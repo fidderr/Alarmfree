@@ -1,0 +1,3758 @@
+/* AlarmFree - Complete Stylesheet with Theme Support */
+
+/* ===== Icons ===== */
+.icon {
+  display: inline-block;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+
+/* ===== Theme Variables ===== */
+:root {
+  --bg: #12121a;
+  --surface: #1e1e28;
+  --surface-hover: #2a2a38;
+  --primary: #64a0ff;
+  --primary-hover: #7ab0ff;
+  --secondary: #a078ff;
+  --text: #f0f0f5;
+  --text-secondary: #b4b4c3;
+  --error: #ff6464;
+  --success: #64dc8c;
+  --warning: #ffc850;
+  --disabled: #64646e;
+  --border: rgba(255, 255, 255, 0.1);
+  --radius: 12px;
+  --radius-sm: 8px;
+  --nav-height: 64px;
+}
+
+.theme-light {
+  --bg: #f5f5fa;
+  --surface: #ffffff;
+  --surface-hover: #ebebf0;
+  --primary: #2563eb;
+  --primary-hover: #3b82f6;
+  --text: #1a1a2e;
+  --text-secondary: #6b6b80;
+  --error: #dc2626;
+  --success: #16a34a;
+  --warning: #d97706;
+  --disabled: #a0a0b0;
+  --border: rgba(0, 0, 0, 0.12);
+}
+
+.theme-colorblind {
+  --bg: #1a1a24;
+  --surface: #252530;
+  --surface-hover: #30303e;
+  --primary: #ffb000;
+  --primary-hover: #ffc333;
+  --secondary: #00b4d8;
+  --error: #ff6b6b;
+  --success: #06d6a0;
+  --text: #f0f0f5;
+  --text-secondary: #b4b4c3;
+  --border: rgba(255, 255, 255, 0.1);
+}
+
+/* ===== Reset & Base ===== */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+.app-root {
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  transition: background 0.3s ease, color 0.3s ease;
+}
+
+/* ===== Screen Layout ===== */
+.screen {
+  min-height: 100vh;
+  padding: 20px 16px;
+  padding-bottom: calc(var(--nav-height) + 24px);
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+/* ===== Header ===== */
+.header {
+  margin-bottom: 24px;
+}
+
+.header h1 {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.header h2 {
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.next-alarm {
+  color: var(--text-secondary);
+  font-size: 14px;
+  margin-top: 4px;
+}
+
+/* ===== Config Header with Back Button ===== */
+.config-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.back-btn {
+  background: none;
+  border: none;
+  color: var(--error);
+  font-size: 20px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  transition: background 0.15s ease;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+}
+
+.back-btn:hover {
+  background: var(--surface);
+}
+
+.config-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text);
+  flex: 1;
+  text-align: center;
+}
+
+.header-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.header-icon-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  font-size: 20px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease;
+}
+
+.header-icon-btn:hover {
+  background: var(--surface-hover);
+}
+
+.save-icon {
+  color: var(--success);
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.delete-icon {
+  color: var(--error);
+}
+
+/* ===== Alarm Cards ===== */
+.alarm-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.alarm-card {
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.alarm-card:hover {
+  background: var(--surface-hover);
+}
+
+.alarm-card:active {
+  transform: scale(0.98);
+}
+
+.alarm-card-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex: 1;
+}
+
+.alarm-card-right {
+  flex-shrink: 0;
+}
+
+.alarm-time {
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--text);
+  min-width: 90px;
+}
+
+.alarm-details {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.alarm-label {
+  font-size: 14px;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.alarm-schedule {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* ===== Toggle Switch ===== */
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 52px;
+  height: 28px;
+  cursor: pointer;
+}
+
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+  position: absolute;
+}
+
+.toggle-slider {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--disabled);
+  border-radius: 28px;
+  transition: background 0.2s ease;
+}
+
+.toggle-slider::before {
+  content: "";
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  left: 3px;
+  bottom: 3px;
+  background: white;
+  border-radius: 50%;
+  transition: transform 0.2s ease;
+}
+
+.toggle-switch input:checked + .toggle-slider {
+  background: var(--primary);
+}
+
+.toggle-switch input:checked + .toggle-slider::before {
+  transform: translateX(24px);
+}
+
+/* ===== Toggle Row ===== */
+.toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.toggle-text {
+  font-size: 14px;
+  color: var(--text);
+}
+
+/* ===== FAB Button ===== */
+.fab {
+  position: fixed;
+  bottom: calc(var(--nav-height) + 24px);
+  right: 24px;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: white;
+  border: none;
+  font-size: 28px;
+  font-weight: 300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(100, 160, 255, 0.3);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  z-index: 10;
+}
+
+.fab:hover {
+  transform: scale(1.05);
+  box-shadow: 0 6px 20px rgba(100, 160, 255, 0.4);
+}
+
+.fab:active {
+  transform: scale(0.95);
+}
+
+/* ===== Bottom Navigation ===== */
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: var(--nav-height);
+  background: var(--surface);
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  border-top: 1px solid var(--border);
+  z-index: 100;
+}
+
+.nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 16px;
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-size: 12px;
+  font-weight: 500;
+  transition: color 0.15s ease;
+  min-width: 64px;
+  min-height: 44px;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+}
+
+.nav-item.active {
+  color: var(--primary);
+}
+
+.nav-item:hover {
+  color: var(--text);
+}
+
+/* ===== Config Sections ===== */
+.config-section {
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.section-label {
+  display: block;
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* ===== Inputs ===== */
+input[type="text"],
+input[type="number"],
+input[type="time"],
+input[type="date"],
+select {
+  width: 100%;
+  padding: 12px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 16px;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+input:focus,
+select:focus {
+  border-color: var(--primary);
+}
+
+select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23b4b4c3' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 36px;
+}
+
+/* ===== Time Picker (spinner wheels) ===== */
+.time-picker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.time-separator {
+  font-size: 40px;
+  font-weight: 700;
+  color: var(--text);
+  padding-bottom: 4px;
+}
+
+/* ===== Schedule Toggle ===== */
+.schedule-toggle {
+  display: flex;
+  gap: 0;
+  margin-bottom: 16px;
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.toggle-btn {
+  flex: 1;
+  padding: 10px 16px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  min-height: 44px;
+}
+
+.toggle-btn.active {
+  background: var(--primary);
+  color: white;
+}
+
+/* ===== Weekday Selector ===== */
+.weekday-selector {
+  display: flex;
+  gap: 6px;
+  flex-wrap: nowrap;
+  justify-content: space-between;
+}
+
+.day-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 48px;
+  aspect-ratio: 1 / 1;
+  height: auto;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1),
+    background 0.18s ease, color 0.18s ease, border-color 0.18s ease,
+    box-shadow 0.18s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Repeated tapping must never start a text selection. */
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.day-btn:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.day-btn:active {
+  transform: scale(0.86);
+}
+
+.day-btn.active {
+  background: var(--primary);
+  color: white;
+  border-color: var(--primary);
+  transform: scale(1.07);
+  box-shadow: 0 4px 16px rgba(100, 160, 255, 0.4);
+  animation: day-pop 0.32s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes day-pop {
+  0% { transform: scale(0.86); }
+  55% { transform: scale(1.16); }
+  100% { transform: scale(1.07); }
+}
+
+/* ===== Date Input ===== */
+.date-input {
+  width: 100%;
+}
+
+/* ===== Radio Group ===== */
+.radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.radio-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.15s ease;
+  min-height: 44px;
+}
+
+.radio-item:hover {
+  background: var(--surface-hover);
+}
+
+.radio-item input[type="radio"] {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+
+.radio-label {
+  font-size: 14px;
+  color: var(--text);
+}
+
+/* ===== Slider ===== */
+.slider-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.slider-row input[type="range"] {
+  flex: 1;
+  height: 4px;
+  accent-color: var(--primary);
+  background: var(--surface);
+  border-radius: 2px;
+  border: none;
+  outline: none;
+}
+
+.slider-value {
+  font-size: 14px;
+  color: var(--primary);
+  font-weight: 600;
+  min-width: 48px;
+  text-align: right;
+}
+
+/* ===== Challenges ===== */
+.challenge-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.challenge-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 14px 16px;
+  background: var(--surface);
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1),
+    border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+  animation: challenge-item-in 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.challenge-item:hover {
+  border-color: var(--primary);
+  box-shadow: 0 4px 18px rgba(100, 160, 255, 0.15);
+}
+
+@keyframes challenge-item-in {
+  0% { transform: scale(0.92) translateY(6px); opacity: 0; }
+  100% { transform: scale(1) translateY(0); opacity: 1; }
+}
+
+.challenge-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.challenge-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.challenge-difficulty {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.challenge-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.edit-btn,
+.remove-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  min-height: auto;
+  transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.15s ease,
+    background 0.15s ease, color 0.15s ease;
+}
+
+.edit-btn {
+  background: var(--surface-hover);
+  color: var(--primary);
+  border: 1px solid var(--border);
+}
+
+.edit-btn:hover {
+  background: var(--primary);
+  color: white;
+  border-color: var(--primary);
+}
+
+.edit-btn:active,
+.remove-btn:active {
+  transform: scale(0.85);
+}
+
+.remove-btn {
+  background: var(--error);
+  color: white;
+  font-size: 14px;
+}
+
+.remove-btn:hover {
+  opacity: 0.85;
+}
+
+/* ===== Challenge Picker ===== */
+.challenge-picker {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 12px;
+}
+
+.picker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.picker-header h4 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.difficulty-selector {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.difficulty-selector label {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.difficulty-selector select {
+  width: auto;
+  padding: 6px 32px 6px 12px;
+  font-size: 13px;
+}
+
+.challenge-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.challenge-option {
+  padding: 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: center;
+  min-height: 44px;
+}
+
+.challenge-option:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.add-challenge-btn {
+  width: 100%;
+  padding: 14px;
+  background: transparent;
+  border: 2px dashed var(--primary);
+  border-radius: 14px;
+  color: var(--primary);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.18s ease,
+    box-shadow 0.18s ease;
+  min-height: 48px;
+}
+
+.add-challenge-btn:hover {
+  background: rgba(100, 160, 255, 0.12);
+  box-shadow: 0 4px 16px rgba(100, 160, 255, 0.18);
+}
+
+.add-challenge-btn:active {
+  transform: scale(0.97);
+}
+
+/* ===== Snooze Config ===== */
+.snooze-config {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.snooze-field {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 12px 16px;
+}
+
+.field-label {
+  font-size: 14px;
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* Compact stepper used for snooze count / interval — laid out as
+   [-]  value  [+] on one row. */
+.stepper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  flex-shrink: 0;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.stepper-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.15s ease,
+    color 0.15s ease, border-color 0.15s ease;
+}
+
+.stepper-btn:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.stepper-btn:active {
+  transform: scale(0.85);
+  background: var(--primary);
+  color: white;
+  border-color: var(--primary);
+}
+
+.stepper-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+  transform: none;
+  background: var(--bg);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+.stepper-value {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--primary);
+  min-width: 42px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ===== Action Buttons ===== */
+.action-buttons {
+  margin-top: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-bottom: 24px;
+}
+
+.save-btn {
+  width: 100%;
+  padding: 16px;
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease;
+  min-height: 52px;
+}
+
+.save-btn:hover {
+  background: var(--primary-hover);
+}
+
+.delete-btn {
+  width: 100%;
+  padding: 16px;
+  background: transparent;
+  color: var(--error);
+  border: 1px solid var(--error);
+  border-radius: var(--radius-sm);
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  min-height: 52px;
+}
+
+.delete-btn:hover {
+  background: var(--error);
+  color: white;
+}
+
+/* ===== Confirmation Dialog ===== */
+.confirm-dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 24px;
+}
+
+.confirm-dialog {
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 24px;
+  max-width: 320px;
+  width: 100%;
+  text-align: center;
+}
+
+.confirm-dialog h3 {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: var(--text);
+}
+
+.confirm-dialog p {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-bottom: 24px;
+}
+
+.confirm-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.btn-cancel {
+  flex: 1;
+  padding: 12px;
+  background: var(--surface-hover);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  min-height: 44px;
+}
+
+.btn-delete {
+  flex: 1;
+  padding: 12px;
+  background: var(--error);
+  color: white;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  min-height: 44px;
+}
+
+/* ===== Empty State ===== */
+.empty-state {
+  text-align: center;
+  padding: 64px 24px;
+}
+
+.empty-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+
+.empty-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+
+.empty-subtitle {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+/* ===== Settings ===== */
+.settings-section {
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-section:last-of-type {
+  border-bottom: none;
+}
+
+.setting-hint {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 8px;
+}
+
+.about-info {
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+  padding: 16px;
+}
+
+.about-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.about-desc {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+
+/* ===== Metrics ===== */
+.metrics-summary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.metric {
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+  padding: 16px 12px;
+  text-align: center;
+}
+
+.metric-value {
+  display: block;
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.metric-label {
+  display: block;
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+
+/* ===== Filter Bar ===== */
+.filter-bar {
+  margin-bottom: 16px;
+}
+
+.filter-bar select {
+  width: auto;
+  padding: 8px 36px 8px 12px;
+}
+
+/* ===== Filter Dropdown ===== */
+.filter-dropdown-container {
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.filter-dropdown {
+  flex: 0 1 auto;
+  max-width: 180px;
+  padding: 8px 32px 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 12 12'%3E%3Cpath fill='%23888' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+}
+
+.filter-dropdown:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+.custom-days-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.custom-days-input {
+  width: 50px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  font-family: inherit;
+  text-align: center;
+}
+
+.custom-days-input:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+.custom-days-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+/* ===== Filter Chips (legacy, kept for other uses) ===== */
+.filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+  align-items: center;
+}
+
+.chip {
+  padding: 8px 14px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  min-height: 36px;
+  font-family: inherit;
+}
+
+.chip:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.chip.active {
+  background: var(--primary);
+  color: white;
+  border-color: var(--primary);
+}
+
+.chip-input {
+  width: 60px !important;
+  padding: 6px 8px !important;
+  font-size: 13px !important;
+  border-radius: 20px !important;
+  text-align: center;
+}
+
+/* ===== History Header ===== */
+.history-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+
+.history-header h2 {
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* ===== Bottom Sheet ===== */
+.bottom-sheet-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.bottom-sheet {
+  background: var(--surface);
+  border-radius: 16px 16px 0 0;
+  padding: 24px 16px;
+  width: 100%;
+  max-width: 480px;
+}
+
+.bottom-sheet h3 {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 16px;
+  color: var(--text);
+}
+
+.sheet-option {
+  width: 100%;
+  padding: 14px 16px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 15px;
+  text-align: left;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: background 0.1s ease;
+  min-height: 48px;
+  font-family: inherit;
+}
+
+.sheet-option:hover {
+  background: var(--surface-hover);
+}
+
+.sheet-option.cancel {
+  color: var(--text-secondary);
+  margin-top: 8px;
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+}
+
+.sheet-option.destructive {
+  color: var(--error);
+}
+
+.sheet-hint {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+/* ===== Event List ===== */
+.event-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.event-item {
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+  padding: 12px 16px;
+  font-size: 14px;
+  color: var(--text);
+}
+
+/* ===== Alarm Firing Screen ===== */
+.alarm-firing-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 16px;
+  text-align: center;
+  min-height: 100vh;
+  max-height: 100vh;
+  padding-bottom: 32px;
+  overflow: hidden;
+}
+
+/* During a challenge the area fills the screen top-to-bottom (no vertical
+   centering of the whole screen, tighter padding) so the play field is as
+   large as possible without scrolling. Content is still centered
+   horizontally. */
+.alarm-firing-screen.in-challenge {
+  justify-content: flex-start;
+  align-items: center;
+  padding: 14px 14px;
+  text-align: center;
+}
+
+/* ===== Alarm Firing — Ringing phase ===== */
+/* Hero fills the upper space; actions anchor the bottom. */
+.firing-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1 1 auto;
+  min-height: 0;
+  gap: 6px;
+  animation: hero-in 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes hero-in {
+  from { transform: translateY(-12px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+/* Animated bell with concentric pulsing rings. */
+.firing-bell {
+  position: relative;
+  width: 96px;
+  height: 96px;
+  margin-bottom: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(100, 160, 255, 0.16);
+  color: var(--primary);
+  animation: bell-swing 1.8s ease-in-out infinite;
+}
+
+.firing-bell-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid var(--primary);
+  opacity: 0;
+  animation: bell-ripple 2s ease-out infinite;
+}
+
+.firing-bell-ring-2 {
+  animation-delay: 1s;
+}
+
+@keyframes bell-ripple {
+  0% { transform: scale(1); opacity: 0.5; }
+  100% { transform: scale(2.1); opacity: 0; }
+}
+
+@keyframes bell-swing {
+  0%, 100% { transform: rotate(0deg); }
+  20% { transform: rotate(12deg); }
+  40% { transform: rotate(-10deg); }
+  60% { transform: rotate(7deg); }
+  80% { transform: rotate(-4deg); }
+}
+
+.time-display {
+  font-size: 76px;
+  font-weight: 200;
+  letter-spacing: 1px;
+  color: var(--text);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.firing-label {
+  font-size: 19px;
+  font-weight: 600;
+  color: var(--text);
+  margin-top: 6px;
+}
+
+.firing-status {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--primary);
+  margin-top: 2px;
+  animation: status-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes status-pulse {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+
+.challenge-area {
+  width: 100%;
+  max-width: 400px;
+  margin: 0 auto;
+  /* Fill the available height; the card inside centers within it so short
+     challenges sit centered and tall ones get the full height. */
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  gap: 12px;
+  padding: 4px 0;
+}
+
+/* When the hold (fallback) challenge is active, go edge-to-edge for the
+   biggest possible play space. */
+.challenge-area:has(.hold-wrapper) {
+  max-width: 100%;
+  justify-content: flex-start;
+  padding: 4px;
+}
+
+/* Compact meta row above the challenge card: centered progress + timer
+   pills. Fixed height so the card below never shifts as they update. */
+.challenge-meta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  height: 36px;
+  flex-shrink: 0;
+}
+
+.challenge-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.challenge-pill-progress {
+  background: var(--surface-hover);
+  color: var(--text-secondary);
+}
+
+.challenge-pill-timer {
+  background: rgba(100, 160, 255, 0.16);
+  color: var(--primary);
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+/* Timer turns urgent in the last 10 seconds. */
+.challenge-pill-timer.low {
+  background: rgba(255, 100, 100, 0.18);
+  color: var(--error);
+  animation: timer-pulse 1s ease-in-out infinite;
+}
+
+@keyframes timer-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.08); }
+}
+
+/* Actions anchored at the bottom, with a big gap between snooze (small,
+   secondary, on top) and dismiss (large, primary, bottom) so they can't
+   be confused or mis-tapped. */
+.firing-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 28px;
+  width: 100%;
+  max-width: 340px;
+  margin: 0 auto;
+  padding-bottom: 12px;
+  flex-shrink: 0;
+}
+
+.snooze-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 26px;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1.5px solid var(--border);
+  border-radius: 999px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.18s ease,
+    color 0.18s ease, border-color 0.18s ease;
+  min-height: 48px;
+}
+
+.snooze-btn:active {
+  transform: scale(0.94);
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+/* Big, inviting primary button. Gentle breathing glow draws the eye to the
+   intended target. */
+.dismiss-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 20px 32px;
+  background: var(--success);
+  color: #0d1f14;
+  border: none;
+  border-radius: 28px;
+  font-size: 19px;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 10px 30px rgba(100, 220, 140, 0.35);
+  transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease;
+  min-height: 64px;
+  animation: dismiss-breathe 2.4s ease-in-out infinite;
+}
+
+@keyframes dismiss-breathe {
+  0%, 100% { box-shadow: 0 10px 30px rgba(100, 220, 140, 0.28); }
+  50% { box-shadow: 0 12px 38px rgba(100, 220, 140, 0.5); }
+}
+
+.dismiss-btn:active {
+  transform: scale(0.97);
+  box-shadow: 0 6px 18px rgba(100, 220, 140, 0.4);
+}
+
+/* ===== General ===== */
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button {
+  font-family: inherit;
+}
+
+/* Checkbox fallback (hidden by toggle-switch) */
+input[type="checkbox"] {
+  accent-color: var(--primary);
+}
+
+
+/* ===== Custom Dropdown ===== */
+.custom-dropdown {
+  position: relative;
+}
+
+.dropdown-trigger {
+  width: 100%;
+  padding: 12px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  transition: border-color 0.15s ease;
+  min-height: 48px;
+}
+
+.dropdown-trigger:hover {
+  border-color: var(--primary);
+}
+
+.dropdown-value {
+  font-weight: 500;
+}
+
+.dropdown-arrow {
+  font-size: 12px;
+  color: var(--text-secondary);
+  transition: transform 0.15s ease;
+}
+
+.dropdown-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  z-index: 50;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+
+.dropdown-item {
+  width: 100%;
+  padding: 12px 16px;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  font-size: 15px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.1s ease;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+}
+
+.dropdown-item:hover {
+  background: var(--surface-hover);
+}
+
+.dropdown-item.active {
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.dropdown-item + .dropdown-item {
+  border-top: 1px solid var(--border);
+}
+
+
+/* ===== Toast Notifications ===== */
+.toast-container {
+  position: fixed;
+  bottom: calc(var(--nav-height) + 16px);
+  left: 16px;
+  right: 16px;
+  z-index: 200;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.toast {
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 12px 20px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  max-width: 400px;
+  width: 100%;
+  pointer-events: auto;
+  animation: toast-slide-up 0.3s ease, toast-fade-out 0.5s ease 10s forwards;
+  cursor: pointer;
+}
+
+.toast-error {
+  border-left: 4px solid var(--error);
+}
+
+.toast-error p {
+  font-size: 13px;
+  color: var(--error);
+  margin-bottom: 4px;
+}
+
+.toast-error p:last-child {
+  margin-bottom: 0;
+}
+
+@keyframes toast-slide-up {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes toast-fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; pointer-events: none; }
+}
+
+.toast-dismiss-hint {
+  font-size: 11px;
+  color: var(--text-secondary) !important;
+  margin-top: 8px;
+  opacity: 0.7;
+}
+
+/* ===== Input Error State ===== */
+.input-error,
+input.input-error {
+  border-color: var(--error) !important;
+  box-shadow: 0 0 0 2px rgba(255, 100, 100, 0.2);
+}
+
+/* ===== Custom Sound Upload ===== */
+.custom-sound-upload {
+  margin-top: 10px;
+  padding: 12px;
+  background: var(--surface);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.custom-sound-upload input[type="file"] {
+  width: 100%;
+  font-size: 14px;
+  color: var(--text);
+}
+
+
+/* ===== Challenge Components ===== */
+/* The single card that holds the challenge. No nested card — the area
+   itself is transparent, this wrapper is the one surface. Sizes to its
+   content but is capped to the area height (it can grow when its inner
+   content uses flex-grow, e.g. the keypad/grid). */
+.challenge-wrapper {
+  width: 100%;
+  max-height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+  background: var(--surface);
+  border-radius: 22px;
+  border: 1px solid var(--border);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.18);
+  animation: challenge-enter 0.32s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes challenge-enter {
+  from { transform: scale(0.96) translateY(8px); opacity: 0; }
+  to { transform: scale(1) translateY(0); opacity: 1; }
+}
+
+/* Component-level progress (e.g. memory "2 / 4"). */
+.challenge-progress {
+  font-size: 13px;
+  color: var(--primary);
+  font-weight: 600;
+  margin-bottom: 12px;
+  text-align: center;
+}
+
+/* Memory's status line: always reserve one line of height so the grid never
+   shifts when the counter appears mid-game. */
+.challenge-progress-fixed {
+  min-height: 18px;
+  margin-bottom: 12px;
+}
+
+.challenge-instruction {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 14px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+/* Math Challenge */
+.math-expression {
+  font-size: 36px;
+  font-weight: 700;
+  color: var(--text);
+  text-align: center;
+  padding: 8px 0 10px 0;
+  font-family: monospace;
+}
+
+/* Display showing the user's typed answer (calculator-style) */
+.math-display {
+  text-align: center;
+  font-size: 30px;
+  font-weight: 700;
+  font-family: monospace;
+  color: var(--text);
+  background: var(--bg);
+  border: 2px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  margin-bottom: 14px;
+  min-height: 52px;
+  transition: border-color 0.15s ease;
+}
+
+.math-display.wrong {
+  border-color: var(--error);
+  color: var(--error);
+  animation: math-shake 0.4s ease;
+}
+
+@keyframes math-shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-6px); }
+  75% { transform: translateX(6px); }
+}
+
+/* Calculator keypad. */
+.math-keypad {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  width: 100%;
+  max-width: 320px;
+  margin: 0 auto;
+}
+
+.math-key {
+  aspect-ratio: 1.6;
+  font-size: 24px;
+  font-weight: 600;
+  font-family: monospace;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.1s ease, transform 0.08s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.math-key:active {
+  background: var(--surface-hover);
+  transform: scale(0.92);
+}
+
+.math-key-action {
+  background: var(--surface);
+  color: var(--text-secondary);
+}
+
+.math-key-submit {
+  grid-column: 1 / -1;
+  aspect-ratio: auto;
+  padding: 14px 0;
+  background: var(--primary);
+  color: white;
+  border: none;
+  font-weight: 700;
+}
+
+.math-key-submit:active {
+  background: var(--primary-hover, var(--primary));
+  transform: scale(0.98);
+}
+
+/* Memory Game */
+.memory-grid {
+  display: grid;
+  gap: 10px;
+  margin: 8px auto 0;
+  width: 100%;
+  max-width: 300px;
+}
+
+.memory-grid-3 { grid-template-columns: repeat(3, 1fr); }
+.memory-grid-4 { grid-template-columns: repeat(4, 1fr); }
+
+.memory-cell {
+  aspect-ratio: 1;
+  border-radius: var(--radius-sm);
+  border: 2px solid var(--border);
+  background: var(--bg);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 700;
+  min-height: 60px;
+}
+
+.memory-cell.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  transform: scale(1.05);
+  box-shadow: 0 0 20px rgba(100, 160, 255, 0.4);
+}
+
+.memory-cell.selected {
+  background: var(--success);
+  border-color: var(--success);
+  color: white;
+}
+
+.memory-cell.wrong {
+  background: var(--error);
+  border-color: var(--error);
+  animation: cell-shake 0.3s ease;
+}
+
+@keyframes cell-shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  75% { transform: translateX(4px); }
+}
+
+/* Typing Challenge */
+.typing-passage {
+  font-size: 17px;
+  line-height: 1.7;
+  padding: 14px;
+  background: var(--bg);
+  border-radius: var(--radius-sm);
+  margin-bottom: 12px;
+  font-family: monospace;
+  /* Cap the passage height so very long Extreme passages scroll internally
+     instead of pushing the input off-screen. */
+  max-height: 40vh;
+  overflow-y: auto;
+  flex-shrink: 0;
+  /* Allow word wrapping but never break inside a word. */
+  word-break: keep-all;
+  overflow-wrap: normal;
+  white-space: normal;
+}
+
+/* Each word is rendered as an inline-block so it stays together. */
+.typing-passage .typing-word {
+  display: inline-block;
+  white-space: nowrap;
+}
+
+.typing-passage .correct { color: var(--success); }
+.typing-passage .incorrect { color: var(--error); text-decoration: underline; }
+.typing-passage .pending { color: var(--text-secondary); }
+.typing-passage .cursor {
+  /* Blink between normal and bold weight so the letter stays readable. */
+  animation: cursor-blink 0.8s steps(2, jump-none) infinite;
+  background: rgba(255, 153, 0, 0.18);
+  border-radius: 2px;
+}
+
+@keyframes cursor-blink {
+  0%, 49% { font-weight: 400; }
+  50%, 100% { font-weight: 800; }
+}
+
+.typing-input-area {
+  width: 100%;
+  min-height: 90px;
+  padding: 12px;
+  font-size: 16px;
+  font-family: monospace;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  resize: none;
+}
+
+.typing-accuracy {
+  text-align: center;
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-top: 8px;
+}
+
+.typing-accuracy .good { color: var(--success); }
+.typing-accuracy .bad { color: var(--error); }
+
+/* Shake / Step / Scan Challenges — ring centered in the card. */
+.progress-ring-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 12px 0;
+}
+
+.progress-ring {
+  width: 180px;
+  height: 180px;
+  border-radius: 50%;
+  border: 8px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  cursor: pointer;
+  transition: transform 0.1s ease;
+  user-select: none;
+}
+
+.progress-ring:active {
+  transform: scale(0.95);
+}
+
+.progress-ring-fill {
+  position: absolute;
+  top: -8px;
+  left: -8px;
+  width: calc(100% + 16px);
+  height: calc(100% + 16px);
+  border-radius: 50%;
+  border: 8px solid transparent;
+  border-top-color: var(--primary);
+  border-right-color: var(--primary);
+  transition: transform 0.3s ease;
+}
+
+.progress-ring-text {
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.progress-ring-label {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+/* Hold-the-bubble challenge */
+.hold-area {
+  position: relative;
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 8px auto 0;
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at 50% 40%, var(--surface-hover) 0%, var(--surface) 70%);
+  overflow: hidden;
+  touch-action: none;
+}
+
+/* Slot is positioned by its CENTRE within a "safe band" inset from every
+   edge by --hold-safe, so the bubble + its glow never reach the clipped
+   edge of the play area regardless of the area's pixel size.
+   left = safe + fx*(100% - 2*safe), same for top. */
+.hold-bubble-slot {
+  --hold-safe: 64px;
+  position: absolute;
+  left: calc(var(--hold-safe) + var(--fx) * (100% - 2 * var(--hold-safe)));
+  top: calc(var(--hold-safe) + var(--fy) * (100% - 2 * var(--hold-safe)));
+  transform: translate(-50%, -50%);
+  animation: bubble-in 0.42s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.hold-bubble {
+  position: relative;
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: none;
+  transform: translateZ(0) scale(1);
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  will-change: transform;
+}
+
+.hold-bubble.filling {
+  transform: translateZ(0) scale(1.08);
+}
+
+.hold-bubble.popping {
+  animation: bubble-pop var(--pop-ms, 280ms) cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+/* SVG progress ring — fill driven purely by a CSS transition on
+   stroke-dashoffset, animated on the compositor for full smoothness. */
+.hold-ring {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+  overflow: visible;
+}
+
+.hold-ring-track {
+  fill: none;
+  stroke: var(--surface);
+  stroke-width: 7;
+  opacity: 0.9;
+}
+
+.hold-ring-fill {
+  fill: none;
+  stroke: var(--primary);
+  stroke-width: 7;
+  stroke-linecap: round;
+  /* circumference of r=45 ≈ 282.74 */
+  stroke-dasharray: 282.74;
+  stroke-dashoffset: 282.74; /* empty */
+  /* Quick, eased drain back to empty on release. */
+  transition: stroke-dashoffset 0.35s ease-out, stroke 0.2s ease;
+  filter: drop-shadow(0 0 5px rgba(100, 160, 255, 0.7));
+}
+
+/* While held, drive the ring to full over the configured hold duration —
+   strictly linear so the visible fill matches the timer exactly. */
+.hold-bubble.filling .hold-ring-fill {
+  stroke-dashoffset: 0;
+  transition: stroke-dashoffset var(--hold-ms, 3000ms) linear;
+}
+
+.hold-bubble.popping .hold-ring-fill {
+  stroke: var(--success);
+  stroke-dashoffset: 0;
+  filter: drop-shadow(0 0 10px rgba(100, 220, 140, 0.9));
+}
+
+/* Solid core disc with a soft radial sheen. */
+.hold-bubble-core {
+  position: absolute;
+  width: 72%;
+  height: 72%;
+  border-radius: 50%;
+  background: var(--surface-hover);
+  background:
+    radial-gradient(circle at 38% 32%,
+      color-mix(in srgb, var(--primary) 28%, var(--surface)) 0%,
+      var(--surface) 78%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.08);
+  transition: background 0.25s ease, box-shadow 0.25s ease, transform 0.2s ease;
+}
+
+.hold-bubble.filling .hold-bubble-core {
+  background: var(--primary);
+  background:
+    radial-gradient(circle at 38% 32%,
+      color-mix(in srgb, var(--primary) 55%, var(--surface)) 0%,
+      color-mix(in srgb, var(--primary) 18%, var(--surface)) 80%);
+  box-shadow:
+    0 0 34px rgba(100, 160, 255, 0.55),
+    inset 0 0 18px rgba(100, 160, 255, 0.35);
+}
+
+.hold-bubble.popping .hold-bubble-core {
+  background: radial-gradient(circle at 50% 50%, var(--success) 0%, var(--success) 100%);
+  box-shadow: 0 0 42px rgba(100, 220, 140, 0.75);
+  transform: scale(1.04);
+}
+
+.hold-bubble-label {
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  color: var(--text-secondary);
+  transition: color 0.25s ease, font-size 0.18s ease;
+}
+
+.hold-bubble.filling .hold-bubble-label {
+  color: var(--text);
+}
+
+.hold-bubble.popping .hold-bubble-label {
+  color: white;
+  font-size: 38px;
+}
+
+/* Expanding ripple burst when a bubble completes. */
+.hold-bubble.popping::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 3px solid var(--success);
+  animation: hold-ripple var(--pop-ms, 280ms) ease-out forwards;
+}
+
+@keyframes bubble-in {
+  0%   { transform: translate(-50%, -50%) scale(0.3); opacity: 0; }
+  55%  { transform: translate(-50%, -50%) scale(1.12); opacity: 1; }
+  100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+}
+
+@keyframes bubble-pop {
+  0%   { transform: translateZ(0) scale(1.08); opacity: 1; }
+  35%  { transform: translateZ(0) scale(1.22); opacity: 1; }
+  100% { transform: translateZ(0) scale(0.5); opacity: 0; }
+}
+
+@keyframes hold-ripple {
+  0%   { transform: scale(1); opacity: 0.8; }
+  100% { transform: scale(1.9); opacity: 0; }
+}
+
+/* Fallback escape-hatch button on the challenge screen. Deliberately
+   understated (text link style) so it doesn't compete with solving the
+   real challenge — it's a last resort, not the primary path. */
+.challenge-fallback-btn {
+  margin-top: 22px;
+  padding: 10px 18px;
+  background: transparent;
+  border: 1px solid var(--surface-hover);
+  border-radius: var(--radius-sm, 10px);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.2s ease, border-color 0.2s ease;
+}
+
+.challenge-fallback-btn:active {
+  color: var(--text);
+  border-color: var(--primary);
+}
+
+/* Hold challenge takes over the firing screen: edge-to-edge, no card, no scroll. */
+.hold-wrapper {
+  position: relative;
+  max-width: none;
+  max-height: none;
+  width: 100%;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  padding: 8px 10px 4px;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  border-radius: 0;
+}
+
+.hold-header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 48px;
+  margin-bottom: 6px;
+}
+
+.hold-instruction {
+  margin: 0;
+}
+
+.hold-back-btn {
+  position: absolute;
+  left: 4px;
+  top: 4px;
+  z-index: 5;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0 4px 0;
+  background: transparent;
+  border: none;
+  color: var(--error);
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.hold-back-btn:active {
+  transform: scale(0.88);
+}
+
+.hold-progress {
+  margin-top: 8px;
+  font-weight: 600;
+}
+
+/* Fallback escape-hatch — a small pill that drops in from the top-right
+   like a notification. Floats above the challenge without ever pushing
+   layout. */
+.fallback-fab {
+  position: fixed;
+  right: 14px;
+  top: 14px;
+  z-index: 40;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 2px solid var(--error);
+  color: var(--error);
+  font-size: 20px;
+  font-weight: 900;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  animation: fallback-drop-in 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.2s ease,
+    color 0.2s ease;
+}
+
+@keyframes fallback-drop-in {
+  0% { transform: translateY(-60px) scale(0.6); opacity: 0; }
+  100% { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+.fallback-fab:active {
+  transform: scale(0.88);
+}
+
+.fallback-fab.armed {
+  background: var(--error);
+  color: white;
+  transform: scale(1.1);
+  animation: fallback-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes fallback-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 100, 100, 0.5); }
+  50%      { box-shadow: 0 0 0 10px rgba(255, 100, 100, 0); }
+}
+
+/* Fallback explanation overlay popup — floats above everything so it
+   never shifts the challenge layout. */
+.fallback-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.55);
+  animation: fade-in 0.18s ease;
+}
+
+.fallback-popup {
+  width: 100%;
+  max-width: 320px;
+  padding: 22px 20px 18px;
+  background: var(--surface);
+  border: 1px solid var(--error);
+  border-radius: 16px;
+  text-align: center;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+  animation: challenge-enter 0.22s ease;
+}
+
+.fallback-popup-title {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text);
+  margin: 0 0 10px;
+}
+
+.fallback-popup-body {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 0 0 18px;
+  line-height: 1.5;
+}
+
+.fallback-popup-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.fallback-popup-cancel {
+  flex: 1;
+  padding: 12px;
+  background: var(--surface-hover);
+  color: var(--text);
+  border: none;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.fallback-popup-confirm {
+  flex: 1;
+  padding: 12px;
+  background: var(--error);
+  color: white;
+  border: none;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.fallback-popup-confirm:active {
+  opacity: 0.85;
+}
+
+.tap-hint {
+  font-size: 13px;
+  color: var(--text-secondary);
+  text-align: center;
+  margin-top: 12px;
+  flex-shrink: 0;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+/* Hardware unavailable */
+.hw-unavailable {
+  text-align: center;
+  padding: 32px;
+}
+
+.hw-unavailable-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+  opacity: 0.5;
+}
+
+.hw-unavailable-text {
+  font-size: 16px;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.hw-unavailable-skip {
+  font-size: 13px;
+  color: var(--text-secondary);
+  animation: pulse 2s infinite;
+}
+
+/* Answer feedback */
+.answer-wrong {
+  animation: shake-input 0.4s ease;
+  border-color: var(--error) !important;
+}
+
+@keyframes shake-input {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-8px); }
+  40% { transform: translateX(8px); }
+  60% { transform: translateX(-6px); }
+  80% { transform: translateX(6px); }
+}
+
+.answer-correct {
+  animation: correct-pulse 0.5s ease;
+  border-color: var(--success) !important;
+}
+
+@keyframes correct-pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.02); box-shadow: 0 0 20px rgba(100, 220, 140, 0.3); }
+  100% { transform: scale(1); }
+}
+
+/* ===== Challenge Picker - Type Selection ===== */
+.challenge-type-card {
+  padding: 14px 16px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 44px;
+}
+
+.challenge-type-card:hover {
+  border-color: var(--primary);
+}
+
+.challenge-type-card .type-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.challenge-type-card .type-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+/* ===== Challenge Config Panel ===== */
+.challenge-config-panel {
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-top: 12px;
+}
+
+.challenge-config-panel h4 {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: var(--text);
+}
+
+.config-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.config-row label {
+  font-size: 14px;
+  color: var(--text-secondary);
+  min-width: 80px;
+}
+
+.config-row input,
+.config-row select {
+  flex: 1;
+}
+
+.config-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.config-actions button {
+  flex: 1;
+  padding: 10px;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  min-height: 44px;
+}
+
+.btn-add-challenge {
+  background: var(--primary);
+  color: white;
+}
+
+.btn-add-challenge:hover {
+  background: var(--primary-hover);
+}
+
+.btn-cancel-config {
+  background: var(--surface-hover);
+  color: var(--text);
+  border: 1px solid var(--border) !important;
+}
+
+.btn-cancel-config:hover {
+  background: var(--border);
+}
+
+
+/* ===== Challenge Overlay ===== */
+.challenge-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 16px;
+  animation: fade-in 0.2s ease;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.challenge-overlay-content {
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 24px;
+  max-width: 400px;
+  width: 100%;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.challenge-overlay-content h3 {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+
+.challenge-overlay-content .overlay-desc {
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin-bottom: 20px;
+}
+
+.challenge-overlay-content .overlay-section {
+  margin-bottom: 20px;
+}
+
+.challenge-overlay-content .overlay-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+
+/* Segmented difficulty buttons */
+.difficulty-segments {
+  display: flex;
+  gap: 0;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.difficulty-segments button {
+  flex: 1;
+  padding: 10px 8px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.difficulty-segments button.active {
+  background: var(--primary);
+  color: white;
+}
+
+/* Count display */
+.count-display {
+  text-align: center;
+  font-size: 48px;
+  font-weight: 700;
+  color: var(--primary);
+  margin: 16px 0;
+}
+
+.count-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+}
+
+.count-controls button {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  font-size: 20px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.count-controls button:active {
+  background: var(--primary);
+  color: white;
+  border-color: var(--primary);
+}
+
+/* Overlay actions */
+.overlay-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.overlay-actions button {
+  flex: 1;
+  padding: 14px;
+  border-radius: var(--radius-sm);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  min-height: 48px;
+}
+
+.overlay-btn-cancel {
+  background: var(--surface-hover);
+  color: var(--text);
+  border: 1px solid var(--border) !important;
+}
+
+.overlay-btn-add {
+  background: var(--primary);
+  color: white;
+}
+
+/* Type selection in overlay */
+.challenge-type-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.challenge-type-option {
+  padding: 14px 16px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+}
+
+.challenge-type-option:active {
+  border-color: var(--primary);
+  background: var(--surface-hover);
+}
+
+.challenge-type-option .type-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 2px;
+}
+
+.challenge-type-option .type-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+
+/* ===== Challenge Overlay (alarm config) ===== */
+.challenge-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 500;
+  padding: 16px;
+}
+
+.challenge-overlay-content {
+  background: var(--bg);
+  border-radius: var(--radius);
+  padding: 24px;
+  max-width: 400px;
+  width: 100%;
+  max-height: 85vh;
+  overflow-y: auto;
+}
+
+.challenge-overlay-content h3 {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 12px;
+}
+
+.challenge-type-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.challenge-type-option {
+  width: 100%;
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.challenge-type-option:hover {
+  border-color: var(--primary);
+  background: var(--surface-hover);
+}
+
+.type-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.type-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.overlay-section {
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.overlay-section:last-of-type {
+  border-bottom: none;
+  margin-bottom: 0;
+}
+
+.overlay-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 10px;
+}
+
+.overlay-desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.overlay-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.overlay-btn-cancel {
+  flex: 1;
+  padding: 12px 16px;
+  background: var(--surface);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  min-height: 44px;
+  transition: background 0.15s ease;
+}
+
+.overlay-btn-cancel:hover {
+  background: var(--surface-hover);
+}
+
+.overlay-btn-add {
+  flex: 1;
+  padding: 12px 16px;
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  min-height: 44px;
+  transition: background 0.15s ease;
+}
+
+.overlay-btn-add:hover {
+  background: var(--primary-hover);
+}
+
+/* Difficulty Segments */
+.difficulty-segments {
+  display: flex;
+  gap: 0;
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.difficulty-segments button {
+  flex: 1;
+  padding: 10px 8px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  min-height: 40px;
+}
+
+.difficulty-segments button.active {
+  background: var(--primary);
+  color: white;
+}
+
+.difficulty-segments button:hover:not(.active) {
+  background: var(--surface-hover);
+}
+
+/* Count Display & Controls */
+.count-display {
+  font-size: 48px;
+  font-weight: 700;
+  color: var(--text);
+  text-align: center;
+  padding: 16px 0;
+}
+
+.count-controls {
+  display: flex;
+  justify-content: center;
+  gap: 24px;
+}
+
+.count-controls button {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 24px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.count-controls button:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.count-controls button:active {
+  transform: scale(0.95);
+}
+
+/* ===== Firing Screen Additions ===== */
+/* Wrong-answer feedback as a fixed-position toast near the bottom — never
+   shifts the challenge layout. Sits above the challenge but below the
+   fallback FAB and celebration. */
+.answer-feedback-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 76px;
+  transform: translateX(-50%);
+  z-index: 35;
+  max-width: 90%;
+  padding: 10px 18px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--error);
+  color: var(--error);
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+  white-space: nowrap;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+  animation: feedback-toast-in 0.26s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes feedback-toast-in {
+  from { transform: translateX(-50%) translateY(12px); opacity: 0; }
+  to { transform: translateX(-50%) translateY(0); opacity: 1; }
+}
+
+/* ===== Time Picker Wheels ===== */
+.wheel-column {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 88px;
+  /* Shows 5 rows of 40px. Fixed height keeps the wheel stable while values
+     spin through it; the stack inside is taller and clipped. */
+  height: 200px;
+  padding: 0;
+  border-radius: 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  cursor: grab;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+  /* 3D drum: give the stack depth so curved rows read as a cylinder. */
+  perspective: 600px;
+  -webkit-perspective: 600px;
+  /* Fade the top/bottom rows into the surface for a drum-roll look. */
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    #000 26%,
+    #000 74%,
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    #000 26%,
+    #000 74%,
+    transparent 100%
+  );
+}
+
+.wheel-column:active {
+  cursor: grabbing;
+}
+
+/* The moving stack of value rows. Translated live during a drag and snapped
+   back with a transition on release (see the inline style in the component).
+   preserve-3d lets the per-row rotateX curvature render against the column's
+   perspective. */
+.wheel-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  transform-style: preserve-3d;
+  -webkit-transform-style: preserve-3d;
+  will-change: transform;
+}
+
+/* Centre highlight band behind the selected value. */
+.wheel-column::before {
+  content: "";
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  top: 50%;
+  height: 44px;
+  transform: translateY(-50%);
+  border-radius: 12px;
+  background: var(--surface-hover);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.wheel-cell {
+  position: relative;
+  z-index: 1;
+  /* Fixed pitch — matches ROW_PITCH in time_picker.rs so the wheel tracks
+     the finger 1:1. */
+  height: 40px;
+  flex: 0 0 40px;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  transition: color 0.18s ease, font-size 0.18s ease, opacity 0.18s ease;
+}
+
+.wheel-cell-center {
+  font-size: 36px;
+  font-weight: 700;
+  color: var(--primary);
+  opacity: 1;
+  cursor: default;
+}
+
+.wheel-cell-near {
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--text);
+  opacity: 0.8;
+}
+
+.wheel-cell-far {
+  font-size: 19px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  opacity: 0.5;
+}
+
+.wheel-cell-edge {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  opacity: 0.28;
+}
+
+
+/* ===== Toast Info & Warning ===== */
+.toast-info {
+  border-left: 4px solid var(--primary);
+}
+
+.toast-info p {
+  font-size: 13px;
+  color: var(--text);
+}
+
+.toast-warning {
+  border-left: 4px solid var(--warning);
+}
+
+.toast-warning p {
+  font-size: 13px;
+  color: var(--warning);
+}
+
+/* ============================================================
+   Celebration overlay — shown briefly after a challenge solve.
+   Total duration ~3000ms, broken into:
+     0–200ms     small pause (parent waits before mounting)
+     200–1000ms  checkmark scales up + confetti bursts
+     1000–2000ms checkmark settles, confetti drifts down
+     2000–2700ms fade out (parent unmounts at ~2700ms)
+   ============================================================ */
+.celebration-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Capture all input while celebrating so nothing underneath can be
+     tapped for the duration the overlay is mounted. */
+  pointer-events: all;
+  touch-action: none;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.0);
+  animation: celebration-fade 2700ms ease-in-out forwards;
+}
+
+@keyframes celebration-fade {
+  0%   { background: rgba(0, 0, 0, 0); opacity: 0; }
+  10%  { background: rgba(0, 0, 0, 0.25); opacity: 1; }
+  75%  { background: rgba(0, 0, 0, 0.25); opacity: 1; }
+  100% { background: rgba(0, 0, 0, 0); opacity: 0; }
+}
+
+/* Center card containing the checkmark + label */
+.celebration-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  z-index: 2;
+}
+
+.celebration-check {
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  background: var(--success, #22c55e);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 12px 40px rgba(34, 197, 94, 0.45);
+  transform: scale(0);
+  animation:
+    check-pop 800ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards,
+    check-pulse 1200ms ease-out 800ms;
+}
+
+@keyframes check-pop {
+  0%   { transform: scale(0) rotate(-30deg); opacity: 0; }
+  60%  { transform: scale(1.15) rotate(0deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+
+@keyframes check-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.55); }
+  100% { box-shadow: 0 0 0 36px rgba(34, 197, 94, 0); }
+}
+
+.celebration-label {
+  color: white;
+  font-size: 24px;
+  font-weight: 700;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.6);
+  opacity: 0;
+  animation: label-in 600ms ease-out 600ms forwards;
+}
+
+@keyframes label-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Confetti container sits behind the check card. */
+.celebration-confetti {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.confetti-piece {
+  --dx: 0px;
+  --dy: 0px;
+  --delay: 0ms;
+  --hue: 200;
+  --size: 8px;
+  position: absolute;
+  width: var(--size);
+  height: var(--size);
+  background: hsl(var(--hue), 80%, 60%);
+  border-radius: 2px;
+  top: 0;
+  left: 0;
+  transform: translate(0, 0) rotate(0deg);
+  opacity: 0;
+  animation: confetti-burst 2200ms ease-out forwards;
+  animation-delay: var(--delay);
+}
+
+@keyframes confetti-burst {
+  0% {
+    transform: translate(0, 0) rotate(0deg) scale(0.4);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  60% {
+    transform: translate(var(--dx), var(--dy)) rotate(540deg) scale(1);
+    opacity: 1;
+  }
+  100% {
+    /* Drift down further with gravity */
+    transform: translate(var(--dx), calc(var(--dy) + 200px)) rotate(900deg) scale(0.8);
+    opacity: 0;
+  }
+}
+
+/* ============================================================
+   History — rich cards with stats and per-challenge breakdown
+   ============================================================ */
+.history-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 0 16px 24px 16px;
+}
+
+.history-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 14px);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.aggregate-card {
+  background: linear-gradient(135deg,
+    rgba(255, 153, 0, 0.10),
+    rgba(255, 153, 0, 0.02));
+  border-color: rgba(255, 153, 0, 0.25);
+}
+
+.history-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.history-card-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0;
+}
+
+.history-card-subtitle {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 2px 0 0 0;
+}
+
+.history-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.history-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  background: var(--bg);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.history-stat-value {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.history-stat-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.history-section-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 4px -4px;
+}
+
+.history-section-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 0;
+}
+
+.history-challenge-list,
+.history-snooze-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.history-challenge-row,
+.history-snooze-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+}
+
+.history-challenge-name {
+  font-size: 14px;
+  color: var(--text);
+}
+
+.history-challenge-difficulty {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+.history-challenge-time,
+.history-snooze-time {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.history-snooze-num {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+/* Event card */
+.event-card {
+  padding: 0;
+}
+
+.event-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 16px;
+  user-select: none;
+}
+
+.event-card-time-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.event-card-time {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.event-card-date {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.event-card-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 4px 0 0 0;
+}
+
+.event-card-summary {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.event-card-total {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.event-card-snooze-pill {
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: var(--bg);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
+.event-card-body {
+  border-top: 1px solid var(--border);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Make grid more compact on small screens */
+@media (max-width: 380px) {
+  .history-stat-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* ============================================================
+   Sound picker — selectable rows with an independent preview
+   (play/stop) control. Selection (the border highlight) is driven
+   ONLY by the chosen sound, never by what is currently previewing.
+   ============================================================ */
+.sound-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: 14px;
+  cursor: pointer;
+  text-align: left;
+  transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1),
+    border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.sound-option:hover {
+  border-color: var(--primary);
+}
+
+.sound-option:active {
+  transform: scale(0.98);
+}
+
+/* Selected = the sound saved for this alarm. Distinct, persistent accent. */
+.sound-option.selected {
+  border-color: var(--primary);
+  background: var(--surface-hover);
+  box-shadow: 0 4px 18px rgba(100, 160, 255, 0.22);
+}
+
+.sound-option .sound-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A small check that only appears for the selected sound. */
+.sound-selected-check {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--primary);
+  flex-shrink: 0;
+}
+
+/* Round preview control. Turns into an accent "playing" state that gently
+   pulses while audio is previewing — visually separate from selection. */
+.sound-preview-btn {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.15s ease,
+    color 0.15s ease, border-color 0.15s ease;
+}
+
+.sound-preview-btn:active {
+  transform: scale(0.88);
+}
+
+.sound-preview-btn.playing {
+  background: var(--primary);
+  color: white;
+  border-color: var(--primary);
+  animation: sound-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes sound-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(100, 160, 255, 0.5); }
+  50% { box-shadow: 0 0 0 8px rgba(100, 160, 255, 0); }
+}
+
+/* ============================================================
+   General polish — softer, springier interactions across the
+   config screen building blocks.
+   ============================================================ */
+.dropdown-trigger {
+  transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1), border-color 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.dropdown-trigger:hover {
+  border-color: var(--primary);
+  box-shadow: 0 4px 16px rgba(100, 160, 255, 0.14);
+}
+
+.dropdown-trigger:active {
+  transform: scale(0.99);
+}
+
+.schedule-toggle .toggle-btn {
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.schedule-toggle .toggle-btn.active {
+  box-shadow: inset 0 0 0 999px rgba(255, 255, 255, 0.02);
+}
+
+.radio-item {
+  border: 1px solid transparent;
+  transition: background 0.18s ease, border-color 0.18s ease, transform 0.15s ease;
+}
+
+.radio-item:active {
+  transform: scale(0.99);
+}
+
+.radio-item:has(input:checked) {
+  border-color: var(--primary);
+  background: var(--surface-hover);
+}
+
+/* Overlay entrance — give the sheet a spring instead of a hard cut. */
+.challenge-overlay-content {
+  animation: overlay-pop 0.26s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes overlay-pop {
+  0% { transform: scale(0.9) translateY(12px); opacity: 0; }
+  100% { transform: scale(1) translateY(0); opacity: 1; }
+}
+
+/* ============================================================
+   Reaction challenge — reuses the hold challenge's full-screen play area
+   (.hold-wrapper / .hold-area). Targets look like concentric "targets";
+   a shrinking timer bar sits under the header.
+   ============================================================ */
+
+/* Timer bar track + draining fill. The fill width transitions to 0 over the
+   round's time limit (set via --react-ms), GPU-friendly and exact. */
+.reaction-timer {
+  width: 100%;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--surface-hover);
+  overflow: hidden;
+  flex-shrink: 0;
+  margin: 2px 0 6px;
+}
+
+.reaction-timer-fill {
+  height: 100%;
+  width: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--success), var(--primary));
+}
+
+/* When running, drain to empty over the configured time limit. A linear
+   ease keeps the visible bar matched to the real countdown. As it empties
+   the gradient shifts toward the warning/error end for urgency. */
+.reaction-timer-fill.running {
+  width: 0% !important;
+  background: linear-gradient(90deg, var(--error), var(--warning));
+  transition: width var(--react-ms, 3000ms) linear;
+}
+
+/* The reaction play area inherits .hold-area (gradient bg, rounded, clipped).
+   This just adds the pre-round countdown centering. */
+.reaction-area {
+  display: block;
+}
+
+.reaction-countdown {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.reaction-countdown-num {
+  font-size: 96px;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--primary);
+  font-variant-numeric: tabular-nums;
+  animation: reaction-count-pop 1s cubic-bezier(0.34, 1.56, 0.64, 1) infinite;
+}
+
+@keyframes reaction-count-pop {
+  0% { transform: scale(0.7); opacity: 0.4; }
+  40% { transform: scale(1.1); opacity: 1; }
+  100% { transform: scale(1); opacity: 0.85; }
+}
+
+.reaction-countdown-label {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+/* Target slot — positioned by centre within the same fixed-px safe band the
+   hold bubble uses, so a target + its glow never reach the clipped edge. */
+.reaction-target-slot {
+  --react-safe: 56px;
+  position: absolute;
+  left: calc(var(--react-safe) + var(--fx) * (100% - 2 * var(--react-safe)));
+  top: calc(var(--react-safe) + var(--fy) * (100% - 2 * var(--react-safe)));
+  transform: translate(-50%, -50%);
+  animation: reaction-spawn 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes reaction-spawn {
+  0% { transform: translate(-50%, -50%) scale(0.2); opacity: 0; }
+  60% { transform: translate(-50%, -50%) scale(1.15); opacity: 1; }
+  100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+}
+
+/* The tappable target: a bullseye of concentric rings with a bright core. */
+.reaction-target {
+  position: relative;
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: none;
+  /* Outer ring + soft glow. */
+  background: radial-gradient(circle at 50% 50%,
+    transparent 0%, transparent 30%,
+    color-mix(in srgb, var(--primary) 22%, transparent) 31%,
+    color-mix(in srgb, var(--primary) 22%, transparent) 44%,
+    transparent 45%);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 55%, transparent),
+    0 6px 20px rgba(100, 160, 255, 0.35);
+  animation: reaction-target-pulse 1.1s ease-in-out infinite;
+  transition: transform 0.08s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.reaction-target:active {
+  transform: scale(0.86);
+}
+
+@keyframes reaction-target-pulse {
+  0%, 100% { box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 55%, transparent), 0 0 0 0 rgba(100, 160, 255, 0.45); }
+  50% { box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 70%, transparent), 0 0 0 12px rgba(100, 160, 255, 0); }
+}
+
+/* Mid ring. */
+.reaction-target-ring {
+  position: absolute;
+  width: 52%;
+  height: 52%;
+  border-radius: 50%;
+  border: 3px solid color-mix(in srgb, var(--primary) 60%, var(--surface));
+  pointer-events: none;
+}
+
+/* Bright centre dot — the "hit me" focal point. */
+.reaction-target-core {
+  position: absolute;
+  width: 26%;
+  height: 26%;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%,
+    color-mix(in srgb, var(--primary) 90%, white) 0%,
+    var(--primary) 80%);
+  box-shadow: 0 0 14px rgba(100, 160, 255, 0.8);
+  pointer-events: none;
+}

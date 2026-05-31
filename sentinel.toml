@@ -1,0 +1,17 @@
+# AlarmFree — mobile-sentinel build configuration
+# Used by: build_sentinel (run from the project root via ./build.sh)
+
+[android]
+activity = "dev.dioxus.main.MainActivity"
+icon = "assets/icon.webp"
+assets = ["assets/sounds"]
+
+# Capabilities are NOT declared here — every capability is a Cargo FEATURE on
+# the mobile-sentinel dependency in Cargo.toml (the single, compile-enforced
+# source of truth). build_sentinel derives the manifest permissions/components
+# AND the set of Gradle capability modules to compile from the exact features
+# the .so was built with. A capability you don't enable ships no Rust, no
+# manifest entry, no Kotlin module, and no Gradle dependency.
+#
+# Deliberately NOT enabled: "accessibility" and "device_admin" — both are
+# policy-sensitive on Google Play and AlarmFree does not need them.

@@ -1,0 +1,9 @@
+[application]
+name = "alarmfree"
+default_platform = "android"
+asset_dir = "assets"
+
+[application.android]
+min_sdk_version = 26
+target_sdk_version = 34
+package = "dev.alarmfree.app"
