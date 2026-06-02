@@ -247,7 +247,7 @@ pub fn ReactionChallenge(
     let cur_round = round();
     let done_this = popped_this_round();
     let timer_running = *timer_on.read();
-    let epoch = timer_epoch();
+    let _epoch = timer_epoch();
     let current_slots = slots.read().clone();
 
     // Drive the timer bar via CSS: when running, transition width to 0 over the
@@ -280,7 +280,7 @@ pub fn ReactionChallenge(
             // the CSS transition restarts each round.
             div { class: "reaction-timer",
                 div {
-                    key: "bar-{epoch}",
+                    key: "bar-{_epoch}",
                     class: "{bar_class}",
                     style: "{bar_style}",
                 }

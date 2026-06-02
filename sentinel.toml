@@ -1,5 +1,14 @@
 # AlarmFree — mobile-sentinel build configuration
-# Used by: build_sentinel (run from the project root via ./build.sh)
+# Used by: build_sentinel (run via ./build.sh, with optional "workspace" flag for local dev)
+#
+# The app's package name (for Play Store) is set in Dioxus.toml under:
+#   [bundle]
+#   identifier = "com.fidderr.alarmfree"
+# or
+#   [android]
+#   identifier = "com.fidderr.alarmfree"
+# This controls applicationId / namespace in the generated Gradle project.
+# It must be unique and never change after publishing to Google Play.
 
 [android]
 activity = "dev.dioxus.main.MainActivity"

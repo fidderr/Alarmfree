@@ -185,9 +185,19 @@ You need:
 ### One-shot
 
 ```bash
-bash apps/alarmfree/build.sh                     # build only
+# Default: uses the published mobile-sentinel crate (the real end-user flow)
+bash apps/alarmfree/build.sh                     # build only (debug)
 bash apps/alarmfree/build.sh install             # build + install on default device
 bash apps/alarmfree/build.sh install <device-id> # build + install on a specific device
+
+# Final builds (release / Play Store AAB)
+bash apps/alarmfree/build.sh release
+bash apps/alarmfree/build.sh aab
+
+# Local development (uses the local sibling mobile-sentinel/ source instead of the published crate)
+bash apps/alarmfree/build.sh workspace
+bash apps/alarmfree/build.sh workspace install
+bash apps/alarmfree/build.sh workspace aab
 ```
 
 ### Manual
@@ -210,6 +220,43 @@ adb install -r target/dx/alarmfree/debug/android/app/app/build/outputs/apk/debug
 
 Output APK:
 `target/dx/alarmfree/debug/android/app/app/build/outputs/apk/debug/app-debug.apk`.
+
+### Release / Google Play Store
+
+The app package name (used by Play Store as the unique app ID) is set in `Dioxus.toml`:
+
+```toml
+[bundle]
+identifier = "com.fidderr.alarmfree"
+```
+
+(or under `[android] identifier = "..."` to override only for Android).
+
+**Never change the package name after the first Play Store release.**
+
+To build a release AAB (recommended for Play Store):
+
+```bash
+# From the alarmfree/ dir — this is the blessed final-build path (uses published crate)
+./build.sh aab
+```
+
+This runs `dx build --release` + `build_sentinel --release --aab` (via the installed published crate).
+
+Output AAB:
+`target/dx/alarmfree/release/android/app/app/build/outputs/bundle/release/app-release.aab`
+
+You can also do `./build.sh release` for a release APK (unsigned by default).
+
+For local development of both the app and mobile-sentinel together, use the workspace flag:
+```bash
+./build.sh workspace aab
+./build.sh workspace release
+```
+
+Upload the AAB to Google Play Console (create app with the exact same package name on first upload).
+
+For signing: Generate an upload keystore and configure via Play App Signing (recommended), or provide signing config (see Dioxus docs for [android.signing] or Gradle signing).
 
 ### Host checks (must stay green)
 

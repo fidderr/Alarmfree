@@ -95,7 +95,7 @@ pub fn HoldButtonChallenge(
     let is_filling = *filling.read();
     let is_popping = *popping.read();
     let (fy, fx) = *pos.read();
-    let seq = bubble_seq();
+    let _seq = bubble_seq();
 
     let bubble_class = if is_popping {
         "hold-bubble popping"
@@ -135,7 +135,7 @@ pub fn HoldButtonChallenge(
                 onpointerleave: move |_| release(),
 
                 div {
-                    key: "bubble-{seq}",
+                    key: "bubble-{_seq}",
                     class: "hold-bubble-slot",
                     style: "{slot_style}",
 
