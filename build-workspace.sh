@@ -11,7 +11,8 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-WORKSPACE_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+# In this flat layout (alarmfree/ + mobile-sentinel/ siblings under the root), go one level up from the app dir.
+WORKSPACE_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 TARGET="aarch64-linux-android"
 ADB="${LOCALAPPDATA}/Android/Sdk/platform-tools/adb.exe"
 
@@ -22,10 +23,12 @@ dx build --platform android --target "$TARGET" --package alarmfree
 
 echo ""
 echo "=== [2/2] Wiring mobile-sentinel + assets + icon + APK ==="
-cd "$WORKSPACE_ROOT"
-cargo run -p mobile-sentinel --bin build_sentinel -- --app alarmfree
+# Run using manifest-path (no root Cargo.toml / workspace required in this layout)
+# and from the app dir (so bin's relative "target/dx/{app}" lookup finds the dx output).
+cargo run --manifest-path "$WORKSPACE_ROOT/mobile-sentinel/Cargo.toml" --bin build_sentinel -- --app alarmfree
 
-APK="$WORKSPACE_ROOT/target/dx/alarmfree/debug/android/app/app/build/outputs/apk/debug/app-debug.apk"
+# The dx + sentinel output the APK under the app crate's target tree (not a shared root target).
+APK="$SCRIPT_DIR/target/dx/alarmfree/debug/android/app/app/build/outputs/apk/debug/app-debug.apk"
 echo ""
 echo "=== APK ready: $APK ==="
 

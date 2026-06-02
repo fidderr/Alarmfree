@@ -24,7 +24,7 @@ echo ""
 echo "=== [2/2] Wiring mobile-sentinel + assets + icon + APK ==="
 # build_sentinel ships as a binary in the published mobile-sentinel crate.
 # Ensure the pinned version is installed (upgrades/installs as needed).
-SENTINEL_VERSION="0.1.1"
+SENTINEL_VERSION="0.1.2"
 if ! cargo install --list | grep -q "mobile-sentinel v${SENTINEL_VERSION}"; then
     echo "Installing build_sentinel ${SENTINEL_VERSION} from crates.io..."
     cargo install mobile-sentinel --version "$SENTINEL_VERSION" --force

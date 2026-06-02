@@ -29,6 +29,31 @@ pub fn Settings() -> Element {
     let mut theme_dropdown_open = use_signal(|| false);
     let mut lang_dropdown_open = use_signal(|| false);
 
+    // One-time on mount: allow the device sensor to rotate this screen
+    // (settings often looks better / is easier to use in landscape on phones
+    // or tablets). The build-time default ("portrait" via sentinel.toml +
+    // mobile-sentinel) keeps everything else locked.
+    // use_hook(|| {
+    //     #[cfg(target_os = "android")]
+    //     {
+    //         mobile_sentinel::display::set_requested_orientation(
+    //             mobile_sentinel::display::ScreenOrientation::Unspecified,
+    //         );
+    //         log::info!("[AlarmFree] Settings: rotation override = Unspecified");
+    //     }
+    // });
+
+    // // On unmount / route change away from Settings: restore the app default lock.
+    // use_drop(|| {
+    //     #[cfg(target_os = "android")]
+    //     {
+    //         mobile_sentinel::display::set_requested_orientation(
+    //             mobile_sentinel::display::ScreenOrientation::Portrait,
+    //         );
+    //         log::info!("[AlarmFree] Settings: restored Portrait (app default)");
+    //     }
+    // });
+
     let theme_modes = [ThemeMode::Dark, ThemeMode::Light, ThemeMode::Colorblind];
     let locales = [
         Locale::English,

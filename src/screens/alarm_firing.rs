@@ -983,12 +983,14 @@ fn render_challenge(
     // hold-the-bubble challenge (touch-only, works on any device). Solving
     // it advances exactly like a normal solve. A back button (on_cancel)
     // lets the user undo an accidental fallback tap.
+    const FALLBACK_REQUIRED_HOLDS: u32 = 20;
+    const FALLBACK_HOLD_MS: u32 = 3000;
     if fallback {
         return rsx! {
             HoldButtonChallenge {
                 key: "fallback-{current_idx}",
-                required: 10,
-                hold_ms: 3000,
+                required: FALLBACK_REQUIRED_HOLDS,
+                hold_ms: FALLBACK_HOLD_MS,
                 on_complete: move |_| {
                     answer_feedback.set("correct");
                     advance_or_dismiss();

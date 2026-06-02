@@ -15,3 +15,8 @@ assets = ["assets/sounds"]
 #
 # Deliberately NOT enabled: "accessibility" and "device_admin" — both are
 # policy-sensitive on Google Play and AlarmFree does not need them.
+
+# Default screen orientation for the main activity (injected at build time by
+# mobile-sentinel). Most screens are locked to portrait; only Settings opts out
+# at runtime via display::set_requested_orientation(Unspecified).
+screen_orientation = "portrait"
