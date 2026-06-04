@@ -221,7 +221,7 @@ adb install -r target/dx/alarmfree/debug/android/app/app/build/outputs/apk/debug
 Output APK:
 `target/dx/alarmfree/debug/android/app/app/build/outputs/apk/debug/app-debug.apk`.
 
-### Release / Google Play Store
+### Release / Google Play Store (Internal Testing)
 
 The app package name (used by Play Store as the unique app ID) is set in `Dioxus.toml`:
 
@@ -234,19 +234,56 @@ identifier = "com.fidderr.alarmfree"
 
 **Never change the package name after the first Play Store release.**
 
-To build a release AAB (recommended for Play Store):
+#### Quick one-command flow for Internal Testing (recommended)
+
+From the `alarmfree/` directory:
 
 ```bash
-# From the alarmfree/ dir — this is the blessed final-build path (uses published crate)
+./build.sh aab
+./sign-aab.sh
+```
+
+- `build.sh aab` builds the production-style release AAB (using the published `mobile-sentinel` crate — the real flow).
+- `sign-aab.sh` auto-detects Android Studio JDK (jbr/bin), generates the upload keystore the first time (`upload-keystore.jks` with your passwords), signs the AAB, and drops a ready-to-upload file into the `release/` folder (e.g. `AlarmFree-InternalTesting-20250602-2228.aab`).
+
+After that you can **literally just copy the file** from `release/` and upload it to Play Console internal testing.
+
+**Important for every new Play release:** bump the `version = "..."` line in `Cargo.toml` first (e.g. `0.1.1` → `0.1.2`).  
+`build.sh` will automatically derive a new higher `versionCode` (major*10000 + minor*100 + patch scheme) so Play accepts it.  
+The Cargo version also becomes the visible "version name" in the store.
+
+If you ever see the error "You can't rollout this release because it doesn't allow any existing users to upgrade to the newly added app bundles", it means your new AAB's versionCode is not higher than one already serving users (e.g. from an earlier accidental high code like 12345). In that case, edit `Dioxus.toml` and force a high explicit one (higher than your current max in the console, e.g. 12346):
+```toml
+[android]
+version_code = 12346   # must be > any previously used code
+```
+Then rebuild with `./build.sh aab && ./sign-aab.sh`. See `release/FUTURE_RELEASES_HOWTO.txt` for full troubleshooting + why you can't "start over" with low codes like 102 on the same package.
+
+For local development while also changing `mobile-sentinel` source:
+
+```bash
+./build.sh workspace aab
+./sign-aab.sh
+```
+
+The script will only error (with hints) if it really can't find the JDK tools.
+
+#### Manual / advanced path
+
+To build a release AAB:
+
+```bash
 ./build.sh aab
 ```
 
-This runs `dx build --release` + `build_sentinel --release --aab` (via the installed published crate).
+This runs `dx build --release` + `build_sentinel --release --aab`.
 
-Output AAB:
+The unsigned AAB lands at:
 `target/dx/alarmfree/release/android/app/app/build/outputs/bundle/release/app-release.aab`
 
-You can also do `./build.sh release` for a release APK (unsigned by default).
+You can also do `./build.sh release` for a release APK (unsigned).
+
+Note: `alarmfree/.cargo/config.toml` is a standard Cargo configuration file (newly added). It sets Rust linker flags (`-Wl,-z,max-page-size=16384`) for Android targets. This makes `libmain.so` (the native Rust binary) compatible with devices that use 16 KB memory pages. Play Console now flags AABs that don't support this; the config fixes the "does not support 16 KB" warning for `libmain.so`. Cargo/dx automatically uses it when building from this directory. It has no effect on non-Android builds or feature inclusion.
 
 For local development of both the app and mobile-sentinel together, use the workspace flag:
 ```bash
@@ -254,9 +291,131 @@ For local development of both the app and mobile-sentinel together, use the work
 ./build.sh workspace release
 ```
 
-Upload the AAB to Google Play Console (create app with the exact same package name on first upload).
+Upload the **signed** AAB to Google Play Console (create app with the exact package name `com.fidderr.alarmfree` on first creation).
 
-For signing: Generate an upload keystore and configure via Play App Signing (recommended), or provide signing config (see Dioxus docs for [android.signing] or Gradle signing).
+### Signing the AAB for Play Store (required)
+
+The easiest way for internal testing is to just run:
+
+```bash
+./sign-aab.sh
+```
+
+(after `./build.sh aab` or `workspace aab`). It handles keystore creation + signing + copying a clean file into `release/`.
+
+The `./build.sh aab` command produces an **unsigned** AAB.
+
+Google strongly recommends using **Google Play App Signing**:
+
+1. **Create an upload keystore** (do this once, store the `.jks` file and passwords safely — this is your "upload key"):
+
+   On Windows (Git Bash / MINGW64 or Command Prompt, keytool must be in PATH — usually from Android Studio's `jre` or `jdk`):
+
+   ```bash
+   keytool -genkey -v -keystore upload-keystore.jks -alias upload -keyalg RSA -keysize 2048 -validity 10000
+   ```
+
+   - Choose a strong password for the store and the key.
+   - Remember the alias (`upload` in the example).
+
+2. **Sign the AAB** you just built (replace paths and passwords):
+
+   ```bash
+   jarsigner -verbose -sigalg SHA256withRSA -digestalg SHA-256 \
+     -keystore upload-keystore.jks \
+     -storepass YOUR_STORE_PASSWORD \
+     -keypass YOUR_KEY_PASSWORD \
+     "target/dx/alarmfree/release/android/app/app/build/outputs/bundle/release/app-release.aab" \
+     upload
+   ```
+
+   On Windows you may need to use forward slashes or quote the whole path carefully.
+
+3. **Verify the signature** (optional but recommended):
+
+   ```bash
+   jarsigner -verify -verbose -certs "target/dx/alarmfree/release/android/app/app/build/outputs/bundle/release/app-release.aab"
+   ```
+
+4. In Play Console:
+   - Create your app and enter the package name `com.fidderr.alarmfree` **exactly** on the first screen.
+   - Go to **App integrity > App signing** and enable Play App Signing.
+   - Upload the **signed** AAB (the one you just jarsigner'ed) under **Production** (or a test track like Closed testing first).
+
+After the first successful upload with Play App Signing enabled, Google will generate the final app signing key. From then on you only ever sign with your local upload key when you build new versions.
+
+**Critical for future releases:**
+Once you have uploaded at least one AAB signed with a particular keystore (the `upload-keystore.jks`), the certificate inside that keystore becomes your registered upload key on Play Store.
+- You **must** keep using the **exact same** .jks file for every future signed release.
+- You do **not** re-run keytool -genkey or give "other details" for new releases.
+- The `sign-aab.sh` script automatically reuses the existing keystore if present (it only generates if the file is missing).
+- If you ever create a brand new keystor, it will have a different certificate. Uploading bundles signed with it will fail, and you will need to go through Google's upload key reset process.
+- The only things that matter for new releases are: the same jks file + the correct password + the correct alias ("upload").
+
+**Tip:** You can also configure signing directly in Dioxus (see `[android.signing]` in Dioxus docs) so that future `./build.sh aab` runs produce a signed AAB automatically. For now the manual `jarsigner` step is the simplest.
+
+### About the "personal information" keytool asks for (CN, OU, O, L, ST, C)
+
+When `sign-aab.sh` (or manual keytool) asks for your name, organization, city, etc., this information is written into the **public certificate** that signs the AAB.
+
+- It becomes visible to Google Play when you upload the bundle.
+- Anyone with technical tools can extract and read the certificate details from a signed AAB/APK.
+- It does **not** appear in the Play Store page, description, or get installed on users' phones in any visible way.
+- It is completely normal and required for every Android app.
+
+You do **not** need to use highly personal real-world details. Safe choices:
+- First/last name: your GitHub name or "fidderr"
+- Organization: "fidderr" or the name you publish under
+- City/State/Country: your actual city/country, or leave blank / use "XX"
+
+The private key (what the passwords protect) never leaves your machine. Only the public certificate travels with the AAB you upload.
+
+If you are uncomfortable, you can always delete the `upload-keystore.jks` and run `./sign-aab.sh` again to generate a fresh one before your first Play Store upload.
+
+### What if I lose the upload key / passwords?
+
+This is very important to understand.
+
+The keystore you create (`upload-keystore.jks`) is your **upload key**, not the final app signing key. Because we use Google Play App Signing, Google holds the real app signing key.
+
+**Scenarios:**
+
+- **Before you have ever uploaded anything to this package name** (`com.fidderr.alarmfree`):  
+  No problem at all. Just delete the keystore (or let the script generate a new one) and start over. Run `./sign-aab.sh` again.
+
+- **After the app has been created in Play Console and at least one signed AAB has been uploaded + Play App Signing is enabled**:  
+  You can still recover, but it is painful.  
+  Google provides an "Upload key reset" process:  
+  https://support.google.com/googleplay/android-developer/answer/7384423
+
+  You will have to prove you own the developer account and the app. The process can take several days to a couple of weeks. During that time you **cannot publish new versions**.
+
+  Also see the section above: "Critical for future releases" — you must keep the same keystore file.
+
+**Strong recommendations (do these now):**
+
+- Store the `upload-keystore.jks` file as an attachment in a password manager (Bitwarden, 1Password, etc.).
+- Store the two passwords (store password and key password) in the same password manager entry.
+- Make at least one encrypted offline backup (e.g. VeraCrypt container on a USB stick or another computer).
+- Write down the alias (`upload`) and that it is a 2048-bit RSA key valid for ~27 years.
+- Never put the keystore or passwords in the git repo (already prevented by `.gitignore`).
+
+Losing the upload key after going live is annoying but recoverable thanks to Play App Signing.  
+Losing it before your first upload is basically free.
+
+### What you actually upload to Play Console
+
+- The **signed** `.aab` file (the most important artifact).
+- Store listing assets (see `play-store-description.md` for title, short description, full description, what's new, etc.):
+  - High-res icon (512×512 png)
+  - Feature graphic (1024×500)
+  - Screenshots (at least 2 phone screenshots, more is better)
+  - Privacy policy URL (you must provide one — even for fully offline apps)
+- Fill in the Content rating questionnaire.
+- Set up pricing & distribution (free or paid).
+- Add testers if using a closed track.
+
+Once the AAB is uploaded and the listing is complete, you can submit for review. The first release usually takes a few days for initial review. Subsequent releases are faster.
 
 ### Host checks (must stay green)
 

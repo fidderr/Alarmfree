@@ -12,3 +12,12 @@ target/
 # OS cruft
 .DS_Store
 Thumbs.db
+
+# Signing keys (never commit real keystores)
+*.jks
+*.keystore
+upload-keystore*
+*.pem
+*.pkcs12
+release/
+dist/
