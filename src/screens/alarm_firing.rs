@@ -500,12 +500,7 @@ pub fn AlarmFiring(id: String) -> Element {
         let id_for_timeout = id_for_timeout.clone();
         async move {
             loop {
-                let (tx, rx) = futures_channel::oneshot::channel::<()>();
-                std::thread::spawn(move || {
-                    std::thread::sleep(std::time::Duration::from_secs(1));
-                    let _ = tx.send(());
-                });
-                let _ = rx.await;
+                crate::timer::sleep(std::time::Duration::from_secs(1)).await;
 
                 if *phase_clone.read() == FiringPhase::Challenge {
                     // Check if sensor counts changed (shake/step activity)
@@ -1173,12 +1168,7 @@ fn render_challenge(
 /// Async sleep helper using a oneshot channel + std::thread::sleep on a
 /// background thread. Avoids needing tokio in the UI layer.
 async fn sleep_ms(ms: u64) {
-    let (tx, rx) = futures_channel::oneshot::channel::<()>();
-    std::thread::spawn(move || {
-        std::thread::sleep(std::time::Duration::from_millis(ms));
-        let _ = tx.send(());
-    });
-    let _ = rx.await;
+    crate::timer::sleep(std::time::Duration::from_millis(ms)).await;
 }
 
 /// Celebration haptic: a short, punchy double-buzz pattern via the gated

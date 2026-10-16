@@ -178,10 +178,5 @@ fn haptic(_ms: u64) {
 /// Async sleep via a background thread + oneshot — keeps the UI layer
 /// free of a tokio dependency (same pattern the other challenges use).
 async fn sleep_ms(ms: u64) {
-    let (tx, rx) = futures_channel::oneshot::channel::<()>();
-    std::thread::spawn(move || {
-        std::thread::sleep(Duration::from_millis(ms));
-        let _ = tx.send(());
-    });
-    let _ = rx.await;
+    crate::timer::sleep(Duration::from_millis(ms)).await;
 }

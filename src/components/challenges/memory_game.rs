@@ -193,10 +193,5 @@ pub fn MemoryGameChallenge(
 
 /// Async sleep helper using oneshot channel
 async fn sleep(ms: u64) {
-    let (tx, rx) = futures_channel::oneshot::channel::<()>();
-    std::thread::spawn(move || {
-        std::thread::sleep(std::time::Duration::from_millis(ms));
-        let _ = tx.send(());
-    });
-    let _ = rx.await;
+    crate::timer::sleep(std::time::Duration::from_millis(ms)).await;
 }

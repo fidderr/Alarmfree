@@ -23,12 +23,7 @@ pub fn ShakeChallenge(required: u32, on_complete: EventHandler<()>) -> Element {
     // Poll shake count from mobile-sentinel every 200ms
     let _poll = use_future(move || async move {
         loop {
-            let (tx, rx) = futures_channel::oneshot::channel::<()>();
-            std::thread::spawn(move || {
-                std::thread::sleep(std::time::Duration::from_millis(200));
-                let _ = tx.send(());
-            });
-            let _ = rx.await;
+            crate::timer::sleep(std::time::Duration::from_millis(200)).await;
 
             let count = mobile_sentinel::sensors::shake_count() as u32;
             current_count.set(count);

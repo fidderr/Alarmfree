@@ -22,12 +22,7 @@ pub fn StepCountChallenge(required: u32, on_complete: EventHandler<()>) -> Eleme
     // Poll step count from mobile-sentinel every 500ms
     let _poll = use_future(move || async move {
         loop {
-            let (tx, rx) = futures_channel::oneshot::channel::<()>();
-            std::thread::spawn(move || {
-                std::thread::sleep(std::time::Duration::from_millis(500));
-                let _ = tx.send(());
-            });
-            let _ = rx.await;
+            crate::timer::sleep(std::time::Duration::from_millis(500)).await;
 
             let count = mobile_sentinel::sensors::step_count() as u32;
             current_count.set(count);

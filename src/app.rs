@@ -132,12 +132,12 @@ pub fn App() -> Element {
     // without any UI-side poll.
     let mut firing_id: Signal<Option<String>> = use_signal(crate::firing_state::peek_firing_alarm);
 
-    use_future(move || {
-        let mut rx = crate::firing_state::init_notifier();
-        async move {
-            use futures_util::StreamExt;
-            while let Some(next) = rx.next().await {
-                firing_id.set(next);
+    use_future(move || async move {
+        loop {
+            crate::timer::sleep_ms(crate::firing_state::POLL_MS).await;
+            let current = crate::firing_state::peek_firing_alarm();
+            if current != *firing_id.peek() {
+                firing_id.set(current);
             }
         }
     });

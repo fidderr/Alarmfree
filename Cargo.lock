@@ -32,7 +32,6 @@ dependencies = [
  "dioxus",
  "futures",
  "futures-channel",
- "futures-util",
  "jni",
  "libc",
  "log",

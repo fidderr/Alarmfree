@@ -33,12 +33,7 @@ pub fn Toast(msg: ToastMessage, on_dismiss: EventHandler<()>) -> Element {
     };
 
     use_future(move || async move {
-        let (tx, rx) = futures_channel::oneshot::channel::<()>();
-        std::thread::spawn(move || {
-            std::thread::sleep(std::time::Duration::from_millis(timeout_ms));
-            let _ = tx.send(());
-        });
-        let _ = rx.await;
+        crate::timer::sleep(std::time::Duration::from_millis(timeout_ms)).await;
         on_dismiss.call(());
     });
 

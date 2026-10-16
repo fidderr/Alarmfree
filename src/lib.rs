@@ -12,3 +12,4 @@ pub mod persistence;
 pub mod platform;
 pub mod sanitize;
 pub mod screens;
+pub mod timer;

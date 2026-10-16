@@ -337,12 +337,7 @@ pub fn AlarmConfig(id: String) -> Element {
         loop {
             // Poll for pick request
             loop {
-                let (tx, rx) = futures_channel::oneshot::channel::<()>();
-                std::thread::spawn(move || {
-                    std::thread::sleep(std::time::Duration::from_millis(100));
-                    let _ = tx.send(());
-                });
-                let _ = rx.await;
+                crate::timer::sleep(std::time::Duration::from_millis(100)).await;
                 if *pick_audio_requested.read() {
                     break;
                 }
@@ -379,12 +374,7 @@ pub fn AlarmConfig(id: String) -> Element {
         loop {
             // Poll for scan request
             loop {
-                let (tx, rx) = futures_channel::oneshot::channel::<()>();
-                std::thread::spawn(move || {
-                    std::thread::sleep(std::time::Duration::from_millis(100));
-                    let _ = tx.send(());
-                });
-                let _ = rx.await;
+                crate::timer::sleep(std::time::Duration::from_millis(100)).await;
                 if *scan_requested.read() {
                     break;
                 }
