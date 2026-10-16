@@ -40,6 +40,20 @@ libc = "0.2"
 [features]
 default = []
 
+# Release builds (dx uses `android-release`, which inherits this). Size-first:
+# the UI runs in the WebView, so native code speed barely matters, but the
+# .so is the biggest thing users download. No `strip` here: the Android Gradle
+# plugin strips the shipped .so and keeps symbols for Play crash reports. No
+# `panic = "abort"`: a panic would turn into a silent process exit.
+# `lto = "thin"`, not "fat": dx 0.7.10 on Windows writes its linker response
+# file with unescaped backslashes, and fat LTO's short argument list hits that
+# (clang: "no such file C:GitAlarmfree..."). Thin LTO links and keeps most of
+# the gain (libmain.so 33.8 MB -> 21.2 MB).
+[profile.release]
+opt-level = "s"
+lto = "thin"
+codegen-units = 1
+
 [dev-dependencies]
 proptest = "1"
 tempfile = "3"
