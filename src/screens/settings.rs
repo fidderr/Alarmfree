@@ -82,7 +82,8 @@ pub fn Settings() -> Element {
     let about_label = t(&translations, "settings.about");
     let tagline_text = t(&translations, "app.tagline");
     let description_text = t(&translations, "app.description");
-    let version_text = t(&translations, "app.version");
+    // Compiled in from Cargo.toml so the About section can never go stale.
+    let version_text = format!("AlarmFree v{}", env!("CARGO_PKG_VERSION"));
     let nav_alarms = t(&translations, "nav.alarms");
     let nav_history = t(&translations, "nav.history");
     let nav_settings = t(&translations, "nav.settings");
