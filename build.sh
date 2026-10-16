@@ -106,7 +106,13 @@ if [ "$MODE" = "release" ] || [ "$MODE" = "aab" ]; then
     VC=""
     # Prefer explicit pin from Dioxus.toml if the user added version_code = NNN (ignore comments)
     if [ -f "Dioxus.toml" ]; then
-      VC=$(grep -i 'version_code' Dioxus.toml | grep -v '^[[:space:]]*#' | head -1 | sed -E 's/.*= *([0-9]+).*/\1/' 2>/dev/null || true)
+      # Take the number right after `version_code =` (not the last `=` on the
+      # line — a trailing comment containing "=" once made this read 0).
+      VC=$(sed -nE 's/^[[:space:]]*version_code[[:space:]]*=[[:space:]]*([0-9]+).*/\1/p' Dioxus.toml | head -1)
+    fi
+    if [ -n "$VC" ] && [ "$VC" -lt 1 ]; then
+      echo "ERROR: version_code in Dioxus.toml must be a positive integer (got $VC)." >&2
+      exit 1
     fi
     if [ -z "$VC" ]; then
       # Derive from Cargo.toml semver (the source of truth for versionName too)
