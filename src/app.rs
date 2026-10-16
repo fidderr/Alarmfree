@@ -110,6 +110,21 @@ pub fn App() -> Element {
     let mut toast_signal: Signal<Option<crate::components::ToastMessage>> = use_signal(|| None);
     use_context_provider(|| toast_signal);
 
+    // If the database had to be reset (or cannot persist), tell the user
+    // instead of silently showing an empty alarm list.
+    use_hook(|| {
+        use crate::persistence::DbRecovery;
+        let key = match crate::persistence::db_recovery() {
+            DbRecovery::None => return,
+            DbRecovery::Recovered { .. } => "db.recovered",
+            DbRecovery::Volatile => "db.volatile",
+        };
+        toast_signal.set(Some(crate::components::ToastMessage {
+            message: t(&translations, key),
+            level: crate::components::ToastLevel::Error,
+        }));
+    });
+
     // Firing-state signal — primed from disk on mount, then driven by the
     // single 500 ms ContextStore poller in `firing_state::init_notifier`.
     // The poller pushes a new value whenever the firing instance id changes

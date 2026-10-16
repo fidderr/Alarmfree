@@ -625,6 +625,12 @@ pub fn AlarmFiring(id: String) -> Element {
                                                let _ = kit.pause(&instance_id);
                                                let generated = generate_challenges(&challenge_list);
                                                if generated.is_empty() {
+                                                   // No runnable challenge (e.g. unknown types): the
+                                                   // gate is trivially satisfied. The SDK refuses to
+                                                   // dismiss a challenge alarm until it is marked
+                                                   // solved, so mark it first or the user would be
+                                                   // stuck in the lockdown.
+                                                   let _ = kit.mark_solved(&instance_id);
                                                    let _ = kit.dismiss(&instance_id);
                                                    let now = chrono::Utc::now();
                                                    let event = crate::models::AlarmEvent {

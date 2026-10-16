@@ -257,5 +257,7 @@
   "challenge.hold.unit": "done",
   "challenge.hold.hold": "HOLD",
   "challenge.reaction.instruction": "Pop the targets — fast!",
-  "challenge.reaction.get_ready": "Get ready"
+  "challenge.reaction.get_ready": "Get ready",
+  "db.recovered": "Your alarm data could not be read, so a fresh database was created. The old file was kept on the device.",
+  "db.volatile": "Alarms cannot be saved right now. Changes will be lost when the app closes."
 }

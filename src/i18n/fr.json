@@ -257,5 +257,7 @@
   "challenge.hold.unit": "fait",
   "challenge.hold.hold": "MAINTIENS",
   "challenge.reaction.instruction": "Touche les cibles — vite !",
-  "challenge.reaction.get_ready": "Prépare-toi"
+  "challenge.reaction.get_ready": "Prépare-toi",
+  "db.recovered": "Les données de tes alarmes n'ont pas pu être lues : une nouvelle base de données a été créée. L'ancien fichier a été conservé sur l'appareil.",
+  "db.volatile": "Les alarmes ne peuvent pas être enregistrées pour le moment. Les modifications seront perdues à la fermeture de l'application."
 }

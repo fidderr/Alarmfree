@@ -39,6 +39,15 @@ impl Database {
         })
     }
 
+    /// Cheap structural integrity check (`PRAGMA quick_check`). `true` when
+    /// SQLite reports the database file as healthy.
+    pub fn quick_check(&self) -> bool {
+        let conn = self.conn.lock().unwrap_or_else(|p| p.into_inner());
+        conn.query_row("PRAGMA quick_check", [], |row| row.get::<_, String>(0))
+            .map(|s| s == "ok")
+            .unwrap_or(false)
+    }
+
     // --- Alarm CRUD ---
 
     pub fn upsert_alarm(&self, alarm: &AlarmData) -> Result<(), rusqlite::Error> {
