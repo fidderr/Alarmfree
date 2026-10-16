@@ -10,9 +10,11 @@ shims. Uninstall/reinstall on a schema change.
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-16
+
 ### Changed
 
-- Built on **mobile-sentinel 0.2.0**: a ringing alarm now comes back after an
+- Built on **mobile-sentinel 0.2.1**: a ringing alarm now comes back after an
   OEM "swipe-up cleaner" kills the app (watchdog alarm + service relaunch),
   Back can no longer close the alarm on phones without predictive back, real
   alarms use `setAlarmClock`, and closing the app no longer logs a native
