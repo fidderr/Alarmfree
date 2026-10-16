@@ -132,8 +132,13 @@ pub fn App() -> Element {
     let mut firing_id: Signal<Option<String>> = use_signal(crate::firing_state::peek_firing_alarm);
 
     use_future(move || async move {
+        let mut watch = crate::firing_state::FiringWatch::default();
         loop {
             crate::timer::sleep_ms(crate::firing_state::POLL_MS).await;
+            // One `stat` per tick; the records are only re-read on change.
+            if !watch.should_reread(crate::firing_state::store_marker()) {
+                continue;
+            }
             let current = crate::firing_state::peek_firing_alarm();
             if current != *firing_id.peek() {
                 firing_id.set(current);
