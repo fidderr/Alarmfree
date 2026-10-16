@@ -193,8 +193,8 @@ else
   # Default: the real published-crate flow that end users of mobile-sentinel will experience.
   # build_sentinel ships as a binary in the published mobile-sentinel crate.
   # Ensure a sufficiently recent version is installed for release/aab support.
-  # NOTE: --release / --aab support landed in mobile-sentinel 0.1.4.
-  SENTINEL_VERSION="0.1.4"
+  # NOTE: release/aab, stale-asset cleanup and extractNativeLibs=false need >= 0.2.0.
+  SENTINEL_VERSION="0.2.0"
   if ! cargo install --list | grep -q "mobile-sentinel v${SENTINEL_VERSION}"; then
       echo "Installing build_sentinel ${SENTINEL_VERSION} from crates.io (required for release/aab)..."
       if ! cargo install mobile-sentinel --version "$SENTINEL_VERSION" --force; then

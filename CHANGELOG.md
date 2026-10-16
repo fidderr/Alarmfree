@@ -10,6 +10,31 @@ shims. Uninstall/reinstall on a schema change.
 
 ## [Unreleased]
 
+### Changed
+
+- Built on **mobile-sentinel 0.2.0**: a ringing alarm now comes back after an
+  OEM "swipe-up cleaner" kills the app (watchdog alarm + service relaunch),
+  Back can no longer close the alarm on phones without predictive back, real
+  alarms use `setAlarmClock`, and closing the app no longer logs a native
+  crash.
+- Layout respects the system bars on Android 15+ (edge-to-edge): nothing hides
+  under the status/navigation bar; dark status-bar icons in the light theme.
+- Long alarm labels and wrong-answer messages wrap instead of overflowing.
+- About shows the real app version (was hard-coded `v0.1.0`).
+- Smaller and lighter: release bundle 24.3 MB → 12.9 MB (size-optimised
+  release profile, stripped `libmain.so`, sounds re-encoded to Ogg Vorbis,
+  native code no longer extracted on install); the firing check reads the
+  alarm store only when it changed; one shared timer instead of a thread per
+  sleep.
+- A database that can't be read is kept as `alarmfree.db.corrupt-<time>` and
+  the user is told, instead of silently starting empty.
+
+### Fixed
+
+- An alarm whose challenges are all unknown types no longer traps the user.
+
+## [0.1.2]
+
 The first documented baseline of the app. Everything below describes the surface
 as it stands today; subsequent releases will track changes against it.
 

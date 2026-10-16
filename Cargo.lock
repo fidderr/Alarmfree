@@ -1447,9 +1447,9 @@ dependencies = [
 
 [[package]]
 name = "mobile-sentinel"
-version = "0.1.4"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bede3c2b8bb0a1d9b346cf2d2c5ca484fe18227e56f834e557d54bd30a0051f2"
+checksum = "e33e785a8625d5046d720144f5f646839be3ea33d6d542e7813e3245b7651cb4"
 dependencies = [
  "android_logger",
  "chrono",
