@@ -125,11 +125,10 @@ pub fn App() -> Element {
         }));
     });
 
-    // Firing-state signal — primed from disk on mount, then driven by the
-    // single 500 ms ContextStore poller in `firing_state::init_notifier`.
-    // The poller pushes a new value whenever the firing instance id changes
-    // (cross-process write by the Recipe state machine), so Dioxus re-renders
-    // without any UI-side poll.
+    // Firing-state signal — primed from disk on mount, then updated by the
+    // single async poll task below, which only writes the signal when the
+    // firing instance id changes (a cross-process write by the Recipe state
+    // machine).
     let mut firing_id: Signal<Option<String>> = use_signal(crate::firing_state::peek_firing_alarm);
 
     use_future(move || async move {
@@ -142,15 +141,39 @@ pub fn App() -> Element {
         }
     });
 
+    // System bars. Android 15+ draws the app edge-to-edge (under the status
+    // and navigation bars), so the UI needs to know how far the bars overlap
+    // (exposed to CSS as --safe-*), and the bar icons must contrast with our
+    // background (dark icons on the light theme).
+    let mut safe_area = use_signal(SafeArea::default);
+    use_effect(move || {
+        let light = matches!(theme(), crate::models::ThemeMode::Light);
+        mobile_sentinel::display::set_light_system_bars(light);
+    });
+    use_future(move || async move {
+        loop {
+            // Cheap JNI read; values only change on rotation / window changes.
+            let current = SafeArea::query();
+            if current != *safe_area.peek() {
+                safe_area.set(current);
+                // A recreated window can reset the icon colour.
+                let light = matches!(*theme.peek(), crate::models::ThemeMode::Light);
+                mobile_sentinel::display::set_light_system_bars(light);
+            }
+            crate::timer::sleep_ms(1000).await;
+        }
+    });
+
     // Read the signal reactively inside rsx! so Dioxus tracks it.
     let firing_id_val = firing_id.read().clone();
 
     // Read theme reactively inside rsx! so Dioxus tracks it as a dependency
     let theme_class = theme.read().css_class();
+    let safe_style = safe_area.read().css_vars();
 
     rsx! {
            document::Link { rel: "stylesheet", href: asset!("/assets/style.css") }
-           div { class: "app-root {theme_class}",
+           div { class: "app-root {theme_class}", style: "{safe_style}",
                if let Some(alarm_id) = firing_id_val {
     // Show alarm firing screen directly, bypassing router
                    crate::screens::AlarmFiring { id: alarm_id }
@@ -167,4 +190,54 @@ pub fn App() -> Element {
                }
            }
        }
+}
+
+/// System-bar overlap in CSS px, rounded to whole px so tiny float jitter
+/// never triggers a re-render.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct SafeArea {
+    top: u32,
+    bottom: u32,
+    left: u32,
+    right: u32,
+}
+
+impl SafeArea {
+    fn query() -> Self {
+        mobile_sentinel::display::safe_area_insets()
+            .map(|i| Self {
+                top: i.top.round() as u32,
+                bottom: i.bottom.round() as u32,
+                left: i.left.round() as u32,
+                right: i.right.round() as u32,
+            })
+            .unwrap_or_default()
+    }
+
+    fn css_vars(&self) -> String {
+        format!(
+            "--safe-top: {}px; --safe-bottom: {}px; --safe-left: {}px; --safe-right: {}px;",
+            self.top, self.bottom, self.left, self.right
+        )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::SafeArea;
+
+    #[test]
+    fn safe_area_renders_css_variables() {
+        let s = SafeArea {
+            top: 24,
+            bottom: 48,
+            left: 0,
+            right: 0,
+        };
+        assert_eq!(
+            s.css_vars(),
+            "--safe-top: 24px; --safe-bottom: 48px; --safe-left: 0px; --safe-right: 0px;"
+        );
+        assert_eq!(SafeArea::default().css_vars().matches("0px").count(), 4);
+    }
 }
