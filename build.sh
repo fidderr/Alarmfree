@@ -126,6 +126,20 @@ if [ "$MODE" = "release" ] || [ "$MODE" = "aab" ]; then
       sed -i '/getByName("release") {/a\            ndk {\n                debugSymbolLevel = "FULL"\n            }' "$GRADLE_FILE" || true
     fi
 
+    # Ship a stripped libmain.so. dx adds `jniLibs.keepDebugSymbols` for every
+    # ABI, which stops AGP from stripping, so users downloaded the full symbol
+    # table (libmain.so 21 MB vs 12.6 MB stripped). Without it AGP strips the
+    # packaged .so, while debugSymbolLevel=FULL above still puts the symbols in
+    # the AAB's metadata for Play crash reports.
+    sed -i '/jniLibs.keepDebugSymbols.add/d' "$GRADLE_FILE" || true
+    # AGP strips with its *default* NDK version unless told otherwise; when
+    # that exact NDK isn't installed it logs "Unable to strip ... libmain.so"
+    # and ships it unstripped. Point it at the NDK dx just built with.
+    NDK_VER="$(basename "${ANDROID_NDK_HOME:-${NDK_HOME:-}}")"
+    if [ -n "$NDK_VER" ] && ! grep -q "ndkVersion" "$GRADLE_FILE"; then
+      sed -i "s/^android {/android {\n    ndkVersion = \"$NDK_VER\"/" "$GRADLE_FILE" || true
+    fi
+
     # Force-keep all sentinel JNI entry points + manifest components.
     # Without this, R8 in release minify can strip the *Primitives / *Helper
     # classes (they are only referenced by string name from Rust JNI and by
