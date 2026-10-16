@@ -49,7 +49,14 @@ pub fn extract_bundled_sounds() {
     {
         let count = extractor.extract("default", "sounds/default");
         if count > 0 {
-            eprintln!("[AlarmFree] Extracted {} bundled sounds", count);
+            log::info!("[AlarmFree] Extracted {} bundled sounds", count);
+        }
+        let removed = prune_superseded_defaults(&default_sounds_dir());
+        if removed > 0 {
+            log::info!(
+                "[AlarmFree] Removed {} superseded bundled sound files",
+                removed
+            );
         }
     }
 
@@ -59,9 +66,10 @@ pub fn extract_bundled_sounds() {
         if src.exists() {
             let count = extractor.extract_from_dir(&src, "sounds/default");
             if count > 0 {
-                eprintln!("[AlarmFree] Copied {} bundled sounds from source", count);
+                log::info!("[AlarmFree] Copied {} bundled sounds from source", count);
             }
         }
+        prune_superseded_defaults(&default_sounds_dir());
     }
 }
 
@@ -84,7 +92,42 @@ pub fn list_default_sounds() -> Vec<String> {
         }
     }
     sounds.sort();
+    // A stem can briefly exist in two formats (see `prune_superseded_defaults`).
+    sounds.dedup();
     sounds
+}
+
+/// Format the bundled default sounds ship in. Older releases shipped `.mp3`.
+const BUNDLED_EXTENSION: &str = "ogg";
+
+/// Delete extracted default sounds that a newer format supersedes: when a stem
+/// exists as `<stem>.ogg` and also in another format (left over from an older
+/// release that bundled `.mp3`), drop the old file. Returns how many files
+/// were removed. Alarms reference default sounds by stem, so nothing breaks.
+fn prune_superseded_defaults(dir: &std::path::Path) -> usize {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return 0;
+    };
+    let files: Vec<PathBuf> = entries
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.is_file())
+        .collect();
+    let current: std::collections::HashSet<String> = files
+        .iter()
+        .filter(|p| p.extension().and_then(|e| e.to_str()) == Some(BUNDLED_EXTENSION))
+        .filter_map(|p| p.file_stem()?.to_str().map(str::to_owned))
+        .collect();
+    files
+        .iter()
+        .filter(|p| p.extension().and_then(|e| e.to_str()) != Some(BUNDLED_EXTENSION))
+        .filter(|p| {
+            p.file_stem()
+                .and_then(|s| s.to_str())
+                .is_some_and(|s| current.contains(s))
+        })
+        .filter(|p| fs::remove_file(p).is_ok())
+        .count()
 }
 
 /// Get the full file path for a default sound by its display name (stem).
@@ -191,5 +234,36 @@ pub fn display_name_translated(sound: &str, translations: &crate::app::Translati
         crate::app::t(translations, key).replace("{name}", &truncated)
     } else {
         sound.to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    #[test]
+    fn prune_removes_old_format_only_when_new_format_exists() {
+        let dir = TempDir::new().unwrap();
+        for f in ["power.mp3", "power.ogg", "funk.mp3", "lofi.ogg"] {
+            fs::write(dir.path().join(f), b"x").unwrap();
+        }
+        assert_eq!(prune_superseded_defaults(dir.path()), 1);
+        let mut left: Vec<_> = fs::read_dir(dir.path())
+            .unwrap()
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect();
+        left.sort();
+        // `funk.mp3` has no replacement, so it stays playable.
+        assert_eq!(left, ["funk.mp3", "lofi.ogg", "power.ogg"]);
+    }
+
+    #[test]
+    fn prune_handles_missing_dir() {
+        assert_eq!(
+            prune_superseded_defaults(std::path::Path::new("/no/such/dir")),
+            0
+        );
     }
 }
