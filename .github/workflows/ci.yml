@@ -33,4 +33,13 @@ jobs:
         with:
           targets: aarch64-linux-android
       - uses: Swatinem/rust-cache@v2
+      # rusqlite's bundled SQLite is C, so the build script needs the NDK's
+      # clang. The ubuntu runner ships an NDK; API 26 matches minSdk.
+      - name: Point cc at the preinstalled NDK
+        run: |
+          BIN="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          test -x "$BIN/aarch64-linux-android26-clang"
+          echo "CC_aarch64_linux_android=$BIN/aarch64-linux-android26-clang" >> "$GITHUB_ENV"
+          echo "AR_aarch64_linux_android=$BIN/llvm-ar" >> "$GITHUB_ENV"
       - run: cargo check --target aarch64-linux-android
+      - run: cargo clippy --target aarch64-linux-android -- -D warnings
