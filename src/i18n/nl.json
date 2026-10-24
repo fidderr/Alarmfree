@@ -276,5 +276,15 @@
   "config.fade_off": "Uit",
   "action.skip_next": "Volgende keer overslaan",
   "action.undo_skip": "Overslaan ongedaan maken",
-  "home.skipped": "Volgende keer overgeslagen"
+  "home.skipped": "Volgende keer overgeslagen",
+  "action.practice": "Oefenen",
+  "practice.title": "Oefenen",
+  "practice.exit": "Stoppen",
+  "practice.done": "Zo gaat het straks. Er is niets opgeslagen.",
+  "practice.empty": "Dit alarm heeft geen uitdagingen om te oefenen.",
+  "config.rings_in": "Gaat af over {time}",
+  "config.weekend": "Weekend",
+  "settings.reliability": "Houd alarmen betrouwbaar",
+  "settings.reliability_desc": "Op sommige telefoons (OnePlus, Xiaomi, Oppo, Samsung...) kunnen alarmen na een herstart mislukken als de app niet automatisch mag starten. Sta in de app-instellingen Automatisch starten / Autostart toe en zet het batterijgebruik op Onbeperkt.",
+  "settings.open_app_settings": "App-instellingen openen"
 }

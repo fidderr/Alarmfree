@@ -101,6 +101,7 @@ pub fn Home() -> Element {
         t(&translations, "action.skip_next")
     };
     let skipped_text = t(&translations, "home.skipped");
+    let practice_text = t(&translations, "action.practice");
 
     let nav_alarms = t(&translations, "nav.alarms");
     let nav_history = t(&translations, "nav.history");
@@ -242,6 +243,19 @@ pub fn Home() -> Element {
                                    }
                                }
                            } else {
+                               if menu_alarm.as_ref().is_some_and(|a| !a.challenges.is_empty()) {
+                                   button {
+                                       class: "sheet-item",
+                                       onclick: {
+                                           let menu_id = menu_id.clone();
+                                           move |_| {
+                                               menu_for.set(None);
+                                               nav.push(Route::Practice { id: menu_id.clone() });
+                                           }
+                                       },
+                                       "{practice_text}"
+                                   }
+                               }
                                if can_skip {
                                    button {
                                        class: "sheet-item",

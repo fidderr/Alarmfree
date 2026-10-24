@@ -225,6 +225,9 @@ pub fn Settings() -> Element {
                        let display_over_apps_label = t(&translations, "settings.display_over_apps");
                        let overlay_desc_text = t(&translations, "settings.overlay_description");
                        let grant_overlay_text = t(&translations, "settings.grant_overlay");
+                       let reliability_label = t(&translations, "settings.reliability");
+                       let reliability_desc = t(&translations, "settings.reliability_desc");
+                       let open_app_settings_text = t(&translations, "settings.open_app_settings");
                        rsx! {
                            div { class: "settings-section",
                                label { class: "section-label", "{notifications_label}" }
@@ -254,6 +257,22 @@ pub fn Settings() -> Element {
                                        request_system_alert_window();
                                    },
                                    span { class: "dropdown-value", "{grant_overlay_text}" }
+                                   span { class: "dropdown-arrow", Icon { name: IconName::ChevronRight, size: 12 } }
+                               }
+                           }
+
+    // Some phones (OnePlus, Xiaomi, Oppo, ...) stop apps from starting at
+    // boot and kill background processes unless allowed. Without that an
+    // alarm can fail after a restart.
+                           div { class: "settings-section",
+                               label { class: "section-label", "{reliability_label}" }
+                               p { class: "about-desc", "{reliability_desc}" }
+                               button {
+                                   class: "dropdown-trigger",
+                                   onclick: move |_| {
+                                       open_app_notification_settings();
+                                   },
+                                   span { class: "dropdown-value", "{open_app_settings_text}" }
                                    span { class: "dropdown-arrow", Icon { name: IconName::ChevronRight, size: 12 } }
                                }
                            }

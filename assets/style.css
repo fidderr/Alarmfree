@@ -3917,3 +3917,76 @@ input.input-error {
   color: var(--text-secondary);
   font-style: italic;
 }
+
+/* ===== Practice mode ===== */
+.practice-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: var(--safe-top);
+  margin-bottom: 8px;
+}
+
+.practice-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.practice-done {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  text-align: center;
+  padding: 24px;
+  color: var(--text);
+}
+
+.btn-primary {
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 14px 28px;
+  font-size: 16px;
+  font-weight: 600;
+  min-height: 48px;
+  cursor: pointer;
+}
+
+/* ===== Editor: live countdown + weekday presets ===== */
+.rings-in {
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 14px;
+  margin-top: 8px;
+}
+
+.day-presets {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.preset-btn {
+  flex: 1;
+  background: var(--surface-hover);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 4px;
+  font-size: 13px;
+  min-height: 36px;
+  cursor: pointer;
+}
+
+.preset-btn:active {
+  background: var(--primary);
+  color: white;
+}

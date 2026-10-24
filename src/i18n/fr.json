@@ -276,5 +276,15 @@
   "config.fade_off": "Non",
   "action.skip_next": "Ignorer la prochaine sonnerie",
   "action.undo_skip": "Annuler",
-  "home.skipped": "Prochaine sonnerie ignorée"
+  "home.skipped": "Prochaine sonnerie ignorée",
+  "action.practice": "S'entraîner",
+  "practice.title": "Entraînement",
+  "practice.exit": "Quitter",
+  "practice.done": "Voilà comment cela se passera. Rien n'a été enregistré.",
+  "practice.empty": "Cette alarme n'a aucun défi à essayer.",
+  "config.rings_in": "Sonne dans {time}",
+  "config.weekend": "Week-end",
+  "settings.reliability": "Alarmes fiables",
+  "settings.reliability_desc": "Sur certains téléphones (OnePlus, Xiaomi, Oppo, Samsung...), les alarmes peuvent échouer après un redémarrage si l'application ne peut pas démarrer seule. Dans les réglages de l'application, autorisez le démarrage automatique et réglez l'utilisation de la batterie sur Sans restriction.",
+  "settings.open_app_settings": "Ouvrir les réglages de l'application"
 }

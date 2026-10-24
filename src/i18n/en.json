@@ -276,5 +276,15 @@
   "config.fade_off": "Off",
   "action.skip_next": "Skip next ring",
   "action.undo_skip": "Undo skip",
-  "home.skipped": "Next ring skipped"
+  "home.skipped": "Next ring skipped",
+  "action.practice": "Practice",
+  "practice.title": "Practice",
+  "practice.exit": "Exit",
+  "practice.done": "That is how it will go. Nothing was recorded.",
+  "practice.empty": "This alarm has no challenges to practice.",
+  "config.rings_in": "Rings in {time}",
+  "config.weekend": "Weekend",
+  "settings.reliability": "Keep alarms reliable",
+  "settings.reliability_desc": "On some phones (OnePlus, Xiaomi, Oppo, Samsung...) alarms can fail after a restart unless the app may start automatically. In the app settings, allow Auto-launch / Autostart and set battery use to Unrestricted.",
+  "settings.open_app_settings": "Open app settings"
 }

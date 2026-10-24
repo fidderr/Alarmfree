@@ -490,6 +490,35 @@ pub fn AlarmConfig(id: String) -> Element {
     let challenges_label = t(&translations, "config.challenges");
     let fade_in_label = t(&translations, "config.fade_in");
     let fade_off_text = t(&translations, "config.fade_off");
+    let weekend_text = t(&translations, "config.weekend");
+    let every_day_text = t(&translations, "config.every_day");
+    // "Rings in …" for the settings as they are right now.
+    let rings_in_text = {
+        let now = chrono::Local::now().naive_local();
+        let date_mode = *schedule_mode.read() == "date";
+        let days = if date_mode {
+            [false; 7]
+        } else {
+            *selected_days.read()
+        };
+        let date = if date_mode {
+            chrono::NaiveDate::parse_from_str(&date_value.read(), "%Y-%m-%d").ok()
+        } else {
+            None
+        };
+        crate::schedule::next_ring_moment(*hour.read(), *minute.read(), days, date, now)
+            .map(|moment| {
+                let left = crate::schedule::countdown(0, (moment - now).num_milliseconds());
+                let time = crate::schedule::format_countdown(
+                    left,
+                    &t(&translations, "home.next_in_dhm"),
+                    &t(&translations, "home.next_in_hm"),
+                    &t(&translations, "home.next_in_m"),
+                );
+                t(&translations, "config.rings_in").replace("{time}", &time)
+            })
+            .unwrap_or_default()
+    };
     let snooze_label = t(&translations, "config.snooze");
     let snooze_count_label = t(&translations, "config.snooze_count");
     let snooze_interval_label = t(&translations, "config.snooze_interval");
@@ -1049,6 +1078,9 @@ pub fn AlarmConfig(id: String) -> Element {
                            minute.set(m);
                        },
                    }
+                   if !rings_in_text.is_empty() {
+                       p { class: "rings-in", "{rings_in_text}" }
+                   }
                }
 
     // Label section
@@ -1101,6 +1133,23 @@ pub fn AlarmConfig(id: String) -> Element {
                                        }
                                    }
                                }
+                           }
+                       }
+                       div { class: "day-presets",
+                           button {
+                               class: "preset-btn",
+                               onclick: move |_| { selected_days.set([true, true, true, true, true, false, false]); },
+                               "{weekdays_text}"
+                           }
+                           button {
+                               class: "preset-btn",
+                               onclick: move |_| { selected_days.set([false, false, false, false, false, true, true]); },
+                               "{weekend_text}"
+                           }
+                           button {
+                               class: "preset-btn",
+                               onclick: move |_| { selected_days.set([true; 7]); },
+                               "{every_day_text}"
                            }
                        }
                    } else {

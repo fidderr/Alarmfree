@@ -276,5 +276,15 @@
   "config.fade_off": "Aus",
   "action.skip_next": "Nächstes Klingeln überspringen",
   "action.undo_skip": "Überspringen rückgängig",
-  "home.skipped": "Nächstes Klingeln übersprungen"
+  "home.skipped": "Nächstes Klingeln übersprungen",
+  "action.practice": "Üben",
+  "practice.title": "Üben",
+  "practice.exit": "Beenden",
+  "practice.done": "So läuft es später ab. Nichts wurde gespeichert.",
+  "practice.empty": "Dieser Wecker hat keine Aufgaben zum Üben.",
+  "config.rings_in": "Klingelt in {time}",
+  "config.weekend": "Wochenende",
+  "settings.reliability": "Wecker zuverlässig halten",
+  "settings.reliability_desc": "Auf manchen Telefonen (OnePlus, Xiaomi, Oppo, Samsung...) können Wecker nach einem Neustart ausfallen, wenn die App nicht automatisch starten darf. Erlaube in den App-Einstellungen den Autostart und setze den Akkuverbrauch auf Unbeschränkt.",
+  "settings.open_app_settings": "App-Einstellungen öffnen"
 }

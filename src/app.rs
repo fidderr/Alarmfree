@@ -10,6 +10,7 @@ use crate::screens::AlarmConfig;
 use crate::screens::AlarmFiring;
 use crate::screens::History;
 use crate::screens::Home;
+use crate::screens::Practice;
 use crate::screens::Settings;
 
 /// Type alias for the translations signal used across the app.
@@ -34,6 +35,8 @@ pub enum Route {
     AlarmConfig { id: String },
     #[route("/alarm-firing/:id")]
     AlarmFiring { id: String },
+    #[route("/practice/:id")]
+    Practice { id: String },
     #[route("/history")]
     History {},
     #[route("/settings")]

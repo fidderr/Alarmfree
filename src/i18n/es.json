@@ -276,5 +276,15 @@
   "config.fade_off": "No",
   "action.skip_next": "Omitir la próxima vez",
   "action.undo_skip": "Deshacer omitir",
-  "home.skipped": "Próxima vez omitida"
+  "home.skipped": "Próxima vez omitida",
+  "action.practice": "Practicar",
+  "practice.title": "Práctica",
+  "practice.exit": "Salir",
+  "practice.done": "Así será. No se guardó nada.",
+  "practice.empty": "Esta alarma no tiene retos que practicar.",
+  "config.rings_in": "Suena en {time}",
+  "config.weekend": "Fin de semana",
+  "settings.reliability": "Alarmas fiables",
+  "settings.reliability_desc": "En algunos teléfonos (OnePlus, Xiaomi, Oppo, Samsung...) las alarmas pueden fallar tras un reinicio si la app no puede iniciarse sola. En los ajustes de la app, permite el inicio automático y pon el uso de batería en Sin restricciones.",
+  "settings.open_app_settings": "Abrir ajustes de la app"
 }

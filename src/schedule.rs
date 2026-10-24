@@ -81,6 +81,30 @@ pub fn sweep_finished_one_time(
     switched_off
 }
 
+/// When an alarm with these settings next rings, as seen from `now`: on the
+/// chosen date for a one-time alarm, otherwise on the first selected weekday
+/// (today included while the time is still ahead). `days` is Monday first.
+/// `None` for a one-time alarm whose date is past, or no day selected and no
+/// date given.
+pub fn next_ring_moment(
+    hour: u8,
+    minute: u8,
+    days: [bool; 7],
+    date: Option<NaiveDate>,
+    now: NaiveDateTime,
+) -> Option<NaiveDateTime> {
+    use chrono::Datelike;
+    let at = |day: NaiveDate| day.and_hms_opt(u32::from(hour), u32::from(minute), 0);
+    if days.iter().any(|&d| d) {
+        return (0..=7)
+            .map(|offset| now.date() + Duration::days(offset))
+            .filter(|day| days[day.weekday().num_days_from_monday() as usize])
+            .filter_map(at)
+            .find(|moment| *moment > now);
+    }
+    at(date?).filter(|moment| *moment > now)
+}
+
 /// Time left until an alarm rings, in whole days, hours and minutes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Countdown {
@@ -183,6 +207,53 @@ mod tests {
 
     fn text(now_ms: i64, at_ms: i64) -> String {
         format_countdown(countdown(now_ms, at_ms), DHM, HM, M)
+    }
+
+    fn day(s: &str) -> NaiveDate {
+        NaiveDate::parse_from_str(s, DATE_FORMAT).unwrap()
+    }
+
+    #[test]
+    fn the_next_ring_picks_the_first_selected_weekday_still_ahead() {
+        // 2026-10-24 is a Saturday; days are Monday first.
+        let mut days = NO_DAYS;
+        days[0] = true; // Monday
+        days[5] = true; // Saturday
+        let now = at("2026-10-24", 15, 0);
+        assert_eq!(
+            next_ring_moment(16, 0, days, None, now),
+            Some(at("2026-10-24", 16, 0)),
+            "Saturday 16:00 is still ahead"
+        );
+        assert_eq!(
+            next_ring_moment(14, 0, days, None, now),
+            Some(at("2026-10-26", 14, 0)),
+            "Saturday 14:00 has passed: Monday"
+        );
+        let saturday_only = {
+            let mut d = NO_DAYS;
+            d[5] = true;
+            d
+        };
+        assert_eq!(
+            next_ring_moment(14, 0, saturday_only, None, now),
+            Some(at("2026-10-31", 14, 0)),
+            "a week away"
+        );
+    }
+
+    #[test]
+    fn the_next_ring_of_a_one_time_alarm_is_its_date_when_that_is_ahead() {
+        let now = at("2026-10-24", 15, 0);
+        assert_eq!(
+            next_ring_moment(7, 0, NO_DAYS, Some(day("2026-12-24")), now),
+            Some(at("2026-12-24", 7, 0))
+        );
+        assert_eq!(
+            next_ring_moment(7, 0, NO_DAYS, Some(day("2026-10-24")), now),
+            None
+        );
+        assert_eq!(next_ring_moment(7, 0, NO_DAYS, None, now), None);
     }
 
     #[test]

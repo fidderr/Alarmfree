@@ -21,14 +21,14 @@ enum FiringPhase {
 
 /// Rate limiter to prevent brute-forcing challenge answers.
 #[derive(Clone, Debug)]
-struct RateLimiter {
+pub(crate) struct RateLimiter {
     consecutive_wrong: u8,
     /// Timestamp (seconds since component mount) when cooldown ends
     cooldown_until_secs: Option<u32>,
 }
 
 impl RateLimiter {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             consecutive_wrong: 0,
             cooldown_until_secs: None,
@@ -72,7 +72,7 @@ impl RateLimiter {
 
 /// Generated challenge data stored in signals (pre-generated to avoid StdRng Send issues)
 #[derive(Clone, Debug)]
-struct GeneratedChallenge {
+pub(crate) struct GeneratedChallenge {
     challenge_type: String,
     /// Enum form of challenge type for history records.
     challenge_type_enum: ChallengeType,
@@ -118,7 +118,7 @@ fn parse_challenge_type(key: &str) -> Option<ChallengeType> {
 }
 
 /// Generate all challenges eagerly from the alarm's challenge list
-fn generate_challenges(challenge_list: &[(String, String)]) -> Vec<GeneratedChallenge> {
+pub(crate) fn generate_challenges(challenge_list: &[(String, String)]) -> Vec<GeneratedChallenge> {
     use crate::models::ReferenceData;
     let mut engine = ChallengeEngine::new();
     let mut generated = Vec::new();
@@ -898,7 +898,7 @@ pub fn AlarmFiring(id: String) -> Element {
 
 /// Render the appropriate challenge component based on type
 #[allow(clippy::too_many_arguments)]
-fn render_challenge(
+pub(crate) fn render_challenge(
     challenge: GeneratedChallenge,
     current_idx: usize,
     total: usize,
@@ -977,10 +977,14 @@ fn render_challenge(
                 // All challenges solved — dismiss via AlarmKit, then let
                 // `on_all_solved` record history and request navigation to
                 // the History screen.
-                let kit = crate::platform::alarm_kit();
-                let id = mobile_sentinel::InstanceId::new(instance_id.clone());
-                let _ = kit.mark_solved(&id);
-                let _ = kit.dismiss(&id);
+                // An empty instance id is practice mode: nothing is ringing, so
+                // there is nothing to dismiss.
+                if !instance_id.is_empty() {
+                    let kit = crate::platform::alarm_kit();
+                    let id = mobile_sentinel::InstanceId::new(instance_id.clone());
+                    let _ = kit.mark_solved(&id);
+                    let _ = kit.dismiss(&id);
+                }
                 on_all_solved.call(());
             } else {
                 current_challenge_index.set(next);
