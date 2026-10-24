@@ -83,6 +83,10 @@ pub struct AlarmData {
     /// Seconds the sound takes to fade in (0 = off).
     #[serde(default)]
     pub fade_in_secs: u16,
+    /// Position in the home list once the user has dragged alarms around (see
+    /// [`crate::ordering`]); 0 = not arranged, listed by time.
+    #[serde(default)]
+    pub order: i64,
     pub enabled: bool,
     pub sound: String,
     pub sound_mode: usize,                 // 0=Sound+Vib, 1=Sound, 2=Vib
@@ -314,6 +318,7 @@ mod tests {
             date: None,
             skip_until_ms: None,
             fade_in_secs: 0,
+            order: 0,
             enabled: true,
             sound: sound.into(),
             sound_mode: 0,

@@ -264,8 +264,6 @@
   "home.next_in_dhm": "{days}d {hours}u {minutes}m",
   "home.today": "Vandaag",
   "home.tomorrow": "Morgen",
-  "config.move_challenge_up": "Omhoog",
-  "config.move_challenge_down": "Omlaag",
   "alarm.copy_label": "{label} (kopie)",
   "action.duplicate": "Dupliceren",
   "home.menu_aria": "Meer acties",
@@ -286,5 +284,7 @@
   "config.weekend": "Weekend",
   "settings.reliability": "Houd alarmen betrouwbaar",
   "settings.reliability_desc": "Op sommige telefoons (OnePlus, Xiaomi, Oppo, Samsung...) kunnen alarmen na een herstart mislukken als de app niet automatisch mag starten. Sta in de app-instellingen Automatisch starten / Autostart toe en zet het batterijgebruik op Onbeperkt.",
-  "settings.open_app_settings": "App-instellingen openen"
+  "settings.open_app_settings": "App-instellingen openen",
+  "config.drag_challenge": "Slepen om te verplaatsen",
+  "challenge.config.test": "Testen"
 }

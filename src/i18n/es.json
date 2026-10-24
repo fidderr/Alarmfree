@@ -264,8 +264,6 @@
   "home.next_in_dhm": "{days}d {hours}h {minutes}m",
   "home.today": "Hoy",
   "home.tomorrow": "Mañana",
-  "config.move_challenge_up": "Subir",
-  "config.move_challenge_down": "Bajar",
   "alarm.copy_label": "{label} (copia)",
   "action.duplicate": "Duplicar",
   "home.menu_aria": "Más acciones",
@@ -286,5 +284,7 @@
   "config.weekend": "Fin de semana",
   "settings.reliability": "Alarmas fiables",
   "settings.reliability_desc": "En algunos teléfonos (OnePlus, Xiaomi, Oppo, Samsung...) las alarmas pueden fallar tras un reinicio si la app no puede iniciarse sola. En los ajustes de la app, permite el inicio automático y pon el uso de batería en Sin restricciones.",
-  "settings.open_app_settings": "Abrir ajustes de la app"
+  "settings.open_app_settings": "Abrir ajustes de la app",
+  "config.drag_challenge": "Arrastra para reordenar",
+  "challenge.config.test": "Probar"
 }

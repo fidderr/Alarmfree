@@ -1,18 +1,22 @@
-//! Practice mode: run an alarm's challenges without an alarm.
+//! Practice mode: run challenges without an alarm.
 //!
 //! Nothing rings, nothing is locked, no history is written and AlarmKit is
 //! never called; the challenges are the very ones that would run when the
 //! alarm fires (same generator, same components), so the user can try what
 //! they set up. Exit is always one tap away.
+//!
+//! [`ChallengeRunner`] is the reusable part: the alarm editor shows it in
+//! place to test the challenge being configured (leaving the editor would
+//! lose unsaved edits), and the [`Practice`] route shows it for a saved alarm.
 
 use crate::app::{t, AlarmData, Translations};
 use crate::components::{Celebration, Icon, IconName};
 use crate::screens::alarm_firing::{generate_challenges, render_challenge, RateLimiter};
 use dioxus::prelude::*;
 
+/// Practice route: the challenges of a saved alarm.
 #[component]
 pub fn Practice(id: String) -> Element {
-    let translations = use_context::<Translations>();
     let alarms = use_context::<Signal<Vec<AlarmData>>>();
     let nav = use_navigator();
 
@@ -23,7 +27,23 @@ pub fn Practice(id: String) -> Element {
         .map(|a| a.challenges.clone())
         .unwrap_or_default();
 
-    let challenges = use_signal(|| generate_challenges(&list));
+    rsx! {
+        ChallengeRunner {
+            challenges: list,
+            on_exit: move |_| {
+                nav.go_back();
+            },
+        }
+    }
+}
+
+/// Runs the given `(type, config_json)` challenges one after another, as an
+/// alarm would, and calls `on_exit` when the user leaves or has finished.
+#[component]
+pub fn ChallengeRunner(challenges: Vec<(String, String)>, on_exit: EventHandler<()>) -> Element {
+    let translations = use_context::<Translations>();
+
+    let generated = use_signal(|| generate_challenges(&challenges));
     let current_challenge_index = use_signal(|| 0usize);
     let answer_feedback = use_signal(|| "");
     let rate_limiter = use_signal(RateLimiter::new);
@@ -50,18 +70,16 @@ pub fn Practice(id: String) -> Element {
     let unknown_text = t(&translations, "challenge.unknown_type");
     let incorrect_text = t(&translations, "challenge.incorrect");
 
-    let total = challenges.read().len();
+    let total = generated.read().len();
     let idx = *current_challenge_index.read();
-    let current = challenges.read().get(idx).cloned();
+    let current = generated.read().get(idx).cloned();
 
     rsx! {
         div { class: "screen alarm-firing-screen in-challenge practice-screen",
             div { class: "practice-bar",
                 button {
                     class: "back-btn",
-                    onclick: move |_| {
-                        nav.go_back();
-                    },
+                    onclick: move |_| on_exit.call(()),
                     Icon { name: IconName::ArrowLeft, size: 16 }
                     " {exit_text}"
                 }
@@ -76,9 +94,7 @@ pub fn Practice(id: String) -> Element {
                     p { "{done_text}" }
                     button {
                         class: "btn-primary",
-                        onclick: move |_| {
-                            nav.go_back();
-                        },
+                        onclick: move |_| on_exit.call(()),
                         "{exit_text}"
                     }
                 }
@@ -116,9 +132,7 @@ pub fn Practice(id: String) -> Element {
                     p { "{empty_text}" }
                     button {
                         class: "btn-primary",
-                        onclick: move |_| {
-                            nav.go_back();
-                        },
+                        onclick: move |_| on_exit.call(()),
                         "{exit_text}"
                     }
                 }

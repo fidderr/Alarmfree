@@ -264,8 +264,6 @@
   "home.next_in_dhm": "{days}T {hours}h {minutes}m",
   "home.today": "Heute",
   "home.tomorrow": "Morgen",
-  "config.move_challenge_up": "Nach oben",
-  "config.move_challenge_down": "Nach unten",
   "alarm.copy_label": "{label} (Kopie)",
   "action.duplicate": "Duplizieren",
   "home.menu_aria": "Weitere Aktionen",
@@ -286,5 +284,7 @@
   "config.weekend": "Wochenende",
   "settings.reliability": "Wecker zuverlässig halten",
   "settings.reliability_desc": "Auf manchen Telefonen (OnePlus, Xiaomi, Oppo, Samsung...) können Wecker nach einem Neustart ausfallen, wenn die App nicht automatisch starten darf. Erlaube in den App-Einstellungen den Autostart und setze den Akkuverbrauch auf Unbeschränkt.",
-  "settings.open_app_settings": "App-Einstellungen öffnen"
+  "settings.open_app_settings": "App-Einstellungen öffnen",
+  "config.drag_challenge": "Zum Umsortieren ziehen",
+  "challenge.config.test": "Testen"
 }

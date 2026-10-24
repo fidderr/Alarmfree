@@ -555,6 +555,7 @@ mod tests {
             date: None,
             skip_until_ms: None,
             fade_in_secs: 0,
+            order: 0,
             enabled: true,
             sound: "happy".into(),
             sound_mode: 0,

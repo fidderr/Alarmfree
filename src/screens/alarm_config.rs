@@ -1,6 +1,7 @@
 use crate::app::{t, AlarmData, Route, Translations};
 use crate::components::time_picker::TimePicker;
 use crate::components::{Icon, IconName};
+use crate::screens::practice::ChallengeRunner;
 use dioxus::prelude::*;
 
 /// Stop any currently playing preview sound via the gated audio capability.
@@ -256,6 +257,137 @@ fn parse_picker_config(type_key: &str, config_json: &str) -> ParsedPickerConfig 
 
 /// Alarm configuration screen for creating/editing alarms.
 /// Reads and writes alarm data to/from shared global context.
+/// What the challenge modal currently shows, for building the challenge's
+/// stored settings from it.
+struct PickedSettings<'a> {
+    difficulty: &'a str,
+    shake_count: u32,
+    step_count: u32,
+    hold_count: u32,
+    hold_secs: u32,
+    reaction_targets: u32,
+    reaction_secs: u32,
+    reaction_rounds: u32,
+    scan_value: &'a str,
+}
+
+/// The stored JSON settings of a challenge of type `type_key` as picked in the
+/// modal. The same JSON is what an alarm keeps and what the firing screen
+/// reads, so the Test button and Add share it.
+fn picker_config_json(type_key: &str, p: &PickedSettings) -> String {
+    match type_key {
+        "challenge.math" | "challenge.memory" | "challenge.typing" => {
+            format!("{{\"difficulty\":\"{}\"}}", p.difficulty)
+        }
+        "challenge.shake" => format!("{{\"count\":{}}}", p.shake_count),
+        "challenge.steps" => format!("{{\"count\":{}}}", p.step_count),
+        "challenge.hold" => format!(
+            "{{\"count\":{},\"hold_ms\":{}}}",
+            p.hold_count,
+            p.hold_secs * 1000
+        ),
+        "challenge.reaction" => format!(
+            "{{\"count\":{},\"time_ms\":{},\"rounds\":{}}}",
+            p.reaction_targets,
+            p.reaction_secs * 1000,
+            p.reaction_rounds
+        ),
+        // Built with serde so a quote or backslash in the code (a URL, JSON text in
+        // a QR code) cannot break the settings, which would silently turn "this
+        // specific code" into "any code".
+        "challenge.scan" => serde_json::json!({
+            "value": crate::sanitize::sanitize_reference_value(p.scan_value)
+        })
+        .to_string(),
+        _ => "{}".to_string(),
+    }
+}
+
+/// Ask for the Android permission a challenge needs (steps, camera) before it
+/// is added or tested. A no-op elsewhere.
+fn request_challenge_permission(type_key: &str) {
+    #[cfg(target_os = "android")]
+    {
+        let permission = match type_key {
+            "challenge.steps" => Some("android.permission.ACTIVITY_RECOGNITION"),
+            "challenge.scan" => Some("android.permission.CAMERA"),
+            _ => None,
+        };
+        if let Some(permission) = permission {
+            let _ = mobile_sentinel::permissions::request(permission);
+        }
+    }
+    #[cfg(not(target_os = "android"))]
+    let _ = type_key;
+}
+
+#[cfg(test)]
+mod picker_tests {
+    use super::*;
+
+    fn picked() -> PickedSettings<'static> {
+        PickedSettings {
+            difficulty: "hard",
+            shake_count: 25,
+            step_count: 40,
+            hold_count: 8,
+            hold_secs: 4,
+            reaction_targets: 12,
+            reaction_secs: 3,
+            reaction_rounds: 2,
+            scan_value: "",
+        }
+    }
+
+    #[test]
+    fn each_challenge_type_stores_only_its_own_settings() {
+        let p = picked();
+        assert_eq!(
+            picker_config_json("challenge.math", &p),
+            r#"{"difficulty":"hard"}"#
+        );
+        assert_eq!(
+            picker_config_json("challenge.memory", &p),
+            r#"{"difficulty":"hard"}"#
+        );
+        assert_eq!(picker_config_json("challenge.shake", &p), r#"{"count":25}"#);
+        assert_eq!(picker_config_json("challenge.steps", &p), r#"{"count":40}"#);
+        assert_eq!(
+            picker_config_json("challenge.hold", &p),
+            r#"{"count":8,"hold_ms":4000}"#
+        );
+        assert_eq!(
+            picker_config_json("challenge.reaction", &p),
+            r#"{"count":12,"time_ms":3000,"rounds":2}"#
+        );
+        assert_eq!(picker_config_json("challenge.unknown", &p), "{}");
+    }
+
+    #[test]
+    fn a_scan_value_is_sanitised_and_empty_means_any_code() {
+        let mut p = picked();
+        assert_eq!(picker_config_json("challenge.scan", &p), r#"{"value":""}"#);
+        // Quotes, backslashes and braces must survive exactly.
+        p.scan_value = r#"https://x.test/?q="a"\b{c}"#;
+        let json = picker_config_json("challenge.scan", &p);
+        let parsed: serde_json::Value = serde_json::from_str(&json).expect("valid JSON");
+        assert_eq!(parsed["value"], r#"https://x.test/?q="a"\b{c}"#);
+        p.scan_value = "ab\u{0007}cd";
+        let json = picker_config_json("challenge.scan", &p);
+        let parsed: serde_json::Value = serde_json::from_str(&json).expect("valid JSON");
+        assert_eq!(parsed["value"], "abcd", "control characters are stripped");
+    }
+
+    #[test]
+    fn the_stored_settings_round_trip_through_the_picker_parser() {
+        let p = picked();
+        let json = picker_config_json("challenge.hold", &p);
+        let parsed = parse_picker_config("challenge.hold", &json);
+        assert_eq!(parsed.hold_count, 8);
+        assert_eq!(parsed.hold_secs, 4);
+    }
+}
+
 #[component]
 pub fn AlarmConfig(id: String) -> Element {
     let mut alarms = use_context::<Signal<Vec<AlarmData>>>();
@@ -342,6 +474,8 @@ pub fn AlarmConfig(id: String) -> Element {
             .map_or(Vec::new(), |a| a.challenges.clone())
     });
     let mut show_challenge_picker = use_signal(|| false);
+    // The challenge being tried out from the modal (shown in place of the editor).
+    let mut test_challenge: Signal<Option<Vec<(String, String)>>> = use_signal(|| None);
     let mut picker_selected_type = use_signal(String::new);
     let mut editing_index: Signal<Option<usize>> = use_signal(|| None);
     let mut picker_difficulty = use_signal(|| "medium".to_string());
@@ -357,7 +491,20 @@ pub fn AlarmConfig(id: String) -> Element {
     let mut snooze_count = use_signal(|| existing.as_ref().map_or(3u8, |a| a.snooze_count));
     let mut snooze_interval = use_signal(|| existing.as_ref().map_or(1u8, |a| a.snooze_interval));
     let mut show_delete_confirm = use_signal(|| false);
-    let mut fade_in_secs = use_signal(|| existing.as_ref().map_or(0u16, |a| a.fade_in_secs));
+
+    // Drag a challenge by its handle to put it in a different step.
+    crate::reorder::use_reorder(
+        "challenge-list",
+        "challenge-item",
+        Some("drag-handle"),
+        EventHandler::new(move |(from, to)| {
+            crate::list_edit::move_item(&mut challenges.write(), from, to);
+        }),
+    );
+    // New alarms fade in over a minute; an existing alarm (or a copy of one) keeps
+    // its own setting.
+    let mut fade_in_secs = use_signal(|| existing.as_ref().map_or(60u16, |a| a.fade_in_secs));
+    let existing_order = existing.as_ref().map_or(0, |a| a.order);
 
     // Background task for native file picker
     let _pick_task = use_future(move || async move {
@@ -431,6 +578,17 @@ pub fn AlarmConfig(id: String) -> Element {
 
     // Translate day labels
     let day_labels: Vec<String> = DAY_KEYS.iter().map(|k| t(&translations, k)).collect();
+
+    // Try out the challenge from the modal with the settings picked so far. It
+    // replaces the editor view only while it runs; the editor keeps its state.
+    if let Some(list) = test_challenge.read().clone() {
+        return rsx! {
+            ChallengeRunner {
+                challenges: list,
+                on_exit: move |_| test_challenge.set(None),
+            }
+        };
+    }
 
     // Delete confirmation dialog
     if *show_delete_confirm.read() {
@@ -539,8 +697,7 @@ pub fn AlarmConfig(id: String) -> Element {
     let add_challenge_text = t(&translations, "config.add_challenge");
     let edit_challenge_text = t(&translations, "config.edit_challenge");
     let remove_challenge_text = t(&translations, "config.remove_challenge");
-    let move_up_text = t(&translations, "config.move_challenge_up");
-    let move_down_text = t(&translations, "config.move_challenge_down");
+    let drag_text = t(&translations, "config.drag_challenge");
     let total_challenges = challenges.read().len();
 
     // Translate sound mode labels
@@ -633,8 +790,35 @@ pub fn AlarmConfig(id: String) -> Element {
                                    t(&translations, "challenge.config.add")
                                };
                                let scan_btn_text = t(&translations, "challenge.config.scan");
+                               let test_text = t(&translations, "challenge.config.test");
+                               let type_for_test = selected_type.clone();
                                rsx! {
-                                   h3 { "{type_display}" }
+                                   div { class: "overlay-head",
+                                       h3 { "{type_display}" }
+                                       button {
+                                           class: "overlay-test-btn",
+                                           onclick: move |_| {
+                                               request_challenge_permission(&type_for_test);
+                                               let config_json = picker_config_json(
+                                                   &type_for_test,
+                                                   &PickedSettings {
+                                                       difficulty: &picker_difficulty.read(),
+                                                       shake_count: *picker_shake_count.read(),
+                                                       step_count: *picker_step_count.read(),
+                                                       hold_count: *picker_hold_count.read(),
+                                                       hold_secs: *picker_hold_secs.read(),
+                                                       reaction_targets: *picker_reaction_targets.read(),
+                                                       reaction_secs: *picker_reaction_secs.read(),
+                                                       reaction_rounds: *picker_reaction_rounds.read(),
+                                                       scan_value: &picker_scan_value.read(),
+                                                   },
+                                               );
+                                               test_challenge.set(Some(vec![(type_for_test.clone(), config_json)]));
+                                           },
+                                           Icon { name: IconName::Play, size: 13 }
+                                           " {test_text}"
+                                       }
+                                   }
                                    p { class: "overlay-desc", "{type_desc}" }
 
                                    if challenge_uses_difficulty(&selected_type) {
@@ -869,50 +1053,21 @@ pub fn AlarmConfig(id: String) -> Element {
                                            onclick: move |_| {
                                                let st = picker_selected_type.read().clone();
 
-                                               // Check permissions for challenges that need them
-                                               #[cfg(target_os = "android")]
-                                               {
-                                                   let permission_needed = match st.as_str() {
-                                                       "challenge.steps" => Some("android.permission.ACTIVITY_RECOGNITION"),
-                                                       "challenge.scan" => Some("android.permission.CAMERA"),
-                                                       _ => None,
-                                                   };
-                                                   if let Some(perm) = permission_needed {
-                                                       let _ = mobile_sentinel::permissions::request(perm);
-                                                   }
-                                               }
-
-                                               let config_json = match st.as_str() {
-                                                   "challenge.math" | "challenge.memory" | "challenge.typing" => {
-                                                       format!("{{\"difficulty\":\"{}\"}}", picker_difficulty.read())
-                                                   }
-                                                   "challenge.shake" => {
-                                                       format!("{{\"count\":{}}}", picker_shake_count.read())
-                                                   }
-                                                   "challenge.steps" => {
-                                                       format!("{{\"count\":{}}}", picker_step_count.read())
-                                                   }
-                                                   "challenge.hold" => {
-                                                       format!(
-                                                           "{{\"count\":{},\"hold_ms\":{}}}",
-                                                           picker_hold_count.read(),
-                                                           *picker_hold_secs.read() * 1000
-                                                       )
-                                                   }
-                                                   "challenge.reaction" => {
-                                                       format!(
-                                                           "{{\"count\":{},\"time_ms\":{},\"rounds\":{}}}",
-                                                           picker_reaction_targets.read(),
-                                                           *picker_reaction_secs.read() * 1000,
-                                                           picker_reaction_rounds.read()
-                                                       )
-                                                   }
-                                                   "challenge.scan" => {
-                                                       let sanitized = crate::sanitize::sanitize_reference_value(&picker_scan_value.read());
-                                                       format!("{{\"value\":\"{}\"}}", sanitized)
-                                                   }
-                                                   _ => "{}".to_string(),
-                                               };
+                                               request_challenge_permission(&st);
+                                               let config_json = picker_config_json(
+                                                   &st,
+                                                   &PickedSettings {
+                                                       difficulty: &picker_difficulty.read(),
+                                                       shake_count: *picker_shake_count.read(),
+                                                       step_count: *picker_step_count.read(),
+                                                       hold_count: *picker_hold_count.read(),
+                                                       hold_secs: *picker_hold_secs.read(),
+                                                       reaction_targets: *picker_reaction_targets.read(),
+                                                       reaction_secs: *picker_reaction_secs.read(),
+                                                       reaction_rounds: *picker_reaction_rounds.read(),
+                                                       scan_value: &picker_scan_value.read(),
+                                                   },
+                                               );
                                                match *editing_index.read() {
                                                    Some(idx) => {
                                                        let mut list = challenges.write();
@@ -1039,6 +1194,9 @@ pub fn AlarmConfig(id: String) -> Element {
                                    date: (*schedule_mode.read() == "date").then(|| date_value.read().clone()),
                                    skip_until_ms: None, // re-saving an alarm starts it fresh
                                    fade_in_secs: *fade_in_secs.read(),
+                                   // A new alarm (or a copy) goes where new alarms go; an
+                                   // edited one keeps its place in the list.
+                                   order: if is_new { crate::ordering::order_for_new(&alarms.read()) } else { existing_order },
                                    enabled: true,
                                    sound: sound_value.read().clone(),
                                    sound_mode: *sound_mode_index.read(),
@@ -1401,7 +1559,7 @@ pub fn AlarmConfig(id: String) -> Element {
                div { class: "config-section",
                    label { class: "section-label", "{challenges_label}" }
                    if !challenges.read().is_empty() {
-                       div { class: "challenge-list",
+                       div { id: "challenge-list", class: "challenge-list",
                            for (idx, (type_key, config_json)) in challenges.read().iter().enumerate() {
                                {
                                    let type_label = t(&translations, type_key);
@@ -1412,25 +1570,10 @@ pub fn AlarmConfig(id: String) -> Element {
                                    rsx! {
                                        div { class: "challenge-item",
                                            if total_challenges > 1 {
-                                               div { class: "challenge-order",
-                                                   button {
-                                                       class: "move-btn",
-                                                       disabled: idx == 0,
-                                                       "aria-label": "{move_up_text}",
-                                                       onclick: move |_| {
-                                                           crate::list_edit::move_up(&mut challenges.write(), idx);
-                                                       },
-                                                       Icon { name: IconName::ChevronUp, size: 12 }
-                                                   }
-                                                   button {
-                                                       class: "move-btn",
-                                                       disabled: idx + 1 >= total_challenges,
-                                                       "aria-label": "{move_down_text}",
-                                                       onclick: move |_| {
-                                                           crate::list_edit::move_down(&mut challenges.write(), idx);
-                                                       },
-                                                       Icon { name: IconName::ChevronDown, size: 12 }
-                                                   }
+                                               div {
+                                                   class: "drag-handle",
+                                                   "aria-label": "{drag_text}",
+                                                   Icon { name: IconName::Grip, size: 18 }
                                                }
                                            }
                                            div { class: "challenge-info",

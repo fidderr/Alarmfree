@@ -264,8 +264,6 @@
   "home.next_in_dhm": "{days}d {hours}h {minutes}m",
   "home.today": "Today",
   "home.tomorrow": "Tomorrow",
-  "config.move_challenge_up": "Move up",
-  "config.move_challenge_down": "Move down",
   "alarm.copy_label": "{label} (copy)",
   "action.duplicate": "Duplicate",
   "home.menu_aria": "More actions",
@@ -286,5 +284,7 @@
   "config.weekend": "Weekend",
   "settings.reliability": "Keep alarms reliable",
   "settings.reliability_desc": "On some phones (OnePlus, Xiaomi, Oppo, Samsung...) alarms can fail after a restart unless the app may start automatically. In the app settings, allow Auto-launch / Autostart and set battery use to Unrestricted.",
-  "settings.open_app_settings": "Open app settings"
+  "settings.open_app_settings": "Open app settings",
+  "config.drag_challenge": "Drag to reorder",
+  "challenge.config.test": "Test"
 }

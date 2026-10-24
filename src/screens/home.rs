@@ -35,6 +35,18 @@ pub fn Home() -> Element {
     });
     let _ = tick();
 
+    // Hold an alarm and drag it to a new place in the list; the order is saved.
+    crate::reorder::use_reorder(
+        "alarm-list",
+        "alarm-card",
+        None,
+        EventHandler::new(move |(from, to)| {
+            if crate::ordering::apply_reorder(&mut alarms.write(), from, to) {
+                crate::persistence::save_alarms(&alarms.read());
+            }
+        }),
+    );
+
     // The "more actions" sheet: which alarm it is open for, and whether it is
     // asking to confirm a delete.
     let mut menu_for: Signal<Option<String>> = use_signal(|| None);
@@ -80,8 +92,7 @@ pub fn Home() -> Element {
     };
 
     // Alarms in clock order.
-    let mut sorted: Vec<AlarmData> = alarms.read().clone();
-    sorted.sort_by_key(|a| (a.time_hour, a.time_minute));
+    let sorted: Vec<AlarmData> = crate::ordering::sorted_for_display(&alarms.read());
 
     // What the actions sheet can do for the alarm it is open for.
     let menu_alarm = menu_for().and_then(|id| alarms.read().iter().find(|a| a.id == id).cloned());
@@ -120,7 +131,7 @@ pub fn Home() -> Element {
 
     // Alarm list or empty state
                if has_alarms {
-                   div { class: "alarm-list",
+                   div { id: "alarm-list", class: "alarm-list",
                        for alarm in sorted.iter() {
                            {
                                let alarm_id = alarm.id.clone();

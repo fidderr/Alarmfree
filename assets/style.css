@@ -3798,39 +3798,6 @@ input.input-error {
   display: none;
 }
 
-/* ===== Challenge reordering ===== */
-.challenge-order {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin-right: 10px;
-  flex-shrink: 0;
-}
-
-.move-btn {
-  width: 30px;
-  height: 22px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--surface-hover);
-  color: var(--text-secondary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  min-height: auto;
-  cursor: pointer;
-}
-
-.move-btn:disabled {
-  opacity: 0.3;
-  cursor: default;
-}
-
-.move-btn:not(:disabled):active {
-  background: var(--primary);
-  color: white;
-}
 
 /* ===== Card menu + bottom sheet ===== */
 .alarm-card-right {
@@ -3989,4 +3956,71 @@ input.input-error {
 .preset-btn:active {
   background: var(--primary);
   color: white;
+}
+
+/* ===== Challenge modal: header with the Test button ===== */
+.overlay-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.overlay-head h3 {
+  margin: 0;
+}
+
+.overlay-test-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  background: transparent;
+  color: var(--primary);
+  border: 1px solid var(--primary);
+  border-radius: 999px;
+  padding: 7px 14px;
+  font-size: 14px;
+  font-weight: 600;
+  min-height: 36px;
+  cursor: pointer;
+}
+
+.overlay-test-btn:active {
+  background: var(--primary);
+  color: white;
+}
+
+/* ===== Drag to reorder (challenge handle, alarm long-press) ===== */
+.drag-handle {
+  width: 30px;
+  align-self: stretch;
+  margin-right: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  touch-action: none;
+  cursor: grab;
+  flex-shrink: 0;
+}
+
+.challenge-list,
+.alarm-list {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.reorder-active .challenge-item,
+.reorder-active .alarm-card {
+  transition: transform 0.15s ease;
+}
+
+.reorder-dragging {
+  transition: none !important;
+  position: relative;
+  z-index: 20;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+  transform-origin: center;
 }

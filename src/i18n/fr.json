@@ -264,8 +264,6 @@
   "home.next_in_dhm": "{days}j {hours}h {minutes}m",
   "home.today": "Aujourd'hui",
   "home.tomorrow": "Demain",
-  "config.move_challenge_up": "Monter",
-  "config.move_challenge_down": "Descendre",
   "alarm.copy_label": "{label} (copie)",
   "action.duplicate": "Dupliquer",
   "home.menu_aria": "Plus d'actions",
@@ -286,5 +284,7 @@
   "config.weekend": "Week-end",
   "settings.reliability": "Alarmes fiables",
   "settings.reliability_desc": "Sur certains téléphones (OnePlus, Xiaomi, Oppo, Samsung...), les alarmes peuvent échouer après un redémarrage si l'application ne peut pas démarrer seule. Dans les réglages de l'application, autorisez le démarrage automatique et réglez l'utilisation de la batterie sur Sans restriction.",
-  "settings.open_app_settings": "Ouvrir les réglages de l'application"
+  "settings.open_app_settings": "Ouvrir les réglages de l'application",
+  "config.drag_challenge": "Glisser pour réordonner",
+  "challenge.config.test": "Tester"
 }
