@@ -35,6 +35,17 @@ pub fn Home() -> Element {
     });
     let _ = tick();
 
+    // The "more actions" sheet: which alarm it is open for, and whether it is
+    // asking to confirm a delete.
+    let mut menu_for: Signal<Option<String>> = use_signal(|| None);
+    let mut confirm_delete = use_signal(|| false);
+    let menu_aria = t(&translations, "home.menu_aria");
+    let duplicate_text = t(&translations, "action.duplicate");
+    let delete_text = t(&translations, "action.delete");
+    let cancel_text = t(&translations, "action.cancel");
+    let delete_confirm_text = t(&translations, "alarm.delete_confirm");
+    let delete_warning_text = t(&translations, "alarm.delete_warning");
+
     // When each enabled alarm really rings next, from AlarmKit (it knows
     // the weekdays, a snooze in progress and one-time dates).
     let now = chrono::Local::now();
@@ -94,6 +105,7 @@ pub fn Home() -> Element {
                            {
                                let alarm_id = alarm.id.clone();
                                let alarm_id2 = alarm.id.clone();
+                               let alarm_id3 = alarm.id.clone();
                                let time = format!("{:02}:{:02}", alarm.time_hour, alarm.time_minute);
                                let label = alarm.label.clone();
                                let schedule_text = format_schedule(&alarm.days, &translations);
@@ -116,6 +128,16 @@ pub fn Home() -> Element {
                                            }
                                        }
                                        div { class: "alarm-card-right",
+                                           button {
+                                               class: "card-menu-btn",
+                                               "aria-label": "{menu_aria}",
+                                               onclick: move |evt| {
+                                                   evt.stop_propagation();
+                                                   confirm_delete.set(false);
+                                                   menu_for.set(Some(alarm_id3.clone()));
+                                               },
+                                               Icon { name: IconName::EllipsisVertical, size: 18 }
+                                           }
                                            label {
                                                class: "toggle-switch",
                                                onclick: move |evt| { evt.stop_propagation(); },
@@ -156,6 +178,63 @@ pub fn Home() -> Element {
                        div { class: "empty-icon", Icon { name: IconName::Clock } }
                        p { class: "empty-title", "{no_alarms_text}" }
                        p { class: "empty-subtitle", "{tap_to_create_text}" }
+                   }
+               }
+
+    // More-actions sheet for one alarm
+               if let Some(menu_id) = menu_for() {
+                   div {
+                       class: "sheet-overlay",
+                       onclick: move |_| { menu_for.set(None); confirm_delete.set(false); },
+                       div {
+                           class: "sheet",
+                           onclick: move |evt| { evt.stop_propagation(); },
+                           if confirm_delete() {
+                               h3 { "{delete_confirm_text}" }
+                               p { "{delete_warning_text}" }
+                               div { class: "confirm-actions",
+                                   button {
+                                       class: "btn-cancel",
+                                       onclick: move |_| { menu_for.set(None); confirm_delete.set(false); },
+                                       "{cancel_text}"
+                                   }
+                                   button {
+                                       class: "btn-delete",
+                                       onclick: {
+                                           let menu_id = menu_id.clone();
+                                           move |_| {
+                                               crate::platform::cancel_alarm_from_ui(&menu_id);
+                                               let unused_sound = crate::app::remove_alarm(&mut alarms.write(), &menu_id);
+                                               if let Some(sound) = unused_sound {
+                                                   crate::custom_sounds::delete_sound(&sound);
+                                               }
+                                               crate::persistence::save_alarms(&alarms.read());
+                                               menu_for.set(None);
+                                               confirm_delete.set(false);
+                                           }
+                                       },
+                                       "{delete_text}"
+                                   }
+                               }
+                           } else {
+                               button {
+                                   class: "sheet-item",
+                                   onclick: {
+                                       let menu_id = menu_id.clone();
+                                       move |_| {
+                                           menu_for.set(None);
+                                           nav.push(Route::AlarmConfig { id: format!("copy-{menu_id}") });
+                                       }
+                                   },
+                                   "{duplicate_text}"
+                               }
+                               button {
+                                   class: "sheet-item danger",
+                                   onclick: move |_| { confirm_delete.set(true); },
+                                   "{delete_text}"
+                               }
+                           }
+                       }
                    }
                }
 

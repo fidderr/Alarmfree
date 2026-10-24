@@ -81,6 +81,19 @@ pub struct AlarmData {
     pub snooze_interval: u8,
 }
 
+/// Remove an alarm from the list. Returns the custom sound file that is left
+/// unused by it, if any: a duplicated alarm shares its sound with the
+/// original, so the file may only be deleted when no other alarm uses it.
+pub fn remove_alarm(list: &mut Vec<AlarmData>, id: &str) -> Option<String> {
+    let removed = list
+        .iter()
+        .position(|a| a.id == id)
+        .map(|i| list.remove(i))?;
+    let orphaned = crate::custom_sounds::is_custom_sound(&removed.sound)
+        && !list.iter().any(|a| a.sound == removed.sound);
+    orphaned.then_some(removed.sound)
+}
+
 /// Root App component with global state context providers.
 #[component]
 pub fn App() -> Element {
@@ -279,6 +292,42 @@ impl SafeArea {
 #[cfg(test)]
 mod tests {
     use super::SafeArea;
+    use super::{remove_alarm, AlarmData};
+
+    fn alarm(id: &str, sound: &str) -> AlarmData {
+        AlarmData {
+            id: id.into(),
+            time_hour: 7,
+            time_minute: 0,
+            label: String::new(),
+            days: [true; 7],
+            date: None,
+            enabled: true,
+            sound: sound.into(),
+            sound_mode: 0,
+            challenges: vec![],
+            snooze_count: 3,
+            snooze_interval: 5,
+        }
+    }
+
+    #[test]
+    fn removing_an_alarm_frees_its_custom_sound_only_when_nothing_else_uses_it() {
+        let mut list = vec![
+            alarm("a", "mine.mp3"),
+            alarm("b", "mine.mp3"),
+            alarm("c", "air"),
+        ];
+        assert_eq!(remove_alarm(&mut list, "a"), None, "the copy still uses it");
+        assert_eq!(remove_alarm(&mut list, "b"), Some("mine.mp3".to_string()));
+        assert_eq!(
+            remove_alarm(&mut list, "c"),
+            None,
+            "bundled sounds are never deleted"
+        );
+        assert_eq!(remove_alarm(&mut list, "missing"), None);
+        assert!(list.is_empty());
+    }
 
     #[test]
     fn safe_area_renders_css_variables() {

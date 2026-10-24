@@ -263,5 +263,10 @@
   "validation.date_past": "Kies een datum en tijd in de toekomst",
   "home.next_in_dhm": "{days}d {hours}u {minutes}m",
   "home.today": "Vandaag",
-  "home.tomorrow": "Morgen"
+  "home.tomorrow": "Morgen",
+  "config.move_challenge_up": "Omhoog",
+  "config.move_challenge_down": "Omlaag",
+  "alarm.copy_label": "{label} (kopie)",
+  "action.duplicate": "Dupliceren",
+  "home.menu_aria": "Meer acties"
 }

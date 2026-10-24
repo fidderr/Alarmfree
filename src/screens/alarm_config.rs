@@ -261,7 +261,9 @@ pub fn AlarmConfig(id: String) -> Element {
     let mut alarms = use_context::<Signal<Vec<AlarmData>>>();
     let translations = use_context::<Translations>();
     let nav = use_navigator();
-    let is_new = id == "new";
+    // "copy-<id>" opens a new alarm prefilled from the alarm <id>.
+    let copy_of = id.strip_prefix("copy-").map(str::to_owned);
+    let is_new = id == "new" || copy_of.is_some();
     let title = if is_new {
         t(&translations, "alarm.create")
     } else {
@@ -269,10 +271,21 @@ pub fn AlarmConfig(id: String) -> Element {
     };
 
     // Load existing alarm data if editing
-    let existing = if !is_new {
-        alarms.read().iter().find(|a| a.id == id).cloned()
-    } else {
+    let existing = if id == "new" {
         None
+    } else {
+        let source_id = copy_of.as_deref().unwrap_or(&id);
+        let found = alarms.read().iter().find(|a| a.id == source_id).cloned();
+        if copy_of.is_some() {
+            found.map(|mut a| {
+                if !a.label.is_empty() {
+                    a.label = t(&translations, "alarm.copy_label").replace("{label}", &a.label);
+                }
+                a
+            })
+        } else {
+            found
+        }
     };
 
     // Form state - initialized from existing alarm or defaults
@@ -444,14 +457,12 @@ pub fn AlarmConfig(id: String) -> Element {
                                            {
                                                crate::platform::cancel_alarm_from_ui(&delete_id);
                                            }
-        // Delete custom sound file if this alarm uses one
-                                           if let Some(alarm) = alarms.read().iter().find(|a| a.id == delete_id) {
-                                               if crate::custom_sounds::is_custom_sound(&alarm.sound) {
-                                                   crate::custom_sounds::delete_sound(&alarm.sound);
-                                               }
+        // Remove alarm from shared state; its custom sound file goes too
+        // unless another alarm (a copy) still uses it
+                                           let unused_sound = crate::app::remove_alarm(&mut alarms.write(), &delete_id);
+                                           if let Some(sound) = unused_sound {
+                                               crate::custom_sounds::delete_sound(&sound);
                                            }
-        // Remove alarm from shared state
-                                           alarms.write().retain(|a| a.id != delete_id);
         // Persist to disk
                                            crate::persistence::save_alarms(&alarms.read());
                                            nav.push(Route::Home {});
@@ -490,6 +501,9 @@ pub fn AlarmConfig(id: String) -> Element {
     let add_challenge_text = t(&translations, "config.add_challenge");
     let edit_challenge_text = t(&translations, "config.edit_challenge");
     let remove_challenge_text = t(&translations, "config.remove_challenge");
+    let move_up_text = t(&translations, "config.move_challenge_up");
+    let move_down_text = t(&translations, "config.move_challenge_down");
+    let total_challenges = challenges.read().len();
 
     // Translate sound mode labels
     let sound_mode_labels: Vec<String> = SOUND_MODE_KEYS
@@ -1320,10 +1334,33 @@ pub fn AlarmConfig(id: String) -> Element {
                                    let summary = challenge_config_summary(&translations, type_key, config_json);
                                    let tk = type_key.clone();
                                    let cj = config_json.clone();
+                                   let step_number = if total_challenges > 1 { format!("{}. ", idx + 1) } else { String::new() };
                                    rsx! {
                                        div { class: "challenge-item",
+                                           if total_challenges > 1 {
+                                               div { class: "challenge-order",
+                                                   button {
+                                                       class: "move-btn",
+                                                       disabled: idx == 0,
+                                                       "aria-label": "{move_up_text}",
+                                                       onclick: move |_| {
+                                                           crate::list_edit::move_up(&mut challenges.write(), idx);
+                                                       },
+                                                       Icon { name: IconName::ChevronUp, size: 12 }
+                                                   }
+                                                   button {
+                                                       class: "move-btn",
+                                                       disabled: idx + 1 >= total_challenges,
+                                                       "aria-label": "{move_down_text}",
+                                                       onclick: move |_| {
+                                                           crate::list_edit::move_down(&mut challenges.write(), idx);
+                                                       },
+                                                       Icon { name: IconName::ChevronDown, size: 12 }
+                                                   }
+                                               }
+                                           }
                                            div { class: "challenge-info",
-                                               span { class: "challenge-name", "{type_label}" }
+                                               span { class: "challenge-name", "{step_number}{type_label}" }
                                                span { class: "challenge-difficulty", "{summary}" }
                                            }
                                            div { class: "challenge-actions",

@@ -7,6 +7,7 @@ pub mod db;
 pub mod firing_state;
 pub mod history_persistence;
 pub mod i18n;
+pub mod list_edit;
 pub mod models;
 pub mod persistence;
 pub mod platform;

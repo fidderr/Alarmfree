@@ -263,5 +263,10 @@
   "validation.date_past": "Choisissez une date et une heure futures",
   "home.next_in_dhm": "{days}j {hours}h {minutes}m",
   "home.today": "Aujourd'hui",
-  "home.tomorrow": "Demain"
+  "home.tomorrow": "Demain",
+  "config.move_challenge_up": "Monter",
+  "config.move_challenge_down": "Descendre",
+  "alarm.copy_label": "{label} (copie)",
+  "action.duplicate": "Dupliquer",
+  "home.menu_aria": "Plus d'actions"
 }
