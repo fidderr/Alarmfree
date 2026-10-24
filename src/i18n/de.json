@@ -268,5 +268,10 @@
   "config.move_challenge_down": "Nach unten",
   "alarm.copy_label": "{label} (Kopie)",
   "action.duplicate": "Duplizieren",
-  "home.menu_aria": "Weitere Aktionen"
+  "home.menu_aria": "Weitere Aktionen",
+  "settings.min_volume": "Mindestlautstärke des Weckers",
+  "settings.min_volume_desc": "Während ein Wecker klingelt, wird die Lautstärke mindestens auf diesen Wert angehoben, damit auch ein stummes Telefon dich weckt. Danach wird sie zurückgesetzt.",
+  "settings.volume_off": "Aus",
+  "config.fade_in": "Langsam lauter",
+  "config.fade_off": "Aus"
 }

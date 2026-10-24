@@ -201,6 +201,8 @@ mod tests {
             label: "x".into(),
             days: [false; 7],
             date: None,
+            skip_until_ms: None,
+            fade_in_secs: 0,
             enabled: true,
             sound: "happy".into(),
             sound_mode: 0,

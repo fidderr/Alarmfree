@@ -73,6 +73,14 @@ pub fn init_platform() {
     ONCE.call_once(setup_platform);
 }
 
+/// Change the minimum alarm volume for rings from now on.
+pub fn set_min_volume(percent: u8) {
+    let runtime = mobile_sentinel::alarm_class_runtime();
+    let mut config = runtime.config();
+    config.min_volume_percent = percent;
+    runtime.configure(config);
+}
+
 /// Whether the alarm is ringing or snoozed, i.e. still in play.
 fn alarm_in_play(kit: &AlarmKit, id: &str) -> bool {
     use mobile_sentinel::context::schema::SessionState;
@@ -127,6 +135,9 @@ fn setup_platform() {
         // Alarm-style buzz for vibration-enabled alarms: pause, long buzz,
         // short gap, long buzz — looped by the firing sink while ringing.
         vibration_pattern: vec![0, 500, 300, 500],
+        // The user's minimum alarm volume (Settings); updated live by
+        // `set_min_volume` when it changes.
+        min_volume_percent: crate::persistence::load_settings().min_volume_percent,
     };
 
     #[cfg(target_os = "android")]
@@ -285,6 +296,8 @@ fn debug_auto_schedule() {
             vibration_pattern: None,
             kiosk_mode: true,
             bypass_dnd: true,
+            skip_until_unix_ms: None,
+            fade_in_secs: 0,
         };
         match kit.create_with_id(id.clone(), spec) {
             Ok(()) => log::info!(
@@ -520,6 +533,8 @@ pub fn alarm_data_to_spec(alarm: &AlarmData) -> AlarmSpec {
         vibration_pattern: None,
         kiosk_mode: true,
         bypass_dnd: true,
+        skip_until_unix_ms: alarm.skip_until_ms,
+        fade_in_secs: alarm.fade_in_secs,
     }
 }
 
@@ -538,6 +553,8 @@ mod tests {
             label: "Wake".into(),
             days: [true, true, true, true, true, false, false],
             date: None,
+            skip_until_ms: None,
+            fade_in_secs: 0,
             enabled: true,
             sound: "happy".into(),
             sound_mode: 0,

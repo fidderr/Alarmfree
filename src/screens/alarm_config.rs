@@ -357,6 +357,7 @@ pub fn AlarmConfig(id: String) -> Element {
     let mut snooze_count = use_signal(|| existing.as_ref().map_or(3u8, |a| a.snooze_count));
     let mut snooze_interval = use_signal(|| existing.as_ref().map_or(1u8, |a| a.snooze_interval));
     let mut show_delete_confirm = use_signal(|| false);
+    let mut fade_in_secs = use_signal(|| existing.as_ref().map_or(0u16, |a| a.fade_in_secs));
 
     // Background task for native file picker
     let _pick_task = use_future(move || async move {
@@ -487,6 +488,8 @@ pub fn AlarmConfig(id: String) -> Element {
     let import_sound_text = t(&translations, "sound.import");
     let preview_sound_text = t(&translations, "sound.preview");
     let challenges_label = t(&translations, "config.challenges");
+    let fade_in_label = t(&translations, "config.fade_in");
+    let fade_off_text = t(&translations, "config.fade_off");
     let snooze_label = t(&translations, "config.snooze");
     let snooze_count_label = t(&translations, "config.snooze_count");
     let snooze_interval_label = t(&translations, "config.snooze_interval");
@@ -999,6 +1002,8 @@ pub fn AlarmConfig(id: String) -> Element {
                                    // weekdays, and the date picked.
                                    days: if *schedule_mode.read() == "date" { [false; 7] } else { *selected_days.read() },
                                    date: (*schedule_mode.read() == "date").then(|| date_value.read().clone()),
+                                   skip_until_ms: None, // re-saving an alarm starts it fresh
+                                   fade_in_secs: *fade_in_secs.read(),
                                    enabled: true,
                                    sound: sound_value.read().clone(),
                                    sound_mode: *sound_mode_index.read(),
@@ -1318,6 +1323,20 @@ pub fn AlarmConfig(id: String) -> Element {
                                        span { class: "radio-label", "{ml}" }
                                    }
                                }
+                           }
+                       }
+                   }
+               }
+
+    // Fade-in section: how long the sound takes to reach full volume
+               div { class: "config-section",
+                   label { class: "section-label", "{fade_in_label}" }
+                   div { class: "schedule-toggle",
+                       for secs in [0u16, 15, 30, 60] {
+                           button {
+                               class: if *fade_in_secs.read() == secs { "toggle-btn active" } else { "toggle-btn" },
+                               onclick: move |_| { fade_in_secs.set(secs); },
+                               if secs == 0 { "{fade_off_text}" } else { "{secs}s" }
                            }
                        }
                    }

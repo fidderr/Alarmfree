@@ -268,5 +268,10 @@
   "config.move_challenge_down": "Bajar",
   "alarm.copy_label": "{label} (copia)",
   "action.duplicate": "Duplicar",
-  "home.menu_aria": "Más acciones"
+  "home.menu_aria": "Más acciones",
+  "settings.min_volume": "Volumen mínimo de la alarma",
+  "settings.min_volume_desc": "Mientras suena una alarma, el volumen se sube como mínimo a este nivel, para que un teléfono silenciado también te despierte. Después se restablece.",
+  "settings.volume_off": "No",
+  "config.fade_in": "Subida gradual",
+  "config.fade_off": "No"
 }

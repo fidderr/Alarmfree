@@ -268,5 +268,10 @@
   "config.move_challenge_down": "Omlaag",
   "alarm.copy_label": "{label} (kopie)",
   "action.duplicate": "Dupliceren",
-  "home.menu_aria": "Meer acties"
+  "home.menu_aria": "Meer acties",
+  "settings.min_volume": "Minimaal alarmvolume",
+  "settings.min_volume_desc": "Terwijl een alarm afgaat, wordt het alarmvolume minstens op dit niveau gezet, zodat ook een telefoon op stil je wekt. Daarna wordt het teruggezet.",
+  "settings.volume_off": "Uit",
+  "config.fade_in": "Geleidelijk luider",
+  "config.fade_off": "Uit"
 }

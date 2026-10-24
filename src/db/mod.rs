@@ -164,8 +164,8 @@ impl Database {
     pub fn load_settings(&self) -> Result<AppSettings, rusqlite::Error> {
         let conn = self.conn.lock().unwrap_or_else(|p| p.into_inner());
         let result = conn.query_row(
-            "SELECT theme, locale, default_snooze_count, default_snooze_interval_minutes \
-             FROM settings WHERE id = 1",
+            "SELECT theme, locale, default_snooze_count, default_snooze_interval_minutes, \
+             min_volume_percent FROM settings WHERE id = 1",
             [],
             |row| {
                 let theme_json: String = row.get(0)?;
@@ -175,6 +175,7 @@ impl Database {
                     locale: serde_json::from_str(&locale_json).unwrap_or_default(),
                     default_snooze_count: row.get(2)?,
                     default_snooze_interval_minutes: row.get(3)?,
+                    min_volume_percent: row.get(4)?,
                 })
             },
         );
@@ -194,12 +195,13 @@ impl Database {
             .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?;
         conn.execute(
             "INSERT OR REPLACE INTO settings (id, theme, locale, default_snooze_count, \
-             default_snooze_interval_minutes) VALUES (1, ?1, ?2, ?3, ?4)",
+             default_snooze_interval_minutes, min_volume_percent) VALUES (1, ?1, ?2, ?3, ?4, ?5)",
             params![
                 theme_json,
                 locale_json,
                 settings.default_snooze_count,
                 settings.default_snooze_interval_minutes,
+                settings.min_volume_percent,
             ],
         )?;
         Ok(())

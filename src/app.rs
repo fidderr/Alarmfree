@@ -73,6 +73,13 @@ pub struct AlarmData {
     /// for alarms saved before this field existed.
     #[serde(default)]
     pub date: Option<String>,
+    /// Skip every occurrence at or before this instant (unix ms): one skipped
+    /// occurrence of a repeating alarm. In the past it has no effect.
+    #[serde(default)]
+    pub skip_until_ms: Option<i64>,
+    /// Seconds the sound takes to fade in (0 = off).
+    #[serde(default)]
+    pub fade_in_secs: u16,
     pub enabled: bool,
     pub sound: String,
     pub sound_mode: usize,                 // 0=Sound+Vib, 1=Sound, 2=Vib
@@ -302,6 +309,8 @@ mod tests {
             label: String::new(),
             days: [true; 7],
             date: None,
+            skip_until_ms: None,
+            fade_in_secs: 0,
             enabled: true,
             sound: sound.into(),
             sound_mode: 0,

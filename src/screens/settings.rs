@@ -28,6 +28,7 @@ pub fn Settings() -> Element {
     let mut translations = use_context::<Translations>();
     let mut theme_dropdown_open = use_signal(|| false);
     let mut lang_dropdown_open = use_signal(|| false);
+    let mut min_volume = use_signal(|| crate::persistence::load_settings().min_volume_percent);
 
     // One-time on mount: allow the device sensor to rotate this screen
     // (settings often looks better / is easier to use in landscape on phones
@@ -80,6 +81,9 @@ pub fn Settings() -> Element {
     let theme_label = t(&translations, "settings.theme");
     let language_label = t(&translations, "settings.language");
     let about_label = t(&translations, "settings.about");
+    let min_volume_label = t(&translations, "settings.min_volume");
+    let min_volume_desc = t(&translations, "settings.min_volume_desc");
+    let volume_off_text = t(&translations, "settings.volume_off");
     let tagline_text = t(&translations, "app.tagline");
     let description_text = t(&translations, "app.description");
     // Compiled in from Cargo.toml so the About section can never go stale.
@@ -173,6 +177,27 @@ pub fn Settings() -> Element {
                                        }
                                    }
                                }
+                           }
+                       }
+                   }
+               }
+
+    // Minimum alarm volume
+               div { class: "settings-section",
+                   label { class: "section-label", "{min_volume_label}" }
+                   p { class: "about-desc", "{min_volume_desc}" }
+                   div { class: "schedule-toggle",
+                       for percent in [0u8, 25, 50, 75, 100] {
+                           button {
+                               class: if min_volume() == percent { "toggle-btn active" } else { "toggle-btn" },
+                               onclick: move |_| {
+                                   min_volume.set(percent);
+                                   let mut settings = crate::persistence::load_settings();
+                                   settings.min_volume_percent = percent;
+                                   crate::persistence::save_settings(&settings);
+                                   crate::platform::set_min_volume(percent);
+                               },
+                               if percent == 0 { "{volume_off_text}" } else { "{percent}%" }
                            }
                        }
                    }

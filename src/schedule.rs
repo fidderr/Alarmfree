@@ -164,6 +164,8 @@ mod tests {
             label: String::new(),
             days,
             date: date.map(str::to_owned),
+            skip_until_ms: None,
+            fade_in_secs: 0,
             enabled: true,
             sound: "air".into(),
             sound_mode: 0,

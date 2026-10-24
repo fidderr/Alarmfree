@@ -268,5 +268,10 @@
   "config.move_challenge_down": "Move down",
   "alarm.copy_label": "{label} (copy)",
   "action.duplicate": "Duplicate",
-  "home.menu_aria": "More actions"
+  "home.menu_aria": "More actions",
+  "settings.min_volume": "Minimum alarm volume",
+  "settings.min_volume_desc": "While an alarm rings, the alarm volume is raised to at least this level, so a muted phone still wakes you. It is set back afterwards.",
+  "settings.volume_off": "Off",
+  "config.fade_in": "Fade in",
+  "config.fade_off": "Off"
 }

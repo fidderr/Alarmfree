@@ -38,6 +38,10 @@ pub struct AppSettings {
     pub locale: Locale,
     pub default_snooze_count: u8,
     pub default_snooze_interval_minutes: u8,
+    /// While an alarm rings, the alarm volume is raised to at least this
+    /// percentage (and restored afterwards), so a muted phone still wakes
+    /// the user. 0 leaves the volume alone.
+    pub min_volume_percent: u8,
 }
 
 impl Default for AppSettings {
@@ -47,6 +51,7 @@ impl Default for AppSettings {
             locale: Locale::default(),
             default_snooze_count: 3,
             default_snooze_interval_minutes: 1,
+            min_volume_percent: 50,
         }
     }
 }

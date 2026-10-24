@@ -268,5 +268,10 @@
   "config.move_challenge_down": "Descendre",
   "alarm.copy_label": "{label} (copie)",
   "action.duplicate": "Dupliquer",
-  "home.menu_aria": "Plus d'actions"
+  "home.menu_aria": "Plus d'actions",
+  "settings.min_volume": "Volume minimal de l'alarme",
+  "settings.min_volume_desc": "Pendant qu'une alarme sonne, le volume est relevé au moins à ce niveau, pour qu'un téléphone en sourdine vous réveille aussi. Il est ensuite rétabli.",
+  "settings.volume_off": "Non",
+  "config.fade_in": "Volume progressif",
+  "config.fade_off": "Non"
 }
