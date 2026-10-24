@@ -273,5 +273,8 @@
   "settings.min_volume_desc": "Pendant qu'une alarme sonne, le volume est relevé au moins à ce niveau, pour qu'un téléphone en sourdine vous réveille aussi. Il est ensuite rétabli.",
   "settings.volume_off": "Non",
   "config.fade_in": "Volume progressif",
-  "config.fade_off": "Non"
+  "config.fade_off": "Non",
+  "action.skip_next": "Ignorer la prochaine sonnerie",
+  "action.undo_skip": "Annuler",
+  "home.skipped": "Prochaine sonnerie ignorée"
 }

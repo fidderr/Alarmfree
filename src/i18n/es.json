@@ -273,5 +273,8 @@
   "settings.min_volume_desc": "Mientras suena una alarma, el volumen se sube como mínimo a este nivel, para que un teléfono silenciado también te despierte. Después se restablece.",
   "settings.volume_off": "No",
   "config.fade_in": "Subida gradual",
-  "config.fade_off": "No"
+  "config.fade_off": "No",
+  "action.skip_next": "Omitir la próxima vez",
+  "action.undo_skip": "Deshacer omitir",
+  "home.skipped": "Próxima vez omitida"
 }

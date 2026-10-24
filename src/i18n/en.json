@@ -273,5 +273,8 @@
   "settings.min_volume_desc": "While an alarm rings, the alarm volume is raised to at least this level, so a muted phone still wakes you. It is set back afterwards.",
   "settings.volume_off": "Off",
   "config.fade_in": "Fade in",
-  "config.fade_off": "Off"
+  "config.fade_off": "Off",
+  "action.skip_next": "Skip next ring",
+  "action.undo_skip": "Undo skip",
+  "home.skipped": "Next ring skipped"
 }

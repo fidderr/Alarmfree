@@ -273,5 +273,8 @@
   "settings.min_volume_desc": "Während ein Wecker klingelt, wird die Lautstärke mindestens auf diesen Wert angehoben, damit auch ein stummes Telefon dich weckt. Danach wird sie zurückgesetzt.",
   "settings.volume_off": "Aus",
   "config.fade_in": "Langsam lauter",
-  "config.fade_off": "Aus"
+  "config.fade_off": "Aus",
+  "action.skip_next": "Nächstes Klingeln überspringen",
+  "action.undo_skip": "Überspringen rückgängig",
+  "home.skipped": "Nächstes Klingeln übersprungen"
 }

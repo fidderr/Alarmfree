@@ -3911,3 +3911,9 @@ input.input-error {
 .sheet-item.danger {
   color: var(--error);
 }
+
+.alarm-skipped {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-style: italic;
+}

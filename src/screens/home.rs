@@ -83,6 +83,25 @@ pub fn Home() -> Element {
     let mut sorted: Vec<AlarmData> = alarms.read().clone();
     sorted.sort_by_key(|a| (a.time_hour, a.time_minute));
 
+    // What the actions sheet can do for the alarm it is open for.
+    let menu_alarm = menu_for().and_then(|id| alarms.read().iter().find(|a| a.id == id).cloned());
+    let skip_active = menu_alarm
+        .as_ref()
+        .is_some_and(|a| a.skip_until_ms.is_some_and(|s| s > now_ms));
+    let menu_next_fire = menu_alarm
+        .as_ref()
+        .and_then(|a| next_fire.get(&a.id).copied());
+    let can_skip = menu_alarm
+        .as_ref()
+        .is_some_and(|a| a.enabled && !schedule::is_one_time(a))
+        && (skip_active || menu_next_fire.is_some());
+    let skip_text = if skip_active {
+        t(&translations, "action.undo_skip")
+    } else {
+        t(&translations, "action.skip_next")
+    };
+    let skipped_text = t(&translations, "home.skipped");
+
     let nav_alarms = t(&translations, "nav.alarms");
     let nav_history = t(&translations, "nav.history");
     let nav_settings = t(&translations, "nav.settings");
@@ -109,7 +128,10 @@ pub fn Home() -> Element {
                                let time = format!("{:02}:{:02}", alarm.time_hour, alarm.time_minute);
                                let label = alarm.label.clone();
                                let schedule_text = format_schedule(&alarm.days, &translations);
-                               let next_ring = next_fire.get(&alarm.id).and_then(|&at| ring_day_label(at, &translations));
+                               let skipped = alarm.skip_until_ms.is_some_and(|s| s > now_ms);
+                               let next_ring = next_fire
+                                   .get(&alarm.id)
+                                   .and_then(|&at| ring_day_label(at, !schedule::is_one_time(alarm), &translations));
                                let enabled = alarm.enabled;
                                rsx! {
                                    div {
@@ -124,6 +146,9 @@ pub fn Home() -> Element {
                                                span { class: "alarm-schedule", "{schedule_text}" }
                                                if let Some(next_ring) = next_ring {
                                                    span { class: "alarm-next-ring", "{next_ring}" }
+                                               }
+                                               if skipped {
+                                                   span { class: "alarm-skipped", "{skipped_text}" }
                                                }
                                            }
                                        }
@@ -217,6 +242,24 @@ pub fn Home() -> Element {
                                    }
                                }
                            } else {
+                               if can_skip {
+                                   button {
+                                       class: "sheet-item",
+                                       onclick: {
+                                           let menu_id = menu_id.clone();
+                                           move |_| {
+                                               // Skipping remembers the occurrence to skip (the
+                                               // next ring); undoing clears it.
+                                               if let Some(alarm) = alarms.write().iter_mut().find(|a| a.id == menu_id) {
+                                                   alarm.skip_until_ms = if skip_active { None } else { menu_next_fire };
+                                               }
+                                               crate::persistence::save_alarms(&alarms.read());
+                                               menu_for.set(None);
+                                           }
+                                       },
+                                       "{skip_text}"
+                                   }
+                               }
                                button {
                                    class: "sheet-item",
                                    onclick: {
@@ -302,13 +345,19 @@ fn format_schedule(days: &[bool; 7], translations: &Translations) -> String {
 
 /// "Today", "Tomorrow" or the weekday an alarm next rings on (the card
 /// already shows its clock time).
-fn ring_day_label(at_ms: i64, translations: &Translations) -> Option<String> {
+fn ring_day_label(at_ms: i64, repeating: bool, translations: &Translations) -> Option<String> {
     use chrono::Local;
     let ring_day = chrono::DateTime::from_timestamp_millis(at_ms)?
         .with_timezone(&Local)
         .date_naive();
     let today = Local::now().date_naive();
-    Some(match schedule::day_label(today, ring_day) {
+    let label = schedule::day_label(today, ring_day);
+    // A repeating alarm already lists its weekdays on the card, so a bare
+    // weekday adds nothing; Today and Tomorrow still do.
+    if repeating && matches!(label, schedule::DayLabel::Weekday(_)) {
+        return None;
+    }
+    Some(match label {
         schedule::DayLabel::Today => t(translations, "home.today"),
         schedule::DayLabel::Tomorrow => t(translations, "home.tomorrow"),
         schedule::DayLabel::Weekday(day) => {
