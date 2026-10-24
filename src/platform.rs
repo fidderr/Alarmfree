@@ -44,11 +44,54 @@ pub fn alarm_kit_optional() -> Option<&'static AlarmKit> {
     ALARM_KIT.get()
 }
 
-/// One-shot platform init. Initialises mobile-sentinel (logger + crash
-/// mitigation), installs the Android `FiringSink`, installs AlarmKit
-/// with that sink + the Android sound backend, then re-arms every
-/// persisted alarm via the universal SDK.
+/// Names of the alarms that were ringing when the phone restarted and were
+/// ended by [`init_platform`], for a notice to the user.
+static ENDED_BY_REBOOT: OnceCell<Vec<String>> = OnceCell::new();
+
+/// Alarms ended by a reboot during startup (empty if none, or before
+/// [`init_platform`] ran).
+pub fn ended_by_reboot() -> &'static [String] {
+    ENDED_BY_REBOOT.get().map_or(&[], Vec::as_slice)
+}
+
+/// One-shot platform init plus the permission prompts (which need the UI).
 pub fn init_sentinel() {
+    init_platform();
+
+    // Permission prompts (POST_NOTIFICATIONS, SYSTEM_ALERT_WINDOW).
+    #[cfg(target_os = "android")]
+    request_runtime_permissions();
+}
+
+/// Platform setup, idempotent and free of UI. Initialises mobile-sentinel
+/// (logger + crash mitigation), installs the Android `FiringSink`, installs
+/// AlarmKit with that sink + the Android sound backend, switches off
+/// one-time alarms that are finished, then re-arms every persisted alarm
+/// via the universal SDK.
+pub fn init_platform() {
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(setup_platform);
+}
+
+/// Whether the alarm is ringing or snoozed, i.e. still in play.
+fn alarm_in_play(kit: &AlarmKit, id: &str) -> bool {
+    use mobile_sentinel::context::schema::SessionState;
+    matches!(
+        kit.store()
+            .load(&InstanceId::new(id.to_owned()))
+            .map(|r| r.state),
+        Ok(SessionState::Firing { .. } | SessionState::Snoozed { .. })
+    )
+}
+
+/// Per-session files the firing screen keeps for an alarm.
+fn clear_session_files(alarm_id: &str) {
+    let dir = mobile_sentinel::app_files_dir();
+    let _ = std::fs::remove_file(dir.join(format!("snooze_{alarm_id}.txt")));
+    let _ = std::fs::remove_file(dir.join(format!("snooze_intervals_{alarm_id}.txt")));
+}
+
+fn setup_platform() {
     mobile_sentinel::init(mobile_sentinel::InitConfig {
         log_tag: "AlarmFree".to_string(),
         ..Default::default()
@@ -122,23 +165,56 @@ pub fn init_sentinel() {
     });
     let _ = ALARM_KIT.set(kit);
 
-    // Single call: rearm all alarms + process active jobs + reengage firing
-    let alarms: Vec<(String, AlarmSpec)> = crate::persistence::load_alarms()
-        .into_iter()
+    // One-time alarms that already rang, or whose time passed while the
+    // phone was off, are switched off instead of being moved to tomorrow.
+    let kit = alarm_kit();
+    let mut list = crate::persistence::load_alarms();
+    let finished =
+        crate::schedule::sweep_finished_one_time(&mut list, Local::now().naive_local(), |id| {
+            alarm_in_play(kit, id)
+        });
+    if !finished.is_empty() {
+        crate::persistence::save_alarms(&list);
+    }
+
+    // Single call: end alarms a reboot interrupted + rearm all alarms +
+    // process active jobs + reengage firing
+    let alarms: Vec<(String, AlarmSpec)> = list
+        .iter()
         .filter(|a| a.enabled)
-        .map(|a| (a.id.clone(), alarm_data_to_spec(&a)))
+        .map(|a| (a.id.clone(), alarm_data_to_spec(a)))
         .collect();
-    alarm_kit().on_startup(&alarms);
+    for (id, _) in &alarms {
+        ensure_alarm_job(id);
+    }
+    let report = kit.on_startup(&alarms);
+
+    let mut ended_names = Vec::new();
+    for id in &report.ended_by_reboot {
+        clear_session_files(&id.0);
+        if let Some(alarm) = list.iter().find(|a| a.id == id.0) {
+            ended_names.push(if alarm.label.is_empty() {
+                format!("{:02}:{:02}", alarm.time_hour, alarm.time_minute)
+            } else {
+                alarm.label.clone()
+            });
+        }
+        crate::schedule::disable_if_one_time(&mut list, &id.0);
+    }
+    if !report.ended_by_reboot.is_empty() {
+        crate::persistence::save_alarms(&list);
+        log::info!(
+            "[AlarmFree] {} alarm(s) ended by a reboot",
+            report.ended_by_reboot.len()
+        );
+    }
+    let _ = ENDED_BY_REBOOT.set(ended_names);
 
     // Debug helpers (test harness only)
     #[cfg(debug_assertions)]
     debug_auto_schedule();
     #[cfg(debug_assertions)]
     debug_action_poller();
-
-    // Permission prompts (POST_NOTIFICATIONS, SYSTEM_ALERT_WINDOW).
-    #[cfg(target_os = "android")]
-    request_runtime_permissions();
 
     #[cfg(target_os = "android")]
     log::info!("[AlarmFree] Platform fully configured");
@@ -224,6 +300,21 @@ fn debug_auto_schedule() {
     }
 }
 
+/// Set by the `hang_ui` debug action; consumed by the UI's heartbeat loop.
+#[cfg(debug_assertions)]
+static DEBUG_HANG_UI: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Debug-only: freeze the calling thread (the UI's) for an hour when the
+/// `hang_ui` debug action asked for it, to exercise the `:sentinel` liveness
+/// watchdog.
+#[cfg(debug_assertions)]
+pub fn debug_block_if_requested() {
+    if DEBUG_HANG_UI.swap(false, std::sync::atomic::Ordering::SeqCst) {
+        log::warn!("[AlarmFree] DEBUG blocking the UI thread");
+        std::thread::sleep(std::time::Duration::from_secs(3600));
+    }
+}
+
 /// Background poll for the integration-test debug action file. The
 /// harness writes `<files>/debug_action.txt` with one of:
 ///
@@ -257,6 +348,9 @@ fn debug_action_poller() {
                 } else {
                     log::info!("[AlarmFree] DEBUG snooze({id}) ok");
                 }
+            } else if contents == "hang_ui" {
+                DEBUG_HANG_UI.store(true, std::sync::atomic::Ordering::SeqCst);
+                log::info!("[AlarmFree] DEBUG hang_ui requested");
             } else if let Some(id) = contents.strip_prefix("dismiss:") {
                 let inst = InstanceId::new(id.to_owned());
                 if let Err(e) = kit.dismiss(&inst) {
@@ -298,21 +392,52 @@ pub fn schedule_alarm_from_ui(alarm: &AlarmData) {
 
     // Register a sentinel job for this alarm instance. The job guardian
     // will activate it when the alarm receiver fires.
-    let payload = serde_json::json!({
-        "instance_id": alarm.id,
-        "activity_fqcn": "dev.dioxus.main.MainActivity"
-    });
-    let config = mobile_sentinel::JobConfig {
-        poll_interval_ms: 100,
-        ..Default::default()
-    };
-    if let Err(_e) = mobile_sentinel::register_job(&alarm.id, payload, config) {
+    if let Err(_e) = register_alarm_job(&alarm.id) {
         #[cfg(target_os = "android")]
         log::warn!(
             "[AlarmFree] Job registration failed for {}: {:?}",
             alarm.id,
             _e
         );
+    }
+}
+
+/// How long the alarm screen may go without proving it is alive before the
+/// `:sentinel` guardian restarts the app (see `app::ui_round_trip`). The first
+/// beat has to follow the activity coming on screen within this time, so it
+/// is generous: a cold start extracts sounds and loads the WebView first.
+const UI_LIVENESS_TIMEOUT_MS: u64 = 15_000;
+
+/// Guardian settings for an alarm's job.
+fn job_config() -> mobile_sentinel::JobConfig {
+    mobile_sentinel::JobConfig {
+        poll_interval_ms: 100,
+        ui_liveness_timeout_ms: UI_LIVENESS_TIMEOUT_MS,
+        ..Default::default()
+    }
+}
+
+fn register_alarm_job(alarm_id: &str) -> Result<(), mobile_sentinel::jobs::JobGuardianError> {
+    let payload = serde_json::json!({
+        "instance_id": alarm_id,
+        "activity_fqcn": ALARMFREE_ACTIVITY_FQCN
+    });
+    mobile_sentinel::register_job(alarm_id, payload, job_config()).map(|_| ())
+}
+
+/// Make sure an enabled alarm's job exists with the current settings.
+/// Registering resets a job to pending, so a job that is active (its alarm
+/// is ringing) is never touched.
+fn ensure_alarm_job(alarm_id: &str) {
+    use mobile_sentinel::jobs::JobStatus;
+    match mobile_sentinel::jobs::get_job(alarm_id) {
+        Ok(Some(job)) if job.status == JobStatus::Active => return,
+        Ok(Some(job)) if job.config.ui_liveness_timeout_ms == UI_LIVENESS_TIMEOUT_MS => return,
+        _ => {}
+    }
+    if let Err(_e) = register_alarm_job(alarm_id) {
+        #[cfg(target_os = "android")]
+        log::warn!("[AlarmFree] ensure job {alarm_id} failed: {_e:?}");
     }
 }
 
@@ -344,9 +469,14 @@ pub fn alarm_data_to_spec(alarm: &AlarmData) -> AlarmSpec {
             minute: alarm.time_minute,
         }
     } else {
-        let today = Local::now().date_naive();
+        // The stored date while it is still ahead, otherwise the next time
+        // this clock time comes round — never a date that is already past,
+        // which AlarmKit cannot schedule.
+        let now = Local::now().naive_local();
+        let date = crate::schedule::resolve_one_time_date(alarm, now)
+            .unwrap_or_else(|| now.date().format("%Y-%m-%d").to_string());
         ScheduleSpec::OneTime {
-            date: today.format("%Y-%m-%d").to_string(),
+            date,
             hour: alarm.time_hour,
             minute: alarm.time_minute,
         }
@@ -407,6 +537,7 @@ mod tests {
             time_minute: 30,
             label: "Wake".into(),
             days: [true, true, true, true, true, false, false],
+            date: None,
             enabled: true,
             sound: "happy".into(),
             sound_mode: 0,

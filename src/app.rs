@@ -69,6 +69,10 @@ pub struct AlarmData {
     pub time_minute: u8,
     pub label: String,
     pub days: [bool; 7],
+    /// Date (`YYYY-MM-DD`) of a one-time alarm; `None` for weekday alarms and
+    /// for alarms saved before this field existed.
+    #[serde(default)]
+    pub date: Option<String>,
     pub enabled: bool,
     pub sound: String,
     pub sound_mode: usize,                 // 0=Sound+Vib, 1=Sound, 2=Vib
@@ -86,14 +90,15 @@ pub fn App() -> Element {
     // Extract bundled sounds from APK assets to internal storage (idempotent)
     crate::custom_sounds::extract_bundled_sounds();
 
+    // Initialize platform: logger, FiringSink, AlarmKit, alarm rearm. First,
+    // so the alarm list below already reflects one-time alarms it switched off.
+    use_hook(crate::platform::init_sentinel);
+
     // Global state signals provided via context.
     let theme = use_signal(|| settings.theme);
     let locale = use_signal(|| settings.locale);
     let alarms = use_signal(crate::persistence::load_alarms);
     let translations: Translations = use_signal(|| i18n::load_translations(settings.locale));
-
-    // Initialize platform: logger, FiringSink, AlarmKit, alarm rearm.
-    use_hook(crate::platform::init_sentinel);
 
     use_context_provider(|| theme);
     use_context_provider(|| locale);
@@ -125,6 +130,20 @@ pub fn App() -> Element {
         }));
     });
 
+    // Tell the user about alarms a reboot interrupted (they were ended, and
+    // will not ring again).
+    use_hook(|| {
+        let ended = crate::platform::ended_by_reboot();
+        if ended.is_empty() {
+            return;
+        }
+        toast_signal.set(Some(crate::components::ToastMessage {
+            message: t(&translations, "alarm.ended_by_reboot")
+                .replace("{alarm}", &ended.join(", ")),
+            level: crate::components::ToastLevel::Error,
+        }));
+    });
+
     // Firing-state signal — primed from disk on mount, then updated by the
     // single async poll task below, which only writes the signal when the
     // firing instance id changes (a cross-process write by the Recipe state
@@ -142,6 +161,23 @@ pub fn App() -> Element {
             let current = crate::firing_state::peek_firing_alarm();
             if current != *firing_id.peek() {
                 firing_id.set(current);
+            }
+        }
+    });
+
+    // Proof of life while an alarm rings. If this UI freezes, the beat stops
+    // and the `:sentinel` guardian restarts the app (the alarm keeps ringing
+    // and the lockdown stays; there is no way out but solving it).
+    use_future(move || async move {
+        loop {
+            crate::timer::sleep_ms(1000).await;
+            if firing_id.peek().is_none() {
+                continue;
+            }
+            #[cfg(debug_assertions)]
+            crate::platform::debug_block_if_requested();
+            if ui_round_trip().await {
+                mobile_sentinel::jobs::ui_heartbeat();
             }
         }
     });
@@ -195,6 +231,19 @@ pub fn App() -> Element {
                }
            }
        }
+}
+
+/// A round trip through the page: Rust asks the WebView to answer, the
+/// answer comes back. It only succeeds while this async loop, the bridge and
+/// the page all work, so it is what a heartbeat must be based on — a bare
+/// timer can keep running next to a page that stopped responding.
+async fn ui_round_trip() -> bool {
+    tokio::time::timeout(std::time::Duration::from_secs(3), async {
+        let mut eval = document::eval("dioxus.send(1);");
+        eval.recv::<i32>().await.is_ok()
+    })
+    .await
+    .unwrap_or(false)
 }
 
 /// System-bar overlap in CSS px, rounded to whole px so tiny float jitter

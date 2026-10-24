@@ -200,6 +200,7 @@ mod tests {
             time_minute: 0,
             label: "x".into(),
             days: [false; 7],
+            date: None,
             enabled: true,
             sound: "happy".into(),
             sound_mode: 0,

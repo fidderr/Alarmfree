@@ -11,5 +11,6 @@ pub mod models;
 pub mod persistence;
 pub mod platform;
 pub mod sanitize;
+pub mod schedule;
 pub mod screens;
 pub mod timer;

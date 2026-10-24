@@ -258,5 +258,7 @@
   "challenge.reaction.instruction": "Tippe die Ziele weg — schnell!",
   "challenge.reaction.get_ready": "Mach dich bereit",
   "db.recovered": "Deine Alarmdaten konnten nicht gelesen werden, daher wurde eine neue Datenbank angelegt. Die alte Datei wurde auf dem Gerät aufbewahrt.",
-  "db.volatile": "Alarme können gerade nicht gespeichert werden. Änderungen gehen verloren, sobald die App geschlossen wird."
+  "db.volatile": "Alarme können gerade nicht gespeichert werden. Änderungen gehen verloren, sobald die App geschlossen wird.",
+  "alarm.ended_by_reboot": "Alarm {alarm} wurde beendet, weil das Telefon neu gestartet wurde.",
+  "validation.date_past": "Wähle ein Datum und eine Uhrzeit in der Zukunft"
 }

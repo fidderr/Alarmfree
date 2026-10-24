@@ -258,5 +258,7 @@
   "challenge.reaction.instruction": "Tik de doelen weg — snel!",
   "challenge.reaction.get_ready": "Maak je klaar",
   "db.recovered": "Je alarmgegevens konden niet worden gelezen, dus er is een nieuwe database gemaakt. Het oude bestand is op het apparaat bewaard.",
-  "db.volatile": "Alarmen kunnen nu niet worden opgeslagen. Wijzigingen gaan verloren zodra de app wordt gesloten."
+  "db.volatile": "Alarmen kunnen nu niet worden opgeslagen. Wijzigingen gaan verloren zodra de app wordt gesloten.",
+  "alarm.ended_by_reboot": "Alarm {alarm} is gestopt omdat de telefoon opnieuw is opgestart.",
+  "validation.date_past": "Kies een datum en tijd in de toekomst"
 }

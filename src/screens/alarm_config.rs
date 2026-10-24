@@ -280,16 +280,29 @@ pub fn AlarmConfig(id: String) -> Element {
     let mut minute = use_signal(|| existing.as_ref().map_or(0u8, |a| a.time_minute));
     let mut label_value =
         use_signal(|| existing.as_ref().map_or(String::new(), |a| a.label.clone()));
-    let mut schedule_mode = use_signal(|| "weekdays".to_string());
+    // An alarm with no weekday selected rings once, on a date: reopen it in
+    // "specific date" mode.
+    let mut schedule_mode = use_signal(|| {
+        match existing.as_ref() {
+            Some(a) if crate::schedule::is_one_time(a) => "date",
+            _ => "weekdays",
+        }
+        .to_string()
+    });
     let mut selected_days = use_signal(|| existing.as_ref().map_or([false; 7], |a| a.days));
-    // Prefill the date field with today (YYYY-MM-DD — the format the native
-    // <input type="date"> expects) so switching to "specific date" mode never
-    // shows an empty picker.
+    // Prefill the date field (YYYY-MM-DD — the format the native
+    // <input type="date"> expects) with the alarm's date, or today, so
+    // switching to "specific date" mode never shows an empty picker.
     let mut date_value = use_signal(|| {
-        chrono::Local::now()
-            .date_naive()
-            .format("%Y-%m-%d")
-            .to_string()
+        existing
+            .as_ref()
+            .and_then(|a| a.date.clone())
+            .unwrap_or_else(|| {
+                chrono::Local::now()
+                    .date_naive()
+                    .format("%Y-%m-%d")
+                    .to_string()
+            })
     });
     let mut sound_value = use_signal(|| {
         existing.as_ref().map_or_else(
@@ -928,6 +941,15 @@ pub fn AlarmConfig(id: String) -> Element {
                                {
                                    errors.insert("schedule".to_string(), t(&translations, "validation.select_day"));
                                }
+                               if *schedule_mode.read() == "date" {
+                                   let picked = chrono::NaiveDate::parse_from_str(&date_value.read(), "%Y-%m-%d")
+                                       .ok()
+                                       .and_then(|d| d.and_hms_opt(u32::from(h), u32::from(m), 0));
+                                   let ahead = picked.is_some_and(|at| at > chrono::Local::now().naive_local());
+                                   if !ahead {
+                                       errors.insert("schedule".to_string(), t(&translations, "validation.date_past"));
+                                   }
+                               }
                                if label_value.read().len() > 100 {
                                    errors.insert("label".to_string(), t(&translations, "validation.label_too_long"));
                                }
@@ -959,7 +981,10 @@ pub fn AlarmConfig(id: String) -> Element {
                                    time_hour: *hour.read(),
                                    time_minute: *minute.read(),
                                    label: crate::sanitize::sanitize_label(&label_value.read()),
-                                   days: *selected_days.read(),
+                                   // "Specific date" mode is a one-time alarm: no
+                                   // weekdays, and the date picked.
+                                   days: if *schedule_mode.read() == "date" { [false; 7] } else { *selected_days.read() },
+                                   date: (*schedule_mode.read() == "date").then(|| date_value.read().clone()),
                                    enabled: true,
                                    sound: sound_value.read().clone(),
                                    sound_mode: *sound_mode_index.read(),

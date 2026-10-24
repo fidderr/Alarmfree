@@ -258,5 +258,7 @@
   "challenge.reaction.instruction": "Pop the targets — fast!",
   "challenge.reaction.get_ready": "Get ready",
   "db.recovered": "Your alarm data could not be read, so a fresh database was created. The old file was kept on the device.",
-  "db.volatile": "Alarms cannot be saved right now. Changes will be lost when the app closes."
+  "db.volatile": "Alarms cannot be saved right now. Changes will be lost when the app closes.",
+  "alarm.ended_by_reboot": "Alarm {alarm} was stopped because the phone restarted.",
+  "validation.date_past": "Pick a date and time in the future"
 }

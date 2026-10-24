@@ -378,6 +378,13 @@ fn generate_challenges(challenge_list: &[(String, String)]) -> Vec<GeneratedChal
     generated
 }
 
+/// A one-time alarm is finished once dismissed: switch it off and persist.
+fn finish_one_time(alarms: &mut Signal<Vec<AlarmData>>, id: &str) {
+    if crate::schedule::disable_if_one_time(&mut alarms.write(), id) {
+        crate::persistence::save_alarms(&alarms.read());
+    }
+}
+
 /// Alarm firing screen.
 /// This screen is a **pure view** over the firing state. All platform
 /// orchestration (audio, kiosk, wake-lock, foreground service, notification,
@@ -390,7 +397,7 @@ fn generate_challenges(challenge_list: &[(String, String)]) -> Vec<GeneratedChal
 #[component]
 pub fn AlarmFiring(id: String) -> Element {
     let translations = use_context::<Translations>();
-    let alarms = use_context::<Signal<Vec<AlarmData>>>();
+    let mut alarms = use_context::<Signal<Vec<AlarmData>>>();
     // One-shot navigation intent — set on successful dismiss so the app
     // lands on History when the Router remounts (the firing screen is
     // rendered outside the Router and can't navigate directly).
@@ -536,96 +543,129 @@ pub fn AlarmFiring(id: String) -> Element {
     });
 
     rsx! {
-           div {
-               class: if *phase.read() == FiringPhase::Challenge { "screen alarm-firing-screen in-challenge" } else { "screen alarm-firing-screen" },
-               match &*phase.read() {
-                   FiringPhase::Ringing => rsx! {
-    // Hero: animated pulsing bell + time + label, centered in the
-    // flexible space at the top.
-                       div { class: "firing-hero",
-                           div { class: "firing-bell",
-                               span { class: "firing-bell-ring" }
-                               span { class: "firing-bell-ring firing-bell-ring-2" }
-                               Icon { name: IconName::Bell, size: 44 }
+               div {
+                   class: if *phase.read() == FiringPhase::Challenge { "screen alarm-firing-screen in-challenge" } else { "screen alarm-firing-screen" },
+                   match &*phase.read() {
+                       FiringPhase::Ringing => rsx! {
+        // Hero: animated pulsing bell + time + label, centered in the
+        // flexible space at the top.
+                           div { class: "firing-hero",
+                               div { class: "firing-bell",
+                                   span { class: "firing-bell-ring" }
+                                   span { class: "firing-bell-ring firing-bell-ring-2" }
+                                   Icon { name: IconName::Bell, size: 44 }
+                               }
+                               h1 { class: "time-display", "{alarm_time}" }
+                               p { class: "firing-label", "{alarm_label}" }
+                               p { class: "firing-status", "{alarm_ringing_text}" }
                            }
-                           h1 { class: "time-display", "{alarm_time}" }
-                           p { class: "firing-label", "{alarm_label}" }
-                           p { class: "firing-status", "{alarm_ringing_text}" }
-                       }
 
-    // Action buttons. Snooze sits high and is small/secondary; dismiss is
-    // the large primary button anchored at the bottom with a big gap
-    // between them so neither is hit by accident.
-                       div { class: "firing-actions",
-    // Snooze button
-                           if *snoozes_remaining.read() > 0 {
-                               {
-                                   let id_for_snooze = id.clone();
-                                   rsx! {
-                                       button {
-                                           class: "snooze-btn",
-                                           onclick: move |_| {
-                                               let remaining = *snoozes_remaining.read();
-                                               if remaining > 0 {
-                                                   if first_interaction.read().is_none() {
-                                                       first_interaction.set(Some(chrono::Utc::now()));
-                                                   }
-                                                   snooze_count_used.set(snooze_count_used() + 1);
-                                                   snoozes_remaining.set(remaining - 1);
-                                                   // Record snooze interval for history metrics.
-                                                   snooze_intervals_used.write().push(snooze_interval_minutes);
-                                                   let _ = std::fs::write(&snooze_file, snooze_count_used().to_string());
-                                                   // Persist intervals so they survive the re-fire remount.
-                                                   let intervals_str: String = snooze_intervals_used
-                                                       .read()
-                                                       .iter()
-                                                       .map(|n| n.to_string())
-                                                       .collect::<Vec<_>>()
-                                                       .join(",");
-                                                   let _ = std::fs::write(&snooze_intervals_file, intervals_str);
+        // Action buttons. Snooze sits high and is small/secondary; dismiss is
+        // the large primary button anchored at the bottom with a big gap
+        // between them so neither is hit by accident.
+                           div { class: "firing-actions",
+        // Snooze button
+                               if *snoozes_remaining.read() > 0 {
+                                   {
+                                       let id_for_snooze = id.clone();
+                                       rsx! {
+                                           button {
+                                               class: "snooze-btn",
+                                               onclick: move |_| {
+                                                   let remaining = *snoozes_remaining.read();
+                                                   if remaining > 0 {
+                                                       if first_interaction.read().is_none() {
+                                                           first_interaction.set(Some(chrono::Utc::now()));
+                                                       }
+                                                       snooze_count_used.set(snooze_count_used() + 1);
+                                                       snoozes_remaining.set(remaining - 1);
+                                                       // Record snooze interval for history metrics.
+                                                       snooze_intervals_used.write().push(snooze_interval_minutes);
+                                                       let _ = std::fs::write(&snooze_file, snooze_count_used().to_string());
+                                                       // Persist intervals so they survive the re-fire remount.
+                                                       let intervals_str: String = snooze_intervals_used
+                                                           .read()
+                                                           .iter()
+                                                           .map(|n| n.to_string())
+                                                           .collect::<Vec<_>>()
+                                                           .join(",");
+                                                       let _ = std::fs::write(&snooze_intervals_file, intervals_str);
 
-                                                   let kit = crate::platform::alarm_kit();
-                                                   let instance_id = mobile_sentinel::InstanceId::new(id_for_snooze.clone());
-                                                   if let Err(_e) = kit.snooze(&instance_id) {
+                                                       let kit = crate::platform::alarm_kit();
+                                                       let instance_id = mobile_sentinel::InstanceId::new(id_for_snooze.clone());
+                                                       if let Err(_e) = kit.snooze(&instance_id) {
+                                                           #[cfg(target_os = "android")]
+                                                           log::warn!("[AlarmFree] AlarmKit snooze failed for {}: {:?}", id_for_snooze, _e);
+                                                       }
                                                        #[cfg(target_os = "android")]
-                                                       log::warn!("[AlarmFree] AlarmKit snooze failed for {}: {:?}", id_for_snooze, _e);
+                                                       {
+                                                           mobile_sentinel::foregrounding::finish_activity();
+                                                       }
                                                    }
-                                                   #[cfg(target_os = "android")]
-                                                   {
-                                                       mobile_sentinel::foregrounding::finish_activity();
-                                                   }
-                                               }
-                                           },
-                                           Icon { name: IconName::Stopwatch, size: 16 }
-                                           " {snooze_text} · {snoozes_remaining} {snooze_left_text}"
+                                               },
+                                               Icon { name: IconName::Stopwatch, size: 16 }
+                                               " {snooze_text} · {snoozes_remaining} {snooze_left_text}"
+                                           }
                                        }
                                    }
                                }
-                           }
 
-    // Dismiss button
-                           {
-                               let id_for_dismiss = id.clone();
-                               rsx! {
-                                   button {
-                                       class: "dismiss-btn",
-                                       onclick: move |_| {
-                                           if first_interaction.read().is_none() {
-                                               first_interaction.set(Some(chrono::Utc::now()));
-                                           }
+        // Dismiss button
+                               {
+                                   let id_for_dismiss = id.clone();
+                                   rsx! {
+                                       button {
+                                           class: "dismiss-btn",
+                                           onclick: move |_| {
+                                               if first_interaction.read().is_none() {
+                                                   first_interaction.set(Some(chrono::Utc::now()));
+                                               }
 
-                                           if has_challenges {
-                                               let kit = crate::platform::alarm_kit();
-                                               let instance_id = mobile_sentinel::InstanceId::new(id_for_dismiss.clone());
-                                               let _ = kit.pause(&instance_id);
-                                               let generated = generate_challenges(&challenge_list);
-                                               if generated.is_empty() {
-                                                   // No runnable challenge (e.g. unknown types): the
-                                                   // gate is trivially satisfied. The SDK refuses to
-                                                   // dismiss a challenge alarm until it is marked
-                                                   // solved, so mark it first or the user would be
-                                                   // stuck in the lockdown.
-                                                   let _ = kit.mark_solved(&instance_id);
+                                               if has_challenges {
+                                                   let kit = crate::platform::alarm_kit();
+                                                   let instance_id = mobile_sentinel::InstanceId::new(id_for_dismiss.clone());
+                                                   let _ = kit.pause(&instance_id);
+                                                   let generated = generate_challenges(&challenge_list);
+                                                   if generated.is_empty() {
+                                                       // No runnable challenge (e.g. unknown types): the
+                                                       // gate is trivially satisfied. The SDK refuses to
+                                                       // dismiss a challenge alarm until it is marked
+                                                       // solved, so mark it first or the user would be
+                                                       // stuck in the lockdown.
+                                                       let _ = kit.mark_solved(&instance_id);
+                                                       let _ = kit.dismiss(&instance_id);
+                                                       let now = chrono::Utc::now();
+                                                       let event = crate::models::AlarmEvent {
+                                                           id: uuid::Uuid::new_v4().to_string(),
+                                                           alarm_id: crate::models::AlarmId(alarm_id_for_history.clone()),
+                                                           alarm_label: alarm_label_for_history.clone(),
+                                                           fire_timestamp: *fire_timestamp.read(),
+                                                           first_interaction_timestamp: *first_interaction.read(),
+                                                           dismiss_timestamp: now,
+                                                           snooze_count: *snooze_count_used.read(),
+                                                           snooze_intervals_minutes: snooze_intervals_used.read().clone(),
+                                                           challenge_solves: challenge_solves.read().clone(),
+                                                           total_dismissal_time: (now - *fire_timestamp.read())
+                                                               .to_std()
+                                                               .unwrap_or(std::time::Duration::from_secs(0)),
+                                                       };
+                                                       crate::history_persistence::record_alarm_event(&event);
+                                                       let _ = std::fs::remove_file(&snooze_file2);
+                                                       let _ = std::fs::remove_file(&snooze_intervals_file2);
+                                                    finish_one_time(&mut alarms, &alarm_id_for_history);
+                                                       // Successful dismiss → land on History when the
+                                                       // Router remounts (don't close the app).
+                                                       nav_intent.set(Some(Route::History {}));
+                                                   } else {
+                                                       challenges.set(generated);
+                                                       current_challenge_index.set(0);
+                                                       phase.set(FiringPhase::Challenge);
+                                                       challenge_timeout.set(0);
+                                                       answer_feedback.set("");
+                                                   }
+                                               } else {
+                                                   let kit = crate::platform::alarm_kit();
+                                                   let instance_id = mobile_sentinel::InstanceId::new(id_for_dismiss.clone());
                                                    let _ = kit.dismiss(&instance_id);
                                                    let now = chrono::Utc::now();
                                                    let event = crate::models::AlarmEvent {
@@ -643,27 +683,79 @@ pub fn AlarmFiring(id: String) -> Element {
                                                            .unwrap_or(std::time::Duration::from_secs(0)),
                                                    };
                                                    crate::history_persistence::record_alarm_event(&event);
-                                                   let _ = std::fs::remove_file(&snooze_file2);
-                                                   let _ = std::fs::remove_file(&snooze_intervals_file2);
-                                                   // Successful dismiss → land on History when the
-                                                   // Router remounts (don't close the app).
+                                                   let _ = std::fs::remove_file(&snooze_file3);
+                                                   let _ = std::fs::remove_file(&snooze_intervals_file3);
+                                                   finish_one_time(&mut alarms, &alarm_id_for_history);
+                                                   // Successful dismiss (no challenges) → land on
+                                                   // History when the Router remounts.
                                                    nav_intent.set(Some(Route::History {}));
-                                               } else {
-                                                   challenges.set(generated);
-                                                   current_challenge_index.set(0);
-                                                   phase.set(FiringPhase::Challenge);
-                                                   challenge_timeout.set(0);
-                                                   answer_feedback.set("");
                                                }
-                                           } else {
-                                               let kit = crate::platform::alarm_kit();
-                                               let instance_id = mobile_sentinel::InstanceId::new(id_for_dismiss.clone());
-                                               let _ = kit.dismiss(&instance_id);
+                                           },
+                                           Icon { name: IconName::Check, size: 20 }
+                                           " {dismiss_text}"
+                                       }
+                                   }
+                               }
+                           }
+                       },
+
+                       FiringPhase::Challenge => rsx! {
+                           div {
+                               class: "challenge-area",
+                               // Reset inactivity timer on any interaction
+                               onclick: move |_| { challenge_timeout.set(0); },
+                               oninput: move |_| { challenge_timeout.set(0); },
+                               ontouchstart: move |_| { challenge_timeout.set(0); },
+
+        // Compact meta row: progress + timer pills, centered. The challenge's
+        // own instruction (rendered inside the card below) is the real heading,
+        // so there's no redundant generic title competing for space here.
+                               div { class: "challenge-meta",
+                                   {
+                                       let total = challenges.read().len();
+                                       let current = *current_challenge_index.read() + 1;
+                                       rsx! {
+                                           if total > 1 {
+                                               span { class: "challenge-pill challenge-pill-progress", "{current} / {total}" }
+                                           }
+                                       }
+                                   }
+                                   {
+                                       let secs_left = 60u32.saturating_sub(*challenge_timeout.read());
+                                       let low = secs_left <= 10;
+                                       let pill_class = if low { "challenge-pill challenge-pill-timer low" } else { "challenge-pill challenge-pill-timer" };
+                                       rsx! {
+                                           span { class: "{pill_class}",
+                                               Icon { name: IconName::Stopwatch, size: 13 }
+                                               " {secs_left}s"
+                                           }
+                                       }
+                                   }
+                               }
+
+
+        // Render current challenge
+                               {
+                                   let idx = *current_challenge_index.read();
+                                   let challenge_list = challenges.read();
+                                   if let Some(challenge) = challenge_list.get(idx) {
+                                       let challenge = challenge.clone();
+                                       drop(challenge_list);
+                                       let aid = alarm_id_for_history.clone();
+                                       let alabel = alarm_label_for_history.clone();
+                                       let aid_for_kit = alarm_id_for_history.clone();
+                                       render_challenge(
+                                           challenge,
+                                           idx,
+                                           challenges.read().len(),
+                                           current_challenge_index,
+                                           answer_feedback,
+                                           EventHandler::new(move |_| {
                                                let now = chrono::Utc::now();
                                                let event = crate::models::AlarmEvent {
                                                    id: uuid::Uuid::new_v4().to_string(),
-                                                   alarm_id: crate::models::AlarmId(alarm_id_for_history.clone()),
-                                                   alarm_label: alarm_label_for_history.clone(),
+                                                   alarm_id: crate::models::AlarmId(aid.clone()),
+                                                   alarm_label: alabel.clone(),
                                                    fire_timestamp: *fire_timestamp.read(),
                                                    first_interaction_timestamp: *first_interaction.read(),
                                                    dismiss_timestamp: now,
@@ -675,215 +767,133 @@ pub fn AlarmFiring(id: String) -> Element {
                                                        .unwrap_or(std::time::Duration::from_secs(0)),
                                                };
                                                crate::history_persistence::record_alarm_event(&event);
-                                               let _ = std::fs::remove_file(&snooze_file3);
-                                               let _ = std::fs::remove_file(&snooze_intervals_file3);
-                                               // Successful dismiss (no challenges) → land on
-                                               // History when the Router remounts.
+        // Clean up snooze persistence file
+                                               let snooze_cleanup = mobile_sentinel::app_files_dir().join(format!("snooze_{}.txt", aid));
+                                               let _ = std::fs::remove_file(snooze_cleanup);
+                                                                                          finish_one_time(&mut alarms, &aid);
+    // All challenges solved → land on History when the
+                                               // Router remounts (the firing screen exits once the
+                                               // ContextStore poll sees the dismissed state).
                                                nav_intent.set(Some(Route::History {}));
+                                           }),
+                                           rate_limiter,
+                                           challenge_timeout,
+                                           celebrating,
+                                           challenge_solves,
+                                           challenge_started_at,
+                                           using_fallback,
+                                           fallback_armed,
+                                           aid_for_kit,
+                                           t(&translations, "challenge.unknown_type"),
+                                       )
+                                   } else {
+                                       rsx! { p { "{loading_text}" } }
+                                   }
+                               }
+
+        // Celebration overlay — shown after a challenge solve before advancing
+                               if *celebrating.read() {
+                                   {
+                                       let total = challenges.read().len();
+                                       let current = *current_challenge_index.read() + 1;
+                                       let label = if total > 1 {
+                                           format!("{} / {}", current, total)
+                                       } else {
+                                           String::new()
+                                       };
+                                       rsx! {
+                                           crate::components::Celebration {
+                                               label: label,
+                                           }
+                                       }
+                                   }
+                               }
+
+        // Feedback overlay — fixed-position toast so it never shifts the
+        // challenge layout when it appears/disappears.
+                               if *answer_feedback.read() == "wrong" {
+                                   {
+                                       let timeout_secs = *challenge_timeout.read();
+                                       let cooling = rate_limiter.read().is_cooling_down(timeout_secs);
+                                       let remaining = rate_limiter.read().remaining_cooldown(timeout_secs);
+                                       if cooling {
+                                           let cooldown_text = t(&translations, "challenge.try_again_in")
+                                               .replace("{seconds}", &remaining.to_string());
+                                           rsx! {
+                                               div { class: "answer-feedback-toast",
+                                                   "{cooldown_text}"
+                                               }
+                                           }
+                                       } else {
+                                           rsx! {
+                                               div { class: "answer-feedback-toast",
+                                                   "{incorrect_text}"
+                                               }
+                                           }
+                                       }
+                                   }
+                               }
+
+        // Fallback escape hatch — a small red danger button anchored bottom-right
+        // so it never pushes the challenge layout. First tap arms it and shows an
+        // overlay popup explaining what it does; tapping again while armed switches
+        // the current challenge to the universal touch-only hold challenge. Hidden
+        // once in fallback or celebrating.
+                               if !*using_fallback.read() && !*celebrating.read() {
+                                   button {
+                                       class: if *fallback_armed.read() { "fallback-fab armed" } else { "fallback-fab" },
+                                       "aria-label": "{fallback_aria_text}",
+                                       onclick: move |_| {
+                                           challenge_timeout.set(0);
+                                           if *fallback_armed.read() {
+                                               fallback_armed.set(false);
+                                               answer_feedback.set("");
+                                               using_fallback.set(true);
+                                           } else {
+                                               fallback_armed.set(true);
                                            }
                                        },
-                                       Icon { name: IconName::Check, size: 20 }
-                                       " {dismiss_text}"
+                                       "!"
                                    }
                                }
-                           }
-                       }
-                   },
 
-                   FiringPhase::Challenge => rsx! {
-                       div {
-                           class: "challenge-area",
-                           // Reset inactivity timer on any interaction
-                           onclick: move |_| { challenge_timeout.set(0); },
-                           oninput: move |_| { challenge_timeout.set(0); },
-                           ontouchstart: move |_| { challenge_timeout.set(0); },
-
-    // Compact meta row: progress + timer pills, centered. The challenge's
-    // own instruction (rendered inside the card below) is the real heading,
-    // so there's no redundant generic title competing for space here.
-                           div { class: "challenge-meta",
-                               {
-                                   let total = challenges.read().len();
-                                   let current = *current_challenge_index.read() + 1;
-                                   rsx! {
-                                       if total > 1 {
-                                           span { class: "challenge-pill challenge-pill-progress", "{current} / {total}" }
-                                       }
-                                   }
-                               }
-                               {
-                                   let secs_left = 60u32.saturating_sub(*challenge_timeout.read());
-                                   let low = secs_left <= 10;
-                                   let pill_class = if low { "challenge-pill challenge-pill-timer low" } else { "challenge-pill challenge-pill-timer" };
-                                   rsx! {
-                                       span { class: "{pill_class}",
-                                           Icon { name: IconName::Stopwatch, size: 13 }
-                                           " {secs_left}s"
-                                       }
-                                   }
-                               }
-                           }
-
-
-    // Render current challenge
-                           {
-                               let idx = *current_challenge_index.read();
-                               let challenge_list = challenges.read();
-                               if let Some(challenge) = challenge_list.get(idx) {
-                                   let challenge = challenge.clone();
-                                   drop(challenge_list);
-                                   let aid = alarm_id_for_history.clone();
-                                   let alabel = alarm_label_for_history.clone();
-                                   let aid_for_kit = alarm_id_for_history.clone();
-                                   render_challenge(
-                                       challenge,
-                                       idx,
-                                       challenges.read().len(),
-                                       current_challenge_index,
-                                       answer_feedback,
-                                       EventHandler::new(move |_| {
-                                           let now = chrono::Utc::now();
-                                           let event = crate::models::AlarmEvent {
-                                               id: uuid::Uuid::new_v4().to_string(),
-                                               alarm_id: crate::models::AlarmId(aid.clone()),
-                                               alarm_label: alabel.clone(),
-                                               fire_timestamp: *fire_timestamp.read(),
-                                               first_interaction_timestamp: *first_interaction.read(),
-                                               dismiss_timestamp: now,
-                                               snooze_count: *snooze_count_used.read(),
-                                               snooze_intervals_minutes: snooze_intervals_used.read().clone(),
-                                               challenge_solves: challenge_solves.read().clone(),
-                                               total_dismissal_time: (now - *fire_timestamp.read())
-                                                   .to_std()
-                                                   .unwrap_or(std::time::Duration::from_secs(0)),
-                                           };
-                                           crate::history_persistence::record_alarm_event(&event);
-    // Clean up snooze persistence file
-                                           let snooze_cleanup = mobile_sentinel::app_files_dir().join(format!("snooze_{}.txt", aid));
-                                           let _ = std::fs::remove_file(snooze_cleanup);
-                                           // All challenges solved → land on History when the
-                                           // Router remounts (the firing screen exits once the
-                                           // ContextStore poll sees the dismissed state).
-                                           nav_intent.set(Some(Route::History {}));
-                                       }),
-                                       rate_limiter,
-                                       challenge_timeout,
-                                       celebrating,
-                                       challenge_solves,
-                                       challenge_started_at,
-                                       using_fallback,
-                                       fallback_armed,
-                                       aid_for_kit,
-                                       t(&translations, "challenge.unknown_type"),
-                                   )
-                               } else {
-                                   rsx! { p { "{loading_text}" } }
-                               }
-                           }
-
-    // Celebration overlay — shown after a challenge solve before advancing
-                           if *celebrating.read() {
-                               {
-                                   let total = challenges.read().len();
-                                   let current = *current_challenge_index.read() + 1;
-                                   let label = if total > 1 {
-                                       format!("{} / {}", current, total)
-                                   } else {
-                                       String::new()
-                                   };
-                                   rsx! {
-                                       crate::components::Celebration {
-                                           label: label,
-                                       }
-                                   }
-                               }
-                           }
-
-    // Feedback overlay — fixed-position toast so it never shifts the
-    // challenge layout when it appears/disappears.
-                           if *answer_feedback.read() == "wrong" {
-                               {
-                                   let timeout_secs = *challenge_timeout.read();
-                                   let cooling = rate_limiter.read().is_cooling_down(timeout_secs);
-                                   let remaining = rate_limiter.read().remaining_cooldown(timeout_secs);
-                                   if cooling {
-                                       let cooldown_text = t(&translations, "challenge.try_again_in")
-                                           .replace("{seconds}", &remaining.to_string());
-                                       rsx! {
-                                           div { class: "answer-feedback-toast",
-                                               "{cooldown_text}"
-                                           }
-                                       }
-                                   } else {
-                                       rsx! {
-                                           div { class: "answer-feedback-toast",
-                                               "{incorrect_text}"
-                                           }
-                                       }
-                                   }
-                               }
-                           }
-
-    // Fallback escape hatch — a small red danger button anchored bottom-right
-    // so it never pushes the challenge layout. First tap arms it and shows an
-    // overlay popup explaining what it does; tapping again while armed switches
-    // the current challenge to the universal touch-only hold challenge. Hidden
-    // once in fallback or celebrating.
-                           if !*using_fallback.read() && !*celebrating.read() {
-                               button {
-                                   class: if *fallback_armed.read() { "fallback-fab armed" } else { "fallback-fab" },
-                                   "aria-label": "{fallback_aria_text}",
-                                   onclick: move |_| {
-                                       challenge_timeout.set(0);
-                                       if *fallback_armed.read() {
-                                           fallback_armed.set(false);
-                                           answer_feedback.set("");
-                                           using_fallback.set(true);
-                                       } else {
-                                           fallback_armed.set(true);
-                                       }
-                                   },
-                                   "!"
-                               }
-                           }
-
-    // Fallback explanation — floating overlay popup so it never shifts
-    // the challenge layout. Tap outside to dismiss; the danger button
-    // itself confirms (second tap).
-                           if *fallback_armed.read() && !*using_fallback.read() {
-                               div {
-                                   class: "fallback-overlay",
-                                   onclick: move |_| { fallback_armed.set(false); },
+        // Fallback explanation — floating overlay popup so it never shifts
+        // the challenge layout. Tap outside to dismiss; the danger button
+        // itself confirms (second tap).
+                               if *fallback_armed.read() && !*using_fallback.read() {
                                    div {
-                                       class: "fallback-popup",
-                                       onclick: move |evt| { evt.stop_propagation(); },
-                                       p { class: "fallback-popup-title", "{fallback_title_text}" }
-                                       p { class: "fallback-popup-body", "{fallback_explain_text}" }
-                                       div { class: "fallback-popup-actions",
-                                           button {
-                                               class: "fallback-popup-cancel",
-                                               onclick: move |_| { fallback_armed.set(false); },
-                                               "{fallback_cancel_text}"
-                                           }
-                                           button {
-                                               class: "fallback-popup-confirm",
-                                               onclick: move |_| {
-                                                   challenge_timeout.set(0);
-                                                   fallback_armed.set(false);
-                                                   answer_feedback.set("");
-                                                   using_fallback.set(true);
-                                               },
-                                               "{fallback_confirm_text}"
+                                       class: "fallback-overlay",
+                                       onclick: move |_| { fallback_armed.set(false); },
+                                       div {
+                                           class: "fallback-popup",
+                                           onclick: move |evt| { evt.stop_propagation(); },
+                                           p { class: "fallback-popup-title", "{fallback_title_text}" }
+                                           p { class: "fallback-popup-body", "{fallback_explain_text}" }
+                                           div { class: "fallback-popup-actions",
+                                               button {
+                                                   class: "fallback-popup-cancel",
+                                                   onclick: move |_| { fallback_armed.set(false); },
+                                                   "{fallback_cancel_text}"
+                                               }
+                                               button {
+                                                   class: "fallback-popup-confirm",
+                                                   onclick: move |_| {
+                                                       challenge_timeout.set(0);
+                                                       fallback_armed.set(false);
+                                                       answer_feedback.set("");
+                                                       using_fallback.set(true);
+                                                   },
+                                                   "{fallback_confirm_text}"
+                                               }
                                            }
                                        }
                                    }
                                }
                            }
-                       }
-                   },
+                       },
+                   }
                }
            }
-       }
 }
 
 /// Render the appropriate challenge component based on type

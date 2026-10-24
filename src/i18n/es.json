@@ -258,5 +258,7 @@
   "challenge.reaction.instruction": "¡Toca los objetivos, rápido!",
   "challenge.reaction.get_ready": "Prepárate",
   "db.recovered": "No se pudieron leer los datos de tus alarmas, por lo que se creó una base de datos nueva. El archivo anterior se conservó en el dispositivo.",
-  "db.volatile": "Ahora mismo no se pueden guardar las alarmas. Los cambios se perderán al cerrar la app."
+  "db.volatile": "Ahora mismo no se pueden guardar las alarmas. Los cambios se perderán al cerrar la app.",
+  "alarm.ended_by_reboot": "La alarma {alarm} se detuvo porque el teléfono se reinició.",
+  "validation.date_past": "Elige una fecha y una hora futuras"
 }
