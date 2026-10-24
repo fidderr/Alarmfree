@@ -1,6 +1,8 @@
 use crate::app::{t, AlarmData, Route, Translations};
 use crate::components::{Icon, IconName};
-use chrono::{Local, Timelike};
+use crate::schedule;
+use std::collections::HashMap;
+
 use dioxus::prelude::*;
 
 /// Translation keys for day abbreviations.
@@ -22,41 +24,53 @@ pub fn Home() -> Element {
     let tap_to_create_text = t(&translations, "alarm.tap_to_create");
     let time_until_template = t(&translations, "alarm.time_until");
 
-    // Calculate actual time until next enabled alarm
-    let next_alarm_text = {
-        let alarm_list = alarms.read();
-        let now = Local::now();
-        let now_minutes = now.hour() * 60 + now.minute();
-        let next = alarm_list
+    // The countdown and the "Today / Tomorrow" labels follow the clock, so
+    // re-render on a timer. Reading `tick` below subscribes this component.
+    let mut tick = use_signal(|| 0u32);
+    use_future(move || async move {
+        loop {
+            crate::timer::sleep_ms(15_000).await;
+            tick += 1;
+        }
+    });
+    let _ = tick();
+
+    // When each enabled alarm really rings next, from AlarmKit (it knows
+    // the weekdays, a snooze in progress and one-time dates).
+    let now = chrono::Local::now();
+    let now_ms = now.timestamp_millis();
+    let next_fire: HashMap<String, i64> = {
+        let kit = crate::platform::alarm_kit_optional();
+        alarms
+            .read()
             .iter()
             .filter(|a| a.enabled)
-            .map(|a| {
-                let alarm_minutes = (a.time_hour as u32) * 60 + (a.time_minute as u32);
-                if alarm_minutes > now_minutes {
-                    alarm_minutes - now_minutes
-                } else {
-                    // Alarm is tomorrow (or later this week, simplified)
-                    (24 * 60) - now_minutes + alarm_minutes
-                }
+            .filter_map(|a| {
+                let at = kit?
+                    .next_fire(&mobile_sentinel::InstanceId::new(a.id.clone()))
+                    .ok()
+                    .flatten()?;
+                Some((a.id.clone(), at))
             })
-            .min();
-
-        match next {
-            Some(minutes) => {
-                let h = minutes / 60;
-                let m = minutes % 60;
-                let time_str = if h > 0 {
-                    t(&translations, "home.next_in_hm")
-                        .replace("{hours}", &h.to_string())
-                        .replace("{minutes}", &format!("{:02}", m))
-                } else {
-                    t(&translations, "home.next_in_m").replace("{minutes}", &m.to_string())
-                };
-                time_until_template.replace("{time}", &time_str)
-            }
-            None => String::new(),
-        }
+            .collect()
     };
+
+    let next_alarm_text = match schedule::earliest_future(now_ms, next_fire.values().copied()) {
+        Some(at) => {
+            let time_str = schedule::format_countdown(
+                schedule::countdown(now_ms, at),
+                &t(&translations, "home.next_in_dhm"),
+                &t(&translations, "home.next_in_hm"),
+                &t(&translations, "home.next_in_m"),
+            );
+            time_until_template.replace("{time}", &time_str)
+        }
+        None => String::new(),
+    };
+
+    // Alarms in clock order.
+    let mut sorted: Vec<AlarmData> = alarms.read().clone();
+    sorted.sort_by_key(|a| (a.time_hour, a.time_minute));
 
     let nav_alarms = t(&translations, "nav.alarms");
     let nav_history = t(&translations, "nav.history");
@@ -76,17 +90,18 @@ pub fn Home() -> Element {
     // Alarm list or empty state
                if has_alarms {
                    div { class: "alarm-list",
-                       for alarm in alarms.read().iter() {
+                       for alarm in sorted.iter() {
                            {
                                let alarm_id = alarm.id.clone();
                                let alarm_id2 = alarm.id.clone();
                                let time = format!("{:02}:{:02}", alarm.time_hour, alarm.time_minute);
                                let label = alarm.label.clone();
-                               let schedule = format_schedule(&alarm.days, &translations);
+                               let schedule_text = format_schedule(&alarm.days, &translations);
+                               let next_ring = next_fire.get(&alarm.id).and_then(|&at| ring_day_label(at, &translations));
                                let enabled = alarm.enabled;
                                rsx! {
                                    div {
-                                       class: "alarm-card",
+                                       class: if enabled { "alarm-card" } else { "alarm-card disabled" },
                                        onclick: move |_| {
                                            nav.push(Route::AlarmConfig { id: alarm_id.clone() });
                                        },
@@ -94,7 +109,10 @@ pub fn Home() -> Element {
                                            div { class: "alarm-time", "{time}" }
                                            div { class: "alarm-details",
                                                span { class: "alarm-label", "{label}" }
-                                               span { class: "alarm-schedule", "{schedule}" }
+                                               span { class: "alarm-schedule", "{schedule_text}" }
+                                               if let Some(next_ring) = next_ring {
+                                                   span { class: "alarm-next-ring", "{next_ring}" }
+                                               }
                                            }
                                        }
                                        div { class: "alarm-card-right",
@@ -201,4 +219,21 @@ fn format_schedule(days: &[bool; 7], translations: &Translations) -> String {
             .collect::<Vec<&str>>()
             .join(", ")
     }
+}
+
+/// "Today", "Tomorrow" or the weekday an alarm next rings on (the card
+/// already shows its clock time).
+fn ring_day_label(at_ms: i64, translations: &Translations) -> Option<String> {
+    use chrono::Local;
+    let ring_day = chrono::DateTime::from_timestamp_millis(at_ms)?
+        .with_timezone(&Local)
+        .date_naive();
+    let today = Local::now().date_naive();
+    Some(match schedule::day_label(today, ring_day) {
+        schedule::DayLabel::Today => t(translations, "home.today"),
+        schedule::DayLabel::Tomorrow => t(translations, "home.tomorrow"),
+        schedule::DayLabel::Weekday(day) => {
+            t(translations, DAY_KEYS[day.num_days_from_monday() as usize])
+        }
+    })
 }

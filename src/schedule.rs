@@ -81,6 +81,70 @@ pub fn sweep_finished_one_time(
     switched_off
 }
 
+/// Time left until an alarm rings, in whole days, hours and minutes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Countdown {
+    pub days: u32,
+    pub hours: u32,
+    pub minutes: u32,
+}
+
+/// The countdown from `now_ms` to `at_ms` (unix ms), rounded UP to a whole
+/// minute: 59 s left reads "1m", never "0m" for an alarm that has not rung.
+/// Zero once `at_ms` is reached.
+pub fn countdown(now_ms: i64, at_ms: i64) -> Countdown {
+    let remaining_ms = (at_ms - now_ms).max(0);
+    let total_minutes = ((remaining_ms + 59_999) / 60_000) as u32;
+    Countdown {
+        days: total_minutes / (24 * 60),
+        hours: total_minutes % (24 * 60) / 60,
+        minutes: total_minutes % 60,
+    }
+}
+
+/// The soonest of `times` that is still ahead of `now_ms`.
+pub fn earliest_future(now_ms: i64, times: impl IntoIterator<Item = i64>) -> Option<i64> {
+    times.into_iter().filter(|&t| t > now_ms).min()
+}
+
+/// Fill one of the countdown templates (`{days}`, `{hours}`, `{minutes}`):
+/// `dhm` once a day or more is left, `hm` once an hour or more is, else `m`.
+pub fn format_countdown(c: Countdown, dhm: &str, hm: &str, m: &str) -> String {
+    let template = if c.days > 0 {
+        dhm
+    } else if c.hours > 0 {
+        hm
+    } else {
+        m
+    };
+    let minutes = if c.days > 0 || c.hours > 0 {
+        format!("{:02}", c.minutes)
+    } else {
+        c.minutes.to_string()
+    };
+    template
+        .replace("{days}", &c.days.to_string())
+        .replace("{hours}", &c.hours.to_string())
+        .replace("{minutes}", &minutes)
+}
+
+/// How to name the day an alarm next rings on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DayLabel {
+    Today,
+    Tomorrow,
+    Weekday(chrono::Weekday),
+}
+
+pub fn day_label(today: NaiveDate, ring_day: NaiveDate) -> DayLabel {
+    use chrono::Datelike;
+    match (ring_day - today).num_days() {
+        0 => DayLabel::Today,
+        1 => DayLabel::Tomorrow,
+        _ => DayLabel::Weekday(ring_day.weekday()),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -110,6 +174,57 @@ mod tests {
     }
 
     const NO_DAYS: [bool; 7] = [false; 7];
+
+    const DHM: &str = "{days}d {hours}h {minutes}m";
+    const HM: &str = "{hours}h {minutes}m";
+    const M: &str = "{minutes}m";
+
+    fn text(now_ms: i64, at_ms: i64) -> String {
+        format_countdown(countdown(now_ms, at_ms), DHM, HM, M)
+    }
+
+    #[test]
+    fn countdown_rounds_up_to_the_next_minute() {
+        assert_eq!(text(0, 1), "1m");
+        assert_eq!(text(0, 59_000), "1m");
+        assert_eq!(text(0, 60_000), "1m");
+        assert_eq!(text(0, 60_001), "2m");
+        assert_eq!(text(0, 0), "0m");
+        assert_eq!(text(10_000, 0), "0m", "an alarm in the past reads zero");
+    }
+
+    #[test]
+    fn countdown_switches_to_hours_and_to_days() {
+        let min = 60_000;
+        assert_eq!(text(0, 59 * min), "59m");
+        assert_eq!(text(0, 60 * min), "1h 00m");
+        assert_eq!(text(0, (23 * 60 + 59) * min), "23h 59m");
+        assert_eq!(text(0, 24 * 60 * min), "1d 0h 00m");
+        assert_eq!(text(0, (6 * 24 * 60 + 23 * 60 + 45) * min), "6d 23h 45m");
+    }
+
+    #[test]
+    fn the_earliest_future_time_wins_and_the_past_is_ignored() {
+        assert_eq!(earliest_future(100, [500, 300, 50, 900]), Some(300));
+        assert_eq!(earliest_future(100, [50, 100]), None);
+        assert_eq!(earliest_future(100, []), None);
+    }
+
+    #[test]
+    fn days_are_named_today_tomorrow_then_by_weekday() {
+        let today = NaiveDate::from_ymd_opt(2026, 10, 24).unwrap(); // Saturday
+        let day = |n| today + Duration::days(n);
+        assert_eq!(day_label(today, day(0)), DayLabel::Today);
+        assert_eq!(day_label(today, day(1)), DayLabel::Tomorrow);
+        assert_eq!(
+            day_label(today, day(2)),
+            DayLabel::Weekday(chrono::Weekday::Mon)
+        );
+        assert_eq!(
+            day_label(today, day(7)),
+            DayLabel::Weekday(chrono::Weekday::Sat)
+        );
+    }
 
     #[test]
     fn next_occurrence_is_today_while_the_time_is_ahead_and_tomorrow_after() {
