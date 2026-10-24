@@ -508,7 +508,13 @@ pub fn AlarmConfig(id: String) -> Element {
         };
         crate::schedule::next_ring_moment(*hour.read(), *minute.read(), days, date, now)
             .map(|moment| {
-                let left = crate::schedule::countdown(0, (moment - now).num_milliseconds());
+                // Measured in real local time, so a clock change in between counts.
+                let left_ms = moment
+                    .and_local_timezone(chrono::Local)
+                    .earliest()
+                    .map(|at| (at - chrono::Local::now()).num_milliseconds())
+                    .unwrap_or_else(|| (moment - now).num_milliseconds());
+                let left = crate::schedule::countdown(0, left_ms);
                 let time = crate::schedule::format_countdown(
                     left,
                     &t(&translations, "home.next_in_dhm"),
