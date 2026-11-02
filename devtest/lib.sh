@@ -15,7 +15,11 @@ mkdir -p "$OUT"
 adb_() { timeout 120 "$ADB" -s "$SERIAL" "$@"; }
 device_ok() { [ "$(timeout 20 "$ADB" -s "$SERIAL" shell echo ok | tr -d '\r')" = ok ]; }
 dev() { adb_ shell "$@" | tr -d '\r'; }
-as_app() { adb_ shell "run-as $PKG sh -c '$*'" | tr -d '\r'; }
+# The app's files are device-encrypted (direct_boot in sentinel.toml), and run-as
+# starts in the credential-encrypted directory.
+DATA="/data/user_de/0/$PKG"
+as_app() { adb_ shell "run-as $PKG sh -c 'cd $DATA && $*'" | tr -d '\r'; }
+sql() { adb_ shell "run-as $PKG sqlite3 $DATA/files/alarmfree.db" 2>&1 | tr -d '\r'; }
 
 main_pid() { dev pidof "$PKG"; }
 sentinel_pid() { dev pidof "$PKG:sentinel"; }
@@ -120,14 +124,12 @@ EVERY_DAY='[true,true,true,true,true,true,true]'
 NO_DAYS='[false,false,false,false,false,false,false]'
 
 seed() { # seed id json (app must be stopped)
-    printf "INSERT OR REPLACE INTO alarms (id, data) VALUES ('%s', '%s');\n" "$1" "$2" |
-        adb_ shell "run-as $PKG sqlite3 files/alarmfree.db"
+    printf "INSERT OR REPLACE INTO alarms (id, data) VALUES ('%s', '%s');\n" "$1" "$2" | sql
 }
 
 db_enabled() { # true / false / missing
     local v
-    v=$(printf "SELECT data FROM alarms WHERE id='%s';\n" "$1" |
-        adb_ shell "run-as $PKG sqlite3 files/alarmfree.db" | tr -d '\r')
+    v=$(printf "SELECT data FROM alarms WHERE id='%s';\n" "$1" | sql)
     [ -z "$v" ] && { echo missing; return; }
     echo "$v" | grep -q '"enabled":true' && echo true || echo false
 }
@@ -173,12 +175,10 @@ make_overdue() {
 }
 
 outcomes() { # how many history rows have this outcome
-    printf "SELECT count(*) FROM alarm_events WHERE outcome='%s';\n" "$1" |
-        adb_ shell "run-as $PKG sqlite3 files/alarmfree.db" 2>&1 | tr -d '\r'
+    printf "SELECT count(*) FROM alarm_events WHERE outcome='%s';\n" "$1" | sql
 }
 unseen() { # how many history rows the user has not been told about
-    printf "SELECT count(*) FROM alarm_events WHERE seen=0;\n" |
-        adb_ shell "run-as $PKG sqlite3 files/alarmfree.db" 2>&1 | tr -d '\r'
+    printf "SELECT count(*) FROM alarm_events WHERE seen=0;\n" | sql
 }
 
 # Is the app's alarm sound playing right now?
@@ -236,11 +236,39 @@ until_past() { # wait until device time is past unix second $1
     while [ "$(now_s)" -lt "$1" ]; do sleep 1; done
 }
 
+top_is_backup() { dev dumpsys activity activities | grep -E "topResumedActivity|ResumedActivity:" | head -1 | grep -q SentinelBackupActivity; }
+
+# Do the backup screen's challenge: `n` long presses where its button is.
+solve_backup() {
+    local n=$1 size w h i=0
+    size=$(dev wm size | tail -1 | sed 's/.*: //')
+    w=${size%x*}
+    h=${size#*x}
+    while [ "$i" -lt "$n" ]; do
+        dev input swipe $((w / 2)) $((h * 2 / 3)) $((w / 2)) $((h * 2 / 3)) 3300
+        sleep 0.3
+        i=$((i + 1))
+    done
+}
+
 top_is_app() { dev dumpsys activity activities | grep -E "topResumedActivity|ResumedActivity:" | head -1 | grep -q "$PKG"; }
 armed_at_ms() { as_app "head -n 1 files/sentinel/armed/$1.armed 2>/dev/null"; }
 os_has_alarm() { dev dumpsys alarm | grep -q "$PKG.*ALARM_DISPATCH\|ALARM_DISPATCH.*$PKG\|walarm\*:com.mobilesentinel.ALARM_DISPATCH"; }
 alarm_volume() { dev cmd media_session volume --stream 4 --get 2> /dev/null | grep -oE 'volume is [0-9]+' | grep -oE '[0-9]+'; }
-set_alarm_volume() { dev cmd media_session volume --stream 4 --set "$1" > /dev/null 2>&1; }
+set_alarm_volume() { dev cmd audio set-volume 4 "$1" > /dev/null 2>&1; }
+
+# Wait until Android has told the app about the boot: on a software-rendered
+# emulator that is well after sys.boot_completed. Opening the app before it can get
+# the activity relaunched, and any activity destroy ends the main process.
+await_boot_signal() {
+    local i=0
+    while [ "$i" -lt 60 ]; do
+        [ -n "$(sentinel_pid)" ] && return 0
+        sleep 1
+        i=$((i + 1))
+    done
+    return 1
+}
 
 # ---- results ----
 RESULTS="$OUT/results.txt"

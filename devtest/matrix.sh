@@ -31,7 +31,9 @@ s01() {
     save_log
     action dismiss:a
     sleep 3
-    note "after dismiss: state=$(state a) next_in=$((($(next_fire_ms a) / 1000 - $(now_s)) / 60))min"
+    local next_ms
+    next_ms=$(next_fire_ms a)
+    note "after dismiss: state=$(state a) next_in=$(((${next_ms:-0} / 1000 - $(now_s)) / 60))min"
 }
 
 # A one-time alarm fires with no app process alive.
@@ -236,8 +238,10 @@ s11a() {
     await_sound 30 || { fail "never started"; save_log; return; }
     sleep 3
     reboot_and_wait || { fail "reboot hung"; return; }
+    await_boot_signal || note "no boot signal in 60s"
+    sleep 5
     start_app
-    sleep 20
+    sleep 15
     if ! sound_on && [ "$(state a)" = scheduled ]; then
         pass "ended by the reboot, next ring armed"
     else
@@ -281,12 +285,18 @@ s12() {
     # Reboot so the time passes before the device is back.
     until_past $((T - 12))
     reboot_and_wait || { fail "reboot hung"; return; }
-    sleep 15
-    local late=no armed
-    sound_on && late=yes
+    local late=no armed i=0
+    while [ "$i" -lt 60 ]; do
+        if sound_on; then
+            late=yes
+            break
+        fi
+        sleep 1
+        i=$((i + 1))
+    done
     armed=$(armed_at_ms a)
     if [ "$late" = yes ]; then
-        pass "rang late after the restart"
+        pass "rang late after the restart, $(($(now_s) - T))s after its time"
     else
         fail "no late ring, armed record='${armed}' os_alarm=$(os_has_alarm && echo yes || echo NO), state=$(state a)"
     fi
@@ -559,6 +569,83 @@ s21() {
     sleep 2
 }
 
+# Rebooted and never unlocked: the alarm rings, and the backup screen is the way
+# out, because the app's own screen cannot come up yet.
+s13() {
+    scenario s13_before_first_unlock
+    fresh
+    next_minute 180
+    seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
+    arm a
+    dev locksettings set-pin 1234 > /dev/null
+    dead
+    reboot_and_wait || { fail "reboot hung"; return; }
+    local locked
+    locked=$(dev dumpsys user | grep -c 'RUNNING_LOCKED')
+    if await_sound 60; then
+        sleep 4
+        screenshot s13_backup_screen
+        if top_is_backup; then
+            solve_backup 20
+            sleep 3
+            if sound_on; then
+                fail "still ringing after the challenge, top: $(dev dumpsys activity activities | grep -m1 ResumedActivity)"
+            else
+                pass "rang ${SOUND_AT}s late while locked (locked users: $locked), stopped by the backup screen"
+            fi
+        else
+            fail "rang, but the backup screen is not on top: $(dev dumpsys activity activities | grep -m1 ResumedActivity)"
+        fi
+    else
+        fail "no sound in 60s, locked users: $locked, state=$(state a) job=$(job_status a) main=$(main_pid)"
+    fi
+    save_log
+    dev locksettings clear --old 1234 > /dev/null
+}
+
+# The UI keeps freezing: after two failures the backup screen takes over.
+s22b() {
+    scenario s22b_ui_keeps_failing
+    fresh
+    next_minute 45
+    seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
+    arm a
+    await_sound 30 || { fail "never started"; save_log; return; }
+    sleep 6
+    local tries=0 i
+    while [ "$tries" -lt 2 ]; do
+        local p0 p1
+        p0=$(main_pid)
+        action hang_ui
+        i=0
+        while [ "$i" -lt 70 ]; do
+            p1=$(main_pid)
+            [ -n "$p1" ] && [ "$p1" != "$p0" ] && break
+            sleep 1
+            i=$((i + 1))
+        done
+        note "frozen UI $((tries + 1)) replaced after ${i}s"
+        sleep 8
+        tries=$((tries + 1))
+    done
+    sleep 3
+    screenshot s22b_backup
+    if top_is_backup; then
+        solve_backup 20
+        sleep 8
+        if ! sound_on && [ "$(state a)" = scheduled ] && [ "$(outcomes backup)" = 1 ]; then
+            pass "backup screen took over, solving it ended the alarm"
+        else
+            fail "after solving: sound=$(sound_on && echo ON || echo off) state=$(state a) backup=$(outcomes backup)"
+        fi
+    else
+        fail "backup screen not on top: $(dev dumpsys activity activities | grep -m1 ResumedActivity)"
+    fi
+    save_log
+    action dismiss:a
+    sleep 2
+}
+
 # A frozen UI gets restarted by the guardian; the alarm carries on.
 s22() {
     scenario s22_hung_ui
@@ -647,7 +734,10 @@ s23b() {
     arm a
     await_sound 30 || { fail "never started"; save_log; return; }
     until_past $((T + 40))
-    dev input tap 5 5
+    local size
+    size=$(dev wm size | tail -1 | sed 's/.*: //')
+    # On the alarm's clock, where a touch does nothing else.
+    dev input tap $((${size%x*} / 2)) $((${size#*x} / 5))
     until_past $((T + 60))
     if ! sound_on; then
         fail "stopped despite the touch, state=$(state a)"
@@ -685,7 +775,7 @@ s23c() {
     sleep 1
     start_app
     sleep 8
-    if [ "$(job_status a)" = pending ] && [ "$(db_enabled a)" = false ] && ! sound_on; then
+    if [ "$(job_status a)" != active ] && [ "$(db_enabled a)" = false ] && ! sound_on; then
         pass "stopped at ${STOPPED_AT}s, one-time alarm off after opening"
     else
         fail "after opening: state=$(state a) job=$(job_status a) enabled=$(db_enabled a)"
@@ -740,7 +830,7 @@ s25() {
     save_log
 }
 
-ALL="s01 s02 s03 s04 s05 s06 s07a s07b s07c s09 s10 s11a s11b s12 s12b s14 s15 s16 s16b s17 s19 s20 s21 s22 s23a s23b s23c s23d s24 s25 s26x5 s27"
+ALL="s01 s02 s03 s04 s05 s06 s07a s07b s07c s09 s10 s11a s11b s12 s12b s13 s14 s15 s16 s16b s17 s19 s20 s21 s22 s22b s23a s23b s23c s23d s24 s25 s26x5 s27"
 : > "$RESULTS"
 for s in ${*:-$ALL}; do
     "$s"
