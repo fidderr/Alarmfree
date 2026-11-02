@@ -194,6 +194,11 @@ fn default_ring_limit_secs() -> Option<u32> {
     Some(mobile_sentinel::context::schema::DEFAULT_RING_LIMIT_SECS)
 }
 
+/// In the binary, not through the asset pipeline: that does not handle a 32-bit build.
+/// And as a plain element, not `document::Style`: that needs a working `eval`, which a
+/// too-old WebView does not have, and it should at least show what it says properly.
+const STYLESHEET: &str = include_str!("../assets/style.css");
+
 /// History is kept this long.
 const HISTORY_KEEP_DAYS: u32 = 5 * 365;
 
@@ -394,7 +399,7 @@ pub fn App() -> Element {
     let safe_style = safe_area.read().css_vars();
 
     rsx! {
-           document::Link { rel: "stylesheet", href: asset!("/assets/style.css") }
+           style { "{STYLESHEET}" }
            div { class: "app-root {theme_class} {motion_class}", style: "{safe_style}",
                if let Some(alarm_id) = firing_id_val {
     // Show alarm firing screen directly, bypassing router

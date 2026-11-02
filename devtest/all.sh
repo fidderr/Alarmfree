@@ -1,16 +1,20 @@
 #!/bin/bash
-# The whole matrix on each emulator in turn, with the APK that is already built.
-# Android 8's stock WebView cannot run the UI, so that one runs without a screen.
+# The whole matrix on each emulator in turn, with the APK that is already built (APK says
+# which, for a release). The stock WebViews of Android 8 and 11 cannot run the UI, so
+# those run without a screen; the tablet and foldable only do what depends on the size.
 #
 # Usage: bash devtest/all.sh [name]    results in devtest-out/<name>_<avd>/
 cd "$(dirname "$0")/.." || exit 1
 . devtest/lib.sh
-APK=target/dx/alarmfree/debug/android/app/app/build/outputs/apk/debug/app-debug.apk
+export APK="${APK:-target/dx/alarmfree/debug/android/app/app/build/outputs/apk/debug/app-debug.apk}"
 NAME=${1:-full}
-for entry in af36: af31: af26:no_ui; do
+for entry in af36: af31: af30:no_ui af26:no_ui af36tab: af36fold:; do
     export AVD=${entry%%:*} NO_UI=${entry#*:} OUT="devtest-out/${NAME}_${entry%%:*}"
     echo "=== AVD $AVD"
     reboot_and_wait || { echo "FAIL  $AVD did not start"; continue; }
     adb_ install -r -g "$APK" | tail -1
-    bash devtest/matrix.sh
+    case "$AVD" in
+        af36tab | af36fold) bash devtest/matrix.sh s01 s25 s28 s31 s34 s35 ;;
+        *) bash devtest/matrix.sh ;;
+    esac
 done
