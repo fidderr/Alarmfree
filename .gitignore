@@ -21,3 +21,6 @@ upload-keystore*
 *.pkcs12
 release/
 dist/
+
+# On-device test output
+devtest-out/

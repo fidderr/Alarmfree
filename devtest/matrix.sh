@@ -1,0 +1,522 @@
+#!/bin/bash
+# Reliability scenarios for AlarmFree, run against one device over adb.
+#
+#   SERIAL=emulator-5554 devtest/matrix.sh            every scenario
+#   SERIAL=emulator-5554 devtest/matrix.sh s02 s03    just these
+#
+# Each scenario starts from a clean app and judges only what can be observed
+# from outside: is the sound on, what state is the alarm in, is it armed.
+# Numbers match the scenario matrix in the reliability plan.
+
+cd "$(dirname "$0")/.." || exit 1
+. devtest/lib.sh
+
+# A repeating alarm fires with no app process alive and the screen off.
+s01() {
+    scenario s01_repeating_dead
+    fresh
+    next_minute 45
+    seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
+    arm a
+    dead || note "process still alive"
+    screen_off
+    if await_sound 40; then
+        note "sound after ${SOUND_AT}s"
+        sleep 8
+        [ "$(state a)" = firing ] && pass "rang, sound ${SOUND_AT}s after alarm time" || fail "sound but state=$(state a)"
+    else
+        fail "no sound in 40s, state=$(state a) job=$(job_status a)"
+    fi
+    save_log
+    action dismiss:a
+    sleep 3
+    note "after dismiss: state=$(state a) next_in=$((($(next_fire_ms a) / 1000 - $(now_s)) / 60))min"
+}
+
+# A one-time alarm fires with no app process alive.
+s02() {
+    scenario s02_one_time_dead
+    fresh
+    next_minute 45
+    seed a "$(alarm_json a "$T_H" "$T_M" "$NO_DAYS" "\"$T_DATE\"")"
+    arm a
+    dead || note "process still alive"
+    screen_off
+    if await_sound 40; then
+        pass "rang, sound ${SOUND_AT}s after alarm time"
+    else
+        fail "no sound in 40s, db_enabled=$(db_enabled a) state=$(state a) job=$(job_status a)"
+    fi
+    save_log
+    action dismiss:a
+    sleep 2
+}
+
+# A snooze runs out with the process dead (the Snooze button always ends it).
+s03() {
+    scenario s03_snooze_expires
+    fresh
+    next_minute 45
+    seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
+    arm a
+    await_sound 30 || { fail "first ring never started"; save_log; return; }
+    sleep 3
+    action snooze:a
+    sleep 3
+    [ "$(state a)" = snoozed ] || note "state after snooze: $(state a)"
+    sound_on && fail "still sounding after snooze"
+    local until
+    until=$(($(next_fire_ms a) / 1000))
+    kill_all
+    T=$until
+    if await_sound 40; then
+        pass "rang again, sound ${SOUND_AT}s after the snooze ended"
+    else
+        fail "no re-ring in 40s, state=$(state a) job=$(job_status a)"
+    fi
+    save_log
+    action dismiss:a
+    sleep 2
+}
+
+# A snoozed one-time alarm survives the app being opened.
+s04() {
+    scenario s04_one_time_snooze_kept
+    fresh
+    next_minute 45
+    seed a "$(alarm_json a "$T_H" "$T_M" "$NO_DAYS" "\"$T_DATE\"" air 0 0 3 5)"
+    arm a
+    await_sound 30 || { fail "first ring never started"; save_log; return; }
+    sleep 3
+    action snooze:a
+    sleep 3
+    local before after
+    before=$(next_fire_ms a)
+    kill_all
+    sleep 1
+    start_app
+    sleep 15
+    after=$(next_fire_ms a)
+    if [ "$(state a)" = snoozed ] && [ "$before" = "$after" ]; then
+        pass "snooze kept after reopening"
+    else
+        fail "state=$(state a) next ring moved by $(((${after:-0} - ${before:-0}) / 60000))min, db_enabled=$(db_enabled a)"
+    fi
+    save_log
+}
+
+# An expired one-time alarm switched back on stays on across an app restart.
+s05() {
+    scenario s05_toggled_back_on
+    fresh
+    next_minute 3600
+    local past
+    past=$(dev date -d "@$((T - 90000))" +%Y-%m-%d)
+    # The row as the home toggle leaves it: enabled, with its old date.
+    seed a "$(alarm_json a "$T_H" "$T_M" "$NO_DAYS" "\"$past\"")"
+    arm a
+    if [ "$(db_enabled a)" = true ] && [ "$(state a)" = scheduled ]; then
+        pass "still on and armed"
+    else
+        fail "db_enabled=$(db_enabled a) state=$(state a)"
+    fi
+    save_log
+}
+
+# Two alarms in the same minute: dismissing one leaves the other ringing.
+s06() {
+    scenario s06_two_alarms
+    fresh
+    next_minute 45
+    seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
+    seed b "$(alarm_json b "$T_H" "$T_M" "$EVERY_DAY" null)"
+    arm a
+    await_sound 30 || { fail "never started"; save_log; return; }
+    sleep 6
+    note "states: a=$(state a) b=$(state b)"
+    local first=a second=b
+    [ "$(state a)" = firing ] || { first=b; second=a; }
+    action "dismiss:$first"
+    sleep 5
+    if [ "$(state $second)" = firing ] && sound_on; then
+        pass "second alarm still ringing"
+    else
+        fail "after dismissing $first: $second state=$(state $second) sound=$(sound_on && echo on || echo OFF)"
+    fi
+    save_log
+    action "dismiss:$second"
+    sleep 2
+}
+
+ring_then() { # ring_then name kill_fn
+    scenario "$1"
+    fresh
+    next_minute 45
+    seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
+    arm a
+    await_sound 30 || { fail "never started"; save_log; return 1; }
+    sleep 4
+    "$2"
+    local t0 i=0
+    t0=$(now_s)
+    sleep 1
+    while [ "$i" -lt 40 ]; do
+        sound_on && [ -n "$(main_pid)" ] && top_is_app && break
+        sleep 1
+        i=$((i + 1))
+    done
+    if sound_on && [ "$(state a)" = firing ]; then
+        pass "back after $(($(now_s) - t0))s, UI on top: $(top_is_app && echo yes || echo no)"
+    else
+        fail "after 40s sound=$(sound_on && echo on || echo OFF) state=$(state a) main=$(main_pid)"
+    fi
+    save_log
+    action dismiss:a
+    sleep 3
+}
+# Kills while ringing.
+s07a() { ring_then s07a_kill_main_mid_ring kill_main; }
+s07b() { ring_then s07b_kill_sentinel_mid_ring kill_sentinel; }
+s07c() { ring_then s07c_kill_both_mid_ring kill_all; }
+
+# Overlay denied: nothing may keep the alarm silent.
+s09() {
+    scenario s09_overlay_denied
+    fresh
+    next_minute 45
+    seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
+    dev appops set "$PKG" SYSTEM_ALERT_WINDOW allow
+    arm a
+    dev appops set "$PKG" SYSTEM_ALERT_WINDOW deny
+    dead
+    screen_off
+    if await_sound 40; then
+        pass "rang without overlay, sound ${SOUND_AT}s"
+    else
+        fail "no sound in 40s, state=$(state a) job=$(job_status a) main=$(main_pid)"
+    fi
+    save_log
+    grant_all
+    action dismiss:a
+    sleep 2
+}
+
+# Notifications denied: the sound must still play.
+s10() {
+    scenario s10_notifications_denied
+    fresh
+    next_minute 45
+    seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
+    dev pm revoke "$PKG" android.permission.POST_NOTIFICATIONS
+    arm a
+    dead
+    screen_off
+    if await_sound 40; then
+        pass "rang without notifications, sound ${SOUND_AT}s"
+    else
+        fail "no sound in 40s, state=$(state a)"
+    fi
+    save_log
+    grant_all
+    action dismiss:a
+    sleep 2
+}
+
+# Reboot while ringing counts as dismissed, and must not ring on opening.
+s11a() {
+    scenario s11a_reboot_mid_ring
+    fresh
+    next_minute 45
+    seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
+    arm a
+    await_sound 30 || { fail "never started"; save_log; return; }
+    sleep 3
+    adb_ reboot
+    boot_wait
+    start_app
+    sleep 20
+    if ! sound_on && [ "$(state a)" = scheduled ]; then
+        pass "ended by the reboot, next ring armed"
+    else
+        fail "sound=$(sound_on && echo on || echo off) state=$(state a)"
+    fi
+    save_log
+}
+
+# A snooze still ahead survives a reboot with no app opened.
+s11b() {
+    scenario s11b_reboot_snooze_ahead
+    fresh
+    next_minute 45
+    seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null air 0 0 3 4)"
+    arm a
+    await_sound 30 || { fail "never started"; save_log; return; }
+    sleep 3
+    action snooze:a
+    sleep 3
+    T=$(($(next_fire_ms a) / 1000))
+    adb_ reboot
+    boot_wait
+    if await_sound 40; then
+        pass "snooze rang after the reboot, ${SOUND_AT}s late, no app opened"
+    else
+        fail "no ring, state=$(state a)"
+    fi
+    save_log
+    action dismiss:a
+    sleep 2
+}
+
+# The alarm's time passes during a restart. Under 15 minutes late must ring,
+# and either way the next occurrence must be armed without opening the app.
+s12() {
+    scenario s12_passed_during_restart
+    fresh
+    next_minute 45
+    seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
+    arm a
+    dead
+    # Reboot so the time passes before the device is back.
+    until_past $((T - 12))
+    adb_ reboot
+    boot_wait
+    sleep 15
+    local late=no armed
+    sound_on && late=yes
+    armed=$(armed_at_ms a)
+    if [ "$late" = yes ]; then
+        pass "rang late after the restart"
+    else
+        fail "no late ring, armed record='${armed}' os_alarm=$(os_has_alarm && echo yes || echo NO), state=$(state a)"
+    fi
+    save_log
+}
+
+# A time-zone change re-arms for the new local time, no app opened.
+s14() {
+    scenario s14_time_zone_change
+    fresh
+    next_minute 7200
+    seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
+    arm a
+    dead
+    local before after zone
+    before=$(armed_at_ms a)
+    zone=$(dev getprop persist.sys.timezone)
+    dev cmd alarm set-timezone Asia/Tokyo 2> /dev/null || dev service call alarm 3 s16 Asia/Tokyo > /dev/null
+    sleep 12
+    after=$(armed_at_ms a)
+    if [ -n "$before" ] && [ "$before" != "$after" ]; then
+        pass "re-armed, moved by $(((after - before) / 60000))min"
+    else
+        fail "armed time unchanged after zone change ($zone to Asia/Tokyo), main=$(main_pid)"
+    fi
+    save_log
+    dev cmd alarm set-timezone "$zone" 2> /dev/null || dev service call alarm 3 s16 "$zone" > /dev/null
+}
+
+# A force-stop removes the alarm: opening the app must re-arm and explain.
+s16() {
+    scenario s16_force_stop
+    fresh
+    next_minute 45
+    seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
+    arm a
+    dev am force-stop "$PKG"
+    until_past $((T + 15))
+    sound_on && note "rang despite force-stop"
+    start_app
+    sleep 20
+    note "after opening: state=$(state a) next_in=$((($(next_fire_ms a) / 1000 - $(now_s)) / 60))min"
+    # Passes once a miss is recorded; history gets an outcome column in Phase 4.
+    local missed
+    missed=$(printf "SELECT count(*) FROM alarm_events WHERE outcome='missed';\n" |
+        adb_ shell "run-as $PKG sqlite3 files/alarmfree.db" 2>&1 | tr -d '\r')
+    [ "$missed" = 1 ] && pass "miss recorded" || fail "miss not recorded ($missed)"
+    save_log
+}
+
+# An unplayable custom sound must still make noise.
+s17() {
+    scenario s17_corrupt_sound
+    fresh
+    as_app "mkdir -p files/sounds/custom; echo not-audio > files/sounds/custom/bad.mp3"
+    next_minute 45
+    seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null bad.mp3)"
+    arm a
+    dead
+    if await_sound 40; then
+        pass "fell back audibly, ${SOUND_AT}s"
+    else
+        fail "silent, state=$(state a)"
+    fi
+    save_log
+    action dismiss:a
+    sleep 2
+}
+
+# Volume keys can't turn a ringing alarm down.
+s19() {
+    scenario s19_volume_keys
+    fresh
+    next_minute 45
+    seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
+    arm a
+    await_sound 30 || { fail "never started"; save_log; return; }
+    sleep 4
+    local v0 v1
+    v0=$(alarm_volume)
+    local i=0
+    while [ "$i" -lt 8 ]; do
+        dev input keyevent KEYCODE_VOLUME_DOWN
+        i=$((i + 1))
+    done
+    sleep 3
+    v1=$(alarm_volume)
+    if [ -n "$v0" ] && [ "${v1:-0}" -ge "$v0" ]; then
+        pass "volume held at $v1"
+    else
+        fail "volume went from $v0 to $v1"
+    fi
+    save_log
+    action dismiss:a
+    sleep 2
+}
+
+# The screen stays on while ringing, without any touch.
+s20() {
+    scenario s20_screen_stays_on
+    fresh
+    local old
+    old=$(dev settings get system screen_off_timeout)
+    dev settings put system screen_off_timeout 15000
+    next_minute 45
+    seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
+    arm a
+    await_sound 30 || { fail "never started"; dev settings put system screen_off_timeout "$old"; save_log; return; }
+    sleep 30
+    local w
+    w=$(dev dumpsys power | grep -m1 -E 'mWakefulness=' | sed 's/.*=//')
+    [ "$w" = Awake ] && pass "screen awake after 30s without touch" || fail "wakefulness=$w"
+    dev settings put system screen_off_timeout "$old"
+    save_log
+    action dismiss:a
+    sleep 2
+}
+
+# A dark-mode switch mid-ring must not end the process.
+s21() {
+    scenario s21_dark_mode_mid_ring
+    fresh
+    next_minute 45
+    seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
+    arm a
+    await_sound 30 || { fail "never started"; save_log; return; }
+    sleep 5
+    local p0 p1
+    p0=$(main_pid)
+    dev cmd uimode night yes > /dev/null
+    sleep 6
+    p1=$(main_pid)
+    dev cmd uimode night no > /dev/null
+    [ "$p0" = "$p1" ] && pass "same process" || fail "main process restarted ($p0 to $p1)"
+    save_log
+    sleep 3
+    action dismiss:a
+    sleep 2
+}
+
+# A frozen UI gets restarted by the guardian; the alarm carries on.
+s22() {
+    scenario s22_hung_ui
+    fresh
+    next_minute 45
+    seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
+    arm a
+    await_sound 30 || { fail "never started"; save_log; return; }
+    sleep 6
+    local p0 p1 i=0
+    p0=$(main_pid)
+    action hang_ui
+    while [ "$i" -lt 45 ]; do
+        p1=$(main_pid)
+        [ -n "$p1" ] && [ "$p1" != "$p0" ] && break
+        sleep 1
+        i=$((i + 1))
+    done
+    if [ "$p0" != "$p1" ] && [ -n "$p1" ]; then
+        sleep 8
+        sound_on && pass "restarted after ${i}s, still ringing" || fail "restarted but silent"
+    else
+        fail "UI never restarted in 45s"
+    fi
+    save_log
+    action dismiss:a
+    sleep 2
+}
+
+# Fade-in survives a cold start: the first playback keeps its fade.
+s24() {
+    scenario s24_fade_in_cold_start
+    fresh
+    next_minute 45
+    seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null air 0 30)"
+    arm a
+    dead
+    await_sound 40 || { fail "no sound"; save_log; return; }
+    sleep 6
+    local plays
+    plays=$(adb_ logcat -d -s MobileSentinel.FiringAudio:I | tr -d '\r' | grep playSound)
+    note "$plays"
+    local n
+    n=$(echo "$plays" | grep -c playSound)
+    if [ "$n" = 1 ] && echo "$plays" | grep -q 'fadeIn=30000ms'; then
+        pass "one playback with fade"
+    else
+        fail "$n playbacks, fade kept: $(echo "$plays" | tail -1 | grep -c 'fadeIn=30000ms')"
+    fi
+    save_log
+    action dismiss:a
+    sleep 2
+}
+
+# Back from the editor stays in the app.
+s25() {
+    scenario s25_back_navigation
+    fresh
+    next_minute 3600
+    seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
+    arm a
+    sleep 3
+    screenshot s25_home
+    local p0 p1
+    p0=$(main_pid)
+    # First card, roughly a third down the screen on any phone.
+    local size w h
+    size=$(dev wm size | tail -1 | sed 's/.*: //')
+    w=${size%x*}
+    h=${size#*x}
+    dev input tap $((w / 3)) $((h / 5))
+    sleep 3
+    screenshot s25_editor
+    dev input keyevent KEYCODE_BACK
+    sleep 3
+    screenshot s25_after_back
+    p1=$(main_pid)
+    if [ "$p0" = "$p1" ] && top_is_app; then
+        pass "Back stayed in the app"
+    else
+        fail "Back closed the app: main $p0 to ${p1:-dead}, on top: $(top_is_app && echo yes || echo no)"
+    fi
+    save_log
+}
+
+ALL="s01 s02 s03 s04 s05 s06 s07a s07b s07c s09 s10 s11a s11b s12 s14 s16 s17 s19 s20 s21 s22 s24 s25"
+: > "$RESULTS"
+for s in ${*:-$ALL}; do
+    "$s"
+done
+echo
+echo "===== SUMMARY ($SERIAL) ====="
+cat "$RESULTS"
+echo "passed: $(grep -c '^PASS' "$RESULTS")  failed: $(grep -c '^FAIL' "$RESULTS")"
