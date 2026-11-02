@@ -314,8 +314,13 @@ s12b() {
     dead
     make_overdue a 30
     reboot_and_wait || { fail "reboot hung"; return; }
-    sleep 15
-    local next
+    # The boot signal comes a while after the boot.
+    local next i=0
+    while [ "$i" -lt 60 ] && [ "$(outcomes missed)" != 1 ]; do
+        sleep 1
+        i=$((i + 1))
+    done
+    sleep 3
     next=$(armed_at_ms a)
     if ! sound_on && [ "$(outcomes missed)" = 1 ] && [ "${next:-0}" -gt "$(($(now_s) * 1000))" ]; then
         pass "not rung, recorded as missed, next ring armed, no app opened"
@@ -646,26 +651,15 @@ s22b() {
     sleep 2
 }
 
-# A page that stays blank, on a WebView too old for the UI. Only for such a device: the
-# backup screen is there at once with the version check, and without it the frozen-UI
-# path has to get there in the end.
+# A page that stays blank, on a WebView too old for the UI (NO_UI=1). The backup screen
+# is there at once with the version check, and without it the frozen-UI path has to get
+# there in the end.
 s22c() {
     scenario s22c_page_stays_blank
-    # Rust only renders once the page's JavaScript runs, so opening the app sets up
-    # nothing here. Arm the way a reboot does, without a screen. Needs `adb root`.
-    adb_ root > /dev/null
-    sleep 3
-    dev am force-stop "$PKG"
-    dev pm clear "$PKG" > /dev/null
-    grant_all
-    headless
-    wait_file files/sentinel 30
-    sleep 3
-    dev am force-stop "$PKG"
+    fresh
     next_minute 45
     seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
-    headless
-    wait_file files/sentinel/context/a.json 45
+    arm a
     screen_off
     await_sound 90 || { fail "never started"; save_log; return; }
     wake
@@ -878,6 +872,7 @@ s25() {
 }
 
 ALL="s01 s02 s03 s04 s05 s06 s07a s07b s07c s09 s10 s11a s11b s12 s12b s13 s14 s15 s16 s16b s17 s19 s20 s21 s22 s22b s23a s23b s23c s23d s24 s25 s26x5 s27"
+[ -n "$NO_UI" ] && ALL="$ALL s22c"
 : > "$RESULTS"
 for s in ${*:-$ALL}; do
     "$s"

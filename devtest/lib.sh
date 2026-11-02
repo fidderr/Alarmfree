@@ -75,6 +75,8 @@ fresh() {
     dev pm clear "$PKG" > /dev/null
     grant_all
     start_app
+    # Opening it is what finds out the WebView is too old, as for any user.
+    [ -n "$NO_UI" ] && dev am start -n "$PKG/$ACTIVITY" > /dev/null
     wait_file files/alarmfree.db 60
     sleep 3
     dev am force-stop "$PKG"
@@ -90,10 +92,24 @@ grant_all() {
     dev appops set "$PKG" SYSTEM_ALERT_WINDOW allow
 }
 
-start_app() { dev am start -n "$PKG/$ACTIVITY" > /dev/null; }
+# NO_UI: for a WebView too old for the UI. Rust only renders once the page's JavaScript
+# runs, so opening the app would set up nothing there.
+start_app() {
+    if [ -n "$NO_UI" ]; then
+        headless
+    else
+        dev am start -n "$PKG/$ACTIVITY" > /dev/null
+    fi
+}
 
-# Start the app's core without a screen, as a reboot or a ring does.
-headless() { dev am broadcast -f 32 -n "$PKG/com.mobilesentinel.SentinelRearmReceiver" -a com.mobilesentinel.RING_STARTED > /dev/null; }
+# Start the app's core without a screen, as a reboot or a ring does. Its receiver only
+# takes that from the system, or from root on an emulator.
+headless() {
+    case "$(adb_ root 2>&1)" in
+        *restarting*) sleep 3 ;;
+    esac
+    dev am broadcast -f 32 -n "$PKG/com.mobilesentinel.SentinelRearmReceiver" -a com.mobilesentinel.RING_STARTED > /dev/null
+}
 
 wait_file() {
     local f=$1 t=${2:-30} i=0
