@@ -1,15 +1,12 @@
 //! Alarm and settings persistence.
 //!
 //! Alarms live in SQLite as JSON-blob rows keyed by id (`AlarmData` is
-//! both the UI signal type and the wire format on disk). On every save
-//! we sync the matching ContextStore record via AlarmKit so the
-//! universal SDK has a fresh view; on load we re-arm via AlarmKit.
+//! both the UI signal type and the wire format on disk). A save tells
+//! AlarmKit about exactly the alarms that changed; startup re-arms them all.
 
-use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use mobile_sentinel::InstanceId;
 use once_cell::sync::Lazy;
 
 use crate::app::AlarmData;
@@ -128,48 +125,42 @@ pub(crate) fn open_with_recovery(path: &Path) -> (Database, DbRecovery) {
 // Public API used by screens
 // ---------------------------------------------------------------------------
 
-/// Save all alarms to the database (full replace strategy). Also pushes
-/// every enabled alarm through AlarmKit so the universal SDK's
-/// ContextStore + exact-alarm registration stays in sync.
+/// What saving `alarms` over `existing` changes: the ids that are gone, and the
+/// alarms that are new or different. Everything else is left alone, so saving
+/// one alarm can't disturb another that is armed, snoozed or ringing.
+fn changes<'a>(
+    existing: &'a [AlarmData],
+    alarms: &'a [AlarmData],
+) -> (Vec<&'a str>, Vec<&'a AlarmData>) {
+    let removed = existing
+        .iter()
+        .filter(|old| !alarms.iter().any(|a| a.id == old.id))
+        .map(|old| old.id.as_str())
+        .collect();
+    let changed = alarms
+        .iter()
+        .filter(|a| existing.iter().find(|old| old.id == a.id) != Some(*a))
+        .collect();
+    (removed, changed)
+}
+
+/// Save the alarm list and bring AlarmKit in line with whatever changed.
 pub fn save_alarms(alarms: &[AlarmData]) {
     let db = DB.db.as_ref();
     let existing = db.list_alarms().unwrap_or_default();
-    let existing_ids: HashSet<String> = existing.iter().map(|a| a.id.clone()).collect();
-    let new_ids: HashSet<String> = alarms.iter().map(|a| a.id.clone()).collect();
+    let (removed, changed) = changes(&existing, alarms);
 
-    // Delete alarms that are no longer in the list.
-    for id in existing_ids.difference(&new_ids) {
+    for id in removed {
         if let Err(e) = db.delete_alarm(id) {
-            eprintln!("[AlarmFree] Failed to delete alarm {}: {}", id, e);
+            log::error!("[AlarmFree] Failed to delete alarm {id}: {e}");
         }
-        if let Some(kit) = crate::platform::alarm_kit_optional() {
-            let _ = kit.delete(&InstanceId::new(id.clone()));
-        }
+        crate::platform::forget_alarm(id);
     }
-
-    // Insert / update each alarm + push through AlarmKit.
-    for alarm in alarms {
+    for alarm in changed {
         if let Err(e) = db.upsert_alarm(alarm) {
-            eprintln!("[AlarmFree] Failed to upsert alarm {}: {}", alarm.id, e);
+            log::error!("[AlarmFree] Failed to upsert alarm {}: {e}", alarm.id);
         }
-
-        if let Some(kit) = crate::platform::alarm_kit_optional() {
-            let id = InstanceId::new(alarm.id.clone());
-            if alarm.enabled {
-                let spec = crate::platform::alarm_data_to_spec(alarm);
-                let res = if kit.get(&id).is_ok() {
-                    kit.update(&id, spec)
-                } else {
-                    kit.create_with_id(id, spec).map(|_| ())
-                };
-                if let Err(e) = res {
-                    eprintln!("[AlarmFree] AlarmKit save failed for {}: {:?}", alarm.id, e);
-                }
-            } else {
-                // Disabled in UI: drop from AlarmKit so no exact alarm is armed.
-                let _ = kit.delete(&id);
-            }
-        }
+        crate::platform::apply_alarm(alarm);
     }
 }
 
@@ -180,7 +171,7 @@ pub fn load_alarms() -> Vec<AlarmData> {
 
 pub fn save_settings(settings: &AppSettings) {
     if let Err(e) = DB.db.save_settings(settings) {
-        eprintln!("[AlarmFree] Failed to save settings: {}", e);
+        log::error!("[AlarmFree] Failed to save settings: {e}");
     }
 }
 
@@ -211,6 +202,22 @@ mod tests {
             snooze_count: 1,
             snooze_interval: 5,
         }
+    }
+
+    #[test]
+    fn a_save_only_touches_what_changed() {
+        let same = alarm("same");
+        let gone = alarm("gone");
+        let mut edited = alarm("edited");
+        let existing = vec![same.clone(), gone, edited.clone()];
+        edited.time_hour = 9;
+        let added = alarm("added");
+        let saved = vec![same, edited.clone(), added.clone()];
+
+        let (removed, changed) = changes(&existing, &saved);
+
+        assert_eq!(removed, ["gone"]);
+        assert_eq!(changed, [&edited, &added]);
     }
 
     #[test]

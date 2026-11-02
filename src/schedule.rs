@@ -1,5 +1,4 @@
-//! One-time ("specific date") alarms: which date they ring on, and when they
-//! are finished.
+//! One-time ("specific date") alarms: which date they ring on.
 //!
 //! An alarm with no weekday selected rings once. Its date is stored in
 //! `AlarmData::date` (`YYYY-MM-DD`). The pure functions here take the current
@@ -58,27 +57,25 @@ pub fn disable_if_one_time(alarms: &mut [AlarmData], id: &str) -> bool {
     }
 }
 
-/// Switch off enabled one-time alarms whose moment has passed and that are no
-/// longer in play (`in_play`: ringing or snoozed). That covers alarms that
-/// already rang and ones whose time passed while the phone was off. Returns
-/// the ids that were switched off.
-pub fn sweep_finished_one_time(
-    alarms: &mut [AlarmData],
-    now: NaiveDateTime,
-    in_play: impl Fn(&str) -> bool,
-) -> Vec<String> {
-    let mut switched_off = Vec::new();
+/// Give a one-time alarm that is being switched on a date still ahead. Its old
+/// date may have passed long ago, and an alarm's date is what it rings on.
+pub fn refresh_one_time_date(alarm: &mut AlarmData, now: NaiveDateTime) {
+    if let Some(date) = resolve_one_time_date(alarm, now) {
+        alarm.date = Some(date);
+    }
+}
+
+/// One-time alarms saved before they had a date get one. Returns whether
+/// anything changed.
+pub fn date_undated_one_time(alarms: &mut [AlarmData], now: NaiveDateTime) -> bool {
+    let mut changed = false;
     for alarm in alarms.iter_mut() {
-        let finished = alarm.enabled
-            && is_one_time(alarm)
-            && one_time_moment(alarm).is_some_and(|at| at <= now)
-            && !in_play(&alarm.id);
-        if finished {
-            alarm.enabled = false;
-            switched_off.push(alarm.id.clone());
+        if alarm.enabled && is_one_time(alarm) && alarm.date.is_none() {
+            refresh_one_time_date(alarm, now);
+            changed = true;
         }
     }
-    switched_off
+    changed
 }
 
 /// When an alarm with these settings next rings, as seen from `now`: on the
@@ -373,30 +370,33 @@ mod tests {
     }
 
     #[test]
-    fn the_sweep_switches_off_finished_one_time_alarms_only() {
+    fn switching_an_expired_one_time_alarm_back_on_moves_it_ahead() {
         let now = at("2026-10-24", 15, 0);
+        let mut expired = alarm(NO_DAYS, Some("2026-10-01"), 7, 0);
+        refresh_one_time_date(&mut expired, now);
+        assert_eq!(expired.date.as_deref(), Some("2026-10-25"));
+
+        let mut ahead = alarm(NO_DAYS, Some("2026-12-24"), 7, 0);
+        refresh_one_time_date(&mut ahead, now);
+        assert_eq!(ahead.date.as_deref(), Some("2026-12-24"), "kept");
+
         let mut days = NO_DAYS;
-        days[2] = true;
-        let mut done = alarm(NO_DAYS, Some("2026-10-24"), 14, 0);
-        done.id = "done".into();
-        let mut upcoming = alarm(NO_DAYS, Some("2026-10-24"), 16, 0);
-        upcoming.id = "upcoming".into();
-        let mut ringing = alarm(NO_DAYS, Some("2026-10-24"), 14, 59);
-        ringing.id = "ringing".into();
-        let mut repeating = alarm(days, None, 14, 0);
-        repeating.id = "repeating".into();
-        let mut legacy = alarm(NO_DAYS, None, 14, 0);
-        legacy.id = "legacy".into();
-        let mut list = vec![done, upcoming, ringing, repeating, legacy];
+        days[0] = true;
+        let mut repeating = alarm(days, None, 7, 0);
+        refresh_one_time_date(&mut repeating, now);
+        assert_eq!(repeating.date, None, "repeating alarms have no date");
+    }
 
-        let off = sweep_finished_one_time(&mut list, now, |id| id == "ringing");
+    #[test]
+    fn undated_one_time_alarms_get_a_date_once() {
+        let now = at("2026-10-24", 15, 0);
+        let mut list = vec![alarm(NO_DAYS, None, 16, 0)];
+        assert!(date_undated_one_time(&mut list, now));
+        assert_eq!(list[0].date.as_deref(), Some("2026-10-24"));
+        assert!(!date_undated_one_time(&mut list, now), "nothing left to do");
 
-        assert_eq!(off, vec!["done".to_string()]);
-        let enabled: Vec<_> = list
-            .iter()
-            .filter(|a| a.enabled)
-            .map(|a| a.id.as_str())
-            .collect();
-        assert_eq!(enabled, ["upcoming", "ringing", "repeating", "legacy"]);
+        let mut off = vec![alarm(NO_DAYS, None, 16, 0)];
+        off[0].enabled = false;
+        assert!(!date_undated_one_time(&mut off, now));
     }
 }

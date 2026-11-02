@@ -112,10 +112,10 @@ pub fn remove_alarm(list: &mut Vec<AlarmData>, id: &str) -> Option<String> {
 #[component]
 pub fn App() -> Element {
     // Load persisted settings (theme + locale).
-    let settings = crate::persistence::load_settings();
+    let settings = use_hook(crate::persistence::load_settings);
 
     // Extract bundled sounds from APK assets to internal storage (idempotent)
-    crate::custom_sounds::extract_bundled_sounds();
+    use_hook(crate::custom_sounds::extract_bundled_sounds);
 
     // Initialize platform: logger, FiringSink, AlarmKit, alarm rearm. First,
     // so the alarm list below already reflects one-time alarms it switched off.
@@ -142,33 +142,31 @@ pub fn App() -> Element {
     let mut toast_signal: Signal<Option<crate::components::ToastMessage>> = use_signal(|| None);
     use_context_provider(|| toast_signal);
 
-    // If the database had to be reset (or cannot persist), tell the user
-    // instead of silently showing an empty alarm list.
+    // Anything the user must know about what happened while the app was away:
+    // a database that had to be reset (or cannot persist) instead of a silently
+    // empty alarm list, alarms a reboot interrupted, alarms that did not ring.
     use_hook(|| {
         use crate::persistence::DbRecovery;
-        let key = match crate::persistence::db_recovery() {
-            DbRecovery::None => return,
-            DbRecovery::Recovered { .. } => "db.recovered",
-            DbRecovery::Volatile => "db.volatile",
-        };
-        toast_signal.set(Some(crate::components::ToastMessage {
-            message: t(&translations, key),
-            level: crate::components::ToastLevel::Error,
-        }));
-    });
-
-    // Tell the user about alarms a reboot interrupted (they were ended, and
-    // will not ring again).
-    use_hook(|| {
-        let ended = crate::platform::ended_by_reboot();
-        if ended.is_empty() {
-            return;
+        let mut notices = Vec::new();
+        match crate::persistence::db_recovery() {
+            DbRecovery::None => {}
+            DbRecovery::Recovered { .. } => notices.push(t(&translations, "db.recovered")),
+            DbRecovery::Volatile => notices.push(t(&translations, "db.volatile")),
         }
-        toast_signal.set(Some(crate::components::ToastMessage {
-            message: t(&translations, "alarm.ended_by_reboot")
-                .replace("{alarm}", &ended.join(", ")),
-            level: crate::components::ToastLevel::Error,
-        }));
+        for (key, names) in [
+            ("alarm.ended_by_reboot", crate::platform::ended_by_reboot()),
+            ("alarm.missed", crate::platform::missed_alarms()),
+        ] {
+            if !names.is_empty() {
+                notices.push(t(&translations, key).replace("{alarm}", &names.join(", ")));
+            }
+        }
+        if !notices.is_empty() {
+            toast_signal.set(Some(crate::components::ToastMessage {
+                message: notices.join(" "),
+                level: crate::components::ToastLevel::Error,
+            }));
+        }
     });
 
     // Firing-state signal — primed from disk on mount, then updated by the
@@ -244,7 +242,7 @@ pub fn App() -> Element {
            div { class: "app-root {theme_class}", style: "{safe_style}",
                if let Some(alarm_id) = firing_id_val {
     // Show alarm firing screen directly, bypassing router
-                   crate::screens::AlarmFiring { id: alarm_id }
+                   crate::screens::AlarmFiring { key: "{alarm_id}", id: alarm_id }
                } else {
                    Router::<Route> {}
                }

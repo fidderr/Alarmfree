@@ -185,21 +185,12 @@ pub fn Home() -> Element {
                                                        let mut list = alarms.write();
                                                        if let Some(a) = list.iter_mut().find(|a| a.id == alarm_id2) {
                                                            a.enabled = !a.enabled;
-                                                           let now_enabled = a.enabled;
-                                                           let alarm_copy = a.clone();
-                                                           drop(list);
-
-    // Persist to disk
-                                                           crate::persistence::save_alarms(&alarms.read());
-
-                                                           {
-                                                               if now_enabled {
-                                                                   crate::platform::schedule_alarm_from_ui(&alarm_copy);
-                                                               } else {
-                                                                   crate::platform::cancel_alarm_from_ui(&alarm_copy.id);
-                                                               }
+                                                           if a.enabled {
+                                                               schedule::refresh_one_time_date(a, chrono::Local::now().naive_local());
                                                            }
                                                        }
+                                                       drop(list);
+                                                       crate::persistence::save_alarms(&alarms.read());
                                                    },
                                                }
                                                span { class: "toggle-slider" }
@@ -240,7 +231,6 @@ pub fn Home() -> Element {
                                        onclick: {
                                            let menu_id = menu_id.clone();
                                            move |_| {
-                                               crate::platform::cancel_alarm_from_ui(&menu_id);
                                                let unused_sound = crate::app::remove_alarm(&mut alarms.write(), &menu_id);
                                                if let Some(sound) = unused_sound {
                                                    crate::custom_sounds::delete_sound(&sound);

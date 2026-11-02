@@ -260,6 +260,7 @@
   "db.recovered": "Les données de tes alarmes n'ont pas pu être lues : une nouvelle base de données a été créée. L'ancien fichier a été conservé sur l'appareil.",
   "db.volatile": "Les alarmes ne peuvent pas être enregistrées pour le moment. Les modifications seront perdues à la fermeture de l'application.",
   "alarm.ended_by_reboot": "L'alarme {alarm} a été arrêtée parce que le téléphone a redémarré.",
+  "alarm.missed": "L'alarme {alarm} n'a pas sonné à temps, car le téléphone était éteint ou l'a retenue.",
   "validation.date_past": "Choisissez une date et une heure futures",
   "home.next_in_dhm": "{days}j {hours}h {minutes}m",
   "home.today": "Aujourd'hui",

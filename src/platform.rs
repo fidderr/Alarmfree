@@ -29,6 +29,10 @@ const FOREGROUND_CHANNEL_NAME: &str = "Alarms";
 /// Notification body shown while firing.
 const FOREGROUND_BODY: &str = "Tap to open";
 
+/// An alarm whose time passed during a restart still rings if it is less than
+/// this late; later than that it is reported as missed.
+const LATE_RING_WINDOW_MS: i64 = 15 * 60 * 1000;
+
 /// Global AlarmKit handle; populated during `init_sentinel`.
 static ALARM_KIT: OnceCell<AlarmKit> = OnceCell::new();
 
@@ -54,20 +58,32 @@ pub fn ended_by_reboot() -> &'static [String] {
     ENDED_BY_REBOOT.get().map_or(&[], Vec::as_slice)
 }
 
+/// Names of the alarms whose time passed without ringing, found during startup.
+static MISSED: OnceCell<Vec<String>> = OnceCell::new();
+
+/// Alarms that did not ring at their time (empty if none, or before
+/// [`init_platform`] ran).
+pub fn missed_alarms() -> &'static [String] {
+    MISSED.get().map_or(&[], Vec::as_slice)
+}
+
 /// One-shot platform init plus the permission prompts (which need the UI).
 pub fn init_sentinel() {
     init_platform();
 
-    // Permission prompts (POST_NOTIFICATIONS, SYSTEM_ALERT_WINDOW).
+    // Permission prompts (POST_NOTIFICATIONS, SYSTEM_ALERT_WINDOW), but never
+    // over a ringing alarm: this also runs when an alarm starts the app.
     #[cfg(target_os = "android")]
-    request_runtime_permissions();
+    if crate::firing_state::peek_firing_alarm().is_none() {
+        request_runtime_permissions();
+    }
 }
 
 /// Platform setup, idempotent and free of UI. Initialises mobile-sentinel
 /// (logger + crash mitigation), installs the Android `FiringSink`, installs
-/// AlarmKit with that sink + the Android sound backend, switches off
-/// one-time alarms that are finished, then re-arms every persisted alarm
-/// via the universal SDK.
+/// AlarmKit with that sink + the Android sound backend, then re-arms every
+/// persisted alarm via the universal SDK and switches off the one-time alarms
+/// it reports as over.
 pub fn init_platform() {
     static ONCE: std::sync::Once = std::sync::Once::new();
     ONCE.call_once(setup_platform);
@@ -79,17 +95,6 @@ pub fn set_min_volume(percent: u8) {
     let mut config = runtime.config();
     config.min_volume_percent = percent;
     runtime.configure(config);
-}
-
-/// Whether the alarm is ringing or snoozed, i.e. still in play.
-fn alarm_in_play(kit: &AlarmKit, id: &str) -> bool {
-    use mobile_sentinel::context::schema::SessionState;
-    matches!(
-        kit.store()
-            .load(&InstanceId::new(id.to_owned()))
-            .map(|r| r.state),
-        Ok(SessionState::Firing { .. } | SessionState::Snoozed { .. })
-    )
 }
 
 /// Per-session files the firing screen keeps for an alarm.
@@ -138,6 +143,7 @@ fn setup_platform() {
         // The user's minimum alarm volume (Settings); updated live by
         // `set_min_volume` when it changes.
         min_volume_percent: crate::persistence::load_settings().min_volume_percent,
+        late_ring_window_ms: LATE_RING_WINDOW_MS,
     };
 
     #[cfg(target_os = "android")]
@@ -176,15 +182,14 @@ fn setup_platform() {
     });
     let _ = ALARM_KIT.set(kit);
 
-    // One-time alarms that already rang, or whose time passed while the
-    // phone was off, are switched off instead of being moved to tomorrow.
     let kit = alarm_kit();
-    let mut list = crate::persistence::load_alarms();
-    let finished =
-        crate::schedule::sweep_finished_one_time(&mut list, Local::now().naive_local(), |id| {
-            alarm_in_play(kit, id)
-        });
-    if !finished.is_empty() {
+    let stored = crate::persistence::database().list_alarms();
+    let readable = stored.is_ok();
+    let mut list = stored.unwrap_or_else(|e| {
+        log::error!("[AlarmFree] alarms could not be read: {e}");
+        Vec::new()
+    });
+    if crate::schedule::date_undated_one_time(&mut list, Local::now().naive_local()) {
         crate::persistence::save_alarms(&list);
     }
 
@@ -198,28 +203,44 @@ fn setup_platform() {
     for (id, _) in &alarms {
         ensure_alarm_job(id);
     }
+    if readable {
+        forget_unlisted_alarms(kit, &alarms);
+    }
     let report = kit.on_startup(&alarms);
 
-    let mut ended_names = Vec::new();
-    for id in &report.ended_by_reboot {
+    let name_of = |id: &str| {
+        list.iter()
+            .find(|a| a.id == id)
+            .map(display_name)
+            .unwrap_or_default()
+    };
+    let ended_names: Vec<String> = report
+        .ended_by_reboot
+        .iter()
+        .map(|id| name_of(&id.0))
+        .collect();
+    let missed_names: Vec<String> = report.missed.iter().map(|m| name_of(&m.id.0)).collect();
+    let over = report
+        .ended_by_reboot
+        .iter()
+        .chain(report.missed.iter().map(|m| &m.id));
+    for id in over {
         clear_session_files(&id.0);
-        if let Some(alarm) = list.iter().find(|a| a.id == id.0) {
-            ended_names.push(if alarm.label.is_empty() {
-                format!("{:02}:{:02}", alarm.time_hour, alarm.time_minute)
-            } else {
-                alarm.label.clone()
-            });
-        }
-        crate::schedule::disable_if_one_time(&mut list, &id.0);
     }
-    if !report.ended_by_reboot.is_empty() {
+    let finished = report
+        .finished
+        .iter()
+        .chain(&report.ended_by_reboot)
+        .chain(report.missed.iter().map(|m| &m.id));
+    let mut switched_off = false;
+    for id in finished {
+        switched_off |= crate::schedule::disable_if_one_time(&mut list, &id.0);
+    }
+    if switched_off {
         crate::persistence::save_alarms(&list);
-        log::info!(
-            "[AlarmFree] {} alarm(s) ended by a reboot",
-            report.ended_by_reboot.len()
-        );
     }
     let _ = ENDED_BY_REBOOT.set(ended_names);
+    let _ = MISSED.set(missed_names);
 
     // Debug helpers (test harness only)
     #[cfg(debug_assertions)]
@@ -229,6 +250,31 @@ fn setup_platform() {
 
     #[cfg(target_os = "android")]
     log::info!("[AlarmFree] Platform fully configured");
+}
+
+/// The name to tell the user an alarm by: its label, else its time.
+fn display_name(alarm: &AlarmData) -> String {
+    if alarm.label.is_empty() {
+        format!("{:02}:{:02}", alarm.time_hour, alarm.time_minute)
+    } else {
+        alarm.label.clone()
+    }
+}
+
+/// Drop what the SDK still has for alarms that are no longer enabled (the app
+/// was killed between saving and telling the SDK). A ringing one stays until it
+/// is dealt with. Only call this when the alarm list was read successfully: a
+/// read error must not cancel every alarm.
+fn forget_unlisted_alarms(kit: &AlarmKit, listed: &[(String, AlarmSpec)]) {
+    let Ok(known) = kit.list() else {
+        return;
+    };
+    for (id, _) in known {
+        let ringing = matches!(kit.current_session(), Ok(Some(s)) if s.instance_id == id);
+        if !ringing && !listed.iter().any(|(listed_id, _)| *listed_id == id.0) {
+            forget_alarm(&id.0);
+        }
+    }
 }
 
 #[cfg(target_os = "android")]
@@ -382,11 +428,18 @@ fn debug_action_poller() {
 // these, which forward to AlarmKit.
 // ---------------------------------------------------------------------------
 
-/// Schedule (or update) an alarm via AlarmKit.
-/// Also registers a sentinel job so the job guardian can keep MAIN alive
-/// when the alarm fires.
-pub fn schedule_alarm_from_ui(alarm: &AlarmData) {
-    let kit = alarm_kit();
+/// Bring the SDK in line with a saved alarm: scheduled when enabled, gone when
+/// not. Registers a sentinel job so the job guardian can keep MAIN alive when
+/// the alarm fires.
+pub(crate) fn apply_alarm(alarm: &AlarmData) {
+    let Some(kit) = alarm_kit_optional() else {
+        return;
+    };
+    if !alarm.enabled {
+        forget_alarm(&alarm.id);
+        return;
+    }
+    ensure_alarm_job(&alarm.id);
     let id = InstanceId::new(alarm.id.clone());
     let spec = alarm_data_to_spec(alarm);
     let res = if kit.get(&id).is_ok() {
@@ -394,25 +447,24 @@ pub fn schedule_alarm_from_ui(alarm: &AlarmData) {
     } else {
         kit.create_with_id(id, spec)
     };
-    if let Err(_e) = res {
-        #[cfg(target_os = "android")]
+    if let Err(e) = res {
         log::warn!(
-            "[AlarmFree] AlarmKit schedule failed for {}: {:?}",
-            alarm.id,
-            _e
+            "[AlarmFree] AlarmKit schedule failed for {}: {e:?}",
+            alarm.id
         );
     }
+}
 
-    // Register a sentinel job for this alarm instance. The job guardian
-    // will activate it when the alarm receiver fires.
-    if let Err(_e) = register_alarm_job(&alarm.id) {
-        #[cfg(target_os = "android")]
-        log::warn!(
-            "[AlarmFree] Job registration failed for {}: {:?}",
-            alarm.id,
-            _e
-        );
+/// Remove everything but the saved alarm itself: nothing may ring for it any
+/// more, and a later alarm with its id starts clean.
+pub(crate) fn forget_alarm(alarm_id: &str) {
+    if let Some(kit) = alarm_kit_optional() {
+        if let Err(e) = kit.delete(&InstanceId::new(alarm_id.to_owned())) {
+            log::warn!("[AlarmFree] AlarmKit delete({alarm_id}) failed: {e:?}");
+        }
     }
+    let _ = mobile_sentinel::remove_job(alarm_id);
+    clear_session_files(alarm_id);
 }
 
 /// How long the alarm screen may go without proving it is alive before the
@@ -439,31 +491,15 @@ fn register_alarm_job(alarm_id: &str) -> Result<(), mobile_sentinel::jobs::JobGu
 }
 
 /// Make sure an enabled alarm's job exists with the current settings.
-/// Registering resets a job to pending, so a job that is active (its alarm
-/// is ringing) is never touched.
 fn ensure_alarm_job(alarm_id: &str) {
-    use mobile_sentinel::jobs::JobStatus;
-    match mobile_sentinel::jobs::get_job(alarm_id) {
-        Ok(Some(job)) if job.status == JobStatus::Active => return,
-        Ok(Some(job)) if job.config.ui_liveness_timeout_ms == UI_LIVENESS_TIMEOUT_MS => return,
-        _ => {}
+    if let Ok(Some(job)) = mobile_sentinel::jobs::get_job(alarm_id) {
+        if job.config.ui_liveness_timeout_ms == UI_LIVENESS_TIMEOUT_MS {
+            return;
+        }
     }
-    if let Err(_e) = register_alarm_job(alarm_id) {
-        #[cfg(target_os = "android")]
-        log::warn!("[AlarmFree] ensure job {alarm_id} failed: {_e:?}");
+    if let Err(e) = register_alarm_job(alarm_id) {
+        log::warn!("[AlarmFree] ensure job {alarm_id} failed: {e:?}");
     }
-}
-
-/// Cancel an alarm via AlarmKit.
-pub fn cancel_alarm_from_ui(alarm_id: &str) {
-    let kit = alarm_kit();
-    let id = InstanceId::new(alarm_id.to_owned());
-    if let Err(_e) = kit.delete(&id) {
-        #[cfg(target_os = "android")]
-        log::warn!("[AlarmFree] AlarmKit delete({}) failed: {:?}", alarm_id, _e);
-    }
-    // Also remove the sentinel job file.
-    let _ = mobile_sentinel::remove_job(alarm_id);
 }
 
 /// Map AlarmFree's UI `AlarmData` to the universal SDK's `AlarmSpec`.
@@ -482,12 +518,16 @@ pub fn alarm_data_to_spec(alarm: &AlarmData) -> AlarmSpec {
             minute: alarm.time_minute,
         }
     } else {
-        // The stored date while it is still ahead, otherwise the next time
-        // this clock time comes round — never a date that is already past,
-        // which AlarmKit cannot schedule.
-        let now = Local::now().naive_local();
-        let date = crate::schedule::resolve_one_time_date(alarm, now)
-            .unwrap_or_else(|| now.date().format("%Y-%m-%d").to_string());
+        // The stored date as it is, also when it has passed: an alarm's spec
+        // must not change by itself as time goes on, or AlarmKit would see every
+        // ringing or snoozed one-time alarm as edited. Dates are set when an
+        // alarm is saved or switched on, and at startup for ones that have none.
+        let date = alarm.date.clone().unwrap_or_else(|| {
+            let now = Local::now().naive_local();
+            crate::schedule::next_occurrence_date(alarm.time_hour, alarm.time_minute, now)
+                .format("%Y-%m-%d")
+                .to_string()
+        });
         ScheduleSpec::OneTime {
             date,
             hour: alarm.time_hour,
@@ -608,5 +648,18 @@ mod tests {
         alarm.days = [false; 7];
         let spec = alarm_data_to_spec(&alarm);
         assert!(matches!(spec.schedule, ScheduleSpec::OneTime { .. }));
+    }
+
+    /// If the spec moved by itself once the alarm's time passed, AlarmKit would
+    /// take a snoozed one-time alarm for an edited one and cancel the snooze.
+    #[test]
+    fn a_one_time_alarm_keeps_its_date_after_its_time_has_passed() {
+        let mut alarm = weekday_alarm();
+        alarm.days = [false; 7];
+        alarm.date = Some("2020-01-01".into());
+        match alarm_data_to_spec(&alarm).schedule {
+            ScheduleSpec::OneTime { date, .. } => assert_eq!(date, "2020-01-01"),
+            other => panic!("expected one-time, got {other:?}"),
+        }
     }
 }

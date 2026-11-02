@@ -612,10 +612,6 @@ pub fn AlarmConfig(id: String) -> Element {
                                    button {
                                        class: "btn-delete",
                                        onclick: move |_| {
-        // Cancel platform alarm first
-                                           {
-                                               crate::platform::cancel_alarm_from_ui(&delete_id);
-                                           }
         // Remove alarm from shared state; its custom sound file goes too
         // unless another alarm (a copy) still uses it
                                            let unused_sound = crate::app::remove_alarm(&mut alarms.write(), &delete_id);
@@ -1215,14 +1211,8 @@ pub fn AlarmConfig(id: String) -> Element {
                                    }
                                }
 
-    // Persist to disk
+    // Persist to disk and schedule
                                crate::persistence::save_alarms(&alarms.read());
-
-    // Schedule with the platform AlarmManager
-                               {
-                                   eprintln!("[AlarmFree] SAVE: Scheduling alarm {} via platform", alarm_data.id);
-                                   crate::platform::schedule_alarm_from_ui(&alarm_data);
-                               }
 
                                nav.push(Route::Home {});
                            },
