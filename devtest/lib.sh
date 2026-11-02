@@ -77,12 +77,12 @@ next_minute() {
     T_DATE=$(dev date -d "@$T" +%Y-%m-%d)
 }
 
-# alarm_json id hour minute days date [sound] [sound_mode] [fade] [snooze_n] [snooze_min] [challenges]
+# alarm_json id hour minute days date [sound] [sound_mode] [fade] [snooze_n] [snooze_min] [challenges] [ring_limit_secs]
 alarm_json() {
     local id=$1 h=$2 m=$3 days=$4 date=$5 sound=${6:-air} mode=${7:-0} fade=${8:-0}
-    local sn=${9:-3} si=${10:-1} ch=${11:-[]}
-    printf '{"id":"%s","time_hour":%s,"time_minute":%s,"label":"%s","days":%s,"date":%s,"skip_until_ms":null,"fade_in_secs":%s,"order":0,"enabled":true,"sound":"%s","sound_mode":%s,"challenges":%s,"snooze_count":%s,"snooze_interval":%s}' \
-        "$id" "$h" "$m" "$id" "$days" "$date" "$fade" "$sound" "$mode" "$ch" "$sn" "$si"
+    local sn=${9:-3} si=${10:-1} ch=${11:-[]} limit=${12:-1800}
+    printf '{"id":"%s","time_hour":%s,"time_minute":%s,"label":"%s","days":%s,"date":%s,"skip_until_ms":null,"fade_in_secs":%s,"ring_limit_secs":%s,"order":0,"enabled":true,"sound":"%s","sound_mode":%s,"challenges":%s,"snooze_count":%s,"snooze_interval":%s}' \
+        "$id" "$h" "$m" "$id" "$days" "$date" "$fade" "$limit" "$sound" "$mode" "$ch" "$sn" "$si"
 }
 EVERY_DAY='[true,true,true,true,true,true,true]'
 NO_DAYS='[false,false,false,false,false,false,false]'
@@ -149,6 +149,27 @@ ring_ms() {
         END { if (rx && play) printf "%d", (play - rx) * 1000 }'
 }
 
+# Milliseconds from the alarm's time T until the sound plays.
+sound_after_t_ms() {
+    adb_ logcat -d -v epoch 2> /dev/null | tr -d '\r' | awk -v t="$T" '
+        /MobileSentinel.FiringAudio/ && /playing / && !play { play = $1 }
+        END { if (play) printf "%d", (play - t) * 1000 }'
+}
+
+# Wait for the sound to stop; sets STOPPED_AT to seconds past T. Fails after `limit` seconds past T.
+await_silence() {
+    local limit=$1 n
+    while :; do
+        n=$(now_s)
+        [ "$n" -gt $((T + limit)) ] && return 1
+        if ! sound_on; then
+            STOPPED_AT=$((n - T))
+            return 0
+        fi
+        sleep 1
+    done
+}
+
 # Seconds from T until the sound starts, or empty after `limit` seconds past T.
 await_sound() {
     local limit=${1:-30} n
@@ -171,6 +192,7 @@ top_is_app() { dev dumpsys activity activities | grep -E "topResumedActivity|Res
 armed_at_ms() { as_app "head -n 1 files/sentinel/armed/$1.armed 2>/dev/null"; }
 os_has_alarm() { dev dumpsys alarm | grep -q "$PKG.*ALARM_DISPATCH\|ALARM_DISPATCH.*$PKG\|walarm\*:com.mobilesentinel.ALARM_DISPATCH"; }
 alarm_volume() { dev cmd media_session volume --stream 4 --get 2> /dev/null | grep -oE 'volume is [0-9]+' | grep -oE '[0-9]+'; }
+set_alarm_volume() { dev cmd media_session volume --stream 4 --set "$1" > /dev/null 2>&1; }
 
 # ---- results ----
 RESULTS="$OUT/results.txt"

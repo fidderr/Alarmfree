@@ -261,6 +261,7 @@
   "db.volatile": "Alarmen kunnen nu niet worden opgeslagen. Wijzigingen gaan verloren zodra de app wordt gesloten.",
   "alarm.ended_by_reboot": "Alarm {alarm} is gestopt omdat de telefoon opnieuw is opgestart.",
   "alarm.missed": "Alarm {alarm} is niet op tijd afgegaan, omdat de telefoon uit stond of het alarm tegenhield.",
+  "alarm.ended_by_limit": "Alarm {alarm} is gestopt nadat het lang zonder reactie afging.",
   "validation.date_past": "Kies een datum en tijd in de toekomst",
   "home.next_in_dhm": "{days}d {hours}u {minutes}m",
   "home.today": "Vandaag",

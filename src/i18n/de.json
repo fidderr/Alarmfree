@@ -261,6 +261,7 @@
   "db.volatile": "Alarme können gerade nicht gespeichert werden. Änderungen gehen verloren, sobald die App geschlossen wird.",
   "alarm.ended_by_reboot": "Alarm {alarm} wurde beendet, weil das Telefon neu gestartet wurde.",
   "alarm.missed": "Der Alarm {alarm} hat nicht rechtzeitig geklingelt, weil das Telefon aus war oder ihn zurückgehalten hat.",
+  "alarm.ended_by_limit": "Der Alarm {alarm} hat aufgehört, nachdem er lange ohne Reaktion geklingelt hat.",
   "validation.date_past": "Wähle ein Datum und eine Uhrzeit in der Zukunft",
   "home.next_in_dhm": "{days}T {hours}h {minutes}m",
   "home.today": "Heute",

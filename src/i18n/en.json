@@ -261,6 +261,7 @@
   "db.volatile": "Alarms cannot be saved right now. Changes will be lost when the app closes.",
   "alarm.ended_by_reboot": "Alarm {alarm} was stopped because the phone restarted.",
   "alarm.missed": "Alarm {alarm} did not ring on time, because the phone was off or held it back.",
+  "alarm.ended_by_limit": "Alarm {alarm} stopped after ringing for a long time with no response.",
   "validation.date_past": "Pick a date and time in the future",
   "home.next_in_dhm": "{days}d {hours}h {minutes}m",
   "home.today": "Today",

@@ -23,7 +23,7 @@ s01() {
     if await_sound 40; then
         note "sound after ${SOUND_AT}s"
         sleep 8
-        [ "$(state a)" = firing ] && pass "rang, sound $(ring_ms)ms after delivery" || fail "sound but state=$(state a)"
+        [ "$(state a)" = firing ] && pass "rang, sound $(ring_ms)ms after delivery, $(sound_after_t_ms)ms after its time" || fail "sound but state=$(state a)"
     else
         fail "no sound in 40s, state=$(state a) job=$(job_status a)"
     fi
@@ -356,11 +356,11 @@ s26() {
     dev dumpsys deviceidle force-idle > /dev/null
     if await_sound 40; then
         local ms
-        ms=$(ring_ms)
+        ms=$(sound_after_t_ms)
         if [ -n "$ms" ] && [ "$ms" -lt 1000 ]; then
-            pass "sound ${ms}ms after delivery"
+            pass "sound ${ms}ms after its time, $(ring_ms)ms after delivery"
         else
-            fail "sound ${ms:-?}ms after delivery"
+            fail "sound ${ms:-?}ms after its time, $(ring_ms)ms after delivery"
         fi
     else
         fail "no sound in 40s, state=$(state a) job=$(job_status a)"
@@ -400,25 +400,28 @@ s19() {
     next_minute 45
     seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
     arm a
-    await_sound 30 || { fail "never started"; save_log; return; }
+    local before v0 v1 v2 i=0
+    before=$(alarm_volume)
+    set_alarm_volume 1
+    await_sound 30 || { fail "never started"; set_alarm_volume "$before"; save_log; return; }
     sleep 4
-    local v0 v1
     v0=$(alarm_volume)
-    local i=0
     while [ "$i" -lt 8 ]; do
         dev input keyevent KEYCODE_VOLUME_DOWN
         i=$((i + 1))
     done
     sleep 3
     v1=$(alarm_volume)
-    if [ -n "$v0" ] && [ "${v1:-0}" -ge "$v0" ]; then
-        pass "volume held at $v1"
-    else
-        fail "volume went from $v0 to $v1"
-    fi
     save_log
     action dismiss:a
-    sleep 2
+    sleep 3
+    v2=$(alarm_volume)
+    set_alarm_volume "$before"
+    if [ "${v0:-0}" -gt 1 ] && [ "${v1:-0}" -ge "$v0" ] && [ "$v2" = 1 ]; then
+        pass "raised from 1 to $v0, held at $v1 against the keys, back to $v2 after"
+    else
+        fail "raised to $v0, after the keys $v1, after dismissing $v2 (should be 1)"
+    fi
 }
 
 # The screen stays on while ringing, without any touch.
@@ -518,6 +521,102 @@ s24() {
     sleep 2
 }
 
+# The ring limit, with a short one. No touch: it stops, and the alarm moves on.
+s23a() {
+    scenario s23a_limit_stops
+    fresh
+    next_minute 45
+    seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null air 0 0 3 1 '[]' 40)"
+    arm a
+    await_sound 30 || { fail "never started"; save_log; return; }
+    if await_silence 70; then
+        sleep 6
+        screenshot s23a_after_limit
+        local s j
+        s=$(state a)
+        j=$(job_status a)
+        if [ "$STOPPED_AT" -ge 38 ] && [ "$s" = scheduled ] && [ "$j" = pending ]; then
+            pass "stopped ${STOPPED_AT}s after its time, next ring armed"
+        else
+            fail "stopped at ${STOPPED_AT}s, state=$s job=$j"
+        fi
+    else
+        fail "still ringing after 70s"
+    fi
+    save_log
+}
+
+# A touch restarts the limit.
+s23b() {
+    scenario s23b_limit_restarts_on_touch
+    fresh
+    next_minute 45
+    seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null air 0 0 3 1 '[]' 50)"
+    arm a
+    await_sound 30 || { fail "never started"; save_log; return; }
+    until_past $((T + 40))
+    dev input tap 5 5
+    until_past $((T + 60))
+    if ! sound_on; then
+        fail "stopped despite the touch, state=$(state a)"
+        save_log
+        return
+    fi
+    if await_silence 110; then
+        [ "$STOPPED_AT" -ge 85 ] && pass "ran on after the touch, stopped at ${STOPPED_AT}s" || fail "stopped too early, ${STOPPED_AT}s"
+    else
+        fail "still ringing after 110s"
+    fi
+    save_log
+    action dismiss:a
+    sleep 2
+}
+
+# With the app away: the ring still stops, and the app deals with it when it can.
+s23c() {
+    scenario s23c_limit_app_away
+    fresh
+    next_minute 45
+    seed a "$(alarm_json a "$T_H" "$T_M" "$NO_DAYS" "\"$T_DATE\"" air 0 0 3 1 '[]' 40)"
+    arm a
+    dev appops set "$PKG" SYSTEM_ALERT_WINDOW deny
+    dead
+    wake
+    go_home
+    await_sound 30 || { fail "never started"; save_log; return; }
+    if ! await_silence 70; then
+        fail "still ringing after 70s"
+        save_log
+        return
+    fi
+    grant_all
+    sleep 1
+    start_app
+    sleep 8
+    if [ "$(job_status a)" = pending ] && [ "$(db_enabled a)" = false ] && ! sound_on; then
+        pass "stopped at ${STOPPED_AT}s, one-time alarm off after opening"
+    else
+        fail "after opening: state=$(state a) job=$(job_status a) enabled=$(db_enabled a)"
+    fi
+    screenshot s23c_after_opening
+    save_log
+}
+
+# Forever means forever, past any limit the others would have hit.
+s23d() {
+    scenario s23d_limit_forever
+    fresh
+    next_minute 45
+    seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null air 0 0 3 1 '[]' null)"
+    arm a
+    await_sound 30 || { fail "never started"; save_log; return; }
+    until_past $((T + 70))
+    sound_on && pass "still ringing after 70s" || fail "stopped, state=$(state a)"
+    save_log
+    action dismiss:a
+    sleep 2
+}
+
 # Back from the editor stays in the app.
 s25() {
     scenario s25_back_navigation
@@ -549,7 +648,7 @@ s25() {
     save_log
 }
 
-ALL="s01 s02 s03 s04 s05 s06 s07a s07b s07c s09 s10 s11a s11b s12 s14 s16 s17 s19 s20 s21 s22 s24 s25 s26x5"
+ALL="s01 s02 s03 s04 s05 s06 s07a s07b s07c s09 s10 s11a s11b s12 s14 s16 s17 s19 s20 s21 s22 s23a s23b s23c s23d s24 s25 s26x5"
 : > "$RESULTS"
 for s in ${*:-$ALL}; do
     "$s"

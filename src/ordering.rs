@@ -67,6 +67,7 @@ mod tests {
             date: None,
             skip_until_ms: None,
             fade_in_secs: 0,
+            ring_limit_secs: None,
             order,
             enabled: true,
             sound: "air".into(),

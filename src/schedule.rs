@@ -187,6 +187,7 @@ mod tests {
             date: date.map(str::to_owned),
             skip_until_ms: None,
             fade_in_secs: 0,
+            ring_limit_secs: None,
             order: 0,
             enabled: true,
             sound: "air".into(),

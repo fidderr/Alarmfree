@@ -261,6 +261,7 @@
   "db.volatile": "Ahora mismo no se pueden guardar las alarmas. Los cambios se perderán al cerrar la app.",
   "alarm.ended_by_reboot": "La alarma {alarm} se detuvo porque el teléfono se reinició.",
   "alarm.missed": "La alarma {alarm} no sonó a tiempo porque el teléfono estaba apagado o la retuvo.",
+  "alarm.ended_by_limit": "La alarma {alarm} se detuvo tras sonar mucho tiempo sin respuesta.",
   "validation.date_past": "Elige una fecha y una hora futuras",
   "home.next_in_dhm": "{days}d {hours}h {minutes}m",
   "home.today": "Hoy",

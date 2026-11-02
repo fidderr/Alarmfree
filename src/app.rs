@@ -83,6 +83,10 @@ pub struct AlarmData {
     /// Seconds the sound takes to fade in (0 = off).
     #[serde(default)]
     pub fade_in_secs: u16,
+    /// Stop by itself after ringing this long with nobody doing anything, in
+    /// seconds. `None` rings until it is dealt with.
+    #[serde(default = "default_ring_limit_secs")]
+    pub ring_limit_secs: Option<u32>,
     /// Position in the home list once the user has dragged alarms around (see
     /// [`crate::ordering`]); 0 = not arranged, listed by time.
     #[serde(default)]
@@ -93,6 +97,10 @@ pub struct AlarmData {
     pub challenges: Vec<(String, String)>, // (type, difficulty)
     pub snooze_count: u8,
     pub snooze_interval: u8,
+}
+
+fn default_ring_limit_secs() -> Option<u32> {
+    Some(mobile_sentinel::context::schema::DEFAULT_RING_LIMIT_SECS)
 }
 
 /// Remove an alarm from the list. Returns the custom sound file that is left
@@ -156,6 +164,10 @@ pub fn App() -> Element {
         for (key, names) in [
             ("alarm.ended_by_reboot", crate::platform::ended_by_reboot()),
             ("alarm.missed", crate::platform::missed_alarms()),
+            (
+                "alarm.ended_by_limit",
+                crate::platform::ended_by_limit_at_startup(),
+            ),
         ] {
             if !names.is_empty() {
                 notices.push(t(&translations, key).replace("{alarm}", &names.join(", ")));
@@ -186,6 +198,17 @@ pub fn App() -> Element {
             let current = crate::firing_state::peek_firing_alarm();
             if current != *firing_id.peek() {
                 firing_id.set(current);
+            }
+            // Rang until its limit with nobody there: nothing else tells the user.
+            let names = crate::platform::take_ended_by_limit();
+            if !names.is_empty() {
+                let mut list = alarms;
+                list.set(crate::persistence::load_alarms());
+                toast_signal.set(Some(crate::components::ToastMessage {
+                    message: t(&translations, "alarm.ended_by_limit")
+                        .replace("{alarm}", &names.join(", ")),
+                    level: crate::components::ToastLevel::Error,
+                }));
             }
         }
     });
@@ -316,6 +339,7 @@ mod tests {
             date: None,
             skip_until_ms: None,
             fade_in_secs: 0,
+            ring_limit_secs: None,
             order: 0,
             enabled: true,
             sound: sound.into(),

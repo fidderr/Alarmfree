@@ -194,6 +194,7 @@ mod tests {
             date: None,
             skip_until_ms: None,
             fade_in_secs: 0,
+            ring_limit_secs: None,
             order: 0,
             enabled: true,
             sound: "happy".into(),

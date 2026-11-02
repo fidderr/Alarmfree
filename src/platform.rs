@@ -70,6 +70,44 @@ pub fn missed_alarms() -> &'static [String] {
     MISSED.get().map_or(&[], Vec::as_slice)
 }
 
+/// Names of the alarms found at startup to have rung until their limit.
+static ENDED_BY_LIMIT: OnceCell<Vec<String>> = OnceCell::new();
+
+/// Alarms that rang until their limit with the app away (empty if none, or before
+/// [`init_platform`] ran).
+pub fn ended_by_limit_at_startup() -> &'static [String] {
+    ENDED_BY_LIMIT.get().map_or(&[], Vec::as_slice)
+}
+
+/// Alarms that just rang until their limit with the app running. Clears them, and
+/// switches off the one-time ones among them. Returns their names.
+pub fn take_ended_by_limit() -> Vec<String> {
+    let Some(kit) = alarm_kit_optional() else {
+        return Vec::new();
+    };
+    let ended = kit.take_ended_by_limit();
+    if ended.is_empty() {
+        return Vec::new();
+    }
+    let mut list = crate::persistence::load_alarms();
+    let mut switched_off = false;
+    let mut names = Vec::with_capacity(ended.len());
+    for id in &ended {
+        clear_session_files(&id.0);
+        switched_off |= crate::schedule::disable_if_one_time(&mut list, &id.0);
+        names.push(
+            list.iter()
+                .find(|a| a.id == id.0)
+                .map(display_name)
+                .unwrap_or_default(),
+        );
+    }
+    if switched_off {
+        crate::persistence::save_alarms(&list);
+    }
+    names
+}
+
 /// One-shot platform init plus the permission prompts (which need the UI).
 pub fn init_sentinel() {
     init_platform();
@@ -232,9 +270,15 @@ fn setup_platform() {
         .map(|id| name_of(&id.0))
         .collect();
     let missed_names: Vec<String> = report.missed.iter().map(|m| name_of(&m.id.0)).collect();
+    let limit_names: Vec<String> = report
+        .ended_by_limit
+        .iter()
+        .map(|id| name_of(&id.0))
+        .collect();
     let over = report
         .ended_by_reboot
         .iter()
+        .chain(&report.ended_by_limit)
         .chain(report.missed.iter().map(|m| &m.id));
     for id in over {
         clear_session_files(&id.0);
@@ -243,6 +287,7 @@ fn setup_platform() {
         .finished
         .iter()
         .chain(&report.ended_by_reboot)
+        .chain(&report.ended_by_limit)
         .chain(report.missed.iter().map(|m| &m.id));
     let mut switched_off = false;
     for id in finished {
@@ -253,6 +298,7 @@ fn setup_platform() {
     }
     let _ = ENDED_BY_REBOOT.set(ended_names);
     let _ = MISSED.set(missed_names);
+    let _ = ENDED_BY_LIMIT.set(limit_names);
 
     // Debug helpers (test harness only)
     #[cfg(debug_assertions)]
@@ -356,6 +402,7 @@ fn debug_auto_schedule() {
             bypass_dnd: true,
             skip_until_unix_ms: None,
             fade_in_secs: 0,
+            ring_limit_secs: None,
         };
         match kit.create_with_id(id.clone(), spec) {
             Ok(()) => log::info!(
@@ -592,6 +639,7 @@ pub fn alarm_data_to_spec(alarm: &AlarmData) -> AlarmSpec {
         bypass_dnd: true,
         skip_until_unix_ms: alarm.skip_until_ms,
         fade_in_secs: alarm.fade_in_secs,
+        ring_limit_secs: alarm.ring_limit_secs,
     }
 }
 
@@ -612,6 +660,7 @@ mod tests {
             date: None,
             skip_until_ms: None,
             fade_in_secs: 0,
+            ring_limit_secs: None,
             order: 0,
             enabled: true,
             sound: "happy".into(),

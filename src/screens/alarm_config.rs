@@ -504,6 +504,13 @@ pub fn AlarmConfig(id: String) -> Element {
     // New alarms fade in over a minute; an existing alarm (or a copy of one) keeps
     // its own setting.
     let mut fade_in_secs = use_signal(|| existing.as_ref().map_or(60u16, |a| a.fade_in_secs));
+    // No selector yet: an existing alarm keeps its limit, a new one gets the default.
+    let ring_limit_secs = use_signal(|| {
+        existing.as_ref().map_or(
+            Some(mobile_sentinel::context::schema::DEFAULT_RING_LIMIT_SECS),
+            |a| a.ring_limit_secs,
+        )
+    });
     let existing_order = existing.as_ref().map_or(0, |a| a.order);
 
     // Background task for native file picker
@@ -1190,6 +1197,7 @@ pub fn AlarmConfig(id: String) -> Element {
                                    date: (*schedule_mode.read() == "date").then(|| date_value.read().clone()),
                                    skip_until_ms: None, // re-saving an alarm starts it fresh
                                    fade_in_secs: *fade_in_secs.read(),
+                                   ring_limit_secs: *ring_limit_secs.read(),
                                    // A new alarm (or a copy) goes where new alarms go; an
                                    // edited one keeps its place in the list.
                                    order: if is_new { crate::ordering::order_for_new(&alarms.read()) } else { existing_order },
