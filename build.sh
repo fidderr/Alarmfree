@@ -42,7 +42,8 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$SCRIPT_DIR"
-TARGET="aarch64-linux-android"
+# Phones are arm64. Emulators need another ABI: TARGET=x86_64-linux-android ./build.sh ...
+TARGET="${TARGET:-aarch64-linux-android}"
 ADB="${LOCALAPPDATA}/Android/Sdk/platform-tools/adb.exe"
 
 cd "$SCRIPT_DIR"
