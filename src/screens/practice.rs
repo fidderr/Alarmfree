@@ -11,7 +11,7 @@
 
 use crate::app::{t, AlarmData, Translations};
 use crate::components::{Celebration, Icon, IconName};
-use crate::screens::alarm_firing::{generate_challenges, render_challenge, RateLimiter};
+use crate::screens::alarm_firing::{generate_challenges, render_challenge};
 use dioxus::prelude::*;
 
 /// Practice route: the challenges of a saved alarm.
@@ -46,7 +46,6 @@ pub fn ChallengeRunner(challenges: Vec<(String, String)>, on_exit: EventHandler<
     let generated = use_signal(|| generate_challenges(&challenges));
     let current_challenge_index = use_signal(|| 0usize);
     let answer_feedback = use_signal(|| "");
-    let rate_limiter = use_signal(RateLimiter::new);
     let mut challenge_timeout = use_signal(|| 0u32);
     let celebrating = use_signal(|| false);
     let challenge_solves = use_signal(Vec::new);
@@ -108,7 +107,6 @@ pub fn ChallengeRunner(challenges: Vec<(String, String)>, on_exit: EventHandler<
                             current_challenge_index,
                             answer_feedback,
                             EventHandler::new(move |_| finished.set(true)),
-                            rate_limiter,
                             challenge_timeout,
                             celebrating,
                             challenge_solves,

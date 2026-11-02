@@ -123,6 +123,117 @@ pub struct DifficultyParams {
 /// Challenge generation engine. Emits new [`ChallengeInstance`]s on demand.
 pub struct ChallengeEngine {
     rng: StdRng,
+    locale: crate::models::Locale,
+}
+
+/// Word pool for typing challenges in the user's language. Short everyday words
+/// without accents: this should wake the user up, not test their keyboard.
+fn word_pool(locale: crate::models::Locale) -> &'static [&'static str] {
+    use crate::models::Locale;
+    match locale {
+        Locale::English => WORD_POOL,
+        Locale::Dutch => &[
+            "de", "het", "een", "goede", "morgen", "wekker", "tijd", "slaap", "droom", "nacht",
+            "vroeg", "opstaan", "koffie", "ontbijt", "energie", "rustig", "ademen", "zon", "licht",
+            "dag", "werk", "huis", "fiets", "water", "brood", "kaas", "appel", "tafel", "stoel",
+            "raam", "deur", "boek", "vogel", "kat", "hond", "bloem", "boom", "regen", "wind",
+            "wolk", "straat", "stad", "vriend", "lachen", "lopen", "zingen", "denken", "wakker",
+        ],
+        Locale::German => &[
+            "der",
+            "die",
+            "das",
+            "guten",
+            "morgen",
+            "wecker",
+            "zeit",
+            "schlaf",
+            "traum",
+            "nacht",
+            "aufstehen",
+            "kaffee",
+            "brot",
+            "energie",
+            "ruhig",
+            "atmen",
+            "sonne",
+            "licht",
+            "tag",
+            "arbeit",
+            "haus",
+            "fahrrad",
+            "wasser",
+            "apfel",
+            "tisch",
+            "stuhl",
+            "fenster",
+            "buch",
+            "vogel",
+            "katze",
+            "hund",
+            "blume",
+            "baum",
+            "regen",
+            "wind",
+            "wolke",
+            "strasse",
+            "stadt",
+            "freund",
+            "lachen",
+            "laufen",
+            "singen",
+            "denken",
+            "wach",
+            "garten",
+            "milch",
+            "schule",
+        ],
+        Locale::French => &[
+            "le", "la", "un", "une", "bon", "matin", "temps", "sommeil", "nuit", "lever", "cafe",
+            "pain", "calme", "soleil", "jour", "travail", "maison", "velo", "eau", "pomme",
+            "table", "chaise", "porte", "livre", "oiseau", "chat", "chien", "fleur", "arbre",
+            "pluie", "vent", "nuage", "rue", "ville", "ami", "rire", "marcher", "chanter",
+            "penser", "jardin", "lait", "ecole", "lune", "mer", "main", "tasse", "route", "fruit",
+        ],
+        Locale::Spanish => &[
+            "el", "la", "un", "una", "buenos", "dias", "tiempo", "sueno", "noche", "cafe", "pan",
+            "calma", "sol", "luz", "dia", "trabajo", "casa", "agua", "mesa", "silla", "puerta",
+            "libro", "gato", "perro", "flor", "lluvia", "viento", "nube", "calle", "ciudad",
+            "amigo", "reir", "andar", "cantar", "pensar", "jardin", "leche", "escuela", "luna",
+            "mar", "mano", "taza", "camino", "fruta", "manzana", "ventana", "pajaro", "arbol",
+        ],
+    }
+}
+
+/// How closely `typed` matches `passage`, from 0 to 1: one minus the edit distance
+/// over the length. Capitals do not count, because a phone keyboard adds them by
+/// itself, and neither does a space at the end. A skipped letter costs one letter,
+/// not everything after it. The one measure for both the screen and the gate.
+pub fn typing_accuracy(passage: &str, typed: &str) -> f32 {
+    let normalize =
+        |s: &str| -> Vec<char> { s.trim_end().chars().flat_map(char::to_lowercase).collect() };
+    let passage = normalize(passage);
+    let typed = normalize(typed);
+    let longest = passage.len().max(typed.len());
+    if longest == 0 {
+        return 1.0;
+    }
+    1.0 - edit_distance(&passage, &typed) as f32 / longest as f32
+}
+
+/// Levenshtein distance.
+fn edit_distance(a: &[char], b: &[char]) -> usize {
+    let mut previous: Vec<usize> = (0..=b.len()).collect();
+    for (i, ca) in a.iter().enumerate() {
+        let mut current = Vec::with_capacity(b.len() + 1);
+        current.push(i + 1);
+        for (j, cb) in b.iter().enumerate() {
+            let replaced = previous[j] + usize::from(ca != cb);
+            current.push(replaced.min(previous[j + 1] + 1).min(current[j] + 1));
+        }
+        previous = current;
+    }
+    previous[b.len()]
 }
 
 /// Word pool for typing challenges.
@@ -836,7 +947,13 @@ impl ChallengeEngine {
     pub fn new() -> Self {
         Self {
             rng: StdRng::from_entropy(),
+            locale: crate::models::Locale::default(),
         }
+    }
+
+    /// The language of what the user is asked to type.
+    pub fn set_locale(&mut self, locale: crate::models::Locale) {
+        self.locale = locale;
     }
 
     /// Generate a challenge instance from config.
@@ -1063,11 +1180,9 @@ impl ChallengeEngine {
         let (min_words, max_words) = params.typing_word_count;
         let word_count = self.rng.gen_range(min_words..=max_words) as usize;
 
+        let pool = word_pool(self.locale);
         let passage: String = (0..word_count)
-            .map(|_| {
-                let idx = self.rng.gen_range(0..WORD_POOL.len());
-                WORD_POOL[idx]
-            })
+            .map(|_| pool[self.rng.gen_range(0..pool.len())])
             .collect::<Vec<&str>>()
             .join(" ");
 
@@ -1096,5 +1211,50 @@ impl ChallengeEngine {
 impl Default for ChallengeEngine {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn capitals_do_not_count_when_typing() {
+        assert_eq!(typing_accuracy("good morning", "Good Morning"), 1.0);
+        assert_eq!(typing_accuracy("good morning", "GOOD MORNING "), 1.0);
+    }
+
+    #[test]
+    fn a_skipped_letter_costs_one_letter_and_not_everything_after_it() {
+        let accuracy = typing_accuracy("good morning sunshine", "god morning sunshine");
+        assert!(accuracy > 0.95, "{accuracy}");
+    }
+
+    #[test]
+    fn typing_something_else_is_not_close() {
+        assert!(typing_accuracy("good morning", "xxxx") < 0.2);
+        assert!(typing_accuracy("good morning", "") < 0.01);
+        assert_eq!(typing_accuracy("", ""), 1.0);
+    }
+
+    #[test]
+    fn every_language_has_words_a_phone_keyboard_types_easily() {
+        use crate::models::Locale;
+        for locale in [
+            Locale::English,
+            Locale::Dutch,
+            Locale::German,
+            Locale::French,
+            Locale::Spanish,
+        ] {
+            let pool = word_pool(locale);
+            assert!(pool.len() >= 40, "{locale:?} has {} words", pool.len());
+            for word in pool {
+                assert!(
+                    word.chars().all(|c| c.is_ascii_lowercase()),
+                    "{locale:?}: {word}"
+                );
+            }
+        }
     }
 }

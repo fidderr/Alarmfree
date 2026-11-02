@@ -158,6 +158,12 @@ pub fn App() -> Element {
             DbRecovery::Recovered { .. } => notices.push(t(&translations, "db.recovered")),
             DbRecovery::Volatile => notices.push(t(&translations, "db.volatile")),
         }
+        let unreadable = crate::persistence::unreadable_alarms();
+        if unreadable > 0 {
+            notices.push(
+                t(&translations, "db.unreadable").replace("{count}", &unreadable.to_string()),
+            );
+        }
         notices.extend(unseen_outcome_notices(&translations));
         if !notices.is_empty() {
             toast_signal.set(Some(crate::components::ToastMessage {
@@ -184,6 +190,12 @@ pub fn App() -> Element {
             let current = crate::firing_state::peek_firing_alarm();
             if current != *firing_id.peek() {
                 firing_id.set(current);
+            }
+            if crate::persistence::take_save_failure() {
+                toast_signal.set(Some(crate::components::ToastMessage {
+                    message: t(&translations, "db.save_failed"),
+                    level: crate::components::ToastLevel::Error,
+                }));
             }
             if crate::platform::handle_ring_ends() {
                 let mut list = alarms;

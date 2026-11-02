@@ -20,18 +20,10 @@ pub fn TypingChallenge(
     let typed_len = typed_chars.len();
     let passage_len = passage.chars().count();
 
-    // Case-insensitive accuracy
+    // So far: against as much of the passage as has been typed.
     let passage_chars: Vec<char> = passage.chars().collect();
-    let correct_count = passage_chars
-        .iter()
-        .zip(typed_chars.iter())
-        .filter(|(p, t)| p.eq_ignore_ascii_case(t))
-        .count();
-    let accuracy = if typed_len > 0 {
-        correct_count as f32 / typed_len as f32
-    } else {
-        1.0
-    };
+    let passage_so_far: String = passage_chars.iter().take(typed_len).collect();
+    let accuracy = crate::models::typing_accuracy(&passage_so_far, &typed_text.read());
     let accuracy_pct = (accuracy * 100.0) as u32;
 
     let accuracy_class = if accuracy >= min_accuracy {
@@ -67,6 +59,8 @@ pub fn TypingChallenge(
     }
 
     let passage_for_handler = passage.clone();
+    // A skipped letter must not leave the user stuck one letter short of the end.
+    let letters_to_spare = (passage_len as f32 * (1.0 - min_accuracy)) as usize;
     let accuracy_text =
         t(&translations, "challenge.typing.accuracy").replace("{pct}", &accuracy_pct.to_string());
     let min_accuracy_text = t(&translations, "challenge.typing.min_accuracy")
@@ -133,13 +127,22 @@ pub fn TypingChallenge(
                 class: "typing-input-area",
                 placeholder: "{placeholder}",
                 autofocus: true,
+                autocomplete: "off",
+                autocorrect: "off",
+                autocapitalize: "off",
+                spellcheck: "false",
                 value: "{typed_text}",
                 oninput: move |evt| {
                     let val = evt.value();
                     typed_text.set(val.clone());
 
-                    // Auto-complete when passage length reached
-                    if val.chars().count() >= passage_for_handler.chars().count() {
+                    // Done once the end of the passage is reached, or close
+                    // enough to it with enough right.
+                    let typed = val.chars().count();
+                    let total = passage_for_handler.chars().count();
+                    let accurate = crate::models::typing_accuracy(&passage_for_handler, &val)
+                        >= min_accuracy;
+                    if typed >= total || (typed + letters_to_spare >= total && accurate) {
                         on_complete.call(val);
                     }
                 },

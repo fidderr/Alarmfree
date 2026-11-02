@@ -7,7 +7,7 @@ use std::path::Path;
 use std::sync::Mutex;
 use std::time::Duration;
 
-use chrono::{DateTime, Datelike, NaiveDate, Utc};
+use chrono::{DateTime, Datelike, Local, NaiveDate, Utc};
 use rusqlite::{params, Connection};
 
 use crate::app::AlarmData;
@@ -62,24 +62,31 @@ impl Database {
     }
 
     pub fn list_alarms(&self) -> Result<Vec<AlarmData>, rusqlite::Error> {
+        self.list_alarms_reporting().map(|(alarms, _)| alarms)
+    }
+
+    /// The saved alarms, and how many rows could not be read: one bad row must not
+    /// empty the whole list.
+    pub fn list_alarms_reporting(&self) -> Result<(Vec<AlarmData>, usize), rusqlite::Error> {
         let conn = self.conn.lock().unwrap_or_else(|p| p.into_inner());
-        let mut stmt = conn.prepare("SELECT data FROM alarms")?;
-        let alarms = stmt
+        let mut stmt = conn.prepare("SELECT id, data FROM alarms")?;
+        let rows = stmt
             .query_map([], |row| {
-                let data: String = row.get(0)?;
-                serde_json::from_str::<AlarmData>(&data).map_err(|e| {
-                    rusqlite::Error::FromSqlConversionFailure(
-                        0,
-                        rusqlite::types::Type::Text,
-                        Box::new(e),
-                    )
-                })
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
             })?
             .collect::<Result<Vec<_>, _>>()?;
+        let total = rows.len();
+        let mut alarms = Vec::with_capacity(total);
+        for (id, data) in rows {
+            match serde_json::from_str::<AlarmData>(&data) {
+                Ok(alarm) => alarms.push(alarm),
+                Err(e) => log::error!("[AlarmFree] alarm {id} cannot be read: {e}"),
+            }
+        }
         // Sort by time for stable display order.
-        let mut alarms = alarms;
         alarms.sort_by_key(|a| (a.time_hour, a.time_minute));
-        Ok(alarms)
+        let unreadable = total - alarms.len();
+        Ok((alarms, unreadable))
     }
 
     pub fn delete_alarm(&self, id: &str) -> Result<(), rusqlite::Error> {
@@ -189,7 +196,8 @@ impl Database {
 
     // --- Settings ---
 
-    pub fn load_settings(&self) -> Result<AppSettings, rusqlite::Error> {
+    /// The saved settings, or `None` when none were saved yet.
+    pub fn load_settings(&self) -> Result<Option<AppSettings>, rusqlite::Error> {
         let conn = self.conn.lock().unwrap_or_else(|p| p.into_inner());
         let result = conn.query_row(
             "SELECT theme, locale, default_snooze_count, default_snooze_interval_minutes, \
@@ -209,8 +217,8 @@ impl Database {
         );
 
         match result {
-            Ok(settings) => Ok(settings),
-            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(AppSettings::default()),
+            Ok(settings) => Ok(Some(settings)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
             Err(e) => Err(e),
         }
     }
@@ -289,18 +297,20 @@ fn row_to_event(row: &rusqlite::Row) -> Result<AlarmEvent, rusqlite::Error> {
     })
 }
 
+/// The period in the user's own time: "this week" starts at their midnight.
 fn filter_to_date_range(filter: &HistoryFilter) -> (DateTime<Utc>, DateTime<Utc>) {
-    let now = Utc::now();
+    let now = Local::now();
+    let now_utc = now.with_timezone(&Utc);
     let safe_midnight = |date: NaiveDate| -> DateTime<Utc> {
         date.and_hms_opt(0, 0, 0)
-            .map(|dt| dt.and_utc())
-            .unwrap_or(now)
+            .and_then(|dt| dt.and_local_timezone(Local).earliest())
+            .map_or(now_utc, |dt| dt.with_timezone(&Utc))
     };
     match filter {
         HistoryFilter::ThisWeek => {
             let weekday_num = now.weekday().num_days_from_monday();
             let start = (now - chrono::Duration::days(weekday_num as i64)).date_naive();
-            (safe_midnight(start), now)
+            (safe_midnight(start), now_utc)
         }
         HistoryFilter::LastWeek => {
             let weekday_num = now.weekday().num_days_from_monday();
@@ -312,7 +322,7 @@ fn filter_to_date_range(filter: &HistoryFilter) -> (DateTime<Utc>, DateTime<Utc>
         HistoryFilter::ThisMonth => {
             let start =
                 NaiveDate::from_ymd_opt(now.year(), now.month(), 1).unwrap_or(now.date_naive());
-            (safe_midnight(start), now)
+            (safe_midnight(start), now_utc)
         }
         HistoryFilter::LastMonth => {
             let this_month_start =
@@ -330,7 +340,7 @@ fn filter_to_date_range(filter: &HistoryFilter) -> (DateTime<Utc>, DateTime<Utc>
         }
         HistoryFilter::ThisYear => {
             let start = NaiveDate::from_ymd_opt(now.year(), 1, 1).unwrap_or(now.date_naive());
-            (safe_midnight(start), now)
+            (safe_midnight(start), now_utc)
         }
         HistoryFilter::LastYear => {
             let this_year_start =
@@ -342,8 +352,8 @@ fn filter_to_date_range(filter: &HistoryFilter) -> (DateTime<Utc>, DateTime<Utc>
             (last_year_start, this_year_start)
         }
         HistoryFilter::LastDays(days) => {
-            let start = now - chrono::Duration::days(*days as i64);
-            (start, now)
+            let start = now_utc - chrono::Duration::days(*days as i64);
+            (start, now_utc)
         }
     }
 }
@@ -486,6 +496,43 @@ mod tests {
         let all = db.query_events(&HistoryFilter::LastDays(1)).unwrap();
         assert_eq!(all.len(), 2);
         assert!(all.iter().any(|e| e.outcome == AlarmOutcome::Missed));
+    }
+
+    #[test]
+    fn one_unreadable_alarm_does_not_lose_the_others() {
+        let db = Database::open_in_memory().unwrap();
+        {
+            let conn = db.conn.lock().unwrap();
+            conn.execute(
+                "INSERT INTO alarms (id, data) VALUES ('bad', 'not json')",
+                [],
+            )
+            .unwrap();
+        }
+        let good = crate::app::AlarmData {
+            id: "good".to_owned(),
+            time_hour: 7,
+            time_minute: 0,
+            label: String::new(),
+            days: [true; 7],
+            date: None,
+            skip_until_ms: None,
+            fade_in_secs: 0,
+            ring_limit_secs: None,
+            order: 0,
+            enabled: true,
+            sound: "air".to_owned(),
+            sound_mode: 0,
+            challenges: Vec::new(),
+            snooze_count: 0,
+            snooze_interval: 1,
+        };
+        db.upsert_alarm(&good).unwrap();
+
+        let (alarms, unreadable) = db.list_alarms_reporting().unwrap();
+
+        assert_eq!(alarms, vec![good]);
+        assert_eq!(unreadable, 1);
     }
 
     #[test]

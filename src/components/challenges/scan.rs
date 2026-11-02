@@ -1,6 +1,15 @@
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use dioxus::prelude::*;
 
 use crate::app::{t, Translations};
+
+static SCANNER_OPEN: AtomicBool = AtomicBool::new(false);
+
+/// Whether the camera scanner is on screen right now.
+pub fn scanner_open() -> bool {
+    SCANNER_OPEN.load(Ordering::Relaxed)
+}
 
 /// Unified scanner challenge (barcode or QR — the camera backend handles
 /// both identically).
@@ -49,8 +58,10 @@ pub fn ScanChallenge(
                 let (tx, rx) = futures_channel::oneshot::channel::<Result<String, String>>();
 
                 std::thread::spawn(move || {
+                    SCANNER_OPEN.store(true, Ordering::Relaxed);
                     // Sole sanctioned scanning entry point (feature-gated).
                     let result = mobile_sentinel::scanner::scan().map_err(|e| format!("{}", e));
+                    SCANNER_OPEN.store(false, Ordering::Relaxed);
                     let _ = tx.send(result);
                 });
 
@@ -65,10 +76,7 @@ pub fn ScanChallenge(
                             status.set("success");
                             on_complete.call(());
                         } else {
-                            eprintln!(
-                                "[AlarmFree] Scan mismatch: scanned='{}' expected='{}'",
-                                scanned, expected
-                            );
+                            log::warn!("[AlarmFree] Scanned something else than the expected code");
                             error_msg.set(mismatch_msg_for_handler.clone());
                             status.set("error");
                         }

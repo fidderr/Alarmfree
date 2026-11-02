@@ -11,7 +11,7 @@ use crate::persistence;
 pub fn record_alarm_event(event: &AlarmEvent) {
     let db = persistence::database();
     if let Err(e) = db.insert_event(event) {
-        eprintln!("[AlarmFree] Failed to record history event: {}", e);
+        log::error!("[AlarmFree] Failed to record history event: {e}");
     }
 }
 
@@ -71,12 +71,12 @@ pub fn delete_history(older_than_days: Option<u32>) {
         Some(days) => {
             let cutoff = Utc::now() - chrono::Duration::days(days as i64);
             if let Err(e) = db.delete_events_before(&cutoff) {
-                eprintln!("[AlarmFree] Failed to delete old history: {}", e);
+                log::error!("[AlarmFree] Failed to delete old history: {e}");
             }
         }
         None => {
             if let Err(e) = db.delete_all_events() {
-                eprintln!("[AlarmFree] Failed to delete all history: {}", e);
+                log::error!("[AlarmFree] Failed to delete all history: {e}");
             }
         }
     }

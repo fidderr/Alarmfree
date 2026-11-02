@@ -20,14 +20,14 @@ fn play_preview(sound_name: &str) -> u64 {
     let path = match crate::custom_sounds::get_playback_path(sound_name) {
         Some(p) => p,
         None => {
-            eprintln!("[AlarmFree] No playback path found for: {}", sound_name);
+            log::warn!("[AlarmFree] No playback path found for: {sound_name}");
             return 0;
         }
     };
     match mobile_sentinel::audio::play(&path.to_string_lossy(), false) {
         Ok(handle) => handle.id(),
         Err(e) => {
-            eprintln!("[AlarmFree] Preview play failed: {}", e);
+            log::warn!("[AlarmFree] Preview play failed: {e}");
             0
         }
     }
@@ -122,8 +122,8 @@ fn challenge_config_summary(
             if value.is_empty() {
                 return t(translations, "challenge.summary.any");
             }
-            return if value.len() > 15 {
-                format!("{}...", &value[..12])
+            return if value.chars().count() > 15 {
+                format!("{}...", value.chars().take(12).collect::<String>())
             } else {
                 value.to_string()
             };
@@ -392,6 +392,7 @@ mod picker_tests {
 pub fn AlarmConfig(id: String) -> Element {
     let mut alarms = use_context::<Signal<Vec<AlarmData>>>();
     let translations = use_context::<Translations>();
+    let mut toast_signal = use_context::<Signal<Option<crate::components::ToastMessage>>>();
     let nav = use_navigator();
     // "copy-<id>" opens a new alarm prefilled from the alarm <id>.
     let copy_of = id.strip_prefix("copy-").map(str::to_owned);
@@ -525,27 +526,28 @@ pub fn AlarmConfig(id: String) -> Element {
             }
             pick_audio_requested.set(false);
 
-            let (tx, rx) = futures_channel::oneshot::channel::<String>();
+            let (tx, rx) = futures_channel::oneshot::channel::<Result<String, String>>();
             std::thread::spawn(move || {
-                let result = crate::custom_sounds::pick_audio_file_native();
-                match result {
-                    Ok(filename) => {
-                        let _ = tx.send(filename);
-                    }
-                    Err(_) => {
-                        let _ = tx.send(String::new());
-                    }
-                }
+                let _ = tx.send(crate::custom_sounds::pick_audio_file_native());
             });
 
-            if let Ok(filename) = rx.await {
-                if !filename.is_empty() {
+            match rx.await {
+                Ok(Ok(filename)) => {
                     sound_value.set(filename);
                     show_sound_picker.set(false);
                     show_file_picker.set(false);
                     playing_sound.set(String::new());
                     preview_handle_id.set(0);
                 }
+                Ok(Err(reason)) if reason == crate::custom_sounds::NOT_A_SOUND => {
+                    toast_signal.set(Some(crate::components::ToastMessage {
+                        message: t(&translations, "sound.not_a_sound"),
+                        level: crate::components::ToastLevel::Error,
+                    }));
+                }
+                // Cancelled, mostly.
+                Ok(Err(reason)) => log::info!("[AlarmFree] No sound imported: {reason}"),
+                Err(_) => {}
             }
         }
     });

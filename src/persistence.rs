@@ -11,7 +11,7 @@ use once_cell::sync::Lazy;
 
 use crate::app::AlarmData;
 use crate::db::Database;
-use crate::models::AppSettings;
+use crate::models::{AppSettings, Locale};
 
 /// What happened when the database was opened at startup.
 #[derive(Debug, Clone, PartialEq)]
@@ -153,12 +153,14 @@ pub fn save_alarms(alarms: &[AlarmData]) {
     for id in removed {
         if let Err(e) = db.delete_alarm(id) {
             log::error!("[AlarmFree] Failed to delete alarm {id}: {e}");
+            note_save_failure();
         }
         crate::platform::forget_alarm(id);
     }
     for alarm in changed {
         if let Err(e) = db.upsert_alarm(alarm) {
             log::error!("[AlarmFree] Failed to upsert alarm {}: {e}", alarm.id);
+            note_save_failure();
         }
         crate::platform::apply_alarm(alarm);
     }
@@ -176,7 +178,36 @@ pub fn save_settings(settings: &AppSettings) {
 }
 
 pub fn load_settings() -> AppSettings {
-    DB.db.load_settings().unwrap_or_default()
+    match DB.db.load_settings() {
+        Ok(Some(settings)) => settings,
+        // Nothing chosen yet: start in the phone's language.
+        Ok(None) => AppSettings {
+            locale: Locale::from_language_code(&mobile_sentinel::device_language())
+                .unwrap_or_default(),
+            ..AppSettings::default()
+        },
+        Err(e) => {
+            log::error!("[AlarmFree] Settings could not be read: {e}");
+            AppSettings::default()
+        }
+    }
+}
+
+/// How many saved alarms cannot be read.
+pub fn unreadable_alarms() -> usize {
+    DB.db.list_alarms_reporting().map_or(0, |(_, n)| n)
+}
+
+/// Set when something could not be saved; see [`take_save_failure`].
+static SAVE_FAILED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Whether something could not be saved since the last call, for telling the user.
+pub fn take_save_failure() -> bool {
+    SAVE_FAILED.swap(false, std::sync::atomic::Ordering::Relaxed)
+}
+
+fn note_save_failure() {
+    SAVE_FAILED.store(true, std::sync::atomic::Ordering::Relaxed);
 }
 
 #[cfg(test)]

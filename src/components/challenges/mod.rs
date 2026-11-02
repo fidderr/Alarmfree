@@ -11,7 +11,7 @@ pub use hold_button::HoldButtonChallenge;
 pub use math::MathChallenge;
 pub use memory_game::MemoryGameChallenge;
 pub use reaction::ReactionChallenge;
-pub use scan::ScanChallenge;
+pub use scan::{scanner_open, ScanChallenge};
 pub use shake::ShakeChallenge;
 pub use step_count::StepCountChallenge;
 pub use typing::TypingChallenge;

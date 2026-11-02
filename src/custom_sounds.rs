@@ -11,7 +11,7 @@
 //! - Custom sounds: full filename with extension (e.g. "a1b2c3d4.mp3")
 
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 // ---------------------------------------------------------------------------
 // Directory helpers
@@ -191,6 +191,12 @@ pub fn pick_audio_file_native() -> Result<String, String> {
         .to_string();
     let filename = crate::sanitize::sanitize_filename(&raw_filename)
         .map_err(|e| format!("Invalid filename: {}", e))?;
+    // A sound that cannot play only shows when the alarm rings, which is too late
+    // to find out.
+    if !looks_like_audio(&imported_path) {
+        let _ = fs::remove_file(&imported_path);
+        return Err(NOT_A_SOUND.to_owned());
+    }
     let dest = custom_sounds_dir().join(&filename);
 
     // Try rename (fast, same filesystem), fall back to copy+delete
@@ -200,6 +206,28 @@ pub fn pick_audio_file_native() -> Result<String, String> {
         let _ = fs::remove_file(&imported_path);
     }
     Ok(filename)
+}
+
+/// Why [`pick_audio_file_native`] refused a file that is no sound.
+pub const NOT_A_SOUND: &str = "not a sound";
+
+fn looks_like_audio(path: &Path) -> bool {
+    let mut head = [0u8; 12];
+    let read = fs::File::open(path).and_then(|mut f| std::io::Read::read(&mut f, &mut head));
+    read.is_ok_and(|n| is_audio_header(&head[..n]))
+}
+
+/// Whether a file starts the way the audio formats Android plays start.
+fn is_audio_header(head: &[u8]) -> bool {
+    let starts = |magic: &[u8]| head.starts_with(magic);
+    starts(b"ID3")
+        || starts(b"OggS")
+        || starts(b"fLaC")
+        || starts(b"#!AMR")
+        || starts(&[0x1A, 0x45, 0xDF, 0xA3]) // Matroska / WebM
+        || (starts(b"RIFF") && head.get(8..12) == Some(b"WAVE".as_slice()))
+        || head.get(4..8) == Some(b"ftyp".as_slice()) // MP4 / M4A
+        || matches!(head, [0xFF, second, ..] if second & 0xE0 == 0xE0) // MP3 / AAC frame
 }
 
 /// Delete a custom sound file by its unique filename.
@@ -244,6 +272,29 @@ pub fn display_name_translated(sound: &str, translations: &crate::app::Translati
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_file_is_only_taken_for_a_sound_if_it_starts_like_one() {
+        for good in [
+            b"ID3\x03\x00".as_slice(),
+            b"OggS\x00",
+            b"fLaC",
+            b"RIFF\x10\x00\x00\x00WAVE",
+            b"\x00\x00\x00\x18ftypM4A ",
+            &[0xFF, 0xFB, 0x90],
+        ] {
+            assert!(is_audio_header(good), "{good:?}");
+        }
+        for bad in [
+            b"".as_slice(),
+            b"not-audio",
+            b"%PDF-1.7",
+            b"RIFF\x10\x00\x00\x00AVI ",
+            b"\x89PNG\r\n",
+        ] {
+            assert!(!is_audio_header(bad), "{bad:?}");
+        }
+    }
     use tempfile::TempDir;
 
     #[test]

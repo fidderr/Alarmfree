@@ -44,6 +44,20 @@ pub struct AppSettings {
     pub min_volume_percent: u8,
 }
 
+impl Locale {
+    /// The language for a two-letter code ("nl"), if the app has it.
+    pub fn from_language_code(code: &str) -> Option<Self> {
+        match code {
+            "en" => Some(Self::English),
+            "nl" => Some(Self::Dutch),
+            "es" => Some(Self::Spanish),
+            "fr" => Some(Self::French),
+            "de" => Some(Self::German),
+            _ => None,
+        }
+    }
+}
+
 impl Default for AppSettings {
     fn default() -> Self {
         Self {

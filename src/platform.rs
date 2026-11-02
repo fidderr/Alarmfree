@@ -66,7 +66,6 @@ pub fn handle_ring_ends() -> bool {
     let mut list = crate::persistence::load_alarms();
     let mut switched_off = false;
     for (id, end) in &ended {
-        clear_session_files(&id.0);
         record_outcome(&list, &id.0, outcome_of(*end), chrono::Utc::now());
         switched_off |= crate::schedule::disable_if_one_time(&mut list, &id.0);
     }
@@ -186,13 +185,6 @@ pub fn set_ring_language(locale: Locale) {
     }
 }
 
-/// Per-session files the firing screen keeps for an alarm.
-fn clear_session_files(alarm_id: &str) {
-    let dir = mobile_sentinel::app_files_dir();
-    let _ = std::fs::remove_file(dir.join(format!("snooze_{alarm_id}.txt")));
-    let _ = std::fs::remove_file(dir.join(format!("snooze_intervals_{alarm_id}.txt")));
-}
-
 fn setup_platform(woken: bool) {
     mobile_sentinel::init(mobile_sentinel::InitConfig {
         log_tag: "AlarmFree".to_string(),
@@ -306,9 +298,11 @@ fn sync_alarms(kit: &'static AlarmKit, woken: bool) {
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
 
-    let stored = crate::persistence::database().list_alarms();
-    let readable = stored.is_ok();
-    let mut list = stored.unwrap_or_else(|e| {
+    // Not sure what is saved? Then what AlarmKit has must stay: it may be all that
+    // still rings.
+    let stored = crate::persistence::database().list_alarms_reporting();
+    let readable = matches!(stored, Ok((_, 0)));
+    let mut list = stored.map(|(alarms, _)| alarms).unwrap_or_else(|e| {
         log::error!("[AlarmFree] alarms could not be read: {e}");
         Vec::new()
     });
@@ -345,14 +339,6 @@ fn sync_alarms(kit: &'static AlarmKit, woken: bool) {
     for missed in &report.missed {
         let due = chrono::DateTime::from_timestamp_millis(missed.due_unix_ms).unwrap_or(now);
         record_outcome(&list, &missed.id.0, AlarmOutcome::Missed, due);
-    }
-    let over = report
-        .ended_by_reboot
-        .iter()
-        .chain(report.ring_ends.iter().map(|(id, _)| id))
-        .chain(report.missed.iter().map(|m| &m.id));
-    for id in over {
-        clear_session_files(&id.0);
     }
     let finished = report
         .finished
@@ -582,7 +568,6 @@ pub(crate) fn forget_alarm(alarm_id: &str) {
         }
     }
     let _ = mobile_sentinel::remove_job(alarm_id);
-    clear_session_files(alarm_id);
 }
 
 /// How long the alarm screen may go without proving it is alive before the
