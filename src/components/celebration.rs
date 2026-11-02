@@ -2,21 +2,20 @@ use dioxus::prelude::*;
 
 use crate::components::{Icon, IconName};
 
-/// Celebration overlay shown briefly when a challenge is solved.
-/// Big green checkmark with a confetti burst — pure CSS animations.
-/// Lifecycle is controlled by the parent (mount when active, unmount when fading).
+/// Shown briefly when a challenge is solved: a big checkmark, with a confetti burst
+/// unless the user turned that off. Pure CSS animations. Lifecycle is controlled by the
+/// parent (mount when active, unmount when fading).
 #[component]
 pub fn Celebration(
     /// Optional progress text shown below the checkmark, e.g. "2 / 3"
     #[props(default = String::new())]
     label: String,
-    /// Number of confetti particles to render (more = denser).
+    /// Number of confetti particles to render (0 = none).
     #[props(default = 28)]
     particles: u32,
 ) -> Element {
     rsx! {
         div { class: "celebration-overlay",
-            // Confetti burst — particles flung outward at random angles.
             div { class: "celebration-confetti",
                 for i in 0..particles {
                     {

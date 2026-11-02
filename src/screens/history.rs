@@ -1,359 +1,489 @@
-use std::time::Duration;
-
-use crate::app::{t, Route, Translations};
-use crate::components::{Icon, IconName};
-use crate::models::{
-    AggregateMetrics, AlarmEvent, AlarmOutcome, ChallengeType, Difficulty, HistoryFilter,
-};
+use chrono::{Datelike, NaiveDate};
 use dioxus::prelude::*;
 
-const FILTER_KEYS: &[&str] = &[
+use crate::app::{t, Route, Translations};
+use crate::components::{BottomNav, Icon, IconName, Sheet, SheetItem};
+use crate::models::setup::difficulty_name;
+use crate::models::{
+    AggregateMetrics, AlarmEvent, AlarmOutcome, AppSettings, ChallengeType, HistoryFilter,
+    WeekStart,
+};
+
+/// How far back a streak is looked for.
+const STREAK_LOOKBACK_DAYS: u32 = 400;
+
+/// The periods, as their translation keys.
+const PERIODS: [&str; 7] = [
     "filter.this_week",
     "filter.last_week",
     "filter.this_month",
     "filter.last_month",
     "filter.this_year",
     "filter.last_year",
+    "filter.custom_days",
 ];
 
-fn key_to_filter(key: &str, custom_days: u16) -> HistoryFilter {
+fn period_filter(key: &str, custom_days: u16) -> HistoryFilter {
     match key {
-        "filter.this_week" => HistoryFilter::ThisWeek,
         "filter.last_week" => HistoryFilter::LastWeek,
         "filter.this_month" => HistoryFilter::ThisMonth,
         "filter.last_month" => HistoryFilter::LastMonth,
         "filter.this_year" => HistoryFilter::ThisYear,
         "filter.last_year" => HistoryFilter::LastYear,
-        "custom" => HistoryFilter::LastDays(custom_days as u32),
+        "filter.custom_days" => HistoryFilter::LastDays(u32::from(custom_days)),
         _ => HistoryFilter::ThisWeek,
     }
 }
 
-/// Format a Duration as "Xm YYs" or "Xs" or "Xms" depending on size.
-fn format_duration(d: Duration) -> String {
-    let secs = d.as_secs();
-    if secs >= 60 {
-        format!("{}m {:02}s", secs / 60, secs % 60)
-    } else if secs > 0 {
-        format!("{}s", secs)
-    } else {
-        let ms = d.as_millis();
-        if ms == 0 {
-            "0s".to_string()
-        } else {
-            format!("{}ms", ms)
+/// How many days in a row, up to and including today or yesterday, every alarm was dealt
+/// with: at least one solved, nothing missed or left ringing. A day without alarms is no
+/// break, and does not count either.
+fn streak(events: &[AlarmEvent], today: NaiveDate) -> u32 {
+    use std::collections::BTreeMap;
+    let mut days: BTreeMap<NaiveDate, bool> = BTreeMap::new();
+    for event in events {
+        let day = event
+            .fire_timestamp
+            .with_timezone(&chrono::Local)
+            .date_naive();
+        let fine = matches!(event.outcome, AlarmOutcome::Solved | AlarmOutcome::Backup);
+        let entry = days.entry(day).or_insert(true);
+        *entry = *entry && fine;
+    }
+    let mut count = 0;
+    for (day, fine) in days.iter().rev() {
+        if *day > today {
+            continue;
+        }
+        if !fine {
+            break;
+        }
+        count += 1;
+    }
+    count
+}
+
+/// One bar of the chart.
+#[derive(Debug, Clone, PartialEq)]
+struct Bar {
+    label: String,
+    /// Average seconds to stop the alarm, 0 when nothing rang.
+    seconds: u64,
+    current: bool,
+}
+
+/// Group events into bars for the period: by weekday for a week, by week for a month, by
+/// month for a year. `None` for a period of the user's own, which has no natural groups.
+fn chart(
+    translations: &Translations,
+    filter: &HistoryFilter,
+    events: &[AlarmEvent],
+    week_start: WeekStart,
+    today: NaiveDate,
+) -> Option<Vec<Bar>> {
+    let mut groups: Vec<(String, Vec<u64>, bool)> = match filter {
+        HistoryFilter::ThisWeek | HistoryFilter::LastWeek => week_start
+            .day_order()
+            .iter()
+            .map(|day| {
+                let is_today = *filter == HistoryFilter::ThisWeek
+                    && today.weekday().num_days_from_monday() as usize == *day;
+                (
+                    crate::text::day_letter(translations, *day),
+                    Vec::new(),
+                    is_today,
+                )
+            })
+            .collect(),
+        HistoryFilter::ThisMonth | HistoryFilter::LastMonth => (0..5)
+            .map(|week| {
+                let current = *filter == HistoryFilter::ThisMonth && today.day0() / 7 == week;
+                ((week * 7 + 1).to_string(), Vec::new(), current)
+            })
+            .collect(),
+        HistoryFilter::ThisYear | HistoryFilter::LastYear => (0..12)
+            .map(|month| {
+                let current = *filter == HistoryFilter::ThisYear && today.month0() == month;
+                (
+                    crate::text::month_short(translations, month as usize)
+                        .chars()
+                        .next()
+                        .map(|c| c.to_uppercase().to_string())
+                        .unwrap_or_default(),
+                    Vec::new(),
+                    current,
+                )
+            })
+            .collect(),
+        HistoryFilter::LastDays(_) => return None,
+    };
+
+    for event in events
+        .iter()
+        .filter(|e| matches!(e.outcome, AlarmOutcome::Solved | AlarmOutcome::Backup))
+    {
+        let day = event
+            .fire_timestamp
+            .with_timezone(&chrono::Local)
+            .date_naive();
+        let group = match filter {
+            HistoryFilter::ThisWeek | HistoryFilter::LastWeek => {
+                let monday_based = day.weekday().num_days_from_monday() as usize;
+                week_start
+                    .day_order()
+                    .iter()
+                    .position(|d| *d == monday_based)
+            }
+            HistoryFilter::ThisMonth | HistoryFilter::LastMonth => Some((day.day0() / 7) as usize),
+            _ => Some(day.month0() as usize),
+        };
+        if let Some(group) = group.and_then(|g| groups.get_mut(g)) {
+            group.1.push(event.total_dismissal_time.as_secs());
         }
     }
-}
 
-/// Display name (translated, short) for a challenge type.
-fn challenge_type_name(translations: &Translations, t_kind: ChallengeType) -> String {
-    let key = match t_kind {
-        ChallengeType::Math => "challenge.tag.math",
-        ChallengeType::MemoryGame => "challenge.tag.memory",
-        ChallengeType::Typing => "challenge.tag.typing",
-        ChallengeType::ShakeToWake => "challenge.tag.shake",
-        ChallengeType::StepCount => "challenge.tag.steps",
-        ChallengeType::Scan => "challenge.tag.scan",
-        ChallengeType::HoldButton => "challenge.tag.hold",
-        ChallengeType::Reaction => "challenge.tag.reaction",
-    };
-    t(translations, key)
-}
-
-/// Display name for difficulty (lowercase, translated).
-fn difficulty_name(translations: &Translations, d: Difficulty) -> String {
-    let key = match d {
-        Difficulty::Easy => "difficulty.easy_lower",
-        Difficulty::Medium => "difficulty.medium_lower",
-        Difficulty::Hard => "difficulty.hard_lower",
-        Difficulty::Extreme => "difficulty.extreme_lower",
-    };
-    t(translations, key)
-}
-
-/// Whether a challenge type's difficulty is meaningful (varies what the
-/// challenge does). Shake / steps / scan / hold are config-only or
-/// fixed-behavior challenges with no difficulty selector, so the difficulty
-/// stored on a history row is ignored when rendering.
-fn challenge_has_difficulty(t_kind: ChallengeType) -> bool {
-    matches!(
-        t_kind,
-        ChallengeType::Math | ChallengeType::MemoryGame | ChallengeType::Typing
+    Some(
+        groups
+            .into_iter()
+            .map(|(label, seconds, current)| Bar {
+                label,
+                seconds: if seconds.is_empty() {
+                    0
+                } else {
+                    seconds.iter().sum::<u64>() / seconds.len() as u64
+                },
+                current,
+            })
+            .collect(),
     )
+}
+
+fn challenge_name(translations: &Translations, kind: ChallengeType) -> String {
+    let key = match kind {
+        ChallengeType::Math => "challenge.math",
+        ChallengeType::MemoryGame => "challenge.memory",
+        ChallengeType::Typing => "challenge.typing",
+        ChallengeType::ShakeToWake => "challenge.shake",
+        ChallengeType::StepCount => "challenge.steps",
+        ChallengeType::Scan => "challenge.scan",
+        ChallengeType::HoldButton => "challenge.hold",
+        ChallengeType::Reaction => "challenge.reaction",
+    };
+    t(translations, key)
+}
+
+/// A solved challenge's name, with its difficulty where it has one.
+fn solve_name(
+    translations: &Translations,
+    kind: ChallengeType,
+    difficulty: crate::models::Difficulty,
+) -> String {
+    let name = challenge_name(translations, kind);
+    if matches!(
+        kind,
+        ChallengeType::Math | ChallengeType::MemoryGame | ChallengeType::Typing
+    ) {
+        let level = t(
+            translations,
+            &format!("difficulty.{}", difficulty_name(difficulty)),
+        );
+        format!("{name}, {level}")
+    } else {
+        name
+    }
 }
 
 #[component]
 pub fn History() -> Element {
     let translations = use_context::<Translations>();
-    let mut filter = use_signal(|| FILTER_KEYS[0].to_string());
+    let settings = use_context::<Signal<AppSettings>>();
+    let mut period = use_signal(|| PERIODS[0]);
     let mut custom_days = use_signal(|| 30u16);
-    let mut show_delete_menu = use_signal(|| false);
+    let mut deleting = use_signal(|| false);
+    let mut show_all = use_signal(|| false);
+    let mut open_event: Signal<Option<String>> = use_signal(|| None);
     let mut refresh = use_signal(|| 0u32);
+    let _ = refresh();
 
-    let current_filter = key_to_filter(&filter.read(), *custom_days.read());
-    let _ = *refresh.read();
-    let events = crate::history_persistence::query_history(&current_filter);
-    let metrics = crate::history_persistence::aggregate_history(&current_filter);
-
-    let history_title = t(&translations, "history.title");
-    let no_events = t(&translations, "history.no_events");
-    let events_subtitle = t(&translations, "history.events_subtitle");
-    let nav_alarms = t(&translations, "nav.alarms");
-    let nav_history = t(&translations, "nav.history");
-    let nav_settings = t(&translations, "nav.settings");
-    let delete_history_text = t(&translations, "history.delete_history");
-    let delete_history_aria = t(&translations, "history.delete_history_aria");
-    let delete_all_text = t(&translations, "history.delete_all");
-    let delete_30_text = t(&translations, "history.delete_30");
-    let delete_90_text = t(&translations, "history.delete_90");
-    let cancel_text = t(&translations, "action.cancel");
-    let custom_days_text = t(&translations, "filter.custom_days");
-    let days_placeholder = t(&translations, "filter.days_placeholder");
-    let days_unit = t(&translations, "filter.days_unit");
-
-    let filter_labels: Vec<String> = FILTER_KEYS.iter().map(|k| t(&translations, k)).collect();
-
-    rsx! {
-        div { class: "screen history-screen",
-            div { class: "history-header",
-                h2 { "{history_title}" }
-                button {
-                    class: "header-icon-btn delete-icon",
-                    "aria-label": "{delete_history_aria}",
-                    onclick: move |_| { show_delete_menu.set(true); },
-                    Icon { name: IconName::Trash }
-                }
-            }
-
-            // Filter selector
-            div { class: "filter-dropdown-container",
-                select {
-                    class: "filter-dropdown",
-                    value: "{filter}",
-                    onchange: move |evt| { filter.set(evt.value()); },
-                    for (i, fl) in filter_labels.iter().enumerate() {
-                        {
-                            let key = FILTER_KEYS[i].to_string();
-                            let label = fl.clone();
-                            rsx! { option { value: "{key}", "{label}" } }
-                        }
-                    }
-                    option { value: "custom", "{custom_days_text}" }
-                }
-                if *filter.read() == "custom" {
-                    div { class: "custom-days-row",
-                        input {
-                            r#type: "number",
-                            class: "custom-days-input",
-                            min: "1",
-                            max: "365",
-                            placeholder: "{days_placeholder}",
-                            value: "{custom_days}",
-                            onchange: move |evt| {
-                                if let Ok(v) = evt.value().parse::<u16>() {
-                                    custom_days.set(v.clamp(1, 365));
-                                }
-                            },
-                        }
-                        span { class: "custom-days-label", "{days_unit}" }
-                    }
-                }
-            }
-
-            // Aggregate / event content
-            if events.is_empty() {
-                div { class: "empty-state",
-                    div { class: "empty-icon", Icon { name: IconName::ChartBar } }
-                    p { class: "empty-title", "{no_events}" }
-                    p { class: "empty-subtitle", "{events_subtitle}" }
-                }
-            } else {
-                div { class: "history-content",
-                    // Top: aggregate summary card
-                    AggregateCard { metrics: metrics.clone() }
-
-                    // Per-event cards
-                    div { class: "event-list",
-                        for event in events.iter() {
-                            EventCard { key: "{event.id}", event: event.clone() }
-                        }
-                    }
-                }
-            }
-
-            nav { class: "bottom-nav",
-                Link { to: Route::Home {}, class: "nav-item",
-                    Icon { name: IconName::Clock }
-                    " {nav_alarms}"
-                }
-                Link { to: Route::History {}, class: "nav-item active",
-                    Icon { name: IconName::ChartBar }
-                    " {nav_history}"
-                }
-                Link { to: Route::Settings {}, class: "nav-item",
-                    Icon { name: IconName::Gear }
-                    " {nav_settings}"
-                }
-            }
-        }
-
-        // Delete bottom sheet
-        if *show_delete_menu.read() {
-            div {
-                class: "bottom-sheet-overlay",
-                onclick: move |_| { show_delete_menu.set(false); },
-                div {
-                    class: "bottom-sheet",
-                    onclick: move |evt| { evt.stop_propagation(); },
-                    h3 { "{delete_history_text}" }
-                    button {
-                        class: "sheet-option destructive",
-                        onclick: move |_| {
-                            crate::history_persistence::delete_history(None);
-                            refresh.set(refresh() + 1);
-                            show_delete_menu.set(false);
-                        },
-                        "{delete_all_text}"
-                    }
-                    button {
-                        class: "sheet-option",
-                        onclick: move |_| {
-                            crate::history_persistence::delete_history(Some(30));
-                            refresh.set(refresh() + 1);
-                            show_delete_menu.set(false);
-                        },
-                        "{delete_30_text}"
-                    }
-                    button {
-                        class: "sheet-option",
-                        onclick: move |_| {
-                            crate::history_persistence::delete_history(Some(90));
-                            refresh.set(refresh() + 1);
-                            show_delete_menu.set(false);
-                        },
-                        "{delete_90_text}"
-                    }
-                    button {
-                        class: "sheet-option cancel",
-                        onclick: move |_| { show_delete_menu.set(false); },
-                        "{cancel_text}"
-                    }
-                }
-            }
-        }
-    }
-}
-
-/// Top-of-list summary card showing averages across the filtered period.
-#[component]
-fn AggregateCard(metrics: AggregateMetrics) -> Element {
-    if metrics.total_events == 0 {
-        return rsx! { div {} };
-    }
-
-    let translations = use_context::<Translations>();
-    let total_events = metrics.total_events;
-    let avg_reaction = format_duration(metrics.avg_reaction_time);
-    let avg_dismiss = format_duration(metrics.avg_total_dismissal_time);
-    let avg_challenge = format_duration(metrics.avg_total_challenge_time);
-    let avg_snooze_count = format!("{:.1}", metrics.avg_snooze_count);
-    let avg_snooze_interval = t(&translations, "history.minutes_short").replace(
-        "{m}",
-        &format!("{:.1}", metrics.avg_snooze_interval_minutes),
+    let filter = period_filter(period(), custom_days());
+    let events = crate::history_persistence::query_history(&filter);
+    let metrics = crate::history_persistence::aggregate_history(&filter);
+    let today = chrono::Local::now().date_naive();
+    let streak_days = streak(
+        &crate::history_persistence::query_history(&HistoryFilter::LastDays(STREAK_LOOKBACK_DAYS)),
+        today,
     );
-    let avg_total_snoozed = format_duration(metrics.avg_total_snoozed);
+    let week_start = settings.read().prefs.week_start;
+    let bars = chart(&translations, &filter, &events, week_start, today);
+    let twenty_four = crate::text::uses_24_hours(&settings.read());
 
-    let title = t(&translations, "history.period_summary");
-    let subtitle =
-        t(&translations, "history.alarms_count").replace("{count}", &total_events.to_string());
-    let label_avg_reaction = t(&translations, "history.avg_reaction");
-    let label_avg_total = t(&translations, "history.avg_total");
-    let label_avg_challenge = t(&translations, "history.avg_challenge");
-    let label_avg_snooze_count = t(&translations, "history.avg_snooze_count");
-    let label_avg_snooze_gap = t(&translations, "history.avg_snooze_gap");
-    let label_avg_time_snoozed = t(&translations, "history.avg_time_snoozed");
-    let label_avg_solve = t(&translations, "history.avg_solve_per_challenge");
+    let delete_aria = t(&translations, "history.delete_history");
 
     rsx! {
-        div { class: "history-card aggregate-card",
-            div { class: "history-card-header",
-                div {
-                    p { class: "history-card-title", "{title}" }
-                    p { class: "history-card-subtitle", "{subtitle}" }
-                }
-                Icon { name: IconName::ChartBar, size: 24 }
-            }
-
-            div { class: "history-stat-grid",
-                div { class: "history-stat",
-                    span { class: "history-stat-value", "{avg_reaction}" }
-                    span { class: "history-stat-label", "{label_avg_reaction}" }
-                }
-                div { class: "history-stat",
-                    span { class: "history-stat-value", "{avg_dismiss}" }
-                    span { class: "history-stat-label", "{label_avg_total}" }
-                }
-                div { class: "history-stat",
-                    span { class: "history-stat-value", "{avg_challenge}" }
-                    span { class: "history-stat-label", "{label_avg_challenge}" }
-                }
-                div { class: "history-stat",
-                    span { class: "history-stat-value", "{avg_snooze_count}" }
-                    span { class: "history-stat-label", "{label_avg_snooze_count}" }
-                }
-                div { class: "history-stat",
-                    span { class: "history-stat-value", "{avg_snooze_interval}" }
-                    span { class: "history-stat-label", "{label_avg_snooze_gap}" }
-                }
-                div { class: "history-stat",
-                    span { class: "history-stat-value", "{avg_total_snoozed}" }
-                    span { class: "history-stat-label", "{label_avg_time_snoozed}" }
+        div { class: "screen",
+            header { class: "main-header main-header-row",
+                h1 { class: "screen-title-large", {t(&translations, "history.title")} }
+                button {
+                    class: "icon-btn",
+                    "aria-label": "{delete_aria}",
+                    onclick: move |_| deleting.set(true),
+                    Icon { name: IconName::Trash, size: 20 }
                 }
             }
 
-            // Per-challenge averages
-            if !metrics.avg_solve_per_challenge.is_empty() {
-                div { class: "history-section-divider" }
-                p { class: "history-section-title", "{label_avg_solve}" }
-                div { class: "history-challenge-list",
-                    for ((ctype, diff), avg) in metrics.avg_solve_per_challenge.iter() {
-                        {
-                            let name = challenge_type_name(&translations, *ctype);
-                            let show_diff = challenge_has_difficulty(*ctype);
-                            let diff_name = difficulty_name(&translations, *diff);
-                            let dur = format_duration(*avg);
-                            rsx! {
-                                div { class: "history-challenge-row",
-                                    span { class: "history-challenge-name",
-                                        "{name}"
-                                        if show_diff {
-                                            " "
-                                            span { class: "history-challenge-difficulty", "{diff_name}" }
-                                        }
+            div { class: "chip-scroll",
+                for key in PERIODS {
+                    button {
+                        class: if period() == key { "chip-pill selected" } else { "chip-pill" },
+                        "aria-pressed": if period() == key { "true" } else { "false" },
+                        onclick: move |_| period.set(key),
+                        {t(&translations, key)}
+                    }
+                }
+            }
+            if period() == "filter.custom_days" {
+                label { class: "custom-days",
+                    {t(&translations, "filter.last_prefix")}
+                    input {
+                        class: "field field-short",
+                        r#type: "number",
+                        min: "1",
+                        max: "365",
+                        value: "{custom_days}",
+                        onchange: move |evt| {
+                            if let Ok(days) = evt.value().parse::<u16>() {
+                                custom_days.set(days.clamp(1, 365));
+                            }
+                        },
+                    }
+                    {t(&translations, "filter.days_unit")}
+                }
+            }
+
+            div { class: "scroll scroll-nav",
+                if events.is_empty() {
+                    div { class: "empty",
+                        div { class: "empty-icon", Icon { name: IconName::ChartBar, size: 40 } }
+                        p { class: "empty-title", {t(&translations, "history.no_events")} }
+                        p { class: "empty-sub", {t(&translations, "history.events_subtitle")} }
+                    }
+                } else {
+                    Summary {
+                        metrics: metrics.clone(),
+                        streak_days,
+                        bars,
+                        show_all: show_all(),
+                        on_toggle: move |_| show_all.set(!show_all()),
+                    }
+                    ul { class: "list history-list",
+                        for event in events.iter().cloned() {
+                            {
+                                let id = event.id.clone();
+                                let open = open_event() == Some(id.clone());
+                                let on_delete_id = id.clone();
+                                rsx! {
+                                    EventRow {
+                                        key: "{id}",
+                                        event,
+                                        open,
+                                        twenty_four,
+                                        on_toggle: move |_| {
+                                            open_event.set(if open { None } else { Some(id.clone()) });
+                                        },
+                                        on_delete: move |_| {
+                                            crate::history_persistence::delete_event(&on_delete_id);
+                                            refresh += 1;
+                                        },
                                     }
-                                    span { class: "history-challenge-time", "{dur}" }
                                 }
                             }
                         }
                     }
                 }
             }
+
+            BottomNav { current: Route::History {} }
+
+            if deleting() {
+                Sheet {
+                    title: t(&translations, "history.delete_history"),
+                    on_close: move |_| deleting.set(false),
+                    SheetItem {
+                        label: t(&translations, "history.delete_30"),
+                        on_click: move |_| {
+                            crate::history_persistence::delete_history(Some(30));
+                            refresh += 1;
+                            deleting.set(false);
+                        },
+                    }
+                    SheetItem {
+                        label: t(&translations, "history.delete_90"),
+                        on_click: move |_| {
+                            crate::history_persistence::delete_history(Some(90));
+                            refresh += 1;
+                            deleting.set(false);
+                        },
+                    }
+                    SheetItem {
+                        label: t(&translations, "history.delete_all"),
+                        danger: true,
+                        on_click: move |_| {
+                            crate::history_persistence::delete_history(None);
+                            refresh += 1;
+                            deleting.set(false);
+                        },
+                    }
+                }
+            }
         }
     }
 }
 
-/// Single alarm event card — always shows the full breakdown.
+/// The period at a glance, with everything else one tap away.
 #[component]
-fn EventCard(event: AlarmEvent) -> Element {
+fn Summary(
+    metrics: AggregateMetrics,
+    streak_days: u32,
+    bars: Option<Vec<Bar>>,
+    show_all: bool,
+    on_toggle: EventHandler<()>,
+) -> Element {
     let translations = use_context::<Translations>();
-    let local_fire: chrono::DateTime<chrono::Local> =
-        event.fire_timestamp.with_timezone(&chrono::Local);
-    let time_str = local_fire.format("%H:%M").to_string();
-    let date_str = local_fire.format("%b %d").to_string();
-    let label = event.alarm_label.clone();
+    let duration = |d| crate::text::duration(&translations, d);
+    let streak_text =
+        t(&translations, "history.streak_days").replace("{count}", &streak_days.to_string());
+    let stats = [
+        (
+            t(&translations, "history.alarms"),
+            metrics.total_events.to_string(),
+        ),
+        (
+            t(&translations, "history.avg_reaction"),
+            duration(metrics.avg_reaction_time),
+        ),
+        (
+            t(&translations, "history.avg_total"),
+            duration(metrics.avg_total_dismissal_time),
+        ),
+        (
+            t(&translations, "history.avg_time_snoozed"),
+            duration(metrics.avg_total_snoozed),
+        ),
+        (
+            t(&translations, "history.avg_snooze_gap"),
+            t(&translations, "text.minutes").replace(
+                "{minutes}",
+                &format!("{:.1}", metrics.avg_snooze_interval_minutes),
+            ),
+        ),
+        (
+            t(&translations, "history.avg_challenge"),
+            duration(metrics.avg_total_challenge_time),
+        ),
+    ];
+    let solves: Vec<(String, String)> = metrics
+        .avg_solve_per_challenge
+        .iter()
+        .map(|((kind, difficulty), avg)| {
+            (
+                solve_name(&translations, *kind, *difficulty),
+                duration(*avg),
+            )
+        })
+        .collect();
+    let longest = bars
+        .iter()
+        .flatten()
+        .map(|bar| bar.seconds)
+        .max()
+        .unwrap_or(0)
+        .max(1);
+    let chart_aria = t(&translations, "history.chart_aria");
+    let toggle_text = if show_all {
+        t(&translations, "history.fewer_stats")
+    } else {
+        t(&translations, "history.all_stats")
+    };
 
-    // Nobody dealt with it, so there is nothing to measure.
+    rsx! {
+        section { class: "summary",
+            div { class: "summary-stats",
+                div {
+                    p { class: "stat-value", "{streak_text}" }
+                    p { class: "stat-name", {t(&translations, "history.streak")} }
+                }
+                div {
+                    p { class: "stat-value", {duration(metrics.avg_total_dismissal_time)} }
+                    p { class: "stat-name", {t(&translations, "history.time_to_stop")} }
+                }
+                div {
+                    p { class: "stat-value", {format!("{:.1}", metrics.avg_snooze_count)} }
+                    p { class: "stat-name", {t(&translations, "history.snoozes")} }
+                }
+            }
+            if let Some(bars) = bars {
+                div { class: "chart", role: "img", "aria-label": "{chart_aria}",
+                    for bar in bars {
+                        {
+                            let height = if bar.seconds == 0 { 0 } else { (bar.seconds * 56 / longest).max(3) };
+                            rsx! {
+                                span { class: "chart-col",
+                                    span {
+                                        class: if bar.current { "chart-bar current" } else { "chart-bar" },
+                                        style: "height: {height}px",
+                                    }
+                                    span { class: "chart-label", "{bar.label}" }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if show_all {
+                dl { class: "stat-list",
+                    for (name, value) in stats {
+                        dt { "{name}" }
+                        dd { "{value}" }
+                    }
+                    for (name, value) in solves {
+                        dt { "{name}" }
+                        dd { "{value}" }
+                    }
+                }
+            }
+            button {
+                class: "link-btn summary-toggle",
+                "aria-expanded": if show_all { "true" } else { "false" },
+                onclick: move |_| on_toggle.call(()),
+                "{toggle_text}"
+            }
+        }
+    }
+}
+
+/// One alarm in the list. Tap for how it went.
+#[component]
+fn EventRow(
+    event: AlarmEvent,
+    open: bool,
+    twenty_four: bool,
+    on_toggle: EventHandler<()>,
+    on_delete: EventHandler<()>,
+) -> Element {
+    use chrono::Timelike;
+    let translations = use_context::<Translations>();
+    let local = event.fire_timestamp.with_timezone(&chrono::Local);
+    let when = format!(
+        "{} {}",
+        crate::text::short_date(&translations, local.date_naive()),
+        crate::text::clock(local.hour() as u8, local.minute() as u8, twenty_four),
+    );
+    let label = event.alarm_label.clone();
+    let flagged = match event.outcome {
+        AlarmOutcome::Solved | AlarmOutcome::Backup => "",
+        AlarmOutcome::Missed => "danger",
+        AlarmOutcome::Limit | AlarmOutcome::Reboot => "warn",
+    };
     let outcome_key = match event.outcome {
         AlarmOutcome::Solved => None,
         AlarmOutcome::Missed => Some("history.outcome.missed"),
@@ -361,141 +491,137 @@ fn EventCard(event: AlarmEvent) -> Element {
         AlarmOutcome::Reboot => Some("history.outcome.reboot"),
         AlarmOutcome::Backup => Some("history.outcome.backup"),
     };
-    if let Some(key) = outcome_key {
-        let outcome_text = t(&translations, key);
-        return rsx! {
-            div { class: "history-card event-card",
-                div { class: "event-card-header",
-                    div {
-                        div { class: "event-card-time-row",
-                            span { class: "event-card-time", "{time_str}" }
-                            span { class: "event-card-date", "{date_str}" }
-                        }
-                        if !label.is_empty() {
-                            p { class: "event-card-label", "{label}" }
-                        }
-                    }
-                    div { class: "event-card-summary",
-                        span { class: "event-card-snooze-pill", "{outcome_text}" }
-                    }
-                }
-            }
-        };
-    }
+    let measured = matches!(event.outcome, AlarmOutcome::Solved);
 
-    let dismiss_str = format_duration(event.total_dismissal_time);
-    let reaction_str = event
-        .reaction_time()
-        .map(format_duration)
-        .unwrap_or_else(|| "—".to_string());
-    let snooze_count = event.snooze_count;
-    let snooze_total = format_duration(event.total_snoozed());
-    let challenge_total = format_duration(event.total_challenge_time());
-    let challenges_count = event.challenge_solves.len();
-
-    let snooze_pill_key = if snooze_count == 1 {
-        "history.snooze_pill_one"
-    } else {
-        "history.snooze_pill_other"
+    let sub = match outcome_key {
+        Some(key) => t(&translations, key),
+        None if event.snooze_count == 1 => t(&translations, "history.snooze_pill_one"),
+        None if event.snooze_count > 1 => t(&translations, "history.snooze_pill_other")
+            .replace("{count}", &event.snooze_count.to_string()),
+        None => event
+            .challenge_solves
+            .iter()
+            .map(|solve| challenge_name(&translations, solve.challenge_type))
+            .collect::<Vec<_>>()
+            .join(", "),
     };
-    let snooze_pill =
-        t(&translations, snooze_pill_key).replace("{count}", &snooze_count.to_string());
+    let value = if measured {
+        crate::text::duration(&translations, event.total_dismissal_time)
+    } else {
+        String::new()
+    };
 
-    let label_reaction = t(&translations, "history.reaction");
-    let label_challenges = t(&translations, "history.challenges");
-    let label_snoozed = t(&translations, "history.snoozed");
-    let title_snooze_intervals = t(&translations, "history.snooze_intervals");
-    let title_challenges_solved = t(&translations, "history.challenges_solved")
-        .replace("{count}", &challenges_count.to_string());
+    let mut details: Vec<(String, String)> = Vec::new();
+    if measured {
+        if let Some(reaction) = event.reaction_time() {
+            details.push((
+                t(&translations, "history.reaction"),
+                crate::text::duration(&translations, reaction),
+            ));
+        }
+        for (i, minutes) in event.snooze_intervals_minutes.iter().enumerate() {
+            details.push((
+                t(&translations, "history.snooze_n").replace("{n}", &(i + 1).to_string()),
+                t(&translations, "text.minutes").replace("{minutes}", &minutes.to_string()),
+            ));
+        }
+        for solve in &event.challenge_solves {
+            details.push((
+                solve_name(&translations, solve.challenge_type, solve.difficulty),
+                crate::text::duration(&translations, solve.duration),
+            ));
+        }
+    }
+    let delete_text = t(&translations, "history.delete_one");
 
     rsx! {
-        div { class: "history-card event-card",
-            div { class: "event-card-header",
-                div {
-                    div { class: "event-card-time-row",
-                        span { class: "event-card-time", "{time_str}" }
-                        span { class: "event-card-date", "{date_str}" }
-                    }
-                    if !label.is_empty() {
-                        p { class: "event-card-label", "{label}" }
-                    }
-                }
-                div { class: "event-card-summary",
-                    span { class: "event-card-total", "{dismiss_str}" }
-                    if snooze_count > 0 {
-                        span { class: "event-card-snooze-pill", "{snooze_pill}" }
+        li { class: "event",
+            button {
+                class: "event-main",
+                "aria-expanded": if open { "true" } else { "false" },
+                onclick: move |_| on_toggle.call(()),
+                span { class: "event-text",
+                    span { class: "event-title", "{when} {label}" }
+                    if !sub.is_empty() {
+                        span { class: "event-sub {flagged}", "{sub}" }
                     }
                 }
+                span { class: "event-value", "{value}" }
             }
-
-            div { class: "event-card-body",
-                div { class: "history-stat-grid",
-                    div { class: "history-stat",
-                        span { class: "history-stat-value", "{reaction_str}" }
-                        span { class: "history-stat-label", "{label_reaction}" }
-                    }
-                    div { class: "history-stat",
-                        span { class: "history-stat-value", "{challenge_total}" }
-                        span { class: "history-stat-label", "{label_challenges}" }
-                    }
-                    if snooze_count > 0 {
-                        div { class: "history-stat",
-                            span { class: "history-stat-value", "{snooze_total}" }
-                            span { class: "history-stat-label", "{label_snoozed}" }
-                        }
-                    }
-                }
-
-                if !event.snooze_intervals_minutes.is_empty() {
-                    div { class: "history-section-divider" }
-                    p { class: "history-section-title", "{title_snooze_intervals}" }
-                    div { class: "history-snooze-list",
-                        for (i, mins) in event.snooze_intervals_minutes.iter().enumerate() {
-                            {
-                                let n = i + 1;
-                                let m = *mins;
-                                let row_label = t(&translations, "history.snooze_n")
-                                    .replace("{n}", &n.to_string());
-                                let row_time = t(&translations, "history.minutes_short")
-                                    .replace("{m}", &m.to_string());
-                                rsx! {
-                                    div { class: "history-snooze-row",
-                                        span { class: "history-snooze-num", "{row_label}" }
-                                        span { class: "history-snooze-time", "{row_time}" }
-                                    }
-                                }
+            if open {
+                div { class: "event-details",
+                    if !details.is_empty() {
+                        dl { class: "stat-list",
+                            for (name, value) in details {
+                                dt { "{name}" }
+                                dd { "{value}" }
                             }
                         }
                     }
-                }
-
-                if challenges_count > 0 {
-                    div { class: "history-section-divider" }
-                    p { class: "history-section-title", "{title_challenges_solved}" }
-                    div { class: "history-challenge-list",
-                        for solve in event.challenge_solves.iter() {
-                            {
-                                let name = challenge_type_name(&translations, solve.challenge_type);
-                                let show_diff = challenge_has_difficulty(solve.challenge_type);
-                                let diff = difficulty_name(&translations, solve.difficulty);
-                                let dur = format_duration(solve.duration);
-                                rsx! {
-                                    div { class: "history-challenge-row",
-                                        span { class: "history-challenge-name",
-                                            "{name}"
-                                            if show_diff {
-                                                " "
-                                                span { class: "history-challenge-difficulty", "{diff}" }
-                                            }
-                                        }
-                                        span { class: "history-challenge-time", "{dur}" }
-                                    }
-                                }
-                            }
-                        }
+                    button {
+                        class: "link-btn danger",
+                        onclick: move |_| on_delete.call(()),
+                        "{delete_text}"
                     }
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::{Duration, Local, TimeZone, Utc};
+
+    fn event_on(day: NaiveDate, outcome: AlarmOutcome) -> AlarmEvent {
+        let at = Local
+            .from_local_datetime(&day.and_hms_opt(7, 0, 0).unwrap())
+            .unwrap()
+            .with_timezone(&Utc);
+        AlarmEvent {
+            id: uuid::Uuid::new_v4().to_string(),
+            alarm_id: crate::models::AlarmId("a".into()),
+            alarm_label: String::new(),
+            fire_timestamp: at,
+            first_interaction_timestamp: None,
+            dismiss_timestamp: at,
+            snooze_count: 0,
+            snooze_intervals_minutes: Vec::new(),
+            challenge_solves: Vec::new(),
+            total_dismissal_time: std::time::Duration::from_secs(60),
+            outcome,
+        }
+    }
+
+    #[test]
+    fn a_streak_counts_days_in_a_row_and_a_miss_ends_it() {
+        let today = NaiveDate::from_ymd_opt(2026, 11, 10).unwrap();
+        let day = |back: i64| today - Duration::days(back);
+        let events = vec![
+            event_on(day(0), AlarmOutcome::Solved),
+            event_on(day(1), AlarmOutcome::Solved),
+            event_on(day(1), AlarmOutcome::Solved),
+            event_on(day(3), AlarmOutcome::Backup),
+            event_on(day(4), AlarmOutcome::Missed),
+            event_on(day(5), AlarmOutcome::Solved),
+        ];
+        assert_eq!(
+            streak(&events, today),
+            3,
+            "a day without alarms is no break"
+        );
+        assert_eq!(streak(&[], today), 0);
+        assert_eq!(
+            streak(
+                &[
+                    event_on(day(0), AlarmOutcome::Solved),
+                    event_on(day(0), AlarmOutcome::Limit)
+                ],
+                today
+            ),
+            0,
+            "one alarm left ringing spoils the day"
+        );
     }
 }

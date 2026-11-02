@@ -230,6 +230,26 @@ fn is_audio_header(head: &[u8]) -> bool {
         || matches!(head, [0xFF, second, ..] if second & 0xE0 == 0xE0) // MP3 / AAC frame
 }
 
+/// The user's own sounds, by filename.
+pub fn list_custom_sounds() -> Vec<String> {
+    let mut sounds: Vec<String> = fs::read_dir(custom_sounds_dir())
+        .map(|entries| {
+            entries
+                .flatten()
+                .filter(|entry| entry.path().is_file())
+                .filter_map(|entry| entry.file_name().into_string().ok())
+                .collect()
+        })
+        .unwrap_or_default();
+    sounds.sort();
+    sounds
+}
+
+/// Whether this phone has the sound an alarm refers to.
+pub fn sound_exists(sound: &str) -> bool {
+    sound.is_empty() || get_playback_path(sound).is_some()
+}
+
 /// Delete a custom sound file by its unique filename.
 pub fn delete_sound(filename: &str) {
     if filename.is_empty() {
@@ -252,20 +272,17 @@ pub fn is_custom_sound(sound: &str) -> bool {
     sound.contains('.')
 }
 
-/// Translation-aware display name for any sound reference. Custom sounds are
-/// wrapped in the localized "Custom (...)" label (truncated past 12 chars);
-/// bundled/system references return their raw string unchanged.
-pub fn display_name_translated(sound: &str, translations: &crate::app::Translations) -> String {
+/// The name to show for a sound: a bundled one is capitalised ("New world"), the user's
+/// own keeps its file name.
+pub fn display_name(sound: &str) -> String {
     if is_custom_sound(sound) {
-        let truncated: String = sound.chars().take(12).collect();
-        let key = if sound.len() > 12 {
-            "sound.custom_name_truncated"
-        } else {
-            "sound.custom_name"
-        };
-        crate::app::t(translations, key).replace("{name}", &truncated)
-    } else {
-        sound.to_string()
+        return sound.to_owned();
+    }
+    let spaced = sound.replace(['_', '-'], " ");
+    let mut chars = spaced.chars();
+    match chars.next() {
+        Some(first) => first.to_uppercase().chain(chars).collect(),
+        None => String::new(),
     }
 }
 

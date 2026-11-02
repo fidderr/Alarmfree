@@ -63,6 +63,13 @@ pub fn aggregate_history(filter: &HistoryFilter) -> AggregateMetrics {
     db.aggregate_metrics(filter).unwrap_or_default()
 }
 
+/// Delete one event.
+pub fn delete_event(id: &str) {
+    if let Err(e) = persistence::database().delete_event(id) {
+        log::error!("[AlarmFree] Failed to delete a history event: {e}");
+    }
+}
+
 /// Delete history events older than the given number of days.
 /// If `older_than_days` is None, deletes all history.
 pub fn delete_history(older_than_days: Option<u32>) {

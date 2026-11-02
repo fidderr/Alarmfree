@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS settings (
     locale TEXT NOT NULL,
     default_snooze_count INTEGER NOT NULL DEFAULT 3,
     default_snooze_interval_minutes INTEGER NOT NULL DEFAULT 1,
-    min_volume_percent INTEGER NOT NULL DEFAULT 50
+    min_volume_percent INTEGER NOT NULL DEFAULT 50,
+    prefs TEXT NOT NULL DEFAULT '{}'
 )
 "#;

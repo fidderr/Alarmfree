@@ -1,23 +1,37 @@
-//! Application settings types: AppSettings, ThemeMode, Locale.
+//! Application settings types: AppSettings, ThemeMode, Locale, Prefs.
 
 use serde::{Deserialize, Serialize};
+
+use crate::app::AlarmData;
 
 /// Visual theme for the app. Persisted via serde directly.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ThemeMode {
+    /// Follows the phone's dark theme setting.
     #[default]
+    System,
     Dark,
     Light,
+    /// Dark, on a pure black background.
+    Black,
     Colorblind,
 }
 
 impl ThemeMode {
-    pub fn css_class(self) -> &'static str {
+    pub fn css_class(self, system_dark: bool) -> &'static str {
         match self {
+            ThemeMode::System if system_dark => "theme-dark",
+            ThemeMode::System => "theme-light",
             ThemeMode::Dark => "theme-dark",
             ThemeMode::Light => "theme-light",
+            ThemeMode::Black => "theme-black",
             ThemeMode::Colorblind => "theme-colorblind",
         }
+    }
+
+    /// Whether this theme has a light background, for the system bar icons.
+    pub fn is_light(self, system_dark: bool) -> bool {
+        self.css_class(system_dark) == "theme-light"
     }
 }
 
@@ -32,6 +46,83 @@ pub enum Locale {
     German,
 }
 
+/// How times are written.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TimeFormat {
+    #[default]
+    System,
+    H24,
+    H12,
+}
+
+/// The day the week starts on, in the day chips and the weekly chart.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum WeekStart {
+    #[default]
+    Monday,
+    Sunday,
+    Saturday,
+}
+
+impl WeekStart {
+    /// The days in display order, as indices with Monday as 0.
+    pub fn day_order(self) -> [usize; 7] {
+        match self {
+            WeekStart::Monday => [0, 1, 2, 3, 4, 5, 6],
+            WeekStart::Sunday => [6, 0, 1, 2, 3, 4, 5],
+            WeekStart::Saturday => [5, 6, 0, 1, 2, 3, 4],
+        }
+    }
+}
+
+/// The order of the home list.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SortMode {
+    /// The order the user dragged the alarms in.
+    #[default]
+    Own,
+    Time,
+    NextRing,
+}
+
+/// Everything added after the settings table's first columns. Stored as one JSON
+/// column, so a new preference needs no migration.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Prefs {
+    /// The language follows the phone's, instead of the one in `AppSettings`.
+    pub language_follows_phone: bool,
+    pub time_format: TimeFormat,
+    pub week_start: WeekStart,
+    pub sort: SortMode,
+    pub touch_feedback: bool,
+    pub less_motion: bool,
+    pub confetti: bool,
+    /// Show a notification this long before an alarm rings (0 = off).
+    pub notify_before_minutes: u8,
+    /// The first-run setup was gone through.
+    pub setup_done: bool,
+    /// What a new alarm starts from, when the user set that up.
+    pub alarm_defaults: Option<AlarmData>,
+}
+
+impl Default for Prefs {
+    fn default() -> Self {
+        Self {
+            language_follows_phone: true,
+            time_format: TimeFormat::default(),
+            week_start: WeekStart::default(),
+            sort: SortMode::default(),
+            touch_feedback: true,
+            less_motion: false,
+            confetti: true,
+            notify_before_minutes: 0,
+            setup_done: false,
+            alarm_defaults: None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AppSettings {
     pub theme: ThemeMode,
@@ -42,6 +133,7 @@ pub struct AppSettings {
     /// percentage (and restored afterwards), so a muted phone still wakes
     /// the user. 0 leaves the volume alone.
     pub min_volume_percent: u8,
+    pub prefs: Prefs,
 }
 
 impl Locale {
@@ -56,6 +148,25 @@ impl Locale {
             _ => None,
         }
     }
+
+    pub const ALL: [Locale; 5] = [
+        Locale::English,
+        Locale::Dutch,
+        Locale::Spanish,
+        Locale::French,
+        Locale::German,
+    ];
+
+    /// The language's name, in that language.
+    pub fn display_name(self) -> &'static str {
+        match self {
+            Locale::English => "English",
+            Locale::Dutch => "Nederlands",
+            Locale::Spanish => "Español",
+            Locale::French => "Français",
+            Locale::German => "Deutsch",
+        }
+    }
 }
 
 impl Default for AppSettings {
@@ -64,8 +175,42 @@ impl Default for AppSettings {
             theme: ThemeMode::default(),
             locale: Locale::default(),
             default_snooze_count: 3,
-            default_snooze_interval_minutes: 1,
+            default_snooze_interval_minutes: 5,
             min_volume_percent: 50,
+            prefs: Prefs::default(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_system_theme_follows_the_phone_and_the_others_do_not() {
+        assert_eq!(ThemeMode::System.css_class(true), "theme-dark");
+        assert_eq!(ThemeMode::System.css_class(false), "theme-light");
+        assert_eq!(ThemeMode::Black.css_class(false), "theme-black");
+        assert!(ThemeMode::Light.is_light(true));
+        assert!(!ThemeMode::Colorblind.is_light(false));
+    }
+
+    #[test]
+    fn prefs_saved_by_an_older_version_get_defaults_for_the_rest() {
+        let prefs: Prefs = serde_json::from_str(r#"{"less_motion":true}"#).unwrap();
+        assert!(prefs.less_motion);
+        assert!(prefs.touch_feedback, "on unless turned off");
+        assert!(prefs.confetti);
+        assert!(!prefs.setup_done);
+    }
+
+    #[test]
+    fn every_week_start_lists_each_day_once() {
+        for start in [WeekStart::Monday, WeekStart::Sunday, WeekStart::Saturday] {
+            let mut days = start.day_order();
+            days.sort_unstable();
+            assert_eq!(days, [0, 1, 2, 3, 4, 5, 6]);
+        }
+        assert_eq!(WeekStart::Sunday.day_order()[0], 6);
     }
 }

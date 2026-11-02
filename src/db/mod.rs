@@ -188,6 +188,12 @@ impl Database {
         Ok(())
     }
 
+    pub fn delete_event(&self, id: &str) -> Result<(), rusqlite::Error> {
+        let conn = self.conn.lock().unwrap_or_else(|p| p.into_inner());
+        conn.execute("DELETE FROM alarm_events WHERE id = ?1", params![id])?;
+        Ok(())
+    }
+
     pub fn delete_all_events(&self) -> Result<(), rusqlite::Error> {
         let conn = self.conn.lock().unwrap_or_else(|p| p.into_inner());
         conn.execute("DELETE FROM alarm_events", [])?;
@@ -201,17 +207,19 @@ impl Database {
         let conn = self.conn.lock().unwrap_or_else(|p| p.into_inner());
         let result = conn.query_row(
             "SELECT theme, locale, default_snooze_count, default_snooze_interval_minutes, \
-             min_volume_percent FROM settings WHERE id = 1",
+             min_volume_percent, prefs FROM settings WHERE id = 1",
             [],
             |row| {
                 let theme_json: String = row.get(0)?;
                 let locale_json: String = row.get(1)?;
+                let prefs_json: String = row.get(5)?;
                 Ok(AppSettings {
                     theme: serde_json::from_str(&theme_json).unwrap_or_default(),
                     locale: serde_json::from_str(&locale_json).unwrap_or_default(),
                     default_snooze_count: row.get(2)?,
                     default_snooze_interval_minutes: row.get(3)?,
                     min_volume_percent: row.get(4)?,
+                    prefs: serde_json::from_str(&prefs_json).unwrap_or_default(),
                 })
             },
         );
@@ -229,15 +237,19 @@ impl Database {
             .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?;
         let locale_json = serde_json::to_string(&settings.locale)
             .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?;
+        let prefs_json = serde_json::to_string(&settings.prefs)
+            .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?;
         conn.execute(
             "INSERT OR REPLACE INTO settings (id, theme, locale, default_snooze_count, \
-             default_snooze_interval_minutes, min_volume_percent) VALUES (1, ?1, ?2, ?3, ?4, ?5)",
+             default_snooze_interval_minutes, min_volume_percent, prefs) \
+             VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6)",
             params![
                 theme_json,
                 locale_json,
                 settings.default_snooze_count,
                 settings.default_snooze_interval_minutes,
                 settings.min_volume_percent,
+                prefs_json,
             ],
         )?;
         Ok(())
@@ -526,6 +538,14 @@ mod tests {
             challenges: Vec::new(),
             snooze_count: 0,
             snooze_interval: 1,
+            note: String::new(),
+            vibration: 0,
+            volume_percent: None,
+            random_order: false,
+            wake_check_minutes: 0,
+            pause_until_ms: None,
+            delete_after_ring: false,
+            hidden: false,
         };
         db.upsert_alarm(&good).unwrap();
 

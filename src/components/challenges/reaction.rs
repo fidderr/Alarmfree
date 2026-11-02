@@ -180,18 +180,18 @@ pub fn ReactionChallenge(
 
             if failed {
                 // Missed the time limit — back to round 1, full countdown.
-                haptic(60);
+                crate::feedback::tick(60);
                 current_round = 1;
                 continue;
             }
 
             // Round cleared.
             if current_round >= rounds {
-                haptic(130);
+                crate::feedback::tick(130);
                 solved.set(true);
                 break;
             }
-            haptic(80);
+            crate::feedback::tick(80);
             current_round += 1;
         }
     });
@@ -210,7 +210,7 @@ pub fn ReactionChallenge(
         let Some(idx) = slot_idx else {
             return;
         };
-        haptic(15);
+        crate::feedback::tick(15);
 
         let done = popped_this_round() + 1;
         popped_this_round.set(done);
@@ -333,13 +333,6 @@ pub fn ReactionChallenge(
             }
         }
     }
-}
-
-/// Fire a short haptic pulse via the gated haptics capability. No-op if
-/// unavailable.
-fn haptic(_ms: u64) {
-    #[cfg(target_os = "android")]
-    mobile_sentinel::haptics::vibrate(Duration::from_millis(_ms));
 }
 
 /// Async sleep via a background thread + oneshot — keeps the UI layer free of

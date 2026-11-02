@@ -1,6 +1,4 @@
 use dioxus::prelude::*;
-#[cfg(target_os = "android")]
-use std::time::Duration;
 
 /// Vertical pixels per one step on the wheel. Equal to the rendered row
 /// height (see `.wheel-cell` in style.css) so the wheel tracks the finger
@@ -111,7 +109,7 @@ fn WheelColumn(value: i32, modulus: i32, on_change: EventHandler<i32>) -> Elemen
                     last_steps.set(steps);
                     let new_val = wrap(*start_value.read() + steps, modulus);
                     if new_val != value {
-                        haptic();
+                        crate::feedback::tick(8);
                         on_change.call(new_val);
                     }
                 }
@@ -175,11 +173,4 @@ fn WheelColumn(value: i32, modulus: i32, on_change: EventHandler<i32>) -> Elemen
             }
         }
     }
-}
-
-/// Fire a short haptic tick via the gated haptics capability (no-op off
-/// Android / when no vibrator). Mirrors the pattern used by the challenges.
-fn haptic() {
-    #[cfg(target_os = "android")]
-    mobile_sentinel::haptics::vibrate(Duration::from_millis(8));
 }

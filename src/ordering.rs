@@ -75,6 +75,14 @@ mod tests {
             challenges: vec![],
             snooze_count: 3,
             snooze_interval: 5,
+            note: String::new(),
+            vibration: 0,
+            volume_percent: None,
+            random_order: false,
+            wake_check_minutes: 0,
+            pause_until_ms: None,
+            delete_after_ring: false,
+            hidden: false,
         }
     }
 

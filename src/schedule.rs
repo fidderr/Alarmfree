@@ -45,16 +45,22 @@ pub fn resolve_one_time_date(alarm: &AlarmData, now: NaiveDateTime) -> Option<St
     Some(date.format(DATE_FORMAT).to_string())
 }
 
-/// Switch off a one-time alarm after it was dismissed. Returns whether
-/// something changed.
-pub fn disable_if_one_time(alarms: &mut [AlarmData], id: &str) -> bool {
-    match alarms.iter_mut().find(|a| a.id == id) {
-        Some(alarm) if is_one_time(alarm) && alarm.enabled => {
-            alarm.enabled = false;
-            true
-        }
-        _ => false,
+/// A one-time alarm is over once dealt with: it switches off, or goes altogether if
+/// it was made to delete itself. Returns whether something changed.
+pub fn finish_if_one_time(alarms: &mut Vec<AlarmData>, id: &str) -> bool {
+    let Some(index) = alarms.iter().position(|a| a.id == id) else {
+        return false;
+    };
+    if alarms[index].delete_after_ring {
+        alarms.remove(index);
+        return true;
     }
+    let alarm = &mut alarms[index];
+    if is_one_time(alarm) && alarm.enabled {
+        alarm.enabled = false;
+        return true;
+    }
+    false
 }
 
 /// Give a one-time alarm that is being switched on a date still ahead. Its old
@@ -195,6 +201,14 @@ mod tests {
             challenges: vec![],
             snooze_count: 3,
             snooze_interval: 5,
+            note: String::new(),
+            vibration: 0,
+            volume_percent: None,
+            random_order: false,
+            wake_check_minutes: 0,
+            pause_until_ms: None,
+            delete_after_ring: false,
+            hidden: false,
         }
     }
 
@@ -360,14 +374,23 @@ mod tests {
         let mut days = NO_DAYS;
         days[0] = true;
         let mut list = vec![alarm(NO_DAYS, Some("2026-10-24"), 7, 0)];
-        assert!(disable_if_one_time(&mut list, "a"));
+        assert!(finish_if_one_time(&mut list, "a"));
         assert!(!list[0].enabled);
-        assert!(!disable_if_one_time(&mut list, "a"), "already off");
+        assert!(!finish_if_one_time(&mut list, "a"), "already off");
 
         let mut repeating = vec![alarm(days, None, 7, 0)];
-        assert!(!disable_if_one_time(&mut repeating, "a"));
+        assert!(!finish_if_one_time(&mut repeating, "a"));
         assert!(repeating[0].enabled);
-        assert!(!disable_if_one_time(&mut repeating, "missing"));
+        assert!(!finish_if_one_time(&mut repeating, "missing"));
+    }
+
+    #[test]
+    fn an_alarm_made_to_delete_itself_goes_when_it_is_over() {
+        let mut quick = alarm(NO_DAYS, Some("2026-10-24"), 7, 0);
+        quick.delete_after_ring = true;
+        let mut list = vec![quick];
+        assert!(finish_if_one_time(&mut list, "a"));
+        assert!(list.is_empty());
     }
 
     #[test]

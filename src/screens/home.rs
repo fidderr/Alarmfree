@@ -1,39 +1,136 @@
+use crate::alarm_ops;
 use crate::app::{t, AlarmData, Route, Translations};
-use crate::components::{Icon, IconName};
+use crate::components::{
+    BottomNav, Icon, IconName, Sheet, SheetDone, SheetItem, Switch, ToastMessage,
+};
+use crate::models::{AppSettings, SortMode};
 use crate::schedule;
+use chrono::{Duration, TimeZone};
 use std::collections::HashMap;
 
 use dioxus::prelude::*;
 
-/// Translation keys for day abbreviations.
-const DAY_KEYS: &[&str] = &[
-    "day.mon", "day.tue", "day.wed", "day.thu", "day.fri", "day.sat", "day.sun",
-];
+/// What the quick row offers, in minutes.
+const QUICK_MINUTES: [i64; 5] = [5, 10, 15, 30, 60];
 
-/// Home screen displaying all alarms with toggle controls.
-/// Reads alarm data from shared global context.
+/// The panel open over the list.
+#[derive(Clone, PartialEq)]
+enum HomeSheet {
+    Sort,
+    PauseAll,
+    /// A date for pausing: everything, or the alarm with this id.
+    PauseDate(Option<String>),
+    Menu(String),
+}
+
+/// "in 7 h 12 min".
+fn countdown_text(translations: &Translations, now_ms: i64, at_ms: i64) -> String {
+    let time = schedule::format_countdown(
+        schedule::countdown(now_ms, at_ms),
+        &t(translations, "home.next_in_dhm"),
+        &t(translations, "home.next_in_hm"),
+        &t(translations, "home.next_in_m"),
+    );
+    t(translations, "home.in").replace("{time}", &time)
+}
+
+fn local_date(at_ms: i64) -> Option<chrono::NaiveDate> {
+    Some(
+        chrono::DateTime::from_timestamp_millis(at_ms)?
+            .with_timezone(&chrono::Local)
+            .date_naive(),
+    )
+}
+
+/// What an alarm's card says about when it rings.
+fn when_text(
+    translations: &Translations,
+    alarm: &AlarmData,
+    next_fire: Option<i64>,
+    now_ms: i64,
+) -> String {
+    if !alarm.enabled {
+        return t(translations, "home.off");
+    }
+    if let Some(until) = alarm.pause_until_ms.filter(|until| *until > now_ms) {
+        return local_date(until)
+            .map(|date| {
+                t(translations, "home.paused_until")
+                    .replace("{date}", &crate::text::day_month(translations, date))
+            })
+            .unwrap_or_default();
+    }
+    if alarm.skip_until_ms.is_some_and(|skip| skip > now_ms) {
+        if let Some(date) = alarm.skip_until_ms.and_then(local_date) {
+            return t(translations, "home.skips")
+                .replace("{day}", &crate::text::day_name(translations, date));
+        }
+    }
+    let Some(date) = next_fire.and_then(local_date) else {
+        return String::new();
+    };
+    let today = chrono::Local::now().date_naive();
+    match schedule::day_label(today, date) {
+        schedule::DayLabel::Today => t(translations, "home.today"),
+        schedule::DayLabel::Tomorrow => t(translations, "home.tomorrow"),
+        schedule::DayLabel::Weekday(_) if schedule::is_one_time(alarm) => {
+            crate::text::short_date(translations, date)
+        }
+        schedule::DayLabel::Weekday(_) => crate::text::day_name(translations, date),
+    }
+}
+
+/// The alarms as the list shows them.
+fn sorted_for_list(
+    alarms: &[AlarmData],
+    sort: SortMode,
+    next: &HashMap<String, i64>,
+) -> Vec<AlarmData> {
+    let mut list = crate::ordering::sorted_for_display(alarms);
+    list.retain(|a| !a.hidden);
+    match sort {
+        SortMode::Own => {}
+        SortMode::Time => list.sort_by_key(|a| (a.time_hour, a.time_minute)),
+        SortMode::NextRing => list.sort_by_key(|a| next.get(&a.id).copied().unwrap_or(i64::MAX)),
+    }
+    list
+}
+
+/// Start of this day, `days` from today, in unix ms.
+fn start_of_day_ms(days: i64) -> Option<i64> {
+    let day = chrono::Local::now().date_naive() + Duration::days(days);
+    chrono::Local
+        .from_local_datetime(&day.and_hms_opt(0, 0, 0)?)
+        .earliest()
+        .map(|at| at.timestamp_millis())
+}
+
+/// Home screen: the alarms and what can be done to them in one tap.
 #[component]
 pub fn Home() -> Element {
     let mut alarms = use_context::<Signal<Vec<AlarmData>>>();
     let translations = use_context::<Translations>();
+    let mut settings = use_context::<Signal<AppSettings>>();
+    let mut toast = use_context::<Signal<Option<ToastMessage>>>();
     let nav = use_navigator();
-    let has_alarms = !alarms.read().is_empty();
-
-    let app_name = t(&translations, "app.name");
-    let no_alarms_text = t(&translations, "alarm.no_alarms");
-    let tap_to_create_text = t(&translations, "alarm.tap_to_create");
-    let time_until_template = t(&translations, "alarm.time_until");
 
     // The countdown and the "Today / Tomorrow" labels follow the clock, so
-    // re-render on a timer. Reading `tick` below subscribes this component.
+    // re-render on a timer. What the phone allows can change meanwhile too.
     let mut tick = use_signal(|| 0u32);
+    let mut problem = use_signal(crate::screens::reliability::first_problem);
     use_future(move || async move {
         loop {
             crate::timer::sleep_ms(15_000).await;
             tick += 1;
+            problem.set(crate::screens::reliability::first_problem());
         }
     });
     let _ = tick();
+
+    let sort = settings.read().prefs.sort;
+    let twenty_four = crate::text::uses_24_hours(&settings.read());
+    let week_start = settings.read().prefs.week_start;
+    let defaults = settings.read().prefs.alarm_defaults.clone();
 
     // Hold an alarm and drag it to a new place in the list; the order is saved.
     crate::reorder::use_reorder(
@@ -41,33 +138,48 @@ pub fn Home() -> Element {
         "alarm-card",
         None,
         EventHandler::new(move |(from, to)| {
-            if crate::ordering::apply_reorder(&mut alarms.write(), from, to) {
-                crate::persistence::save_alarms(&alarms.read());
+            if settings.peek().prefs.sort != SortMode::Own {
+                return;
+            }
+            // Positions in the list, which leaves out the alarms it does not show.
+            let mut list = alarms.write();
+            let shown: Vec<String> = crate::ordering::sorted_for_display(&list)
+                .into_iter()
+                .filter(|a| !a.hidden)
+                .map(|a| a.id)
+                .collect();
+            let position = |id: Option<&String>| {
+                id.and_then(|id| {
+                    crate::ordering::sorted_for_display(&list)
+                        .iter()
+                        .position(|a| a.id == *id)
+                })
+            };
+            if let (Some(from), Some(to)) = (position(shown.get(from)), position(shown.get(to))) {
+                if crate::ordering::apply_reorder(&mut list, from, to) {
+                    drop(list);
+                    crate::persistence::save_alarms(&alarms.read());
+                }
             }
         }),
     );
 
-    // The "more actions" sheet: which alarm it is open for, and whether it is
-    // asking to confirm a delete.
-    let mut menu_for: Signal<Option<String>> = use_signal(|| None);
-    let mut confirm_delete = use_signal(|| false);
-    let menu_aria = t(&translations, "home.menu_aria");
-    let duplicate_text = t(&translations, "action.duplicate");
-    let delete_text = t(&translations, "action.delete");
-    let cancel_text = t(&translations, "action.cancel");
-    let delete_confirm_text = t(&translations, "alarm.delete_confirm");
-    let delete_warning_text = t(&translations, "alarm.delete_warning");
+    let mut sheet: Signal<Option<HomeSheet>> = use_signal(|| None);
+    let mut pause_date = use_signal(|| {
+        (chrono::Local::now().date_naive() + Duration::days(7))
+            .format("%Y-%m-%d")
+            .to_string()
+    });
 
     // When each enabled alarm really rings next, from AlarmKit (it knows
     // the weekdays, a snooze in progress and one-time dates).
-    let now = chrono::Local::now();
-    let now_ms = now.timestamp_millis();
+    let now_ms = chrono::Local::now().timestamp_millis();
     let next_fire: HashMap<String, i64> = {
         let kit = crate::platform::alarm_kit_optional();
         alarms
             .read()
             .iter()
-            .filter(|a| a.enabled)
+            .filter(|a| a.enabled && !a.hidden)
             .filter_map(|a| {
                 let at = kit?
                     .next_fire(&mobile_sentinel::InstanceId::new(a.id.clone()))
@@ -77,306 +189,489 @@ pub fn Home() -> Element {
             })
             .collect()
     };
+    let list = sorted_for_list(&alarms.read(), sort, &next_fire);
+    let has_alarms = !list.is_empty();
+    let paused_until = alarm_ops::all_paused_until(&alarms.read(), now_ms);
 
-    let next_alarm_text = match schedule::earliest_future(now_ms, next_fire.values().copied()) {
+    let next_ms = schedule::earliest_future(now_ms, next_fire.values().copied());
+    let (next_title, next_sub) = match next_ms {
         Some(at) => {
-            let time_str = schedule::format_countdown(
-                schedule::countdown(now_ms, at),
-                &t(&translations, "home.next_in_dhm"),
-                &t(&translations, "home.next_in_hm"),
-                &t(&translations, "home.next_in_m"),
-            );
-            time_until_template.replace("{time}", &time_str)
+            let local = chrono::DateTime::from_timestamp_millis(at)
+                .map(|at| at.with_timezone(&chrono::Local));
+            let title = local
+                .map(|at| {
+                    use chrono::Timelike;
+                    format!(
+                        "{} {}",
+                        crate::text::day_name(&translations, at.date_naive()),
+                        crate::text::clock(at.hour() as u8, at.minute() as u8, twenty_four)
+                    )
+                })
+                .unwrap_or_default();
+            (title, countdown_text(&translations, now_ms, at))
         }
-        None => String::new(),
+        None => (t(&translations, "home.none_on"), String::new()),
     };
 
-    // Alarms in clock order.
-    let sorted: Vec<AlarmData> = crate::ordering::sorted_for_display(&alarms.read());
-
-    // What the actions sheet can do for the alarm it is open for.
-    let menu_alarm = menu_for().and_then(|id| alarms.read().iter().find(|a| a.id == id).cloned());
-    let skip_active = menu_alarm
-        .as_ref()
-        .is_some_and(|a| a.skip_until_ms.is_some_and(|s| s > now_ms));
-    let menu_next_fire = menu_alarm
-        .as_ref()
-        .and_then(|a| next_fire.get(&a.id).copied());
-    let can_skip = menu_alarm
-        .as_ref()
-        .is_some_and(|a| a.enabled && !schedule::is_one_time(a))
-        && (skip_active || menu_next_fire.is_some());
-    let skip_text = if skip_active {
-        t(&translations, "action.undo_skip")
-    } else {
-        t(&translations, "action.skip_next")
+    // Change the list, tell the user, and offer to take it back.
+    let mut change = move |message: String, apply: &mut dyn FnMut(&mut Vec<AlarmData>)| {
+        let before = alarms.peek().clone();
+        apply(&mut alarms.write());
+        crate::persistence::save_alarms(&alarms.peek());
+        toast.set(Some(ToastMessage::with_undo(message, before)));
     };
-    let skipped_text = t(&translations, "home.skipped");
-    let practice_text = t(&translations, "action.practice");
 
-    let nav_alarms = t(&translations, "nav.alarms");
-    let nav_history = t(&translations, "nav.history");
-    let nav_settings = t(&translations, "nav.settings");
+    let next_label = t(&translations, "home.next_label");
+    let pause_aria = t(&translations, "home.pause_aria");
+    let sort_aria = t(&translations, "home.sort_aria");
+    let menu_aria = t(&translations, "home.menu_aria");
     let create_aria = t(&translations, "home.create_aria");
+    let quick_label = t(&translations, "home.quick");
+
+    let sheet_view = match sheet() {
+        None => rsx! {},
+        Some(HomeSheet::Sort) => {
+            let options = [
+                (SortMode::Own, "home.sort_own"),
+                (SortMode::Time, "home.sort_time"),
+                (SortMode::NextRing, "home.sort_next"),
+            ];
+            rsx! {
+                Sheet {
+                    title: t(&translations, "home.sort_title"),
+                    note: t(&translations, "home.sort_note"),
+                    on_close: move |_| sheet.set(None),
+                    for (mode, key) in options {
+                        SheetItem {
+                            label: t(&translations, key),
+                            selected: sort == mode,
+                            on_click: move |_| {
+                                settings.write().prefs.sort = mode;
+                                crate::persistence::save_settings(&settings.peek());
+                                sheet.set(None);
+                            },
+                        }
+                    }
+                }
+            }
+        }
+        Some(HomeSheet::PauseAll) => rsx! {
+            Sheet {
+                title: t(&translations, "home.pause_title"),
+                note: t(&translations, "home.pause_note"),
+                on_close: move |_| sheet.set(None),
+                if paused_until.is_some() {
+                    SheetItem {
+                        label: t(&translations, "home.pause_end"),
+                        on_click: move |_| {
+                            let message = t(&translations, "home.pause_ended");
+                            change(message, &mut |list| alarm_ops::resume_all(list));
+                            sheet.set(None);
+                        },
+                    }
+                }
+                SheetItem {
+                    label: t(&translations, "home.pause_tomorrow"),
+                    on_click: move |_| {
+                        if let Some(until) = start_of_day_ms(1) {
+                            let message = paused_message(&translations, until);
+                            change(message, &mut |list| alarm_ops::pause_all(list, until));
+                        }
+                        sheet.set(None);
+                    },
+                }
+                SheetItem {
+                    label: t(&translations, "home.pause_week"),
+                    on_click: move |_| {
+                        if let Some(until) = start_of_day_ms(7) {
+                            let message = paused_message(&translations, until);
+                            change(message, &mut |list| alarm_ops::pause_all(list, until));
+                        }
+                        sheet.set(None);
+                    },
+                }
+                SheetItem {
+                    label: t(&translations, "home.pause_date"),
+                    on_click: move |_| sheet.set(Some(HomeSheet::PauseDate(None))),
+                }
+            }
+        },
+        Some(HomeSheet::PauseDate(only)) => {
+            let min = chrono::Local::now()
+                .date_naive()
+                .format("%Y-%m-%d")
+                .to_string();
+            rsx! {
+                Sheet {
+                    title: t(&translations, "home.pause_date"),
+                    note: t(&translations, "home.pause_date_note"),
+                    on_close: move |_| sheet.set(None),
+                    input {
+                        class: "field",
+                        r#type: "date",
+                        min: "{min}",
+                        value: "{pause_date}",
+                        onchange: move |evt| pause_date.set(evt.value()),
+                    }
+                    SheetDone {
+                        label: t(&translations, "home.pause_apply"),
+                        on_click: move |_| {
+                            let picked = chrono::NaiveDate::parse_from_str(&pause_date.read(), "%Y-%m-%d")
+                                .ok()
+                                .and_then(|day| day.and_hms_opt(0, 0, 0))
+                                .and_then(|at| chrono::Local.from_local_datetime(&at).earliest())
+                                .map(|at| at.timestamp_millis());
+                            if let Some(until) = picked.filter(|until| *until > now_ms) {
+                                let message = paused_message(&translations, until);
+                                let only = only.clone();
+                                change(message, &mut |list| match &only {
+                                    Some(id) => {
+                                        if let Some(alarm) = list.iter_mut().find(|a| a.id == *id) {
+                                            alarm.pause_until_ms = Some(until);
+                                        }
+                                    }
+                                    None => alarm_ops::pause_all(list, until),
+                                });
+                            }
+                            sheet.set(None);
+                        },
+                    }
+                }
+            }
+        }
+        Some(HomeSheet::Menu(id)) => {
+            let found = alarms.read().iter().find(|a| a.id == id).cloned();
+            match found {
+                None => rsx! {},
+                Some(alarm) => {
+                    let skip_active = alarm.skip_until_ms.is_some_and(|skip| skip > now_ms);
+                    let pause_active = alarm.pause_until_ms.is_some_and(|until| until > now_ms);
+                    let next = next_fire.get(&id).copied();
+                    let can_skip = alarm.enabled
+                        && !schedule::is_one_time(&alarm)
+                        && (skip_active || next.is_some());
+                    let title = format!(
+                        "{} {}",
+                        crate::text::clock(alarm.time_hour, alarm.time_minute, twenty_four),
+                        alarm.label
+                    );
+                    let name = alarm.label.clone();
+                    let (id_try, id_skip, id_copy, id_pause, id_delete) =
+                        (id.clone(), id.clone(), id.clone(), id.clone(), id.clone());
+                    rsx! {
+                        Sheet {
+                            title,
+                            note: t(&translations, "home.menu_note"),
+                            on_close: move |_| sheet.set(None),
+                            if !alarm.challenges.is_empty() {
+                                SheetItem {
+                                    label: t(&translations, "home.practice"),
+                                    on_click: move |_| {
+                                        sheet.set(None);
+                                        nav.push(Route::Practice { id: id_try.clone() });
+                                    },
+                                }
+                            }
+                            if can_skip {
+                                SheetItem {
+                                    label: if skip_active {
+                                        t(&translations, "action.undo_skip")
+                                    } else {
+                                        t(&translations, "action.skip_next")
+                                    },
+                                    on_click: move |_| {
+                                        let message = if skip_active {
+                                            t(&translations, "home.skip_undone")
+                                        } else {
+                                            t(&translations, "home.skipped")
+                                        };
+                                        let id = id_skip.clone();
+                                        change(message, &mut |list| {
+                                            // Skipping remembers the occurrence to skip (the
+                                            // next ring); undoing clears it.
+                                            if let Some(alarm) = list.iter_mut().find(|a| a.id == id) {
+                                                alarm.skip_until_ms = if skip_active { None } else { next };
+                                            }
+                                        });
+                                        sheet.set(None);
+                                    },
+                                }
+                            }
+                            SheetItem {
+                                label: t(&translations, "action.duplicate"),
+                                on_click: move |_| {
+                                    sheet.set(None);
+                                    nav.push(Route::AlarmConfig { id: format!("copy-{id_copy}") });
+                                },
+                            }
+                            SheetItem {
+                                label: if pause_active {
+                                    t(&translations, "home.pause_end")
+                                } else {
+                                    t(&translations, "home.pause_one")
+                                },
+                                on_click: move |_| {
+                                    if pause_active {
+                                        let message = t(&translations, "home.pause_ended");
+                                        let id = id_pause.clone();
+                                        change(message, &mut |list| {
+                                            if let Some(alarm) = list.iter_mut().find(|a| a.id == id) {
+                                                alarm.pause_until_ms = None;
+                                            }
+                                        });
+                                        sheet.set(None);
+                                    } else {
+                                        sheet.set(Some(HomeSheet::PauseDate(Some(id_pause.clone()))));
+                                    }
+                                },
+                            }
+                            SheetItem {
+                                label: t(&translations, "action.delete"),
+                                danger: true,
+                                on_click: move |_| {
+                                    let message = if name.is_empty() {
+                                        t(&translations, "home.deleted_plain")
+                                    } else {
+                                        t(&translations, "home.deleted").replace("{alarm}", &name)
+                                    };
+                                    let id = id_delete.clone();
+                                    change(message, &mut |list| list.retain(|a| a.id != id));
+                                    sheet.set(None);
+                                },
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    };
 
     rsx! {
-           div { class: "screen home-screen",
-    // Header
-               div { class: "header",
-                   h1 { "{app_name}" }
-                   if has_alarms {
-                       p { class: "next-alarm", "{next_alarm_text}" }
-                   }
-               }
+        div { class: "screen",
+            header { class: "home-header",
+                div {
+                    p { class: "home-next-label", "{next_label}" }
+                    h1 { class: "home-next", "{next_title}" }
+                    if !next_sub.is_empty() {
+                        p { class: "home-next-sub", "{next_sub}" }
+                    }
+                }
+                div { class: "home-actions",
+                    button {
+                        class: if paused_until.is_some() { "round-icon-btn on" } else { "round-icon-btn" },
+                        "aria-label": "{pause_aria}",
+                        onclick: move |_| sheet.set(Some(HomeSheet::PauseAll)),
+                        Icon { name: IconName::Pause, size: 20 }
+                    }
+                    button {
+                        class: "round-icon-btn",
+                        "aria-label": "{sort_aria}",
+                        onclick: move |_| sheet.set(Some(HomeSheet::Sort)),
+                        Icon { name: IconName::Sort, size: 20 }
+                    }
+                }
+            }
 
-    // Alarm list or empty state
-               if has_alarms {
-                   div { id: "alarm-list", class: "alarm-list",
-                       for alarm in sorted.iter() {
-                           {
-                               let alarm_id = alarm.id.clone();
-                               let alarm_id2 = alarm.id.clone();
-                               let alarm_id3 = alarm.id.clone();
-                               let time = format!("{:02}:{:02}", alarm.time_hour, alarm.time_minute);
-                               let label = alarm.label.clone();
-                               let schedule_text = format_schedule(&alarm.days, &translations);
-                               let skipped = alarm.skip_until_ms.is_some_and(|s| s > now_ms);
-                               let next_ring = next_fire
-                                   .get(&alarm.id)
-                                   .and_then(|&at| ring_day_label(at, !schedule::is_one_time(alarm), &translations));
-                               let enabled = alarm.enabled;
-                               rsx! {
-                                   div {
-                                       class: if enabled { "alarm-card" } else { "alarm-card disabled" },
-                                       onclick: move |_| {
-                                           nav.push(Route::AlarmConfig { id: alarm_id.clone() });
-                                       },
-                                       div { class: "alarm-card-left",
-                                           div { class: "alarm-time", "{time}" }
-                                           div { class: "alarm-details",
-                                               span { class: "alarm-label", "{label}" }
-                                               span { class: "alarm-schedule", "{schedule_text}" }
-                                               if let Some(next_ring) = next_ring {
-                                                   span { class: "alarm-next-ring", "{next_ring}" }
-                                               }
-                                               if skipped {
-                                                   span { class: "alarm-skipped", "{skipped_text}" }
-                                               }
-                                           }
-                                       }
-                                       div { class: "alarm-card-right",
-                                           button {
-                                               class: "card-menu-btn",
-                                               "aria-label": "{menu_aria}",
-                                               onclick: move |evt| {
-                                                   evt.stop_propagation();
-                                                   confirm_delete.set(false);
-                                                   menu_for.set(Some(alarm_id3.clone()));
-                                               },
-                                               Icon { name: IconName::EllipsisVertical, size: 18 }
-                                           }
-                                           label {
-                                               class: "toggle-switch",
-                                               onclick: move |evt| { evt.stop_propagation(); },
-                                               input {
-                                                   r#type: "checkbox",
-                                                   checked: enabled,
-                                                   onchange: move |_| {
-                                                       let mut list = alarms.write();
-                                                       if let Some(a) = list.iter_mut().find(|a| a.id == alarm_id2) {
-                                                           a.enabled = !a.enabled;
-                                                           if a.enabled {
-                                                               schedule::refresh_one_time_date(a, chrono::Local::now().naive_local());
-                                                           }
-                                                       }
-                                                       drop(list);
-                                                       crate::persistence::save_alarms(&alarms.read());
-                                                   },
-                                               }
-                                               span { class: "toggle-slider" }
-                                           }
-                                       }
-                                   }
-                               }
-                           }
-                       }
-                   }
-               } else {
-                   div { class: "empty-state",
-                       div { class: "empty-icon", Icon { name: IconName::Clock } }
-                       p { class: "empty-title", "{no_alarms_text}" }
-                       p { class: "empty-subtitle", "{tap_to_create_text}" }
-                   }
-               }
+            if let Some(check) = problem() {
+                {
+                    let (name, _) = crate::screens::reliability::check_text(&translations, check);
+                    let title = t(&translations, "reliability.banner").replace("{check}", &name);
+                    let fix = t(&translations, "reliability.fix");
+                    rsx! {
+                        button {
+                            class: "banner",
+                            onclick: move |_| { nav.push(Route::Reliability {}); },
+                            Icon { name: IconName::Warning, size: 18 }
+                            span { class: "banner-text", "{title}" }
+                            span { class: "banner-action", "{fix}" }
+                        }
+                    }
+                }
+            }
 
-    // More-actions sheet for one alarm
-               if let Some(menu_id) = menu_for() {
-                   div {
-                       class: "sheet-overlay",
-                       onclick: move |_| { menu_for.set(None); confirm_delete.set(false); },
-                       div {
-                           class: "sheet",
-                           onclick: move |evt| { evt.stop_propagation(); },
-                           if confirm_delete() {
-                               h3 { "{delete_confirm_text}" }
-                               p { "{delete_warning_text}" }
-                               div { class: "confirm-actions",
-                                   button {
-                                       class: "btn-cancel",
-                                       onclick: move |_| { menu_for.set(None); confirm_delete.set(false); },
-                                       "{cancel_text}"
-                                   }
-                                   button {
-                                       class: "btn-delete",
-                                       onclick: {
-                                           let menu_id = menu_id.clone();
-                                           move |_| {
-                                               let unused_sound = crate::app::remove_alarm(&mut alarms.write(), &menu_id);
-                                               if let Some(sound) = unused_sound {
-                                                   crate::custom_sounds::delete_sound(&sound);
-                                               }
-                                               crate::persistence::save_alarms(&alarms.read());
-                                               menu_for.set(None);
-                                               confirm_delete.set(false);
-                                           }
-                                       },
-                                       "{delete_text}"
-                                   }
-                               }
-                           } else {
-                               if menu_alarm.as_ref().is_some_and(|a| !a.challenges.is_empty()) {
-                                   button {
-                                       class: "sheet-item",
-                                       onclick: {
-                                           let menu_id = menu_id.clone();
-                                           move |_| {
-                                               menu_for.set(None);
-                                               nav.push(Route::Practice { id: menu_id.clone() });
-                                           }
-                                       },
-                                       "{practice_text}"
-                                   }
-                               }
-                               if can_skip {
-                                   button {
-                                       class: "sheet-item",
-                                       onclick: {
-                                           let menu_id = menu_id.clone();
-                                           move |_| {
-                                               // Skipping remembers the occurrence to skip (the
-                                               // next ring); undoing clears it.
-                                               if let Some(alarm) = alarms.write().iter_mut().find(|a| a.id == menu_id) {
-                                                   alarm.skip_until_ms = if skip_active { None } else { menu_next_fire };
-                                               }
-                                               crate::persistence::save_alarms(&alarms.read());
-                                               menu_for.set(None);
-                                           }
-                                       },
-                                       "{skip_text}"
-                                   }
-                               }
-                               button {
-                                   class: "sheet-item",
-                                   onclick: {
-                                       let menu_id = menu_id.clone();
-                                       move |_| {
-                                           menu_for.set(None);
-                                           nav.push(Route::AlarmConfig { id: format!("copy-{menu_id}") });
-                                       }
-                                   },
-                                   "{duplicate_text}"
-                               }
-                               button {
-                                   class: "sheet-item danger",
-                                   onclick: move |_| { confirm_delete.set(true); },
-                                   "{delete_text}"
-                               }
-                           }
-                       }
-                   }
-               }
+            div { class: "quick-row",
+                span { class: "quick-label", "{quick_label}" }
+                for minutes in QUICK_MINUTES {
+                    button {
+                        class: "chip-slim",
+                        onclick: {
+                            let defaults = defaults.clone();
+                            move |_| {
+                                if alarms.peek().len() >= alarm_ops::MAX_ALARMS {
+                                    toast.set(Some(ToastMessage::error(t(&translations, "alarm.limit_reached"))));
+                                    return;
+                                }
+                                let label = t(&translations, "home.quick_alarm");
+                                let message = t(&translations, "home.quick_set").replace("{minutes}", &minutes.to_string());
+                                let now = chrono::Local::now().naive_local();
+                                let mut alarm = alarm_ops::quick_alarm(now, minutes, label, defaults.as_ref());
+                                alarm.order = crate::ordering::order_for_new(&alarms.peek());
+                                change(message, &mut |list| list.push(alarm.clone()));
+                            }
+                        },
+                        "+{minutes}"
+                    }
+                }
+            }
 
-    // Add alarm FAB
-               button {
-                   class: "fab",
-                   "aria-label": "{create_aria}",
-                   onclick: move |_| {
-                       nav.push(Route::AlarmConfig { id: "new".to_string() });
-                   },
-                   Icon { name: IconName::Plus }
-               }
+            div { class: "scroll scroll-fab",
+                if has_alarms {
+                    ul { id: "alarm-list", class: "list alarm-list",
+                        for alarm in list.iter() {
+                            {
+                                let open_id = alarm.id.clone();
+                                let menu_id = alarm.id.clone();
+                                let toggle_id = alarm.id.clone();
+                                let time = crate::text::clock(alarm.time_hour, alarm.time_minute, twenty_four);
+                                let label = alarm.label.clone();
+                                let when = when_text(&translations, alarm, next_fire.get(&alarm.id).copied(), now_ms);
+                                let on = alarm.enabled;
+                                let days = alarm.days;
+                                let one_time = schedule::is_one_time(alarm);
+                                let switch_aria = t(&translations, "home.switch_aria");
+                                let name = alarm.label.clone();
+                                rsx! {
+                                    li { key: "{alarm.id}", class: if on { "alarm-card" } else { "alarm-card off" },
+                                        // 12 hours take more room, and all the times stay in line.
+                                        button {
+                                            class: "alarm-main",
+                                            onclick: move |_| { nav.push(Route::AlarmConfig { id: open_id.clone() }); },
+                                            span { class: if twenty_four { "alarm-time" } else { "alarm-time h12" }, "{time}" }
+                                            span { class: "alarm-info",
+                                                span { class: "alarm-label", "{label}" }
+                                                span { class: "alarm-when",
+                                                    span { "{when}" }
+                                                    if !one_time {
+                                                        span { class: "alarm-days",
+                                                            for day in week_start.day_order() {
+                                                                span {
+                                                                    class: if days[day] && on { "alarm-day on" } else { "alarm-day" },
+                                                                    "{crate::text::day_letter(&translations, day)}"
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        button {
+                                            class: "alarm-menu",
+                                            "aria-label": "{menu_aria}",
+                                            onclick: move |_| sheet.set(Some(HomeSheet::Menu(menu_id.clone()))),
+                                            Icon { name: IconName::EllipsisVertical, size: 18 }
+                                        }
+                                        button {
+                                            class: "alarm-switch",
+                                            role: "switch",
+                                            "aria-checked": if on { "true" } else { "false" },
+                                            "aria-label": "{switch_aria} {name}",
+                                            onclick: move |_| {
+                                                let now = chrono::Local::now().naive_local();
+                                                let id = toggle_id.clone();
+                                                let mut message = String::new();
+                                                change(String::new(), &mut |list| {
+                                                    if let Some(alarm) = list.iter_mut().find(|a| a.id == id) {
+                                                        alarm.enabled = !alarm.enabled;
+                                                        if alarm.enabled {
+                                                            schedule::refresh_one_time_date(alarm, now);
+                                                            message = rings_in(&translations, alarm);
+                                                        } else {
+                                                            message = t(&translations, "home.switched_off");
+                                                        }
+                                                    }
+                                                });
+                                                if let Some(toast_now) = toast.write().as_mut() {
+                                                    toast_now.message = message;
+                                                }
+                                            },
+                                            Switch { on }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    div { class: "empty",
+                        div { class: "empty-icon", Icon { name: IconName::Clock, size: 40 } }
+                        p { class: "empty-title", {t(&translations, "alarm.no_alarms")} }
+                        p { class: "empty-sub", {t(&translations, "alarm.tap_to_create")} }
+                        for (key, hour, days) in [
+                            ("home.template_weekdays", 7u8, [true, true, true, true, true, false, false]),
+                            ("home.template_weekend", 9u8, [false, false, false, false, false, true, true]),
+                        ] {
+                            button {
+                                class: "btn empty-template",
+                                onclick: {
+                                    let defaults = defaults.clone();
+                                    move |_| {
+                                        let mut alarm = alarm_ops::new_alarm(defaults.as_ref());
+                                        alarm.id = uuid::Uuid::new_v4().to_string();
+                                        alarm.time_hour = hour;
+                                        alarm.time_minute = 0;
+                                        alarm.days = days;
+                                        alarm.label = t(&translations, key);
+                                        alarm.order = crate::ordering::order_for_new(&alarms.peek());
+                                        alarms.write().push(alarm);
+                                        crate::persistence::save_alarms(&alarms.peek());
+                                    }
+                                },
+                                {t(&translations, key)}
+                            }
+                        }
+                    }
+                }
+            }
 
-    // Bottom navigation
-               nav { class: "bottom-nav",
-                   Link { to: Route::Home {}, class: "nav-item active",
-                       Icon { name: IconName::Clock }
-                       " {nav_alarms}"
-                   }
-                   Link { to: Route::History {}, class: "nav-item",
-                       Icon { name: IconName::ChartBar }
-                       " {nav_history}"
-                   }
-                   Link { to: Route::Settings {}, class: "nav-item",
-                       Icon { name: IconName::Gear }
-                       " {nav_settings}"
-                   }
-               }
-           }
-       }
-}
+            button {
+                class: "fab",
+                "aria-label": "{create_aria}",
+                onclick: move |_| {
+                    if alarms.peek().len() >= alarm_ops::MAX_ALARMS {
+                        toast.set(Some(ToastMessage::error(t(&translations, "alarm.limit_reached"))));
+                        return;
+                    }
+                    nav.push(Route::AlarmConfig { id: "new".to_string() });
+                },
+                Icon { name: IconName::Plus, size: 24 }
+            }
 
-/// Format the days array into a human-readable schedule string.
-fn format_schedule(days: &[bool; 7], translations: &Translations) -> String {
-    let day_labels: Vec<String> = DAY_KEYS.iter().map(|k| t(translations, k)).collect();
-    let selected: Vec<&String> = days
-        .iter()
-        .enumerate()
-        .filter(|(_, &d)| d)
-        .map(|(i, _)| &day_labels[i])
-        .collect();
+            BottomNav { current: Route::Home {} }
 
-    if selected.is_empty() {
-        t(translations, "config.one_time")
-    } else if selected.len() == 7 {
-        t(translations, "config.every_day")
-    } else if selected.len() == 5
-        && days[0]
-        && days[1]
-        && days[2]
-        && days[3]
-        && days[4]
-        && !days[5]
-        && !days[6]
-    {
-        t(translations, "config.weekdays")
-    } else {
-        selected
-            .iter()
-            .map(|s| s.as_str())
-            .collect::<Vec<&str>>()
-            .join(", ")
-    }
-}
-
-/// "Today", "Tomorrow" or the weekday an alarm next rings on (the card
-/// already shows its clock time).
-fn ring_day_label(at_ms: i64, repeating: bool, translations: &Translations) -> Option<String> {
-    use chrono::Local;
-    let ring_day = chrono::DateTime::from_timestamp_millis(at_ms)?
-        .with_timezone(&Local)
-        .date_naive();
-    let today = Local::now().date_naive();
-    let label = schedule::day_label(today, ring_day);
-    // A repeating alarm already lists its weekdays on the card, so a bare
-    // weekday adds nothing; Today and Tomorrow still do.
-    if repeating && matches!(label, schedule::DayLabel::Weekday(_)) {
-        return None;
-    }
-    Some(match label {
-        schedule::DayLabel::Today => t(translations, "home.today"),
-        schedule::DayLabel::Tomorrow => t(translations, "home.tomorrow"),
-        schedule::DayLabel::Weekday(day) => {
-            t(translations, DAY_KEYS[day.num_days_from_monday() as usize])
+            {sheet_view}
         }
+    }
+}
+
+fn paused_message(translations: &Translations, until_ms: i64) -> String {
+    let date = local_date(until_ms).unwrap_or_default();
+    t(translations, "home.paused_message")
+        .replace("{date}", &crate::text::day_month(translations, date))
+}
+
+/// "Rings in 7 h 12 min", for an alarm switched on just now.
+fn rings_in(translations: &Translations, alarm: &AlarmData) -> String {
+    let now = chrono::Local::now();
+    let date = alarm
+        .date
+        .as_deref()
+        .and_then(|d| chrono::NaiveDate::parse_from_str(d, "%Y-%m-%d").ok());
+    schedule::next_ring_moment(
+        alarm.time_hour,
+        alarm.time_minute,
+        alarm.days,
+        date,
+        now.naive_local(),
+    )
+    .and_then(|moment| chrono::Local.from_local_datetime(&moment).earliest())
+    .map(|at| {
+        let time = schedule::format_countdown(
+            schedule::countdown(now.timestamp_millis(), at.timestamp_millis()),
+            &t(translations, "home.next_in_dhm"),
+            &t(translations, "home.next_in_hm"),
+            &t(translations, "home.next_in_m"),
+        );
+        t(translations, "config.rings_in").replace("{time}", &time)
     })
+    .unwrap_or_default()
 }

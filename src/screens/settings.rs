@@ -1,322 +1,432 @@
-use crate::app::{t, Route, Translations};
-use crate::components::{Icon, IconName};
+use crate::alarm_ops;
+use crate::app::{t, AlarmData, Route, Translations};
+use crate::components::{
+    BottomNav, Chips, Icon, IconName, Row, Sheet, SheetDone, SheetItem, SwitchRow, ToastMessage,
+};
 use crate::i18n;
-use crate::models::{Locale, ThemeMode};
+use crate::models::{AppSettings, Locale, ThemeMode, TimeFormat, WeekStart};
 use dioxus::prelude::*;
 
-/// Translation keys for theme labels.
-const THEME_KEYS: &[&str] = &["theme.dark", "theme.light", "theme.colorblind"];
+/// What "Before an alarm" offers, in minutes.
+const NOTIFY_MINUTES: [u8; 4] = [0, 5, 10, 30];
 
-/// Display name for each Locale (in its own language).
-fn locale_display(l: Locale) -> &'static str {
-    match l {
-        Locale::English => "English",
-        Locale::Dutch => "Nederlands",
-        Locale::Spanish => "Español",
-        Locale::French => "Français",
-        Locale::German => "Deutsch",
-    }
+/// The percentages for the minimum volume.
+const VOLUMES: [u8; 5] = [0, 25, 50, 75, 100];
+
+/// The panel open over the settings.
+#[derive(Clone, Copy, PartialEq)]
+enum SettingsSheet {
+    Theme,
+    Language,
+    TimeFormat,
+    WeekStart,
+    NotifyBefore,
+    Volume,
+    Backup,
+    DeleteHistory,
+    About,
 }
 
 /// Settings screen for app-wide preferences.
-/// Uses shared context for theme and locale so changes persist across screens.
 #[component]
 pub fn Settings() -> Element {
-    // Access global theme, locale, and translations signals from context
-    let mut theme_signal = use_context::<Signal<ThemeMode>>();
-    let mut locale_signal = use_context::<Signal<Locale>>();
+    let mut settings = use_context::<Signal<AppSettings>>();
     let mut translations = use_context::<Translations>();
-    let mut theme_dropdown_open = use_signal(|| false);
-    let mut lang_dropdown_open = use_signal(|| false);
-    let mut min_volume = use_signal(|| crate::persistence::load_settings().min_volume_percent);
+    let mut alarms = use_context::<Signal<Vec<AlarmData>>>();
+    let mut toast = use_context::<Signal<Option<ToastMessage>>>();
+    let nav = use_navigator();
+    let mut sheet: Signal<Option<SettingsSheet>> = use_signal(|| None);
 
-    // One-time on mount: allow the device sensor to rotate this screen
-    // (settings often looks better / is easier to use in landscape on phones
-    // or tablets). The build-time default ("portrait" via sentinel.toml +
-    // mobile-sentinel) keeps everything else locked.
-    // use_hook(|| {
-    //     #[cfg(target_os = "android")]
-    //     {
-    //         mobile_sentinel::display::set_requested_orientation(
-    //             mobile_sentinel::display::ScreenOrientation::Unspecified,
-    //         );
-    //         log::info!("[AlarmFree] Settings: rotation override = Unspecified");
-    //     }
-    // });
+    let problems = use_hook(|| {
+        mobile_sentinel::health::report(crate::platform::FOREGROUND_CHANNEL_ID)
+            .problems()
+            .len()
+    });
 
-    // // On unmount / route change away from Settings: restore the app default lock.
-    // use_drop(|| {
-    //     #[cfg(target_os = "android")]
-    //     {
-    //         mobile_sentinel::display::set_requested_orientation(
-    //             mobile_sentinel::display::ScreenOrientation::Portrait,
-    //         );
-    //         log::info!("[AlarmFree] Settings: restored Portrait (app default)");
-    //     }
-    // });
-
-    let theme_modes = [ThemeMode::Dark, ThemeMode::Light, ThemeMode::Colorblind];
-    let locales = [
-        Locale::English,
-        Locale::Dutch,
-        Locale::Spanish,
-        Locale::French,
-        Locale::German,
-    ];
-
-    // Translate theme labels
-    let theme_labels: Vec<String> = THEME_KEYS.iter().map(|k| t(&translations, k)).collect();
-
-    // Get current theme's translated label
-    let current_theme_index = match *theme_signal.read() {
-        ThemeMode::Dark => 0,
-        ThemeMode::Light => 1,
-        ThemeMode::Colorblind => 2,
+    let mut update = move |change: &mut dyn FnMut(&mut AppSettings)| {
+        change(&mut settings.write());
+        crate::persistence::save_settings(&settings.peek());
     };
-    let current_theme_label = theme_labels[current_theme_index].clone();
-    let current_locale = *locale_signal.read();
-    let current_language_label = locale_display(current_locale);
 
-    let settings_title = t(&translations, "settings.title");
-    let theme_label = t(&translations, "settings.theme");
-    let language_label = t(&translations, "settings.language");
-    let about_label = t(&translations, "settings.about");
-    let min_volume_label = t(&translations, "settings.min_volume");
-    let min_volume_desc = t(&translations, "settings.min_volume_desc");
-    let volume_off_text = t(&translations, "settings.volume_off");
-    let tagline_text = t(&translations, "app.tagline");
-    let description_text = t(&translations, "app.description");
-    // Compiled in from Cargo.toml so the About section can never go stale.
-    let version_text = format!("AlarmFree v{}", env!("CARGO_PKG_VERSION"));
-    let nav_alarms = t(&translations, "nav.alarms");
-    let nav_history = t(&translations, "nav.history");
-    let nav_settings = t(&translations, "nav.settings");
+    let now = settings.read().clone();
+    let prefs = now.prefs.clone();
+    let theme_name = |mode: ThemeMode, translations: &Translations| {
+        t(
+            translations,
+            match mode {
+                ThemeMode::System => "theme.system",
+                ThemeMode::Dark => "theme.dark",
+                ThemeMode::Light => "theme.light",
+                ThemeMode::Black => "theme.black",
+                ThemeMode::Colorblind => "theme.colorblind",
+            },
+        )
+    };
+    let format_name = |format: TimeFormat, translations: &Translations| {
+        t(
+            translations,
+            match format {
+                TimeFormat::System => "settings.follow_phone",
+                TimeFormat::H24 => "settings.h24",
+                TimeFormat::H12 => "settings.h12",
+            },
+        )
+    };
+    let week_name = |start: WeekStart, translations: &Translations| {
+        t(
+            translations,
+            match start {
+                WeekStart::Monday => "day.monday",
+                WeekStart::Sunday => "day.sunday",
+                WeekStart::Saturday => "day.saturday",
+            },
+        )
+    };
+    let language_name = if prefs.language_follows_phone {
+        t(&translations, "settings.follow_phone")
+    } else {
+        now.locale.display_name().to_owned()
+    };
+    let notify_name = |minutes: u8, translations: &Translations| {
+        if minutes == 0 {
+            t(translations, "config.fade_off")
+        } else {
+            t(translations, "text.minutes").replace("{minutes}", &minutes.to_string())
+        }
+    };
+    let volume_name = |percent: u8, translations: &Translations| {
+        if percent == 0 {
+            t(translations, "settings.volume_off")
+        } else {
+            format!("{percent}%")
+        }
+    };
+    let done_text = t(&translations, "action.done");
+    let version_text = format!("AlarmFree {}", env!("CARGO_PKG_VERSION"));
+
+    let sheet_view = match sheet() {
+        None => rsx! {},
+        Some(SettingsSheet::Theme) => rsx! {
+            Sheet {
+                title: t(&translations, "settings.theme"),
+                on_close: move |_| sheet.set(None),
+                for mode in [ThemeMode::System, ThemeMode::Dark, ThemeMode::Light, ThemeMode::Black, ThemeMode::Colorblind] {
+                    SheetItem {
+                        label: theme_name(mode, &translations),
+                        selected: now.theme == mode,
+                        on_click: move |_| {
+                            update(&mut |s| s.theme = mode);
+                            sheet.set(None);
+                        },
+                    }
+                }
+            }
+        },
+        Some(SettingsSheet::Language) => rsx! {
+            Sheet {
+                title: t(&translations, "settings.language"),
+                on_close: move |_| sheet.set(None),
+                SheetItem {
+                    label: t(&translations, "settings.follow_phone"),
+                    selected: prefs.language_follows_phone,
+                    on_click: move |_| {
+                        let locale = Locale::from_language_code(&mobile_sentinel::device_language()).unwrap_or_default();
+                        update(&mut |s| {
+                            s.prefs.language_follows_phone = true;
+                            s.locale = locale;
+                        });
+                        translations.set(i18n::load_translations(locale));
+                        crate::platform::set_ring_language(locale);
+                        sheet.set(None);
+                    },
+                }
+                for locale in Locale::ALL {
+                    SheetItem {
+                        label: locale.display_name().to_owned(),
+                        selected: !prefs.language_follows_phone && now.locale == locale,
+                        on_click: move |_| {
+                            update(&mut |s| {
+                                s.prefs.language_follows_phone = false;
+                                s.locale = locale;
+                            });
+                            translations.set(i18n::load_translations(locale));
+                            crate::platform::set_ring_language(locale);
+                            sheet.set(None);
+                        },
+                    }
+                }
+            }
+        },
+        Some(SettingsSheet::TimeFormat) => rsx! {
+            Sheet {
+                title: t(&translations, "settings.time_format"),
+                on_close: move |_| sheet.set(None),
+                for format in [TimeFormat::System, TimeFormat::H24, TimeFormat::H12] {
+                    SheetItem {
+                        label: format_name(format, &translations),
+                        selected: prefs.time_format == format,
+                        on_click: move |_| {
+                            update(&mut |s| s.prefs.time_format = format);
+                            sheet.set(None);
+                        },
+                    }
+                }
+            }
+        },
+        Some(SettingsSheet::WeekStart) => rsx! {
+            Sheet {
+                title: t(&translations, "settings.week_start"),
+                on_close: move |_| sheet.set(None),
+                for start in [WeekStart::Monday, WeekStart::Sunday, WeekStart::Saturday] {
+                    SheetItem {
+                        label: week_name(start, &translations),
+                        selected: prefs.week_start == start,
+                        on_click: move |_| {
+                            update(&mut |s| s.prefs.week_start = start);
+                            sheet.set(None);
+                        },
+                    }
+                }
+            }
+        },
+        Some(SettingsSheet::NotifyBefore) => rsx! {
+            Sheet {
+                title: t(&translations, "settings.notify_before"),
+                note: t(&translations, "settings.notify_before_note"),
+                on_close: move |_| sheet.set(None),
+                Chips::<u8> {
+                    grow: true,
+                    options: NOTIFY_MINUTES.iter().map(|m| (*m, notify_name(*m, &translations))).collect::<Vec<_>>(),
+                    selected: Some(prefs.notify_before_minutes),
+                    on_pick: move |minutes: u8| {
+                        update(&mut |s| s.prefs.notify_before_minutes = minutes);
+                        crate::platform::refresh_reminders();
+                    },
+                }
+                SheetDone { label: done_text.clone(), on_click: move |_| sheet.set(None) }
+            }
+        },
+        Some(SettingsSheet::Volume) => rsx! {
+            Sheet {
+                title: t(&translations, "settings.min_volume"),
+                note: t(&translations, "settings.min_volume_desc"),
+                on_close: move |_| sheet.set(None),
+                Chips::<u8> {
+                    grow: true,
+                    options: VOLUMES.iter().map(|p| (*p, volume_name(*p, &translations))).collect::<Vec<_>>(),
+                    selected: Some(now.min_volume_percent),
+                    on_pick: move |percent: u8| {
+                        update(&mut |s| s.min_volume_percent = percent);
+                        crate::platform::set_min_volume(percent);
+                    },
+                }
+                SheetDone { label: done_text.clone(), on_click: move |_| sheet.set(None) }
+            }
+        },
+        Some(SettingsSheet::Backup) => rsx! {
+            Sheet {
+                title: t(&translations, "settings.backup"),
+                note: t(&translations, "settings.backup_note"),
+                on_close: move |_| sheet.set(None),
+                SheetItem {
+                    label: t(&translations, "settings.backup_save"),
+                    on_click: move |_| {
+                        let message = match save_backup(&alarms.peek()) {
+                            Ok(place) => t(&translations, "settings.backup_saved").replace("{place}", &place),
+                            Err(e) => {
+                                log::warn!("[AlarmFree] Backup failed: {e}");
+                                t(&translations, "settings.backup_failed")
+                            }
+                        };
+                        toast.set(Some(ToastMessage::info(message)));
+                        sheet.set(None);
+                    },
+                }
+                SheetItem {
+                    label: t(&translations, "settings.backup_restore"),
+                    on_click: move |_| {
+                        sheet.set(None);
+                        spawn(async move {
+                            let (tx, rx) = futures_channel::oneshot::channel();
+                            std::thread::spawn(move || {
+                                let _ = tx.send(read_backup());
+                            });
+                            match rx.await {
+                                Ok(Ok(found)) => {
+                                    let before = alarms.peek().clone();
+                                    let room = alarm_ops::MAX_ALARMS.saturating_sub(before.len());
+                                    let added = found.len().min(room);
+                                    {
+                                        let mut list = alarms.write();
+                                        let first = crate::ordering::order_for_new(&list);
+                                        for (position, mut alarm) in found.into_iter().take(room).enumerate() {
+                                            alarm.order = first + position as i64;
+                                            list.push(alarm);
+                                        }
+                                    }
+                                    crate::persistence::save_alarms(&alarms.peek());
+                                    let message = t(&translations, "settings.backup_restored").replace("{count}", &added.to_string());
+                                    toast.set(Some(ToastMessage::with_undo(message, before)));
+                                }
+                                Ok(Err(e)) if e.is_empty() => {}
+                                Ok(Err(e)) => {
+                                    log::warn!("[AlarmFree] Restoring failed: {e}");
+                                    toast.set(Some(ToastMessage::error(t(&translations, "settings.backup_bad"))));
+                                }
+                                Err(_) => {}
+                            }
+                        });
+                    },
+                }
+            }
+        },
+        Some(SettingsSheet::DeleteHistory) => rsx! {
+            Sheet {
+                title: t(&translations, "history.delete_history"),
+                on_close: move |_| sheet.set(None),
+                SheetItem {
+                    label: t(&translations, "history.delete_30"),
+                    on_click: move |_| {
+                        crate::history_persistence::delete_history(Some(30));
+                        sheet.set(None);
+                    },
+                }
+                SheetItem {
+                    label: t(&translations, "history.delete_90"),
+                    on_click: move |_| {
+                        crate::history_persistence::delete_history(Some(90));
+                        sheet.set(None);
+                    },
+                }
+                SheetItem {
+                    label: t(&translations, "history.delete_all"),
+                    danger: true,
+                    on_click: move |_| {
+                        crate::history_persistence::delete_history(None);
+                        sheet.set(None);
+                    },
+                }
+            }
+        },
+        Some(SettingsSheet::About) => rsx! {
+            Sheet {
+                title: version_text.clone(),
+                note: t(&translations, "app.description"),
+                on_close: move |_| sheet.set(None),
+                p { class: "about-line", {t(&translations, "app.tagline")} }
+                SheetDone { label: done_text.clone(), on_click: move |_| sheet.set(None) }
+            }
+        },
+    };
+
+    let reliability_sub = if problems == 0 {
+        t(&translations, "settings.reliability_fine")
+    } else if problems == 1 {
+        t(&translations, "settings.reliability_one")
+    } else {
+        t(&translations, "settings.reliability_many").replace("{count}", &problems.to_string())
+    };
 
     rsx! {
-           div { class: "screen settings-screen",
-    // Header
-               div { class: "header",
-                   h2 { "{settings_title}" }
-               }
+        div { class: "screen",
+            header { class: "main-header",
+                h1 { class: "screen-title-large", {t(&translations, "settings.title")} }
+            }
+            div { class: "scroll scroll-nav",
+                button {
+                    class: if problems > 0 { "banner banner-tall" } else { "banner banner-tall fine" },
+                    onclick: move |_| { nav.push(Route::Reliability {}); },
+                    span { class: "banner-text",
+                        span { class: "banner-title", {t(&translations, "reliability.title")} }
+                        span { class: "banner-sub", "{reliability_sub}" }
+                    }
+                    span { class: "banner-action",
+                        if problems > 0 {
+                            {t(&translations, "settings.check")}
+                        } else {
+                            Icon { name: IconName::ChevronRight, size: 14 }
+                        }
+                    }
+                }
 
-    // Theme selection (custom dropdown)
-               div { class: "settings-section",
-                   label { class: "section-label", "{theme_label}" }
-                   div { class: "custom-dropdown",
-                       button {
-                           class: "dropdown-trigger",
-                           onclick: move |_| {
-                               let current = *theme_dropdown_open.read();
-                               theme_dropdown_open.set(!current);
-                               lang_dropdown_open.set(false);
-                           },
-                           span { class: "dropdown-value", "{current_theme_label}" }
-                           span { class: "dropdown-arrow", Icon { name: IconName::ChevronDown, size: 12 } }
-                       }
-                       if *theme_dropdown_open.read() {
-                           div { class: "dropdown-menu",
-                               for (i, mode) in theme_modes.iter().enumerate() {
-                                   {
-                                       let is_active = current_theme_index == i;
-                                       let mode_val = *mode;
-                                       let label = theme_labels[i].clone();
-                                       rsx! {
-                                           button {
-                                               class: if is_active { "dropdown-item active" } else { "dropdown-item" },
-                                               onclick: move |_| {
-                                                   theme_signal.set(mode_val);
-                                                   theme_dropdown_open.set(false);
-                                                   let mut settings = crate::persistence::load_settings();
-                                                   settings.theme = mode_val;
-                                                   crate::persistence::save_settings(&settings);
-                                               },
-                                               "{label}"
-                                           }
-                                       }
-                                   }
-                               }
-                           }
-                       }
-                   }
-               }
+                h2 { class: "list-title", {t(&translations, "settings.general")} }
+                ul { class: "list",
+                    Row { title: t(&translations, "settings.theme"), value: theme_name(now.theme, &translations), on_click: move |_| sheet.set(Some(SettingsSheet::Theme)) }
+                    Row { title: t(&translations, "settings.language"), value: language_name, on_click: move |_| sheet.set(Some(SettingsSheet::Language)) }
+                    Row { title: t(&translations, "settings.time_format"), value: format_name(prefs.time_format, &translations), on_click: move |_| sheet.set(Some(SettingsSheet::TimeFormat)) }
+                    Row { title: t(&translations, "settings.week_start"), value: week_name(prefs.week_start, &translations), on_click: move |_| sheet.set(Some(SettingsSheet::WeekStart)) }
+                }
 
-    // Language selection (custom dropdown)
-               div { class: "settings-section",
-                   label { class: "section-label", "{language_label}" }
-                   div { class: "custom-dropdown",
-                       button {
-                           class: "dropdown-trigger",
-                           onclick: move |_| {
-                               let current = *lang_dropdown_open.read();
-                               lang_dropdown_open.set(!current);
-                               theme_dropdown_open.set(false);
-                           },
-                           span { class: "dropdown-value", "{current_language_label}" }
-                           span { class: "dropdown-arrow", Icon { name: IconName::ChevronDown, size: 12 } }
-                       }
-                       if *lang_dropdown_open.read() {
-                           div { class: "dropdown-menu",
-                               for locale_val in locales.iter() {
-                                   {
-                                       let lv = *locale_val;
-                                       let is_active = current_locale == lv;
-                                       let display = locale_display(lv);
-                                       rsx! {
-                                           button {
-                                               class: if is_active { "dropdown-item active" } else { "dropdown-item" },
-                                               onclick: move |_| {
-                                                   locale_signal.set(lv);
-                                                   translations.set(i18n::load_translations(lv));
-                                                   lang_dropdown_open.set(false);
-                                                   let mut settings = crate::persistence::load_settings();
-                                                   settings.locale = lv;
-                                                   crate::persistence::save_settings(&settings);
-                                                   crate::platform::set_ring_language(lv);
-                                               },
-                                               "{display}"
-                                           }
-                                       }
-                                   }
-                               }
-                           }
-                       }
-                   }
-               }
+                h2 { class: "list-title", {t(&translations, "settings.alarm_defaults")} }
+                ul { class: "list",
+                    Row {
+                        title: t(&translations, "settings.new_alarms"),
+                        value: t(&translations, "settings.edit"),
+                        on_click: move |_| { nav.push(Route::AlarmConfig { id: "defaults".to_string() }); },
+                    }
+                    Row { title: t(&translations, "settings.notify_before"), value: notify_name(prefs.notify_before_minutes, &translations), on_click: move |_| sheet.set(Some(SettingsSheet::NotifyBefore)) }
+                }
 
-    // Minimum alarm volume
-               div { class: "settings-section",
-                   label { class: "section-label", "{min_volume_label}" }
-                   p { class: "about-desc", "{min_volume_desc}" }
-                   div { class: "schedule-toggle",
-                       for percent in [0u8, 25, 50, 75, 100] {
-                           button {
-                               class: if min_volume() == percent { "toggle-btn active" } else { "toggle-btn" },
-                               onclick: move |_| {
-                                   min_volume.set(percent);
-                                   let mut settings = crate::persistence::load_settings();
-                                   settings.min_volume_percent = percent;
-                                   crate::persistence::save_settings(&settings);
-                                   crate::platform::set_min_volume(percent);
-                               },
-                               if percent == 0 { "{volume_off_text}" } else { "{percent}%" }
-                           }
-                       }
-                   }
-               }
+                h2 { class: "list-title", {t(&translations, "settings.ringing")} }
+                ul { class: "list",
+                    Row { title: t(&translations, "settings.min_volume"), value: volume_name(now.min_volume_percent, &translations), on_click: move |_| sheet.set(Some(SettingsSheet::Volume)) }
+                    SwitchRow {
+                        title: t(&translations, "settings.touch_feedback"),
+                        on: prefs.touch_feedback,
+                        on_toggle: move |on: bool| {
+                            update(&mut |s| s.prefs.touch_feedback = on);
+                            crate::feedback::set_enabled(on);
+                        },
+                    }
+                    SwitchRow {
+                        title: t(&translations, "settings.less_motion"),
+                        on: prefs.less_motion,
+                        on_toggle: move |on: bool| update(&mut |s| s.prefs.less_motion = on),
+                    }
+                    SwitchRow {
+                        title: t(&translations, "settings.confetti"),
+                        on: prefs.confetti,
+                        on_toggle: move |on: bool| update(&mut |s| s.prefs.confetti = on),
+                    }
+                }
 
-    // About section
-               div { class: "settings-section",
-                   label { class: "section-label", "{about_label}" }
-                   div { class: "about-info",
-                       p { class: "about-name", "{version_text}" }
-                       p { class: "about-desc", "{tagline_text}" }
-                       p { class: "about-desc", "{description_text}" }
-                   }
-               }
-
-    // Notification permission deep-link.
-    // Opens android.settings.APP_NOTIFICATION_SETTINGS so the user
-    // can re-grant POST_NOTIFICATIONS after initial denial.
-    // Hidden on non-Android — the link target is Android-only.
-               {
-    #[cfg(target_os = "android")]
-                   {
-                       let notifications_label = t(&translations, "settings.notifications");
-                       let open_notification_text = t(&translations, "settings.open_notification_settings");
-                       let display_over_apps_label = t(&translations, "settings.display_over_apps");
-                       let overlay_desc_text = t(&translations, "settings.overlay_description");
-                       let grant_overlay_text = t(&translations, "settings.grant_overlay");
-                       let reliability_label = t(&translations, "settings.reliability");
-                       let reliability_desc = t(&translations, "settings.reliability_desc");
-                       let open_app_settings_text = t(&translations, "settings.open_app_settings");
-                       rsx! {
-                           div { class: "settings-section",
-                               label { class: "section-label", "{notifications_label}" }
-                               button {
-                                   class: "dropdown-trigger",
-                                   onclick: move |_| {
-                                       open_app_notification_settings();
-                                   },
-                                   span { class: "dropdown-value", "{open_notification_text}" }
-                                   span { class: "dropdown-arrow", Icon { name: IconName::ChevronRight, size: 12 } }
-                               }
-                           }
-
-    // SYSTEM_ALERT_WINDOW deep-link — REQUIRED for
-    // Alarmy-style force-to-front when the screen is on
-    // and unlocked. Without it, alarms only fire as a
-    // heads-up notification in that state. See
-    // `platform.rs::init_sentinel` for the init-time
-    // prompt; this row lets the user re-check / re-grant
-    // later if they dismissed the prompt.
-                           div { class: "settings-section",
-                               label { class: "section-label", "{display_over_apps_label}" }
-                               p { class: "about-desc", "{overlay_desc_text}" }
-                               button {
-                                   class: "dropdown-trigger",
-                                   onclick: move |_| {
-                                       request_system_alert_window();
-                                   },
-                                   span { class: "dropdown-value", "{grant_overlay_text}" }
-                                   span { class: "dropdown-arrow", Icon { name: IconName::ChevronRight, size: 12 } }
-                               }
-                           }
-
-    // Some phones (OnePlus, Xiaomi, Oppo, ...) stop apps from starting at
-    // boot and kill background processes unless allowed. Without that an
-    // alarm can fail after a restart.
-                           div { class: "settings-section",
-                               label { class: "section-label", "{reliability_label}" }
-                               p { class: "about-desc", "{reliability_desc}" }
-                               button {
-                                   class: "dropdown-trigger",
-                                   onclick: move |_| {
-                                       open_app_notification_settings();
-                                   },
-                                   span { class: "dropdown-value", "{open_app_settings_text}" }
-                                   span { class: "dropdown-arrow", Icon { name: IconName::ChevronRight, size: 12 } }
-                               }
-                           }
-                       }
-                   }
-    #[cfg(not(target_os = "android"))]
-                   rsx! {}
-               }
-
-    // Bottom navigation
-               nav { class: "bottom-nav",
-                   Link { to: Route::Home {}, class: "nav-item",
-                       Icon { name: IconName::Clock }
-                       " {nav_alarms}"
-                   }
-                   Link { to: Route::History {}, class: "nav-item",
-                       Icon { name: IconName::ChartBar }
-                       " {nav_history}"
-                   }
-                   Link { to: Route::Settings {}, class: "nav-item active",
-                       Icon { name: IconName::Gear }
-                       " {nav_settings}"
-                   }
-               }
-           }
-       }
+                h2 { class: "list-title", {t(&translations, "settings.data")} }
+                ul { class: "list",
+                    Row { title: t(&translations, "settings.backup"), on_click: move |_| sheet.set(Some(SettingsSheet::Backup)) }
+                    Row { title: t(&translations, "history.delete_history"), on_click: move |_| sheet.set(Some(SettingsSheet::DeleteHistory)) }
+                    Row { title: t(&translations, "settings.about"), value: env!("CARGO_PKG_VERSION").to_string(), on_click: move |_| sheet.set(Some(SettingsSheet::About)) }
+                }
+            }
+            BottomNav { current: Route::Settings {} }
+            {sheet_view}
+        }
+    }
 }
 
-/// Open the app's notification settings page so the user can re-grant
-/// POST_NOTIFICATIONS after denying the initial runtime prompt.
-#[cfg(target_os = "android")]
-fn open_app_notification_settings() {
-    mobile_sentinel::permissions::open_app_settings();
+/// Write the alarms to a file in Downloads. Returns where it went.
+fn save_backup(alarms: &[AlarmData]) -> Result<String, String> {
+    let json = alarm_ops::export_json(alarms);
+    let path = mobile_sentinel::app_files_dir().join("alarmfree-backup.json");
+    std::fs::write(&path, json).map_err(|e| e.to_string())?;
+    let name = format!("alarmfree-{}.json", chrono::Local::now().format("%Y-%m-%d"));
+    let result = mobile_sentinel::share::save_to_downloads(
+        &path.to_string_lossy(),
+        &name,
+        "application/json",
+    )
+    .map_err(|e| e.to_string());
+    let _ = std::fs::remove_file(&path);
+    result
 }
 
-/// Launch the `ACTION_MANAGE_OVERLAY_PERMISSION` Settings page so the user
-/// can grant `SYSTEM_ALERT_WINDOW` — the permission that lets the alarm
-/// receiver force the firing screen to foreground when the phone is on
-/// and unlocked. Without this permission, Android 14's Background
-/// Activity Launch (BAL) restrictions collapse our `startActivity` call
-/// to a heads-up notification. Delegates to `mobile_sentinel::overlay::request()`.
-#[cfg(target_os = "android")]
-fn request_system_alert_window() {
-    mobile_sentinel::overlay::request();
-    log::info!("[AlarmFree] Overlay-permission Settings launched");
+/// Let the user pick a backup and read the alarms from it. Blocks, so off the UI
+/// thread. An empty error is the user changing their mind.
+fn read_backup() -> Result<Vec<AlarmData>, String> {
+    let picked =
+        mobile_sentinel::media_picker::pick_file(&["application/json", "text/plain", "*/*"])
+            .map_err(|_| String::new())?;
+    let json = std::fs::read_to_string(&picked).map_err(|e| e.to_string());
+    let _ = std::fs::remove_file(&picked);
+    alarm_ops::import_json(&json?, crate::custom_sounds::sound_exists)
+        .ok_or_else(|| "not a backup".to_owned())
 }

@@ -5,12 +5,16 @@
 use dioxus::prelude::*;
 use std::collections::HashMap;
 
+use crate::back::{BackStack, BACK_PRESSED};
 use crate::i18n;
+use crate::models::AppSettings;
 use crate::screens::AlarmConfig;
 use crate::screens::AlarmFiring;
+use crate::screens::FirstRun;
 use crate::screens::History;
 use crate::screens::Home;
 use crate::screens::Practice;
+use crate::screens::Reliability;
 use crate::screens::Settings;
 
 /// Type alias for the translations signal used across the app.
@@ -41,10 +45,14 @@ pub enum Route {
     History {},
     #[route("/settings")]
     Settings {},
+    #[route("/reliability")]
+    Reliability {},
+    #[route("/welcome")]
+    FirstRun {},
 }
 
 /// Router-scoped layout that performs a one-shot navigation requested via
-/// the `nav_intent` context signal.
+/// the `nav_intent` context signal, and leaves a screen on Back.
 ///
 /// The firing screen (`AlarmFiring`) is rendered *outside* the `Router`
 /// (see [`App`]), so it cannot call `use_navigator()` itself. Instead it
@@ -54,11 +62,42 @@ pub enum Route {
 #[component]
 fn NavWatcher() -> Element {
     let mut nav_intent = use_context::<Signal<Option<Route>>>();
+    let mut leave_screen = use_context::<Signal<u32>>();
+    let settings = use_context::<Signal<AppSettings>>();
     let nav = use_navigator();
+    let route = use_route::<Route>();
     use_effect(move || {
         if let Some(route) = nav_intent() {
             nav_intent.set(None);
             nav.replace(route);
+        }
+    });
+    // Once, before anything else.
+    use_hook(|| {
+        if !settings.peek().prefs.setup_done {
+            nav.replace(Route::FirstRun {});
+        }
+    });
+    let current = use_signal(|| route.clone());
+    let mut current = current;
+    if *current.peek() != route {
+        current.set(route);
+    }
+    use_effect(move || {
+        if leave_screen() == 0 {
+            return;
+        }
+        leave_screen.set(0);
+        match &*current.peek() {
+            Route::Home {} => mobile_sentinel::foregrounding::move_to_back(),
+            // The main screens do not stack up.
+            Route::History {} | Route::Settings {} => {
+                nav.replace(Route::Home {});
+            }
+            _ if nav.can_go_back() => nav.go_back(),
+            _ => {
+                nav.replace(Route::Home {});
+            }
         }
     });
     rsx! { Outlet::<Route> {} }
@@ -94,48 +133,73 @@ pub struct AlarmData {
     pub enabled: bool,
     pub sound: String,
     pub sound_mode: usize,                 // 0=Sound+Vib, 1=Sound, 2=Vib
-    pub challenges: Vec<(String, String)>, // (type, difficulty)
+    pub challenges: Vec<(String, String)>, // (type, settings), see ChallengeSetup
     pub snooze_count: u8,
     pub snooze_interval: u8,
+    /// Shown under the label while it rings ("Take medication").
+    #[serde(default)]
+    pub note: String,
+    /// Vibration pattern, see [`crate::platform::VIBRATION_PATTERNS`]. Whether it
+    /// vibrates at all is `sound_mode`.
+    #[serde(default)]
+    pub vibration: u8,
+    /// The alarm volume while it rings is at least this; `None` is the general
+    /// minimum from the settings.
+    #[serde(default)]
+    pub volume_percent: Option<u8>,
+    /// Do the challenges in a different order each time.
+    #[serde(default)]
+    pub random_order: bool,
+    /// This long after it was turned off, confirm being up or it rings again (0 = off).
+    #[serde(default)]
+    pub wake_check_minutes: u8,
+    /// Nothing rings until then, for a holiday. Separate from a skipped ring, so
+    /// undoing one leaves the other.
+    #[serde(default)]
+    pub pause_until_ms: Option<i64>,
+    /// Gone instead of switched off when over: quick alarms, wake-up checks.
+    #[serde(default)]
+    pub delete_after_ring: bool,
+    /// Not in the list: wake-up checks and test alarms.
+    #[serde(default)]
+    pub hidden: bool,
 }
 
 fn default_ring_limit_secs() -> Option<u32> {
     Some(mobile_sentinel::context::schema::DEFAULT_RING_LIMIT_SECS)
 }
 
-/// Remove an alarm from the list. Returns the custom sound file that is left
-/// unused by it, if any: a duplicated alarm shares its sound with the
-/// original, so the file may only be deleted when no other alarm uses it.
-pub fn remove_alarm(list: &mut Vec<AlarmData>, id: &str) -> Option<String> {
-    let removed = list
-        .iter()
-        .position(|a| a.id == id)
-        .map(|i| list.remove(i))?;
-    let orphaned = crate::custom_sounds::is_custom_sound(&removed.sound)
-        && !list.iter().any(|a| a.sound == removed.sound);
-    orphaned.then_some(removed.sound)
-}
+/// History is kept this long.
+const HISTORY_KEEP_DAYS: u32 = 5 * 365;
 
 /// Root App component with global state context providers.
 #[component]
 pub fn App() -> Element {
-    // Load persisted settings (theme + locale).
-    let settings = use_hook(crate::persistence::load_settings);
-
     // Initialize platform: logger, FiringSink, AlarmKit, alarm rearm. First,
     // so the alarm list below already reflects one-time alarms it switched off.
-    use_hook(crate::platform::init_sentinel);
+    use_hook(crate::platform::init_platform);
 
     // Global state signals provided via context.
-    let theme = use_signal(|| settings.theme);
-    let locale = use_signal(|| settings.locale);
-    let alarms = use_signal(crate::persistence::load_alarms);
-    let translations: Translations = use_signal(|| i18n::load_translations(settings.locale));
+    let settings: Signal<AppSettings> = use_signal(crate::persistence::load_settings);
+    let mut alarms = use_signal(crate::persistence::load_alarms);
+    let translations: Translations = use_signal(|| i18n::load_translations(settings.peek().locale));
 
-    use_context_provider(|| theme);
-    use_context_provider(|| locale);
+    use_context_provider(|| settings);
     use_context_provider(|| alarms);
     use_context_provider(|| translations);
+
+    use_hook(|| {
+        crate::feedback::set_enabled(settings.peek().prefs.touch_feedback);
+        // What the history screen promises.
+        crate::history_persistence::delete_history(Some(HISTORY_KEEP_DAYS));
+    });
+
+    // Back: whatever is on top takes it, else the screen is left. While an alarm rings
+    // there is nothing to go back to, on any Android version.
+    let back_stack = use_context_provider(BackStack::default);
+    let mut leave_screen: Signal<u32> = use_signal(|| 0);
+    use_context_provider(|| leave_screen);
+    use_hook(|| mobile_sentinel::foregrounding::on_back(|| BACK_PRESSED.notify_one()));
 
     // One-shot navigation intent. Set by screens rendered outside the
     // Router (the firing screen) to request a route once the Router
@@ -166,10 +230,9 @@ pub fn App() -> Element {
         }
         notices.extend(unseen_outcome_notices(&translations));
         if !notices.is_empty() {
-            toast_signal.set(Some(crate::components::ToastMessage {
-                message: notices.join(" "),
-                level: crate::components::ToastLevel::Error,
-            }));
+            toast_signal.set(Some(crate::components::ToastMessage::error(
+                notices.join(" "),
+            )));
         }
     });
 
@@ -178,6 +241,18 @@ pub fn App() -> Element {
     // firing instance id changes (a cross-process write by the Recipe state
     // machine).
     let mut firing_id: Signal<Option<String>> = use_signal(crate::firing_state::peek_firing_alarm);
+
+    use_future(move || {
+        let back_stack = back_stack.clone();
+        async move {
+            loop {
+                BACK_PRESSED.notified().await;
+                if firing_id.peek().is_none() && !back_stack.pop() {
+                    leave_screen += 1;
+                }
+            }
+        }
+    });
 
     use_future(move || async move {
         let mut watch = crate::firing_state::FiringWatch::default();
@@ -189,10 +264,9 @@ pub fn App() -> Element {
                 // Rang until its limit with nobody there: nothing else tells the user.
                 let notices = unseen_outcome_notices(&translations);
                 if !notices.is_empty() {
-                    toast_signal.set(Some(crate::components::ToastMessage {
-                        message: notices.join(" "),
-                        level: crate::components::ToastLevel::Error,
-                    }));
+                    toast_signal.set(Some(crate::components::ToastMessage::error(
+                        notices.join(" "),
+                    )));
                 }
             }
             // One `stat` per tick; the records are only re-read on change.
@@ -204,10 +278,10 @@ pub fn App() -> Element {
                 firing_id.set(current);
             }
             if crate::persistence::take_save_failure() {
-                toast_signal.set(Some(crate::components::ToastMessage {
-                    message: t(&translations, "db.save_failed"),
-                    level: crate::components::ToastLevel::Error,
-                }));
+                toast_signal.set(Some(crate::components::ToastMessage::error(t(
+                    &translations,
+                    "db.save_failed",
+                ))));
             }
         }
     });
@@ -234,8 +308,9 @@ pub fn App() -> Element {
     // (exposed to CSS as --safe-*), and the bar icons must contrast with our
     // background (dark icons on the light theme).
     let mut safe_area = use_signal(SafeArea::default);
+    let mut system_dark = use_signal(mobile_sentinel::display::system_dark);
     use_effect(move || {
-        let light = matches!(theme(), crate::models::ThemeMode::Light);
+        let light = settings.read().theme.is_light(system_dark());
         mobile_sentinel::display::set_light_system_bars(light);
     });
     use_future(move || async move {
@@ -245,8 +320,12 @@ pub fn App() -> Element {
             if current != *safe_area.peek() {
                 safe_area.set(current);
                 // A recreated window can reset the icon colour.
-                let light = matches!(*theme.peek(), crate::models::ThemeMode::Light);
+                let light = settings.peek().theme.is_light(*system_dark.peek());
                 mobile_sentinel::display::set_light_system_bars(light);
+            }
+            let dark = mobile_sentinel::display::system_dark();
+            if dark != *system_dark.peek() {
+                system_dark.set(dark);
             }
             crate::timer::sleep_ms(1000).await;
         }
@@ -256,12 +335,17 @@ pub fn App() -> Element {
     let firing_id_val = firing_id.read().clone();
 
     // Read theme reactively inside rsx! so Dioxus tracks it as a dependency
-    let theme_class = theme.read().css_class();
+    let theme_class = settings.read().theme.css_class(system_dark());
+    let motion_class = if settings.read().prefs.less_motion {
+        "less-motion"
+    } else {
+        ""
+    };
     let safe_style = safe_area.read().css_vars();
 
     rsx! {
            document::Link { rel: "stylesheet", href: asset!("/assets/style.css") }
-           div { class: "app-root {theme_class}", style: "{safe_style}",
+           div { class: "app-root {theme_class} {motion_class}", style: "{safe_style}",
                if let Some(alarm_id) = firing_id_val {
     // Show alarm firing screen directly, bypassing router
                    crate::screens::AlarmFiring { key: "{alarm_id}", id: alarm_id }
@@ -272,8 +356,14 @@ pub fn App() -> Element {
     // Toast notification overlay
                if let Some(msg) = toast_signal.read().clone() {
                    crate::components::Toast {
+                       key: "{msg.message}",
                        msg: msg,
                        on_dismiss: move |_| { toast_signal.set(None); },
+                       on_undo: move |before: Vec<AlarmData>| {
+                           alarms.set(before);
+                           crate::persistence::save_alarms(&alarms.peek());
+                           toast_signal.set(None);
+                       },
                    }
                }
            }
@@ -349,46 +439,6 @@ impl SafeArea {
 #[cfg(test)]
 mod tests {
     use super::SafeArea;
-    use super::{remove_alarm, AlarmData};
-
-    fn alarm(id: &str, sound: &str) -> AlarmData {
-        AlarmData {
-            id: id.into(),
-            time_hour: 7,
-            time_minute: 0,
-            label: String::new(),
-            days: [true; 7],
-            date: None,
-            skip_until_ms: None,
-            fade_in_secs: 0,
-            ring_limit_secs: None,
-            order: 0,
-            enabled: true,
-            sound: sound.into(),
-            sound_mode: 0,
-            challenges: vec![],
-            snooze_count: 3,
-            snooze_interval: 5,
-        }
-    }
-
-    #[test]
-    fn removing_an_alarm_frees_its_custom_sound_only_when_nothing_else_uses_it() {
-        let mut list = vec![
-            alarm("a", "mine.mp3"),
-            alarm("b", "mine.mp3"),
-            alarm("c", "air"),
-        ];
-        assert_eq!(remove_alarm(&mut list, "a"), None, "the copy still uses it");
-        assert_eq!(remove_alarm(&mut list, "b"), Some("mine.mp3".to_string()));
-        assert_eq!(
-            remove_alarm(&mut list, "c"),
-            None,
-            "bundled sounds are never deleted"
-        );
-        assert_eq!(remove_alarm(&mut list, "missing"), None);
-        assert!(list.is_empty());
-    }
 
     #[test]
     fn safe_area_renders_css_variables() {

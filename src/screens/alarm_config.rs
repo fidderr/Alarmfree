@@ -1,28 +1,74 @@
-use crate::app::{t, AlarmData, Route, Translations};
-use crate::components::time_picker::TimePicker;
-use crate::components::{Icon, IconName};
-use crate::screens::practice::ChallengeRunner;
+//! Making and changing an alarm. The time and the days are right there; everything
+//! else is one summary row that opens a sheet.
+
+use chrono::{Duration, TimeZone};
 use dioxus::prelude::*;
 
-/// Stop any currently playing preview sound via the gated audio capability.
-fn stop_preview(handle_id: u64) {
-    if handle_id == 0 {
-        return;
-    }
-    let handle = mobile_sentinel::PlaybackHandle::from_id(handle_id);
-    let _ = mobile_sentinel::audio::stop(&handle);
+use crate::alarm_ops;
+use crate::app::{t, AlarmData, Translations};
+use crate::back::use_back_handler;
+use crate::components::time_picker::TimePicker;
+use crate::components::{
+    Chips, GroupTitle, Icon, IconName, Row, ScreenHeader, Sheet, SheetDone, SheetItem, Stepper,
+    ToastMessage,
+};
+use crate::models::setup::{difficulty_name, preset, CHALLENGE_TYPES};
+use crate::models::{AppSettings, ChallengeSetup, Difficulty};
+use crate::screens::practice::ChallengeRunner;
+
+/// How long tapping a sound plays it.
+const SOUND_PREVIEW_MS: u64 = 5_000;
+/// How long "Try" rings.
+const TRY_MS: u64 = 10_000;
+/// The most challenges an alarm takes.
+const MAX_CHALLENGES: usize = 10;
+
+/// Translation keys of the vibration patterns, in the order of
+/// `platform::VIBRATION_PATTERNS`.
+const VIBRATION_KEYS: [&str; 3] = ["vibration.pulse", "vibration.steady", "vibration.heartbeat"];
+
+const DIFFICULTIES: [Difficulty; 4] = [
+    Difficulty::Easy,
+    Difficulty::Medium,
+    Difficulty::Hard,
+    Difficulty::Extreme,
+];
+
+const FADE_SECONDS: [u16; 6] = [0, 15, 30, 60, 120, 300];
+const LIMIT_MINUTES: [u32; 4] = [30, 60, 90, 120];
+const CHECK_MINUTES: [u8; 4] = [0, 3, 5, 10];
+
+/// The panel open over the editor.
+#[derive(Clone, PartialEq)]
+enum EditorSheet {
+    Time,
+    Date,
+    Label,
+    Sound,
+    Vibration,
+    Snooze,
+    Challenges,
+    AddChallenge,
+    Detail(usize),
+    Limit,
+    WakeCheck,
+    Delete,
+    Discard,
 }
 
-/// Play a sound preview via the gated audio capability. Returns the new
-/// handle ID (0 on failure).
-fn play_preview(sound_name: &str) -> u64 {
-    // Get the file path for any sound (default or custom)
-    let path = match crate::custom_sounds::get_playback_path(sound_name) {
-        Some(p) => p,
-        None => {
-            log::warn!("[AlarmFree] No playback path found for: {sound_name}");
-            return 0;
-        }
+/// Stops whatever a sound preview started, also when the editor goes away.
+fn stop_preview(handle_id: u64) {
+    if handle_id != 0 {
+        let handle = mobile_sentinel::PlaybackHandle::from_id(handle_id);
+        let _ = mobile_sentinel::audio::stop(&handle);
+    }
+}
+
+/// Play a sound via the gated audio capability. Returns the handle (0 on failure).
+fn play_preview(sound: &str) -> u64 {
+    let Some(path) = crate::custom_sounds::get_playback_path(sound) else {
+        log::warn!("[AlarmFree] No playback path found for: {sound}");
+        return 0;
     };
     match mobile_sentinel::audio::play(&path.to_string_lossy(), false) {
         Ok(handle) => handle.id(),
@@ -33,284 +79,14 @@ fn play_preview(sound_name: &str) -> u64 {
     }
 }
 
-/// All bundled alarm sounds — loaded dynamically from the sounds/default directory.
-fn get_default_sounds() -> Vec<String> {
-    crate::custom_sounds::list_default_sounds()
-}
-
-/// Translation keys for challenge types.
-const CHALLENGE_KEYS: &[&str] = &[
-    "challenge.math",
-    "challenge.scan",
-    "challenge.shake",
-    "challenge.steps",
-    "challenge.memory",
-    "challenge.typing",
-    "challenge.hold",
-    "challenge.reaction",
-];
-
-/// Difficulty level values (value, translation key) for math/memory/typing challenges.
-const DIFFICULTY_VALUES: &[(&str, &str)] = &[
-    ("easy", "difficulty.easy"),
-    ("medium", "difficulty.medium"),
-    ("hard", "difficulty.hard"),
-    ("extreme", "difficulty.extreme"),
-];
-
-/// Challenge description translation keys (matched to CHALLENGE_KEYS order).
-const CHALLENGE_DESC_KEYS: &[&str] = &[
-    "challenge.desc.math",
-    "challenge.desc.scan",
-    "challenge.desc.shake",
-    "challenge.desc.steps",
-    "challenge.desc.memory",
-    "challenge.desc.typing",
-    "challenge.desc.hold",
-    "challenge.desc.reaction",
-];
-
-/// Returns a human-readable summary of a challenge's JSON config.
-fn challenge_config_summary(
-    translations: &Translations,
-    type_key: &str,
-    config_json: &str,
-) -> String {
-    if let Ok(config) = serde_json::from_str::<serde_json::Value>(config_json) {
-        if let Some(diff) = config.get("difficulty").and_then(|v| v.as_str()) {
-            let key = match diff {
-                "easy" => "difficulty.easy",
-                "medium" => "difficulty.medium",
-                "hard" => "difficulty.hard",
-                "extreme" => "difficulty.extreme",
-                _ => return diff.to_string(),
-            };
-            return t(translations, key);
-        }
-        if let Some(count) = config.get("count").and_then(|v| v.as_u64()) {
-            return match type_key {
-                "challenge.shake" => t(translations, "challenge.summary.shakes")
-                    .replace("{count}", &count.to_string()),
-                "challenge.steps" => t(translations, "challenge.summary.steps")
-                    .replace("{count}", &count.to_string()),
-                "challenge.hold" => {
-                    let secs = config
-                        .get("hold_ms")
-                        .and_then(|v| v.as_u64())
-                        .map(|ms| ms / 1000)
-                        .unwrap_or(3);
-                    t(translations, "challenge.summary.hold")
-                        .replace("{count}", &count.to_string())
-                        .replace("{secs}", &secs.to_string())
-                }
-                "challenge.reaction" => {
-                    let secs = config
-                        .get("time_ms")
-                        .and_then(|v| v.as_u64())
-                        .map(|ms| ms / 1000)
-                        .unwrap_or(3);
-                    let rounds = config.get("rounds").and_then(|v| v.as_u64()).unwrap_or(2);
-                    t(translations, "challenge.summary.reaction")
-                        .replace("{count}", &count.to_string())
-                        .replace("{secs}", &secs.to_string())
-                        .replace("{rounds}", &rounds.to_string())
-                }
-                _ => format!("{} count", count),
-            };
-        }
-        if let Some(value) = config.get("value").and_then(|v| v.as_str()) {
-            if value.is_empty() {
-                return t(translations, "challenge.summary.any");
-            }
-            return if value.chars().count() > 15 {
-                format!("{}...", value.chars().take(12).collect::<String>())
-            } else {
-                value.to_string()
-            };
-        }
-        if config.as_object().is_some_and(|o| o.is_empty()) {
-            return t(translations, "challenge.summary.default");
-        }
-    }
-    config_json.to_string()
-}
-
-/// Returns true if the challenge type uses a difficulty selector.
-fn challenge_uses_difficulty(type_key: &str) -> bool {
-    matches!(
-        type_key,
-        "challenge.math" | "challenge.memory" | "challenge.typing"
-    )
-}
-
-/// Returns an example string showing what a difficulty level looks like for a given challenge type.
-fn difficulty_example(translations: &Translations, type_key: &str, difficulty: &str) -> String {
-    let key = match (type_key, difficulty) {
-        ("challenge.math", "easy") => "challenge.example.math_easy",
-        ("challenge.math", "medium") => "challenge.example.math_medium",
-        ("challenge.math", "hard") => "challenge.example.math_hard",
-        ("challenge.math", "extreme") => "challenge.example.math_extreme",
-        ("challenge.memory", "easy") => "challenge.example.memory_easy",
-        ("challenge.memory", "medium") => "challenge.example.memory_medium",
-        ("challenge.memory", "hard") => "challenge.example.memory_hard",
-        ("challenge.memory", "extreme") => "challenge.example.memory_extreme",
-        ("challenge.typing", "easy") => "challenge.example.typing_easy",
-        ("challenge.typing", "medium") => "challenge.example.typing_medium",
-        ("challenge.typing", "hard") => "challenge.example.typing_hard",
-        ("challenge.typing", "extreme") => "challenge.example.typing_extreme",
-        _ => return String::new(),
-    };
-    t(translations, key)
-}
-
-/// Translation keys for day abbreviations.
-const DAY_KEYS: &[&str] = &[
-    "day.mon", "day.tue", "day.wed", "day.thu", "day.fri", "day.sat", "day.sun",
-];
-
-/// Translation keys for sound mode options.
-const SOUND_MODE_KEYS: &[&str] = &[
-    "config.sound_vibration",
-    "config.sound_only",
-    "config.vibration_only",
-];
-
-/// Picker field values parsed from a stored challenge config JSON. Used to
-/// pre-fill the challenge overlay when editing an existing challenge.
-struct ParsedPickerConfig {
-    difficulty: String,
-    shake_count: u32,
-    step_count: u32,
-    hold_count: u32,
-    hold_secs: u32,
-    scan_value: String,
-    reaction_targets: u32,
-    reaction_secs: u32,
-    reaction_rounds: u32,
-}
-
-/// Parse a stored `(type_key, config_json)` pair back into picker field
-/// values so the overlay can open in "edit" mode pre-filled with the
-/// challenge's current settings. Unset fields fall back to the same
-/// defaults used when adding a fresh challenge.
-fn parse_picker_config(type_key: &str, config_json: &str) -> ParsedPickerConfig {
-    let config: serde_json::Value =
-        serde_json::from_str(config_json).unwrap_or_else(|_| serde_json::json!({}));
-
-    let difficulty = config
-        .get("difficulty")
-        .and_then(|v| v.as_str())
-        .unwrap_or("medium")
-        .to_string();
-    let count = config.get("count").and_then(|v| v.as_u64());
-    let hold_secs = config
-        .get("hold_ms")
-        .and_then(|v| v.as_u64())
-        .map(|ms| (ms / 1000) as u32)
-        .unwrap_or(3);
-    let value = config
-        .get("value")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
-
-    ParsedPickerConfig {
-        difficulty,
-        shake_count: if type_key == "challenge.shake" {
-            count.unwrap_or(20) as u32
-        } else {
-            20
-        },
-        step_count: if type_key == "challenge.steps" {
-            count.unwrap_or(20) as u32
-        } else {
-            20
-        },
-        hold_count: if type_key == "challenge.hold" {
-            count.unwrap_or(10) as u32
-        } else {
-            10
-        },
-        hold_secs,
-        scan_value: if type_key == "challenge.scan" {
-            value
-        } else {
-            String::new()
-        },
-        reaction_targets: if type_key == "challenge.reaction" {
-            count.unwrap_or(10) as u32
-        } else {
-            10
-        },
-        reaction_secs: config
-            .get("time_ms")
-            .and_then(|v| v.as_u64())
-            .map(|ms| (ms / 1000) as u32)
-            .unwrap_or(3),
-        reaction_rounds: config
-            .get("rounds")
-            .and_then(|v| v.as_u64())
-            .map(|r| r as u32)
-            .unwrap_or(2),
-    }
-}
-
-/// Alarm configuration screen for creating/editing alarms.
-/// Reads and writes alarm data to/from shared global context.
-/// What the challenge modal currently shows, for building the challenge's
-/// stored settings from it.
-struct PickedSettings<'a> {
-    difficulty: &'a str,
-    shake_count: u32,
-    step_count: u32,
-    hold_count: u32,
-    hold_secs: u32,
-    reaction_targets: u32,
-    reaction_secs: u32,
-    reaction_rounds: u32,
-    scan_value: &'a str,
-}
-
-/// The stored JSON settings of a challenge of type `type_key` as picked in the
-/// modal. The same JSON is what an alarm keeps and what the firing screen
-/// reads, so the Test button and Add share it.
-fn picker_config_json(type_key: &str, p: &PickedSettings) -> String {
-    match type_key {
-        "challenge.math" | "challenge.memory" | "challenge.typing" => {
-            format!("{{\"difficulty\":\"{}\"}}", p.difficulty)
-        }
-        "challenge.shake" => format!("{{\"count\":{}}}", p.shake_count),
-        "challenge.steps" => format!("{{\"count\":{}}}", p.step_count),
-        "challenge.hold" => format!(
-            "{{\"count\":{},\"hold_ms\":{}}}",
-            p.hold_count,
-            p.hold_secs * 1000
-        ),
-        "challenge.reaction" => format!(
-            "{{\"count\":{},\"time_ms\":{},\"rounds\":{}}}",
-            p.reaction_targets,
-            p.reaction_secs * 1000,
-            p.reaction_rounds
-        ),
-        // Built with serde so a quote or backslash in the code (a URL, JSON text in
-        // a QR code) cannot break the settings, which would silently turn "this
-        // specific code" into "any code".
-        "challenge.scan" => serde_json::json!({
-            "value": crate::sanitize::sanitize_reference_value(p.scan_value)
-        })
-        .to_string(),
-        _ => "{}".to_string(),
-    }
-}
-
-/// Ask for the Android permission a challenge needs (steps, camera) before it
-/// is added or tested. A no-op elsewhere.
-fn request_challenge_permission(type_key: &str) {
+/// Ask for the Android permission a challenge needs (steps, camera) before it is
+/// added or tried. A no-op elsewhere.
+fn request_challenge_permission(setup: &ChallengeSetup) {
     #[cfg(target_os = "android")]
     {
-        let permission = match type_key {
-            "challenge.steps" => Some("android.permission.ACTIVITY_RECOGNITION"),
-            "challenge.scan" => Some("android.permission.CAMERA"),
+        let permission = match setup {
+            ChallengeSetup::Steps { .. } => Some("android.permission.ACTIVITY_RECOGNITION"),
+            ChallengeSetup::Scan { .. } => Some("android.permission.CAMERA"),
             _ => None,
         };
         if let Some(permission) = permission {
@@ -318,1396 +94,1302 @@ fn request_challenge_permission(type_key: &str) {
         }
     }
     #[cfg(not(target_os = "android"))]
-    let _ = type_key;
+    let _ = setup;
 }
 
-#[cfg(test)]
-mod picker_tests {
-    use super::*;
+/// A time typed in by hand: "7", "730", "07:30", "7.30".
+fn parse_typed_time(text: &str) -> Option<(u8, u8)> {
+    let digits: String = text.chars().filter(char::is_ascii_digit).collect();
+    let separated = text.contains([':', '.', ' ', 'h']);
+    let (hour, minute) = match digits.len() {
+        1 | 2 if !separated => (digits.parse().ok()?, 0),
+        3 if !separated => (digits[..1].parse().ok()?, digits[1..].parse().ok()?),
+        3 => (digits[..1].parse().ok()?, digits[1..].parse().ok()?),
+        4 => (digits[..2].parse().ok()?, digits[2..].parse().ok()?),
+        _ => return None,
+    };
+    (hour < 24 && minute < 60).then_some((hour, minute))
+}
 
-    fn picked() -> PickedSettings<'static> {
-        PickedSettings {
-            difficulty: "hard",
-            shake_count: 25,
-            step_count: 40,
-            hold_count: 8,
-            hold_secs: 4,
-            reaction_targets: 12,
-            reaction_secs: 3,
-            reaction_rounds: 2,
-            scan_value: "",
+/// What an alarm's challenge is set to, in a few words.
+fn challenge_summary(translations: &Translations, setup: &ChallengeSetup) -> String {
+    let difficulty = |d: Difficulty| t(translations, &format!("difficulty.{}", difficulty_name(d)));
+    match setup {
+        ChallengeSetup::Math { difficulty: d }
+        | ChallengeSetup::Memory { difficulty: d }
+        | ChallengeSetup::Typing { difficulty: d } => difficulty(*d),
+        ChallengeSetup::Shake { count } => {
+            t(translations, "challenge.summary.shakes").replace("{count}", &count.to_string())
+        }
+        ChallengeSetup::Steps { count } => {
+            t(translations, "challenge.summary.steps").replace("{count}", &count.to_string())
+        }
+        ChallengeSetup::Hold { count, secs } => t(translations, "challenge.summary.hold")
+            .replace("{count}", &count.to_string())
+            .replace("{secs}", &secs.to_string()),
+        ChallengeSetup::Reaction {
+            targets,
+            secs,
+            rounds,
+        } => t(translations, "challenge.summary.reaction")
+            .replace("{count}", &targets.to_string())
+            .replace("{secs}", &secs.to_string())
+            .replace("{rounds}", &rounds.to_string()),
+        ChallengeSetup::Scan { code } if code.is_empty() => {
+            t(translations, "challenge.summary.any")
+        }
+        ChallengeSetup::Scan { code } => {
+            t(translations, "challenge.summary.code").replace("{code}", code)
         }
     }
+}
 
-    #[test]
-    fn each_challenge_type_stores_only_its_own_settings() {
-        let p = picked();
-        assert_eq!(
-            picker_config_json("challenge.math", &p),
-            r#"{"difficulty":"hard"}"#
-        );
-        assert_eq!(
-            picker_config_json("challenge.memory", &p),
-            r#"{"difficulty":"hard"}"#
-        );
-        assert_eq!(picker_config_json("challenge.shake", &p), r#"{"count":25}"#);
-        assert_eq!(picker_config_json("challenge.steps", &p), r#"{"count":40}"#);
-        assert_eq!(
-            picker_config_json("challenge.hold", &p),
-            r#"{"count":8,"hold_ms":4000}"#
-        );
-        assert_eq!(
-            picker_config_json("challenge.reaction", &p),
-            r#"{"count":12,"time_ms":3000,"rounds":2}"#
-        );
-        assert_eq!(picker_config_json("challenge.unknown", &p), "{}");
-    }
+/// An example of what a difficulty means for this challenge.
+fn difficulty_example(translations: &Translations, setup: &ChallengeSetup) -> String {
+    let (name, difficulty) = match setup {
+        ChallengeSetup::Math { difficulty } => ("math", difficulty),
+        ChallengeSetup::Memory { difficulty } => ("memory", difficulty),
+        ChallengeSetup::Typing { difficulty } => ("typing", difficulty),
+        _ => return String::new(),
+    };
+    t(
+        translations,
+        &format!("challenge.example.{name}_{}", difficulty_name(*difficulty)),
+    )
+}
 
-    #[test]
-    fn a_scan_value_is_sanitised_and_empty_means_any_code() {
-        let mut p = picked();
-        assert_eq!(picker_config_json("challenge.scan", &p), r#"{"value":""}"#);
-        // Quotes, backslashes and braces must survive exactly.
-        p.scan_value = r#"https://x.test/?q="a"\b{c}"#;
-        let json = picker_config_json("challenge.scan", &p);
-        let parsed: serde_json::Value = serde_json::from_str(&json).expect("valid JSON");
-        assert_eq!(parsed["value"], r#"https://x.test/?q="a"\b{c}"#);
-        p.scan_value = "ab\u{0007}cd";
-        let json = picker_config_json("challenge.scan", &p);
-        let parsed: serde_json::Value = serde_json::from_str(&json).expect("valid JSON");
-        assert_eq!(parsed["value"], "abcd", "control characters are stripped");
-    }
-
-    #[test]
-    fn the_stored_settings_round_trip_through_the_picker_parser() {
-        let p = picked();
-        let json = picker_config_json("challenge.hold", &p);
-        let parsed = parse_picker_config("challenge.hold", &json);
-        assert_eq!(parsed.hold_count, 8);
-        assert_eq!(parsed.hold_secs, 4);
+fn seconds_label(translations: &Translations, secs: u16) -> String {
+    match secs {
+        0 => t(translations, "config.fade_off"),
+        s if s < 60 => t(translations, "text.seconds").replace("{seconds}", &s.to_string()),
+        s => t(translations, "text.minutes").replace("{minutes}", &(s / 60).to_string()),
     }
 }
 
+/// Alarm configuration screen for creating/editing alarms, and for what new alarms
+/// start from ("defaults").
 #[component]
 pub fn AlarmConfig(id: String) -> Element {
     let mut alarms = use_context::<Signal<Vec<AlarmData>>>();
     let translations = use_context::<Translations>();
-    let mut toast_signal = use_context::<Signal<Option<crate::components::ToastMessage>>>();
+    let mut settings = use_context::<Signal<AppSettings>>();
+    let mut toast = use_context::<Signal<Option<ToastMessage>>>();
     let nav = use_navigator();
+
     // "copy-<id>" opens a new alarm prefilled from the alarm <id>.
     let copy_of = id.strip_prefix("copy-").map(str::to_owned);
+    let for_defaults = id == "defaults";
     let is_new = id == "new" || copy_of.is_some();
-    let title = if is_new {
+
+    // What the editor starts from, once; comparing with it tells if anything changed.
+    let original = use_hook(|| {
+        let defaults = settings.peek().prefs.alarm_defaults.clone();
+        if for_defaults || id == "new" {
+            return alarm_ops::new_alarm(defaults.as_ref());
+        }
+        let source = copy_of.as_deref().unwrap_or(&id);
+        let found = alarms.peek().iter().find(|a| a.id == source).cloned();
+        let mut alarm = found.unwrap_or_else(|| alarm_ops::new_alarm(defaults.as_ref()));
+        if copy_of.is_some() && !alarm.label.is_empty() {
+            alarm.label = t(&translations, "alarm.copy_label").replace("{label}", &alarm.label);
+        }
+        alarm
+    });
+
+    let mut draft = use_signal(|| original.clone());
+    // An alarm with no weekday selected rings once, on a date.
+    let mut one_time = use_signal(|| crate::schedule::is_one_time(&original));
+    let mut date_value = use_signal(|| {
+        original.date.clone().unwrap_or_else(|| {
+            chrono::Local::now()
+                .date_naive()
+                .format("%Y-%m-%d")
+                .to_string()
+        })
+    });
+    let mut setups = use_signal(|| ChallengeSetup::list_from_stored(&original.challenges));
+    let mut sheet: Signal<Option<EditorSheet>> = use_signal(|| None);
+    let mut error = use_signal(String::new);
+    let mut typed_time = use_signal(String::new);
+    // Challenges being tried; shown instead of the editor, which keeps its state.
+    let mut trying: Signal<Option<Vec<ChallengeSetup>>> = use_signal(|| None);
+
+    // A sound playing for a moment. The token makes an older timer leave a newer
+    // preview alone.
+    let mut preview_handle = use_signal(|| 0u64);
+    let mut preview_token = use_signal(|| 0u64);
+    let mut try_running = use_signal(|| false);
+    let mut stop_sound = move || {
+        stop_preview(*preview_handle.peek());
+        preview_handle.set(0);
+        let token = *preview_token.peek() + 1;
+        preview_token.set(token);
+        try_running.set(false);
+    };
+    let mut play_for = move |sound: String, ms: u64| {
+        stop_sound();
+        preview_handle.set(play_preview(&sound));
+        let token = *preview_token.peek();
+        spawn(async move {
+            crate::timer::sleep_ms(ms).await;
+            if *preview_token.peek() == token {
+                stop_sound();
+            }
+        });
+    };
+    use_drop(move || stop_preview(*preview_handle.peek()));
+
+    // Drag a challenge by its handle to put it in a different step.
+    crate::reorder::use_reorder(
+        "challenge-list",
+        "challenge-row",
+        Some("drag-handle"),
+        EventHandler::new(move |(from, to)| {
+            crate::list_edit::move_item(&mut setups.write(), from, to);
+        }),
+    );
+
+    // The alarm as it would be saved right now.
+    let build = {
+        let id = id.clone();
+        let original = original.clone();
+        move || -> AlarmData {
+            let mut alarm = draft.peek().clone();
+            alarm.id = if is_new {
+                uuid::Uuid::new_v4().to_string()
+            } else {
+                id.clone()
+            };
+            alarm.label = crate::sanitize::sanitize_label(&alarm.label);
+            alarm.note = crate::sanitize::sanitize_label(&alarm.note);
+            if *one_time.peek() {
+                alarm.days = [false; 7];
+                alarm.date = Some(date_value.peek().clone());
+            } else {
+                alarm.date = None;
+            }
+            alarm.challenges = setups
+                .peek()
+                .iter()
+                .map(ChallengeSetup::to_stored)
+                .collect();
+            alarm.order = if is_new {
+                crate::ordering::order_for_new(&alarms.peek())
+            } else {
+                original.order
+            };
+            // Saving an alarm starts it fresh, apart from a holiday the user asked for.
+            alarm.enabled = true;
+            alarm.skip_until_ms = None;
+            alarm
+        }
+    };
+
+    let has_changes = {
+        let build = build.clone();
+        let original = original.clone();
+        let id = id.clone();
+        move || -> bool {
+            let mut now = build();
+            let mut then = original.clone();
+            now.id = String::new();
+            then.id = String::new();
+            now.order = then.order;
+            now.enabled = then.enabled;
+            now.skip_until_ms = then.skip_until_ms;
+            if then.days == [false; 7] && then.date.is_none() {
+                then.date = now.date.clone();
+            }
+            let _ = &id;
+            now != then
+        }
+    };
+
+    let mut leave = {
+        let has_changes = has_changes.clone();
+        move || {
+            if has_changes() {
+                sheet.set(Some(EditorSheet::Discard));
+            } else {
+                stop_sound();
+                nav.go_back();
+            }
+        }
+    };
+    use_back_handler(EventHandler::new({
+        let mut leave = leave.clone();
+        move |_| leave()
+    }));
+
+    if let Some(list) = trying() {
+        return rsx! {
+            ChallengeRunner {
+                challenges: list,
+                on_exit: move |_| trying.set(None),
+            }
+        };
+    }
+
+    let current = draft.read().clone();
+    let twenty_four = crate::text::uses_24_hours(&settings.read());
+    let week_start = settings.read().prefs.week_start;
+    let is_one_time = one_time();
+
+    // "Rings tomorrow, in 7 h 12 min" for the settings as they are right now.
+    let rings_text = {
+        let now = chrono::Local::now();
+        let days = if is_one_time {
+            [false; 7]
+        } else {
+            current.days
+        };
+        let date = if is_one_time {
+            chrono::NaiveDate::parse_from_str(&date_value.read(), "%Y-%m-%d").ok()
+        } else {
+            None
+        };
+        crate::schedule::next_ring_moment(
+            current.time_hour,
+            current.time_minute,
+            days,
+            date,
+            now.naive_local(),
+        )
+        .map(|moment| {
+            // Measured in real local time, so a clock change in between counts.
+            let left_ms = chrono::Local
+                .from_local_datetime(&moment)
+                .earliest()
+                .map(|at| (at - now).num_milliseconds())
+                .unwrap_or_else(|| (moment - now.naive_local()).num_milliseconds());
+            let time = crate::schedule::format_countdown(
+                crate::schedule::countdown(0, left_ms),
+                &t(&translations, "home.next_in_dhm"),
+                &t(&translations, "home.next_in_hm"),
+                &t(&translations, "home.next_in_m"),
+            );
+            let day = match crate::schedule::day_label(now.date_naive(), moment.date()) {
+                crate::schedule::DayLabel::Today => t(&translations, "home.today_lower"),
+                crate::schedule::DayLabel::Tomorrow => t(&translations, "home.tomorrow_lower"),
+                crate::schedule::DayLabel::Weekday(_) => {
+                    crate::text::short_date(&translations, moment.date())
+                }
+            };
+            t(&translations, "config.rings_on")
+                .replace("{day}", &day)
+                .replace("{time}", &time)
+        })
+        .unwrap_or_default()
+    };
+
+    let done_text = t(&translations, "action.done");
+    let title = if for_defaults {
+        t(&translations, "config.defaults_title")
+    } else if is_new {
         t(&translations, "alarm.create")
     } else {
         t(&translations, "alarm.edit")
     };
 
-    // Load existing alarm data if editing
-    let existing = if id == "new" {
-        None
+    // Summary rows.
+    let sound_summary = if current.sound_mode == 2 {
+        t(&translations, "config.vibration_only")
     } else {
-        let source_id = copy_of.as_deref().unwrap_or(&id);
-        let found = alarms.read().iter().find(|a| a.id == source_id).cloned();
-        if copy_of.is_some() {
-            found.map(|mut a| {
-                if !a.label.is_empty() {
-                    a.label = t(&translations, "alarm.copy_label").replace("{label}", &a.label);
-                }
-                a
-            })
-        } else {
-            found
+        format!(
+            "{}, {} {}",
+            crate::custom_sounds::display_name(&current.sound),
+            t(&translations, "config.fade_in_lower"),
+            seconds_label(&translations, current.fade_in_secs),
+        )
+    };
+    let vibration_summary = if current.sound_mode == 1 {
+        t(&translations, "vibration.off")
+    } else {
+        t(
+            &translations,
+            VIBRATION_KEYS[usize::from(current.vibration).min(VIBRATION_KEYS.len() - 1)],
+        )
+    };
+    let snooze_summary = if current.snooze_count == 0 {
+        t(&translations, "config.no_snooze")
+    } else {
+        t(&translations, "config.snooze_summary")
+            .replace("{minutes}", &current.snooze_interval.to_string())
+            .replace("{count}", &current.snooze_count.to_string())
+    };
+    let challenge_summary_text = if setups.read().is_empty() {
+        t(&translations, "config.none")
+    } else {
+        setups
+            .read()
+            .iter()
+            .map(|s| t(&translations, s.type_key()))
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    let limit_summary = match current.ring_limit_secs {
+        None => t(&translations, "config.limit_forever"),
+        Some(secs) => {
+            t(&translations, "text.minutes").replace("{minutes}", &(secs / 60).to_string())
         }
     };
-
-    // Form state - initialized from existing alarm or defaults
-    let mut hour = use_signal(|| existing.as_ref().map_or(7u8, |a| a.time_hour));
-    let mut minute = use_signal(|| existing.as_ref().map_or(0u8, |a| a.time_minute));
-    let mut label_value =
-        use_signal(|| existing.as_ref().map_or(String::new(), |a| a.label.clone()));
-    // An alarm with no weekday selected rings once, on a date: reopen it in
-    // "specific date" mode.
-    let mut schedule_mode = use_signal(|| {
-        match existing.as_ref() {
-            Some(a) if crate::schedule::is_one_time(a) => "date",
-            _ => "weekdays",
-        }
-        .to_string()
-    });
-    let mut selected_days = use_signal(|| existing.as_ref().map_or([false; 7], |a| a.days));
-    // Prefill the date field (YYYY-MM-DD — the format the native
-    // <input type="date"> expects) with the alarm's date, or today, so
-    // switching to "specific date" mode never shows an empty picker.
-    let mut date_value = use_signal(|| {
-        existing
-            .as_ref()
-            .and_then(|a| a.date.clone())
-            .unwrap_or_else(|| {
-                chrono::Local::now()
-                    .date_naive()
-                    .format("%Y-%m-%d")
-                    .to_string()
-            })
-    });
-    let mut sound_value = use_signal(|| {
-        existing.as_ref().map_or_else(
-            || {
-                get_default_sounds()
-                    .first()
-                    .cloned()
-                    .unwrap_or_else(|| "alarm".to_string())
-            },
-            |a| a.sound.clone(),
-        )
-    });
-    let mut show_sound_picker = use_signal(|| false);
-    let mut show_file_picker = use_signal(|| false);
-    let mut playing_sound = use_signal(String::new);
-    let mut preview_handle_id = use_signal(|| 0u64);
-    let mut pick_audio_requested = use_signal(|| false);
-    let mut sound_mode_index = use_signal(|| existing.as_ref().map_or(0usize, |a| a.sound_mode));
-    let default_sounds_list = use_signal(get_default_sounds);
-
-    let mut challenges: Signal<Vec<(String, String)>> = use_signal(|| {
-        existing
-            .as_ref()
-            .map_or(Vec::new(), |a| a.challenges.clone())
-    });
-    let mut show_challenge_picker = use_signal(|| false);
-    // The challenge being tried out from the modal (shown in place of the editor).
-    let mut test_challenge: Signal<Option<Vec<(String, String)>>> = use_signal(|| None);
-    let mut picker_selected_type = use_signal(String::new);
-    let mut editing_index: Signal<Option<usize>> = use_signal(|| None);
-    let mut picker_difficulty = use_signal(|| "medium".to_string());
-    let mut picker_shake_count = use_signal(|| 20u32);
-    let mut picker_step_count = use_signal(|| 20u32);
-    let mut picker_hold_count = use_signal(|| 10u32);
-    let mut picker_hold_secs = use_signal(|| 3u32);
-    let mut picker_reaction_targets = use_signal(|| 10u32);
-    let mut picker_reaction_secs = use_signal(|| 3u32);
-    let mut picker_reaction_rounds = use_signal(|| 2u32);
-    let mut picker_scan_value = use_signal(String::new);
-    let mut scan_requested = use_signal(|| false);
-    let mut snooze_count = use_signal(|| existing.as_ref().map_or(3u8, |a| a.snooze_count));
-    let mut snooze_interval = use_signal(|| existing.as_ref().map_or(1u8, |a| a.snooze_interval));
-    let mut show_delete_confirm = use_signal(|| false);
-
-    // Drag a challenge by its handle to put it in a different step.
-    crate::reorder::use_reorder(
-        "challenge-list",
-        "challenge-item",
-        Some("drag-handle"),
-        EventHandler::new(move |(from, to)| {
-            crate::list_edit::move_item(&mut challenges.write(), from, to);
-        }),
-    );
-    // New alarms fade in over a minute; an existing alarm (or a copy of one) keeps
-    // its own setting.
-    let mut fade_in_secs = use_signal(|| existing.as_ref().map_or(60u16, |a| a.fade_in_secs));
-    // No selector yet: an existing alarm keeps its limit, a new one gets the default.
-    let ring_limit_secs = use_signal(|| {
-        existing.as_ref().map_or(
-            Some(mobile_sentinel::context::schema::DEFAULT_RING_LIMIT_SECS),
-            |a| a.ring_limit_secs,
-        )
-    });
-    let existing_order = existing.as_ref().map_or(0, |a| a.order);
-
-    // Background task for native file picker
-    let _pick_task = use_future(move || async move {
-        loop {
-            // Poll for pick request
-            loop {
-                crate::timer::sleep(std::time::Duration::from_millis(100)).await;
-                if *pick_audio_requested.read() {
-                    break;
-                }
-            }
-            pick_audio_requested.set(false);
-
-            let (tx, rx) = futures_channel::oneshot::channel::<Result<String, String>>();
-            std::thread::spawn(move || {
-                let _ = tx.send(crate::custom_sounds::pick_audio_file_native());
-            });
-
-            match rx.await {
-                Ok(Ok(filename)) => {
-                    sound_value.set(filename);
-                    show_sound_picker.set(false);
-                    show_file_picker.set(false);
-                    playing_sound.set(String::new());
-                    preview_handle_id.set(0);
-                }
-                Ok(Err(reason)) if reason == crate::custom_sounds::NOT_A_SOUND => {
-                    toast_signal.set(Some(crate::components::ToastMessage {
-                        message: t(&translations, "sound.not_a_sound"),
-                        level: crate::components::ToastLevel::Error,
-                    }));
-                }
-                // Cancelled, mostly.
-                Ok(Err(reason)) => log::info!("[AlarmFree] No sound imported: {reason}"),
-                Err(_) => {}
-            }
-        }
-    });
-
-    // Background task for code scanning (barcode / QR)
-    let _scan_task = use_future(move || async move {
-        loop {
-            // Poll for scan request
-            loop {
-                crate::timer::sleep(std::time::Duration::from_millis(100)).await;
-                if *scan_requested.read() {
-                    break;
-                }
-            }
-
-            scan_requested.set(false);
-
-            let (tx, rx) = futures_channel::oneshot::channel::<String>();
-            std::thread::spawn(move || {
-                // Scanning goes through the feature-gated `camera` module —
-                // the only sanctioned entry point. The raw JNI facade is
-                // crate-private, so there is no bypass.
-                let result = mobile_sentinel::scanner::scan().unwrap_or_default();
-                let _ = tx.send(result);
-            });
-
-            if let Ok(value) = rx.await {
-                if !value.is_empty() {
-                    picker_scan_value.set(value);
-                }
-            }
-        }
-    });
-
-    let mut validation_errors: Signal<std::collections::HashMap<String, String>> =
-        use_signal(std::collections::HashMap::new);
-
-    // Translate day labels
-    let day_labels: Vec<String> = DAY_KEYS.iter().map(|k| t(&translations, k)).collect();
-
-    // Try out the challenge from the modal with the settings picked so far. It
-    // replaces the editor view only while it runs; the editor keeps its state.
-    if let Some(list) = test_challenge.read().clone() {
-        return rsx! {
-            ChallengeRunner {
-                challenges: list,
-                on_exit: move |_| test_challenge.set(None),
-            }
-        };
-    }
-
-    // Delete confirmation dialog
-    if *show_delete_confirm.read() {
-        let delete_id = id.clone();
-        let cancel_text = t(&translations, "action.cancel");
-        let delete_text = t(&translations, "action.delete");
-        let delete_confirm_text = t(&translations, "alarm.delete_confirm");
-        let delete_warning_text = t(&translations, "alarm.delete_warning");
-        return rsx! {
-                   div { class: "screen alarm-config-screen",
-                       div { class: "confirm-dialog-overlay",
-                           div { class: "confirm-dialog",
-                               h3 { "{delete_confirm_text}" }
-                               p { "{delete_warning_text}" }
-                               div { class: "confirm-actions",
-                                   button {
-                                       class: "btn-cancel",
-                                       onclick: move |_| { show_delete_confirm.set(false); },
-                                       "{cancel_text}"
-                                   }
-                                   button {
-                                       class: "btn-delete",
-                                       onclick: move |_| {
-        // Remove alarm from shared state; its custom sound file goes too
-        // unless another alarm (a copy) still uses it
-                                           let unused_sound = crate::app::remove_alarm(&mut alarms.write(), &delete_id);
-                                           if let Some(sound) = unused_sound {
-                                               crate::custom_sounds::delete_sound(&sound);
-                                           }
-        // Persist to disk
-                                           crate::persistence::save_alarms(&alarms.read());
-                                           nav.push(Route::Home {});
-                                       },
-                                       "{delete_text}"
-                                   }
-                               }
-                           }
-                       }
-                   }
-               };
-    }
-
-    let time_label = t(&translations, "config.time");
-    let schedule_label = t(&translations, "config.repeat");
-    let label_label = t(&translations, "config.label");
-    let label_placeholder = t(&translations, "config.label_placeholder");
-    let sound_label = t(&translations, "config.sound");
-    let sound_mode_label = t(&translations, "config.sound_mode");
-    let sound_picker_title = t(&translations, "sound.select");
-    let close_btn_text = t(&translations, "action.close");
-    let import_sound_text = t(&translations, "sound.import");
-    let preview_sound_text = t(&translations, "sound.preview");
-    let challenges_label = t(&translations, "config.challenges");
-    let fade_in_label = t(&translations, "config.fade_in");
-    let fade_off_text = t(&translations, "config.fade_off");
-    let weekend_text = t(&translations, "config.weekend");
-    let every_day_text = t(&translations, "config.every_day");
-    // "Rings in …" for the settings as they are right now.
-    let rings_in_text = {
-        let now = chrono::Local::now().naive_local();
-        let date_mode = *schedule_mode.read() == "date";
-        let days = if date_mode {
-            [false; 7]
-        } else {
-            *selected_days.read()
-        };
-        let date = if date_mode {
-            chrono::NaiveDate::parse_from_str(&date_value.read(), "%Y-%m-%d").ok()
-        } else {
-            None
-        };
-        crate::schedule::next_ring_moment(*hour.read(), *minute.read(), days, date, now)
-            .map(|moment| {
-                // Measured in real local time, so a clock change in between counts.
-                let left_ms = moment
-                    .and_local_timezone(chrono::Local)
-                    .earliest()
-                    .map(|at| (at - chrono::Local::now()).num_milliseconds())
-                    .unwrap_or_else(|| (moment - now).num_milliseconds());
-                let left = crate::schedule::countdown(0, left_ms);
-                let time = crate::schedule::format_countdown(
-                    left,
-                    &t(&translations, "home.next_in_dhm"),
-                    &t(&translations, "home.next_in_hm"),
-                    &t(&translations, "home.next_in_m"),
-                );
-                t(&translations, "config.rings_in").replace("{time}", &time)
-            })
-            .unwrap_or_default()
+    let check_summary = if current.wake_check_minutes == 0 {
+        t(&translations, "config.fade_off")
+    } else {
+        t(&translations, "text.minutes")
+            .replace("{minutes}", &current.wake_check_minutes.to_string())
     };
-    let snooze_label = t(&translations, "config.snooze");
-    let snooze_count_label = t(&translations, "config.snooze_count");
-    let snooze_interval_label = t(&translations, "config.snooze_interval");
-    let decrease_text = t(&translations, "action.decrease");
-    let increase_text = t(&translations, "action.increase");
+    let label_summary = if current.label.is_empty() {
+        t(&translations, "config.none")
+    } else {
+        current.label.clone()
+    };
 
-    let _back_text = t(&translations, "action.back");
-    let weekdays_text = t(&translations, "config.weekdays");
-    let specific_date_text = t(&translations, "config.specific_date");
-    let select_challenge_text = t(&translations, "config.select_challenge");
-    let cancel_text = t(&translations, "action.cancel");
-    let add_challenge_text = t(&translations, "config.add_challenge");
-    let edit_challenge_text = t(&translations, "config.edit_challenge");
-    let remove_challenge_text = t(&translations, "config.remove_challenge");
-    let drag_text = t(&translations, "config.drag_challenge");
-    let total_challenges = challenges.read().len();
+    let sheet_view = match sheet() {
+        None => rsx! {},
+        Some(EditorSheet::Time) => rsx! {
+            Sheet {
+                title: t(&translations, "config.time"),
+                note: t(&translations, "config.time_note"),
+                on_close: move |_| sheet.set(None),
+                TimePicker {
+                    hour: current.time_hour,
+                    minute: current.time_minute,
+                    on_change: move |(h, m)| {
+                        let mut alarm = draft.write();
+                        alarm.time_hour = h;
+                        alarm.time_minute = m;
+                    },
+                }
+                label { class: "field-label",
+                    {t(&translations, "config.time_type")}
+                    input {
+                        class: "field",
+                        r#type: "text",
+                        inputmode: "numeric",
+                        placeholder: "07:00",
+                        value: "{typed_time}",
+                        oninput: move |evt| {
+                            let text = evt.value();
+                            if let Some((h, m)) = parse_typed_time(&text) {
+                                let mut alarm = draft.write();
+                                alarm.time_hour = h;
+                                alarm.time_minute = m;
+                            }
+                            typed_time.set(text);
+                        },
+                    }
+                }
+                SheetDone { label: done_text.clone(), on_click: move |_| sheet.set(None) }
+            }
+        },
+        Some(EditorSheet::Date) => {
+            let today = chrono::Local::now().date_naive();
+            let quick = [
+                ("home.today", today),
+                ("home.tomorrow", today + Duration::days(1)),
+                ("config.next_week", today + Duration::days(7)),
+            ];
+            rsx! {
+                Sheet {
+                    title: t(&translations, "config.date_title"),
+                    note: t(&translations, "config.date_note"),
+                    on_close: move |_| sheet.set(None),
+                    label { class: "field-label",
+                        {t(&translations, "config.date")}
+                        input {
+                            class: "field",
+                            r#type: "date",
+                            value: "{date_value}",
+                            onchange: move |evt| {
+                                date_value.set(evt.value());
+                                error.set(String::new());
+                            },
+                        }
+                    }
+                    GroupTitle { text: t(&translations, "config.quick") }
+                    Chips::<chrono::NaiveDate> {
+                        grow: true,
+                        options: quick.iter().map(|(key, day)| (*day, t(&translations, key))).collect::<Vec<_>>(),
+                        selected: chrono::NaiveDate::parse_from_str(&date_value.read(), "%Y-%m-%d").ok(),
+                        on_pick: move |day: chrono::NaiveDate| {
+                            date_value.set(day.format("%Y-%m-%d").to_string());
+                            error.set(String::new());
+                        },
+                    }
+                    SheetDone { label: done_text.clone(), on_click: move |_| sheet.set(None) }
+                }
+            }
+        }
+        Some(EditorSheet::Label) => {
+            let mut used: Vec<String> = alarms
+                .read()
+                .iter()
+                .filter(|a| !a.hidden && !a.label.is_empty())
+                .map(|a| a.label.clone())
+                .collect();
+            used.sort();
+            used.dedup();
+            rsx! {
+                Sheet {
+                    title: t(&translations, "config.label"),
+                    note: t(&translations, "config.label_note"),
+                    on_close: move |_| sheet.set(None),
+                    label { class: "field-label",
+                        {t(&translations, "config.label_name")}
+                        input {
+                            class: "field",
+                            r#type: "text",
+                            maxlength: "100",
+                            placeholder: t(&translations, "config.label_placeholder"),
+                            value: "{current.label}",
+                            oninput: move |evt| draft.write().label = evt.value(),
+                        }
+                    }
+                    label { class: "field-label",
+                        {t(&translations, "config.note")}
+                        input {
+                            class: "field",
+                            r#type: "text",
+                            maxlength: "100",
+                            placeholder: t(&translations, "config.note_placeholder"),
+                            value: "{current.note}",
+                            oninput: move |evt| draft.write().note = evt.value(),
+                        }
+                    }
+                    if !used.is_empty() {
+                        GroupTitle { text: t(&translations, "config.used_before") }
+                        Chips::<String> {
+                            options: used.into_iter().map(|l| (l.clone(), l)).collect::<Vec<_>>(),
+                            selected: Some(current.label.clone()),
+                            on_pick: move |label: String| draft.write().label = label,
+                        }
+                    }
+                    SheetDone { label: done_text.clone(), on_click: move |_| sheet.set(None) }
+                }
+            }
+        }
+        Some(EditorSheet::Sound) => {
+            let defaults = crate::custom_sounds::list_default_sounds();
+            let custom = crate::custom_sounds::list_custom_sounds();
+            let general_volume = settings.read().min_volume_percent;
+            let volume = current.volume_percent.unwrap_or(general_volume);
+            let selected_sound = current.sound.clone();
+            let vibrate_only = current.sound_mode == 2;
+            rsx! {
+                Sheet {
+                    title: t(&translations, "config.sound"),
+                    note: t(&translations, "config.sound_note"),
+                    on_close: move |_| {
+                        stop_sound();
+                        sheet.set(None);
+                    },
+                    button {
+                        class: if vibrate_only { "radio selected" } else { "radio" },
+                        onclick: move |_| {
+                            stop_sound();
+                            draft.write().sound_mode = 2;
+                        },
+                        span { class: "radio-mark" }
+                        span { class: "radio-text", {t(&translations, "config.no_sound")} }
+                    }
+                    for sound in defaults.into_iter().chain(custom.clone()) {
+                        {
+                            let is_selected = !vibrate_only && sound == selected_sound;
+                            let name = crate::custom_sounds::display_name(&sound);
+                            let to_pick = sound.clone();
+                            let to_delete = sound.clone();
+                            let is_custom = crate::custom_sounds::is_custom_sound(&sound);
+                            let delete_aria = t(&translations, "sound.delete");
+                            rsx! {
+                                div { class: "radio-row",
+                                    button {
+                                        class: if is_selected { "radio selected" } else { "radio" },
+                                        onclick: move |_| {
+                                            {
+                                                let mut alarm = draft.write();
+                                                alarm.sound = to_pick.clone();
+                                                if alarm.sound_mode == 2 {
+                                                    alarm.sound_mode = 0;
+                                                }
+                                            }
+                                            play_for(to_pick.clone(), SOUND_PREVIEW_MS);
+                                        },
+                                        span { class: "radio-mark" }
+                                        span { class: "radio-text", "{name}" }
+                                    }
+                                    if is_custom {
+                                        button {
+                                            class: "icon-btn",
+                                            "aria-label": "{delete_aria}",
+                                            onclick: move |_| {
+                                                stop_sound();
+                                                // An alarm that uses it falls back to the first sound
+                                                // when it is saved or edited, and always rings: the
+                                                // ring has its own fallbacks.
+                                                let replacement = alarm_ops::factory_alarm().sound;
+                                                {
+                                                    let mut alarm = draft.write();
+                                                    if alarm.sound == to_delete {
+                                                        alarm.sound = replacement.clone();
+                                                    }
+                                                }
+                                                let mut list = alarms.write();
+                                                let mut changed = false;
+                                                for alarm in list.iter_mut().filter(|a| a.sound == to_delete) {
+                                                    alarm.sound = replacement.clone();
+                                                    changed = true;
+                                                }
+                                                drop(list);
+                                                if changed {
+                                                    crate::persistence::save_alarms(&alarms.peek());
+                                                }
+                                                crate::custom_sounds::delete_sound(&to_delete);
+                                            },
+                                            Icon { name: IconName::Xmark, size: 16 }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    button {
+                        class: "btn btn-quiet",
+                        onclick: move |_| {
+                            // Stop it first, or the tone keeps looping behind the picker.
+                            stop_sound();
+                            spawn(async move {
+                                let (tx, rx) = futures_channel::oneshot::channel();
+                                std::thread::spawn(move || {
+                                    let _ = tx.send(crate::custom_sounds::pick_audio_file_native());
+                                });
+                                match rx.await {
+                                    Ok(Ok(filename)) => {
+                                        let mut alarm = draft.write();
+                                        alarm.sound = filename;
+                                        if alarm.sound_mode == 2 {
+                                            alarm.sound_mode = 0;
+                                        }
+                                    }
+                                    Ok(Err(reason)) if reason == crate::custom_sounds::NOT_A_SOUND => {
+                                        toast.set(Some(ToastMessage::error(t(&translations, "sound.not_a_sound"))));
+                                    }
+                                    // Cancelled, mostly.
+                                    Ok(Err(reason)) => log::info!("[AlarmFree] No sound imported: {reason}"),
+                                    Err(_) => {}
+                                }
+                            });
+                        },
+                        {t(&translations, "sound.import")}
+                    }
+                    label { class: "slider-row",
+                        span { {t(&translations, "config.volume")} }
+                        input {
+                            class: "slider",
+                            r#type: "range",
+                            min: "0",
+                            max: "100",
+                            step: "5",
+                            value: "{volume}",
+                            oninput: move |evt| {
+                                if let Ok(value) = evt.value().parse::<u8>() {
+                                    draft.write().volume_percent = Some(value);
+                                }
+                            },
+                        }
+                        span { class: "slider-value", "{volume}%" }
+                    }
+                    GroupTitle { text: t(&translations, "config.fade_in") }
+                    Chips::<u16> {
+                        grow: true,
+                        options: FADE_SECONDS.iter().map(|s| (*s, seconds_label(&translations, *s))).collect::<Vec<_>>(),
+                        selected: Some(current.fade_in_secs),
+                        on_pick: move |secs: u16| draft.write().fade_in_secs = secs,
+                    }
+                    SheetDone {
+                        label: done_text.clone(),
+                        on_click: move |_| {
+                            stop_sound();
+                            sheet.set(None);
+                        },
+                    }
+                }
+            }
+        }
+        Some(EditorSheet::Vibration) => {
+            let selected = if current.sound_mode == 1 {
+                None
+            } else {
+                Some(current.vibration)
+            };
+            let mut options = vec![(u8::MAX, t(&translations, "vibration.off"))];
+            options.extend(
+                VIBRATION_KEYS
+                    .iter()
+                    .enumerate()
+                    .map(|(i, key)| (i as u8, t(&translations, key))),
+            );
+            rsx! {
+                Sheet {
+                    title: t(&translations, "config.vibration"),
+                    note: t(&translations, "config.vibration_note"),
+                    on_close: move |_| sheet.set(None),
+                    Chips::<u8> {
+                        grow: true,
+                        options,
+                        selected: Some(selected.unwrap_or(u8::MAX)),
+                        on_pick: move |pattern: u8| {
+                            let mut alarm = draft.write();
+                            if pattern == u8::MAX {
+                                // Nothing at all is no alarm: without sound it keeps vibrating.
+                                if alarm.sound_mode != 2 {
+                                    alarm.sound_mode = 1;
+                                }
+                            } else {
+                                alarm.vibration = pattern;
+                                if alarm.sound_mode == 1 {
+                                    alarm.sound_mode = 0;
+                                }
+                                crate::feedback::pattern(crate::platform::VIBRATION_PATTERNS[usize::from(pattern)]);
+                            }
+                        },
+                    }
+                    SheetDone { label: done_text.clone(), on_click: move |_| sheet.set(None) }
+                }
+            }
+        }
+        Some(EditorSheet::Snooze) => rsx! {
+            Sheet {
+                title: t(&translations, "config.snooze"),
+                note: t(&translations, "config.snooze_note"),
+                on_close: move |_| sheet.set(None),
+                Stepper {
+                    title: t(&translations, "config.snooze_interval"),
+                    value: t(&translations, "text.minutes").replace("{minutes}", &current.snooze_interval.to_string()),
+                    on_less: move |_| {
+                        let mut alarm = draft.write();
+                        alarm.snooze_interval = alarm.snooze_interval.saturating_sub(1).max(1);
+                    },
+                    on_more: move |_| {
+                        let mut alarm = draft.write();
+                        alarm.snooze_interval = alarm.snooze_interval.saturating_add(1).min(60);
+                    },
+                }
+                Stepper {
+                    title: t(&translations, "config.snooze_count"),
+                    value: t(&translations, "text.times").replace("{count}", &current.snooze_count.to_string()),
+                    on_less: move |_| {
+                        let mut alarm = draft.write();
+                        alarm.snooze_count = alarm.snooze_count.saturating_sub(1);
+                    },
+                    on_more: move |_| {
+                        let mut alarm = draft.write();
+                        alarm.snooze_count = alarm.snooze_count.saturating_add(1).min(10);
+                    },
+                }
+                SheetDone { label: done_text.clone(), on_click: move |_| sheet.set(None) }
+            }
+        },
+        Some(EditorSheet::Challenges) => {
+            let list = setups.read().clone();
+            let count = list.len();
+            let try_text = t(&translations, "challenge.try");
+            let remove_text = t(&translations, "config.remove_challenge");
+            let drag_text = t(&translations, "config.drag_challenge");
+            let order_options = vec![
+                (false, t(&translations, "config.order_fixed")),
+                (true, t(&translations, "config.order_random")),
+            ];
+            let preset_options = vec![
+                ("gentle", t(&translations, "preset.gentle")),
+                ("normal", t(&translations, "preset.normal")),
+                ("hard", t(&translations, "preset.hard")),
+            ];
+            rsx! {
+                Sheet {
+                    title: t(&translations, "config.challenges"),
+                    note: t(&translations, "config.challenges_note"),
+                    on_close: move |_| sheet.set(None),
+                    div { id: "challenge-list", class: "challenge-list",
+                        for (index, setup) in list.iter().cloned().enumerate() {
+                            {
+                                let name = t(&translations, setup.type_key());
+                                let summary = challenge_summary(&translations, &setup);
+                                let to_try = setup.clone();
+                                rsx! {
+                                    div { key: "{index}-{setup.type_key()}", class: "challenge-row",
+                                        span { class: "drag-handle", "aria-label": "{drag_text}",
+                                            Icon { name: IconName::Grip, size: 18 }
+                                        }
+                                        span { class: "challenge-number", "aria-hidden": "true", "{index + 1}" }
+                                        button {
+                                            class: "challenge-open",
+                                            onclick: move |_| sheet.set(Some(EditorSheet::Detail(index))),
+                                            span { class: "challenge-name", "{name}" }
+                                            span { class: "challenge-summary", "{summary}" }
+                                        }
+                                        button {
+                                            class: "link-btn",
+                                            onclick: move |_| {
+                                                request_challenge_permission(&to_try);
+                                                trying.set(Some(vec![to_try.clone()]));
+                                            },
+                                            "{try_text}"
+                                        }
+                                        button {
+                                            class: "icon-btn",
+                                            "aria-label": "{remove_text} {name}",
+                                            onclick: move |_| {
+                                                setups.write().remove(index);
+                                            },
+                                            Icon { name: IconName::Xmark, size: 18 }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if count < MAX_CHALLENGES {
+                        button {
+                            class: "btn btn-quiet",
+                            onclick: move |_| sheet.set(Some(EditorSheet::AddChallenge)),
+                            {t(&translations, "config.add_challenge")}
+                        }
+                    }
+                    if count > 0 {
+                        button {
+                            class: "btn btn-quiet",
+                            onclick: move |_| {
+                                let list = setups.peek().clone();
+                                for setup in &list {
+                                    request_challenge_permission(setup);
+                                }
+                                trying.set(Some(list));
+                            },
+                            {t(&translations, "config.try_all")}
+                        }
+                    }
+                    GroupTitle { text: t(&translations, "config.order") }
+                    Chips::<bool> {
+                        grow: true,
+                        options: order_options,
+                        selected: Some(current.random_order),
+                        on_pick: move |random: bool| draft.write().random_order = random,
+                    }
+                    GroupTitle { text: t(&translations, "config.presets") }
+                    Chips::<&'static str> {
+                        grow: true,
+                        options: preset_options,
+                        selected: None,
+                        on_pick: move |name: &'static str| {
+                            let list = preset(name);
+                            for setup in &list {
+                                request_challenge_permission(setup);
+                            }
+                            setups.set(list);
+                        },
+                    }
+                    SheetDone { label: done_text.clone(), on_click: move |_| sheet.set(None) }
+                }
+            }
+        }
+        Some(EditorSheet::AddChallenge) => rsx! {
+            Sheet {
+                title: t(&translations, "config.select_challenge"),
+                note: t(&translations, "config.add_note"),
+                on_close: move |_| sheet.set(Some(EditorSheet::Challenges)),
+                for key in CHALLENGE_TYPES {
+                    button {
+                        class: "add-option",
+                        onclick: move |_| {
+                            if let Some(setup) = ChallengeSetup::new(key) {
+                                request_challenge_permission(&setup);
+                                let mut list = setups.write();
+                                list.push(setup);
+                                let index = list.len() - 1;
+                                drop(list);
+                                sheet.set(Some(EditorSheet::Detail(index)));
+                            }
+                        },
+                        span { class: "add-name", {t(&translations, key)} }
+                        span { class: "add-desc", {t(&translations, &key.replace("challenge.", "challenge.desc."))} }
+                    }
+                }
+                SheetDone {
+                    label: t(&translations, "challenge.config.back"),
+                    on_click: move |_| sheet.set(Some(EditorSheet::Challenges)),
+                }
+            }
+        },
+        Some(EditorSheet::Detail(index)) => {
+            let Some(setup) = setups.read().get(index).cloned() else {
+                return rsx! {};
+            };
+            let name = t(&translations, setup.type_key());
+            let description = t(
+                &translations,
+                &setup.type_key().replace("challenge.", "challenge.desc."),
+            );
+            let example = difficulty_example(&translations, &setup);
+            let mut update = move |change: &dyn Fn(&mut ChallengeSetup)| {
+                if let Some(setup) = setups.write().get_mut(index) {
+                    change(setup);
+                }
+            };
+            let to_try = setup.clone();
+            let controls = match setup {
+                ChallengeSetup::Math { difficulty }
+                | ChallengeSetup::Memory { difficulty }
+                | ChallengeSetup::Typing { difficulty } => rsx! {
+                    GroupTitle { text: t(&translations, "challenge.config.difficulty") }
+                    Chips::<Difficulty> {
+                        grow: true,
+                        options: DIFFICULTIES
+                            .iter()
+                            .map(|d| (*d, t(&translations, &format!("difficulty.{}", difficulty_name(*d)))))
+                            .collect::<Vec<_>>(),
+                        selected: Some(difficulty),
+                        on_pick: move |picked: Difficulty| update(&|setup| match setup {
+                            ChallengeSetup::Math { difficulty }
+                            | ChallengeSetup::Memory { difficulty }
+                            | ChallengeSetup::Typing { difficulty } => *difficulty = picked,
+                            _ => {}
+                        }),
+                    }
+                    p { class: "example", "{example}" }
+                },
+                ChallengeSetup::Shake { count } => rsx! {
+                    Stepper {
+                        title: t(&translations, "challenge.config.how_many_shakes"),
+                        value: "{count}",
+                        on_less: move |_| update(&|s| if let ChallengeSetup::Shake { count } = s { *count = count.saturating_sub(5).max(5) }),
+                        on_more: move |_| update(&|s| if let ChallengeSetup::Shake { count } = s { *count = (*count + 5).min(200) }),
+                    }
+                },
+                ChallengeSetup::Steps { count } => rsx! {
+                    Stepper {
+                        title: t(&translations, "challenge.config.how_many_steps"),
+                        value: "{count}",
+                        on_less: move |_| update(&|s| if let ChallengeSetup::Steps { count } = s { *count = count.saturating_sub(5).max(5) }),
+                        on_more: move |_| update(&|s| if let ChallengeSetup::Steps { count } = s { *count = (*count + 5).min(200) }),
+                    }
+                },
+                ChallengeSetup::Hold { count, secs } => rsx! {
+                    Stepper {
+                        title: t(&translations, "challenge.config.how_many_holds"),
+                        value: "{count}",
+                        on_less: move |_| update(&|s| if let ChallengeSetup::Hold { count, .. } = s { *count = count.saturating_sub(1).max(1) }),
+                        on_more: move |_| update(&|s| if let ChallengeSetup::Hold { count, .. } = s { *count = (*count + 1).min(30) }),
+                    }
+                    Stepper {
+                        title: t(&translations, "challenge.config.hold_duration"),
+                        value: t(&translations, "text.seconds").replace("{seconds}", &secs.to_string()),
+                        on_less: move |_| update(&|s| if let ChallengeSetup::Hold { secs, .. } = s { *secs = secs.saturating_sub(1).max(1) }),
+                        on_more: move |_| update(&|s| if let ChallengeSetup::Hold { secs, .. } = s { *secs = (*secs + 1).min(15) }),
+                    }
+                },
+                ChallengeSetup::Reaction {
+                    targets,
+                    secs,
+                    rounds,
+                } => rsx! {
+                    Stepper {
+                        title: t(&translations, "challenge.config.how_many_targets"),
+                        value: "{targets}",
+                        on_less: move |_| update(&|s| if let ChallengeSetup::Reaction { targets, .. } = s { *targets = targets.saturating_sub(1).max(3) }),
+                        on_more: move |_| update(&|s| if let ChallengeSetup::Reaction { targets, .. } = s { *targets = (*targets + 1).min(30) }),
+                    }
+                    Stepper {
+                        title: t(&translations, "challenge.config.time_limit"),
+                        value: t(&translations, "text.seconds").replace("{seconds}", &secs.to_string()),
+                        on_less: move |_| update(&|s| if let ChallengeSetup::Reaction { secs, .. } = s { *secs = secs.saturating_sub(1).max(2) }),
+                        on_more: move |_| update(&|s| if let ChallengeSetup::Reaction { secs, .. } = s { *secs = (*secs + 1).min(10) }),
+                    }
+                    Stepper {
+                        title: t(&translations, "challenge.config.how_many_rounds"),
+                        value: "{rounds}",
+                        on_less: move |_| update(&|s| if let ChallengeSetup::Reaction { rounds, .. } = s { *rounds = rounds.saturating_sub(1).max(1) }),
+                        on_more: move |_| update(&|s| if let ChallengeSetup::Reaction { rounds, .. } = s { *rounds = (*rounds + 1).min(5) }),
+                    }
+                },
+                ChallengeSetup::Scan { code } => rsx! {
+                    label { class: "field-label",
+                        {t(&translations, "challenge.config.scan_value")}
+                        input {
+                            class: "field",
+                            r#type: "text",
+                            placeholder: t(&translations, "challenge.config.scan_placeholder"),
+                            value: "{code}",
+                            oninput: move |evt| {
+                                let text = evt.value();
+                                update(&|s| if let ChallengeSetup::Scan { code } = s { code.clone_from(&text) });
+                            },
+                        }
+                    }
+                    button {
+                        class: "btn btn-quiet",
+                        onclick: move |_| {
+                            spawn(async move {
+                                let (tx, rx) = futures_channel::oneshot::channel::<String>();
+                                std::thread::spawn(move || {
+                                    let _ = tx.send(mobile_sentinel::scanner::scan().unwrap_or_default());
+                                });
+                                if let Ok(value) = rx.await {
+                                    if !value.is_empty() {
+                                        if let Some(ChallengeSetup::Scan { code }) = setups.write().get_mut(index) {
+                                            *code = value;
+                                        }
+                                    }
+                                }
+                            });
+                        },
+                        {t(&translations, "challenge.config.scan_now")}
+                    }
+                },
+            };
+            rsx! {
+                Sheet {
+                    title: name,
+                    note: description,
+                    on_close: move |_| sheet.set(Some(EditorSheet::Challenges)),
+                    {controls}
+                    button {
+                        class: "btn btn-quiet",
+                        onclick: move |_| {
+                            request_challenge_permission(&to_try);
+                            trying.set(Some(vec![to_try.clone()]));
+                        },
+                        {t(&translations, "challenge.config.test")}
+                    }
+                    button {
+                        class: "btn btn-quiet danger",
+                        onclick: move |_| {
+                            setups.write().remove(index);
+                            sheet.set(Some(EditorSheet::Challenges));
+                        },
+                        {t(&translations, "config.remove_from_alarm")}
+                    }
+                    SheetDone { label: done_text.clone(), on_click: move |_| sheet.set(Some(EditorSheet::Challenges)) }
+                }
+            }
+        }
+        Some(EditorSheet::Limit) => {
+            let mut options: Vec<(Option<u32>, String)> = LIMIT_MINUTES
+                .iter()
+                .map(|m| {
+                    (
+                        Some(m * 60),
+                        t(&translations, "text.minutes").replace("{minutes}", &m.to_string()),
+                    )
+                })
+                .collect();
+            options.push((None, t(&translations, "config.limit_forever")));
+            rsx! {
+                Sheet {
+                    title: t(&translations, "config.ring_limit"),
+                    note: t(&translations, "config.limit_note"),
+                    on_close: move |_| sheet.set(None),
+                    Chips::<Option<u32>> {
+                        grow: true,
+                        options,
+                        selected: Some(current.ring_limit_secs),
+                        on_pick: move |limit: Option<u32>| draft.write().ring_limit_secs = limit,
+                    }
+                    SheetDone { label: done_text.clone(), on_click: move |_| sheet.set(None) }
+                }
+            }
+        }
+        Some(EditorSheet::WakeCheck) => rsx! {
+            Sheet {
+                title: t(&translations, "config.wake_check"),
+                note: t(&translations, "config.wake_check_note"),
+                on_close: move |_| sheet.set(None),
+                Chips::<u8> {
+                    grow: true,
+                    options: CHECK_MINUTES
+                        .iter()
+                        .map(|m| (*m, if *m == 0 {
+                            t(&translations, "config.fade_off")
+                        } else {
+                            t(&translations, "text.minutes").replace("{minutes}", &m.to_string())
+                        }))
+                        .collect::<Vec<_>>(),
+                    selected: Some(current.wake_check_minutes),
+                    on_pick: move |minutes: u8| draft.write().wake_check_minutes = minutes,
+                }
+                SheetDone { label: done_text.clone(), on_click: move |_| sheet.set(None) }
+            }
+        },
+        Some(EditorSheet::Delete) => {
+            let delete_id = id.clone();
+            rsx! {
+                Sheet {
+                    title: t(&translations, "alarm.delete_confirm"),
+                    note: t(&translations, "alarm.delete_warning"),
+                    on_close: move |_| sheet.set(None),
+                    SheetItem {
+                        label: t(&translations, "action.delete"),
+                        danger: true,
+                        on_click: move |_| {
+                            stop_sound();
+                            alarms.write().retain(|a| a.id != delete_id);
+                            crate::persistence::save_alarms(&alarms.peek());
+                            nav.go_back();
+                        },
+                    }
+                    SheetDone { label: t(&translations, "alarm.keep"), on_click: move |_| sheet.set(None) }
+                }
+            }
+        }
+        Some(EditorSheet::Discard) => rsx! {
+            Sheet {
+                title: t(&translations, "config.discard_title"),
+                note: t(&translations, "config.discard_note"),
+                on_close: move |_| sheet.set(None),
+                SheetItem {
+                    label: t(&translations, "config.discard"),
+                    danger: true,
+                    on_click: move |_| {
+                        stop_sound();
+                        nav.go_back();
+                    },
+                }
+                SheetDone { label: t(&translations, "config.keep_editing"), on_click: move |_| sheet.set(None) }
+            }
+        },
+    };
 
-    // Translate sound mode labels
-    let sound_mode_labels: Vec<String> = SOUND_MODE_KEYS
-        .iter()
-        .map(|k| t(&translations, k))
-        .collect();
+    let shift_time = move |minutes: i32| {
+        let mut alarm = draft.write();
+        let total = i32::from(alarm.time_hour) * 60 + i32::from(alarm.time_minute) + minutes;
+        let total = total.rem_euclid(24 * 60);
+        alarm.time_hour = (total / 60) as u8;
+        alarm.time_minute = (total % 60) as u8;
+    };
+    let mut shift_earlier = shift_time;
+    let mut shift_later = shift_time;
 
-    // Translate challenge type options
-    let challenge_labels: Vec<String> =
-        CHALLENGE_KEYS.iter().map(|k| t(&translations, k)).collect();
+    let time_text = crate::text::clock(current.time_hour, current.time_minute, twenty_four);
+    let date_text = chrono::NaiveDate::parse_from_str(&date_value.read(), "%Y-%m-%d")
+        .map(|date| crate::text::short_date(&translations, date))
+        .unwrap_or_default();
+    let once_text = t(&translations, "config.once_on").replace("{date}", &date_text);
+    let error_text = error();
+
+    let save = {
+        let build = build.clone();
+        let id = id.clone();
+        move |_| {
+            stop_sound();
+            let alarm = build();
+            if for_defaults {
+                let mut defaults = alarm;
+                defaults.id = String::new();
+                settings.write().prefs.alarm_defaults = Some(defaults);
+                crate::persistence::save_settings(&settings.peek());
+                nav.go_back();
+                return;
+            }
+            if *one_time.peek() {
+                let ahead = chrono::NaiveDate::parse_from_str(&date_value.peek(), "%Y-%m-%d")
+                    .ok()
+                    .and_then(|d| {
+                        d.and_hms_opt(u32::from(alarm.time_hour), u32::from(alarm.time_minute), 0)
+                    })
+                    .is_some_and(|at| at > chrono::Local::now().naive_local());
+                if !ahead {
+                    error.set(t(&translations, "validation.date_past"));
+                    return;
+                }
+            } else if !alarm.days.iter().any(|d| *d) {
+                error.set(t(&translations, "validation.select_day"));
+                return;
+            }
+            error.set(String::new());
+            let saved_id = if is_new { alarm.id.clone() } else { id.clone() };
+            {
+                let mut list = alarms.write();
+                if let Some(existing) = list.iter_mut().find(|a| a.id == saved_id) {
+                    *existing = alarm;
+                } else {
+                    list.push(alarm);
+                }
+            }
+            crate::persistence::save_alarms(&alarms.peek());
+            nav.go_back();
+        }
+    };
 
     rsx! {
-    // Challenge picker overlay
-           if *show_challenge_picker.read() {
-               div {
-                   class: "challenge-overlay",
-                   onclick: move |_| {
-                       show_challenge_picker.set(false);
-                       picker_selected_type.set(String::new());
-                       editing_index.set(None);
-                   },
-                   div {
-                       class: "challenge-overlay-content",
-                       onclick: move |evt| { evt.stop_propagation(); },
+        div { class: "screen",
+            ScreenHeader {
+                title,
+                on_back: move |_| leave(),
+                if !is_new && !for_defaults {
+                    button {
+                        class: "icon-btn",
+                        "aria-label": t(&translations, "alarm.delete"),
+                        onclick: move |_| sheet.set(Some(EditorSheet::Delete)),
+                        Icon { name: IconName::Trash, size: 20 }
+                    }
+                }
+            }
 
-                       if picker_selected_type.read().is_empty() {
-                           h3 { "{select_challenge_text}" }
-                           div { class: "challenge-type-list",
-                               for (i, ct_label) in challenge_labels.iter().enumerate() {
-                                   {
-                                       let ct_key = CHALLENGE_KEYS[i].to_string();
-                                       let ctl = ct_label.clone();
-                                       let desc = t(&translations, CHALLENGE_DESC_KEYS[i]);
-                                       rsx! {
-                                           button {
-                                               class: "challenge-type-option",
-                                               onclick: move |_| {
-                                                   picker_selected_type.set(ct_key.clone());
-                                                   picker_difficulty.set("medium".to_string());
-                                                   picker_shake_count.set(20);
-                                                   picker_step_count.set(20);
-                                                   picker_hold_count.set(10);
-                                                   picker_hold_secs.set(3);
-                                                   picker_reaction_targets.set(10);
-                                                   picker_reaction_secs.set(3);
-                                                   picker_reaction_rounds.set(2);
-                                                   picker_scan_value.set(String::new());
-                                               },
-                                               span { class: "type-name", "{ctl}" }
-                                               span { class: "type-desc", "{desc}" }
-                                           }
-                                       }
-                                   }
-                               }
-                           }
-                           div { class: "overlay-actions",
-                               button {
-                                   class: "overlay-btn-cancel",
-                                   onclick: move |_| {
-                                       show_challenge_picker.set(false);
-                                       picker_selected_type.set(String::new());
-                                       editing_index.set(None);
-                                   },
-                                   "{cancel_text}"
-                               }
-                           }
-                       } else {
-    // Config mode for selected type
-                           {
-                               let selected_type = picker_selected_type.read().clone();
-                               let type_display = t(&translations, &selected_type);
-                               let type_idx = CHALLENGE_KEYS.iter().position(|k| *k == selected_type.as_str()).unwrap_or(0);
-                               let type_desc = t(&translations, CHALLENGE_DESC_KEYS[type_idx]);
-                               let difficulty_label = t(&translations, "challenge.config.difficulty");
-                               let shakes_label = t(&translations, "challenge.config.how_many_shakes");
-                               let steps_label = t(&translations, "challenge.config.how_many_steps");
-                               let hold_count_label = t(&translations, "challenge.config.how_many_holds");
-                               let hold_secs_label = t(&translations, "challenge.config.hold_duration");
-                               let reaction_targets_label = t(&translations, "challenge.config.how_many_targets");
-                               let reaction_time_label = t(&translations, "challenge.config.time_limit");
-                               let reaction_rounds_label = t(&translations, "challenge.config.how_many_rounds");
-                               let scan_label = t(&translations, "challenge.config.scan_value");
-                               let scan_placeholder = t(&translations, "challenge.config.scan_placeholder");
-                               let scan_tip = t(&translations, "challenge.config.scan_tip");
-                               let back_btn_text = t(&translations, "challenge.config.back");
-                               let add_btn_text = if editing_index.read().is_some() {
-                                   t(&translations, "action.save")
-                               } else {
-                                   t(&translations, "challenge.config.add")
-                               };
-                               let scan_btn_text = t(&translations, "challenge.config.scan");
-                               let test_text = t(&translations, "challenge.config.test");
-                               let type_for_test = selected_type.clone();
-                               rsx! {
-                                   div { class: "overlay-head",
-                                       h3 { "{type_display}" }
-                                       button {
-                                           class: "overlay-test-btn",
-                                           onclick: move |_| {
-                                               request_challenge_permission(&type_for_test);
-                                               let config_json = picker_config_json(
-                                                   &type_for_test,
-                                                   &PickedSettings {
-                                                       difficulty: &picker_difficulty.read(),
-                                                       shake_count: *picker_shake_count.read(),
-                                                       step_count: *picker_step_count.read(),
-                                                       hold_count: *picker_hold_count.read(),
-                                                       hold_secs: *picker_hold_secs.read(),
-                                                       reaction_targets: *picker_reaction_targets.read(),
-                                                       reaction_secs: *picker_reaction_secs.read(),
-                                                       reaction_rounds: *picker_reaction_rounds.read(),
-                                                       scan_value: &picker_scan_value.read(),
-                                                   },
-                                               );
-                                               test_challenge.set(Some(vec![(type_for_test.clone(), config_json)]));
-                                           },
-                                           Icon { name: IconName::Play, size: 13 }
-                                           " {test_text}"
-                                       }
-                                   }
-                                   p { class: "overlay-desc", "{type_desc}" }
+            div { class: "scroll scroll-save",
+                if !for_defaults {
+                    section { class: "editor-time",
+                        div { class: "time-row",
+                            button {
+                                class: "time-shift",
+                                "aria-label": t(&translations, "config.earlier"),
+                                onclick: move |_| shift_earlier(-5),
+                                "\u{2212}5"
+                            }
+                            button {
+                                class: if twenty_four { "time-big" } else { "time-big h12" },
+                                "aria-label": t(&translations, "config.change_time"),
+                                onclick: move |_| {
+                                    typed_time.set(String::new());
+                                    sheet.set(Some(EditorSheet::Time));
+                                },
+                                "{time_text}"
+                            }
+                            button {
+                                class: "time-shift",
+                                "aria-label": t(&translations, "config.later"),
+                                onclick: move |_| shift_later(5),
+                                "+5"
+                            }
+                        }
+                        p { class: "rings-in", "{rings_text}" }
+                    }
 
-                                   if challenge_uses_difficulty(&selected_type) {
-                                       div { class: "overlay-section",
-                                           div { class: "overlay-label", "{difficulty_label}" }
-                                           div { class: "difficulty-segments",
-                                               for (val, label_key) in DIFFICULTY_VALUES.iter() {
-                                                   {
-                                                       let v = val.to_string();
-                                                       let l = t(&translations, label_key);
-                                                       let is_active = *picker_difficulty.read() == v;
-                                                       let btn_class = if is_active { "active" } else { "" };
-                                                       rsx! {
-                                                           button {
-                                                               class: "{btn_class}",
-                                                               onclick: move |_| { picker_difficulty.set(v.clone()); },
-                                                               "{l}"
-                                                           }
-                                                       }
-                                                   }
-                                               }
-                                           }
-                                           {
-                                               let diff = picker_difficulty.read().clone();
-                                               let example = difficulty_example(&translations, &selected_type, &diff);
-                                               rsx! {
-                                                   p { class: "overlay-desc",
-                                                       style: "margin-top: 12px; font-family: monospace; text-align: center; font-size: 16px;",
-                                                       "{example}"
-                                                   }
-                                               }
-                                           }
-                                       }
-                                   }
+                    section { class: "editor-repeat",
+                        if is_one_time {
+                            button {
+                                class: "btn btn-primary once-btn",
+                                onclick: move |_| sheet.set(Some(EditorSheet::Date)),
+                                "{once_text}"
+                            }
+                        } else {
+                            div { class: "day-chips",
+                                for day in week_start.day_order() {
+                                    {
+                                        let on = current.days[day];
+                                        let name = t(&translations, crate::text::FULL_DAY_KEYS[day]);
+                                        rsx! {
+                                            button {
+                                                class: if on { "day-chip on" } else { "day-chip" },
+                                                "aria-label": "{name}",
+                                                "aria-pressed": if on { "true" } else { "false" },
+                                                onclick: move |_| {
+                                                    draft.write().days[day] = !on;
+                                                    error.set(String::new());
+                                                },
+                                                {crate::text::day_letter(&translations, day)}
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        div { class: "repeat-presets",
+                            for (key, days) in [
+                                ("config.weekdays", [true, true, true, true, true, false, false]),
+                                ("config.weekend", [false, false, false, false, false, true, true]),
+                                ("config.every_day", [true; 7]),
+                            ] {
+                                button {
+                                    class: "chip-small",
+                                    onclick: move |_| {
+                                        one_time.set(false);
+                                        draft.write().days = days;
+                                        error.set(String::new());
+                                    },
+                                    {t(&translations, key)}
+                                }
+                            }
+                            button {
+                                class: "chip-small",
+                                onclick: move |_| {
+                                    one_time.set(true);
+                                    error.set(String::new());
+                                    sheet.set(Some(EditorSheet::Date));
+                                },
+                                {t(&translations, "config.one_date")}
+                            }
+                        }
+                        if !error_text.is_empty() {
+                            p { class: "field-error", "{error_text}" }
+                        }
+                    }
+                }
 
-                                   if selected_type == "challenge.shake" {
-                                       div { class: "overlay-section",
-                                           div { class: "overlay-label", "{shakes_label}" }
-                                           div { class: "count-display", "{picker_shake_count}" }
-                                           div { class: "count-controls",
-                                               button {
-                                                   onclick: move |_| {
-                                                       let current = *picker_shake_count.read();
-                                                       if current > 5 { picker_shake_count.set(current - 5); }
-                                                   },
-                                                   "\u{2212}"
-                                               }
-                                               button {
-                                                   onclick: move |_| {
-                                                       let current = *picker_shake_count.read();
-                                                       if current < 100 { picker_shake_count.set(current + 5); }
-                                                   },
-                                                   "+"
-                                               }
-                                           }
-                                       }
-                                   }
+                ul { class: "list",
+                    Row { title: t(&translations, "config.label"), value: label_summary, on_click: move |_| sheet.set(Some(EditorSheet::Label)) }
+                    Row { title: t(&translations, "config.sound"), value: sound_summary, on_click: move |_| sheet.set(Some(EditorSheet::Sound)) }
+                    Row { title: t(&translations, "config.vibration"), value: vibration_summary, on_click: move |_| sheet.set(Some(EditorSheet::Vibration)) }
+                    Row { title: t(&translations, "config.snooze"), value: snooze_summary, on_click: move |_| sheet.set(Some(EditorSheet::Snooze)) }
+                    Row { title: t(&translations, "config.challenges"), value: challenge_summary_text, on_click: move |_| sheet.set(Some(EditorSheet::Challenges)) }
+                    Row { title: t(&translations, "config.ring_limit"), value: limit_summary, on_click: move |_| sheet.set(Some(EditorSheet::Limit)) }
+                    Row { title: t(&translations, "config.wake_check"), value: check_summary, on_click: move |_| sheet.set(Some(EditorSheet::WakeCheck)) }
+                }
+            }
 
-                                   if selected_type == "challenge.steps" {
-                                       div { class: "overlay-section",
-                                           div { class: "overlay-label", "{steps_label}" }
-                                           div { class: "count-display", "{picker_step_count}" }
-                                           div { class: "count-controls",
-                                               button {
-                                                   onclick: move |_| {
-                                                       let current = *picker_step_count.read();
-                                                       if current > 5 { picker_step_count.set(current - 5); }
-                                                   },
-                                                   "\u{2212}"
-                                               }
-                                               button {
-                                                   onclick: move |_| {
-                                                       let current = *picker_step_count.read();
-                                                       if current < 200 { picker_step_count.set(current + 5); }
-                                                   },
-                                                   "+"
-                                               }
-                                           }
-                                       }
-                                   }
+            div { class: "save-bar",
+                if !for_defaults {
+                    button {
+                        class: "btn btn-quiet try-btn",
+                        onclick: {
+                            let build = build.clone();
+                            move |_| {
+                                if try_running() {
+                                    stop_sound();
+                                    return;
+                                }
+                                let alarm = build();
+                                if alarm.sound_mode != 1 {
+                                    crate::feedback::pattern(crate::platform::VIBRATION_PATTERNS[usize::from(alarm.vibration).min(2)]);
+                                }
+                                if alarm.sound_mode == 2 {
+                                    return;
+                                }
+                                play_for(alarm.sound, TRY_MS);
+                                try_running.set(true);
+                            }
+                        },
+                        if try_running() {
+                            {t(&translations, "config.try_stop")}
+                        } else {
+                            {t(&translations, "config.try_ring")}
+                        }
+                    }
+                }
+                button { class: "btn btn-primary save-btn", onclick: save, {t(&translations, "action.save")} }
+            }
 
-                                   if selected_type == "challenge.hold" {
-                                       div { class: "overlay-section",
-                                           div { class: "overlay-label", "{hold_count_label}" }
-                                           div { class: "count-display", "{picker_hold_count}" }
-                                           div { class: "count-controls",
-                                               button {
-                                                   onclick: move |_| {
-                                                       let current = *picker_hold_count.read();
-                                                       if current > 1 { picker_hold_count.set(current - 1); }
-                                                   },
-                                                   "\u{2212}"
-                                               }
-                                               button {
-                                                   onclick: move |_| {
-                                                       let current = *picker_hold_count.read();
-                                                       if current < 20 { picker_hold_count.set(current + 1); }
-                                                   },
-                                                   "+"
-                                               }
-                                           }
-                                       }
-                                       div { class: "overlay-section",
-                                           div { class: "overlay-label", "{hold_secs_label}" }
-                                           div { class: "count-display", "{picker_hold_secs}s" }
-                                           div { class: "count-controls",
-                                               button {
-                                                   onclick: move |_| {
-                                                       let current = *picker_hold_secs.read();
-                                                       if current > 1 { picker_hold_secs.set(current - 1); }
-                                                   },
-                                                   "\u{2212}"
-                                               }
-                                               button {
-                                                   onclick: move |_| {
-                                                       let current = *picker_hold_secs.read();
-                                                       if current < 15 { picker_hold_secs.set(current + 1); }
-                                                   },
-                                                   "+"
-                                               }
-                                           }
-                                       }
-                                   }
+            {sheet_view}
+        }
+    }
+}
 
-                                   if selected_type == "challenge.reaction" {
-                                       div { class: "overlay-section",
-                                           div { class: "overlay-label", "{reaction_targets_label}" }
-                                           div { class: "count-display", "{picker_reaction_targets}" }
-                                           div { class: "count-controls",
-                                               button {
-                                                   onclick: move |_| {
-                                                       let current = *picker_reaction_targets.read();
-                                                       if current > 3 { picker_reaction_targets.set(current - 1); }
-                                                   },
-                                                   "\u{2212}"
-                                               }
-                                               button {
-                                                   onclick: move |_| {
-                                                       let current = *picker_reaction_targets.read();
-                                                       if current < 30 { picker_reaction_targets.set(current + 1); }
-                                                   },
-                                                   "+"
-                                               }
-                                           }
-                                       }
-                                       div { class: "overlay-section",
-                                           div { class: "overlay-label", "{reaction_time_label}" }
-                                           div { class: "count-display", "{picker_reaction_secs}s" }
-                                           div { class: "count-controls",
-                                               button {
-                                                   onclick: move |_| {
-                                                       let current = *picker_reaction_secs.read();
-                                                       if current > 2 { picker_reaction_secs.set(current - 1); }
-                                                   },
-                                                   "\u{2212}"
-                                               }
-                                               button {
-                                                   onclick: move |_| {
-                                                       let current = *picker_reaction_secs.read();
-                                                       if current < 10 { picker_reaction_secs.set(current + 1); }
-                                                   },
-                                                   "+"
-                                               }
-                                           }
-                                       }
-                                       div { class: "overlay-section",
-                                           div { class: "overlay-label", "{reaction_rounds_label}" }
-                                           div { class: "count-display", "{picker_reaction_rounds}" }
-                                           div { class: "count-controls",
-                                               button {
-                                                   onclick: move |_| {
-                                                       let current = *picker_reaction_rounds.read();
-                                                       if current > 1 { picker_reaction_rounds.set(current - 1); }
-                                                   },
-                                                   "\u{2212}"
-                                               }
-                                               button {
-                                                   onclick: move |_| {
-                                                       let current = *picker_reaction_rounds.read();
-                                                       if current < 5 { picker_reaction_rounds.set(current + 1); }
-                                                   },
-                                                   "+"
-                                               }
-                                           }
-                                       }
-                                   }
+#[cfg(test)]
+mod tests {
+    use super::parse_typed_time;
 
-                                   if selected_type == "challenge.scan" {
-                                       div { class: "overlay-section",
-                                           div { class: "overlay-label", "{scan_label}" }
-                                           div { style: "display: flex; gap: 8px; align-items: center;",
-                                               input {
-                                                   r#type: "text",
-                                                   placeholder: "{scan_placeholder}",
-                                                   value: "{picker_scan_value}",
-                                                   style: "flex: 1;",
-                                                   oninput: move |evt| { picker_scan_value.set(evt.value()); },
-                                               }
-                                               button {
-                                                   class: "overlay-btn-add",
-                                                   style: "flex: 0; padding: 12px 16px; white-space: nowrap;",
-                                                   onclick: move |_| {
-    #[cfg(not(target_os = "android"))]
-                                                       picker_scan_value.set("simulated-code".to_string());
-    #[cfg(target_os = "android")]
-                                                       scan_requested.set(true);
-                                                   },
-                                                   "{scan_btn_text}"
-                                               }
-                                           }
-                                           p { class: "overlay-desc", "{scan_tip}" }
-                                       }
-                                   }
-
-    // Action buttons: Back + Add
-                                   div { class: "overlay-actions",
-                                       button {
-                                           class: "overlay-btn-cancel",
-                                           onclick: move |_| {
-                                               if editing_index.read().is_some() {
-                                                   // Editing an existing challenge — there is no type
-                                                   // list behind us, so Back closes the overlay.
-                                                   show_challenge_picker.set(false);
-                                                   editing_index.set(None);
-                                               }
-                                               picker_selected_type.set(String::new());
-                                           },
-                                           "{back_btn_text}"
-                                       }
-                                       button {
-                                           class: "overlay-btn-add",
-                                           onclick: move |_| {
-                                               let st = picker_selected_type.read().clone();
-
-                                               request_challenge_permission(&st);
-                                               let config_json = picker_config_json(
-                                                   &st,
-                                                   &PickedSettings {
-                                                       difficulty: &picker_difficulty.read(),
-                                                       shake_count: *picker_shake_count.read(),
-                                                       step_count: *picker_step_count.read(),
-                                                       hold_count: *picker_hold_count.read(),
-                                                       hold_secs: *picker_hold_secs.read(),
-                                                       reaction_targets: *picker_reaction_targets.read(),
-                                                       reaction_secs: *picker_reaction_secs.read(),
-                                                       reaction_rounds: *picker_reaction_rounds.read(),
-                                                       scan_value: &picker_scan_value.read(),
-                                                   },
-                                               );
-                                               match *editing_index.read() {
-                                                   Some(idx) => {
-                                                       let mut list = challenges.write();
-                                                       if idx < list.len() {
-                                                           list[idx] = (st, config_json);
-                                                       } else {
-                                                           list.push((st, config_json));
-                                                       }
-                                                   }
-                                                   None => {
-                                                       challenges.write().push((st, config_json));
-                                                   }
-                                               }
-                                               show_challenge_picker.set(false);
-                                               picker_selected_type.set(String::new());
-                                               editing_index.set(None);
-                                           },
-                                           "{add_btn_text}"
-                                       }
-                                   }
-                               }
-                           }
-                       }
-                   }
-               }
-           }
-
-    // Main config screen content
-           div { class: "screen alarm-config-screen",
-    // Header with back, title, save, delete
-               div { class: "config-header",
-                   button {
-                       class: "back-btn",
-                       onclick: move |_| {
-    // Stop any playing preview
-                           {
-                               let hid = *preview_handle_id.read();
-                               if hid != 0 {
-                                   stop_preview(hid);
-                               }
-                           }
-                           nav.push(Route::Home {});
-                       },
-                       Icon { name: IconName::ArrowLeft, size: 16 }
-                   }
-                   span { class: "config-title", "{title}" }
-                   div { class: "header-actions",
-                       if !is_new {
-                           button {
-                               class: "header-icon-btn delete-icon",
-                               onclick: move |_| { show_delete_confirm.set(true); },
-                               Icon { name: IconName::Trash }
-                           }
-                       }
-                       button {
-                           class: "header-icon-btn save-icon",
-                           onclick: move |_| {
-    // Stop any playing preview
-                               {
-                                   let hid = *preview_handle_id.read();
-                                   if hid != 0 {
-                                       stop_preview(hid);
-                                   }
-                               }
-
-    // Validate
-                               let mut errors = std::collections::HashMap::new();
-                               let h = *hour.read();
-                               let m = *minute.read();
-                               if h > 23 {
-                                   errors.insert("time".to_string(), t(&translations, "validation.hour"));
-                               }
-                               if m > 59 {
-                                   errors.insert("time".to_string(), t(&translations, "validation.minute"));
-                               }
-                               if *schedule_mode.read() == "weekdays"
-                                   && !selected_days.read().iter().any(|&d| d)
-                               {
-                                   errors.insert("schedule".to_string(), t(&translations, "validation.select_day"));
-                               }
-                               if *schedule_mode.read() == "date" {
-                                   let picked = chrono::NaiveDate::parse_from_str(&date_value.read(), "%Y-%m-%d")
-                                       .ok()
-                                       .and_then(|d| d.and_hms_opt(u32::from(h), u32::from(m), 0));
-                                   let ahead = picked.is_some_and(|at| at > chrono::Local::now().naive_local());
-                                   if !ahead {
-                                       errors.insert("schedule".to_string(), t(&translations, "validation.date_past"));
-                                   }
-                               }
-                               if label_value.read().len() > 100 {
-                                   errors.insert("label".to_string(), t(&translations, "validation.label_too_long"));
-                               }
-                               let sc = *snooze_count.read();
-                               if sc > 10 {
-                                   errors.insert("snooze_count".to_string(), t(&translations, "validation.snooze_count"));
-                               }
-                               let si = *snooze_interval.read();
-                               if si == 0 || si > 30 {
-                                   errors.insert("snooze_interval".to_string(), t(&translations, "validation.snooze_interval"));
-                               }
-                               if challenges.read().len() > 10 {
-                                   errors.insert("challenges".to_string(), t(&translations, "validation.max_challenges"));
-                               }
-
-                               if !errors.is_empty() {
-                                   validation_errors.set(errors);
-                                   return;
-                               }
-                               validation_errors.set(std::collections::HashMap::new());
-
-    // Build alarm data
-                               let alarm_data = AlarmData {
-                                   id: if is_new {
-                                       uuid::Uuid::new_v4().to_string()
-                                   } else {
-                                       id.clone()
-                                   },
-                                   time_hour: *hour.read(),
-                                   time_minute: *minute.read(),
-                                   label: crate::sanitize::sanitize_label(&label_value.read()),
-                                   // "Specific date" mode is a one-time alarm: no
-                                   // weekdays, and the date picked.
-                                   days: if *schedule_mode.read() == "date" { [false; 7] } else { *selected_days.read() },
-                                   date: (*schedule_mode.read() == "date").then(|| date_value.read().clone()),
-                                   skip_until_ms: None, // re-saving an alarm starts it fresh
-                                   fade_in_secs: *fade_in_secs.read(),
-                                   ring_limit_secs: *ring_limit_secs.read(),
-                                   // A new alarm (or a copy) goes where new alarms go; an
-                                   // edited one keeps its place in the list.
-                                   order: if is_new { crate::ordering::order_for_new(&alarms.read()) } else { existing_order },
-                                   enabled: true,
-                                   sound: sound_value.read().clone(),
-                                   sound_mode: *sound_mode_index.read(),
-                                   challenges: challenges.read().clone(),
-                                   snooze_count: *snooze_count.read(),
-                                   snooze_interval: *snooze_interval.read(),
-                               };
-
-    // Save to state
-                               {
-                                   let mut list = alarms.write();
-                                   if let Some(existing) = list.iter_mut().find(|a| a.id == alarm_data.id) {
-    *existing = alarm_data.clone();
-                                   } else {
-                                       list.push(alarm_data.clone());
-                                   }
-                               }
-
-    // Persist to disk and schedule
-                               crate::persistence::save_alarms(&alarms.read());
-
-                               nav.push(Route::Home {});
-                           },
-                           Icon { name: IconName::Check }
-                       }
-                   }
-               }
-
-    // Time section
-               div { class: "config-section",
-                   label { class: "section-label", "{time_label}" }
-                   TimePicker {
-                       hour: *hour.read(),
-                       minute: *minute.read(),
-                       on_change: move |(h, m)| {
-                           hour.set(h);
-                           minute.set(m);
-                       },
-                   }
-                   if !rings_in_text.is_empty() {
-                       p { class: "rings-in", "{rings_in_text}" }
-                   }
-               }
-
-    // Label section
-               div { class: "config-section",
-                   label { class: "section-label", "{label_label}" }
-                   input {
-                       r#type: "text",
-                       placeholder: "{label_placeholder}",
-                       value: "{label_value}",
-                       oninput: move |evt| {
-                           label_value.set(evt.value());
-                           validation_errors.write().remove("label");
-                       },
-                   }
-                   if let Some(err) = validation_errors.read().get("label") {
-                       p { style: "color: var(--error); font-size: 12px; margin-top: 4px;", "{err}" }
-                   }
-               }
-
-    // Schedule section
-               div { class: "config-section",
-                   label { class: "section-label", "{schedule_label}" }
-                   div { class: "schedule-toggle",
-                       button {
-                           class: if *schedule_mode.read() == "weekdays" { "toggle-btn active" } else { "toggle-btn" },
-                           onclick: move |_| { schedule_mode.set("weekdays".to_string()); },
-                           "{weekdays_text}"
-                       }
-                       button {
-                           class: if *schedule_mode.read() == "date" { "toggle-btn active" } else { "toggle-btn" },
-                           onclick: move |_| { schedule_mode.set("date".to_string()); },
-                           "{specific_date_text}"
-                       }
-                   }
-                   if *schedule_mode.read() == "weekdays" {
-                       div { class: "weekday-selector",
-                           for (i, day_label) in day_labels.iter().enumerate() {
-                               {
-                                   let dl = day_label.clone();
-                                   let is_active = selected_days.read()[i];
-                                   rsx! {
-                                       button {
-                                           class: if is_active { "day-btn active" } else { "day-btn" },
-                                           onclick: move |_| {
-                                               let mut days = *selected_days.read();
-                                               days[i] = !days[i];
-                                               selected_days.set(days);
-                                           },
-                                           "{dl}"
-                                       }
-                                   }
-                               }
-                           }
-                       }
-                       div { class: "day-presets",
-                           button {
-                               class: "preset-btn",
-                               onclick: move |_| { selected_days.set([true, true, true, true, true, false, false]); },
-                               "{weekdays_text}"
-                           }
-                           button {
-                               class: "preset-btn",
-                               onclick: move |_| { selected_days.set([false, false, false, false, false, true, true]); },
-                               "{weekend_text}"
-                           }
-                           button {
-                               class: "preset-btn",
-                               onclick: move |_| { selected_days.set([true; 7]); },
-                               "{every_day_text}"
-                           }
-                       }
-                   } else {
-                       input {
-                           r#type: "date",
-                           class: "date-input",
-                           value: "{date_value}",
-                           onchange: move |evt| { date_value.set(evt.value()); },
-                       }
-                   }
-                   if let Some(err) = validation_errors.read().get("schedule") {
-                       p { style: "color: var(--error); font-size: 12px; margin-top: 4px;", "{err}" }
-                   }
-               }
-
-    // Sound section
-               div { class: "config-section",
-                   label { class: "section-label", "{sound_label}" }
-                   button {
-                       class: "dropdown-trigger",
-                       onclick: move |_| {
-                           {
-                               let hid = *preview_handle_id.read();
-                               if hid != 0 {
-                                   stop_preview(hid);
-                               }
-                           }
-                           let current = *show_sound_picker.read();
-                           show_sound_picker.set(!current);
-                       },
-                       span { class: "dropdown-value", "{crate::custom_sounds::display_name_translated(&sound_value.read(), &translations)}" }
-                       span { class: "dropdown-arrow", Icon { name: IconName::ChevronDown, size: 12 } }
-                   }
-
-                   if *show_sound_picker.read() {
-                       div {
-                           class: "challenge-overlay",
-                           onclick: move |_| {
-    // Stop preview and close
-                               let hid = *preview_handle_id.read();
-                               if hid != 0 {
-                                   stop_preview(hid);
-                               }
-                               playing_sound.set(String::new());
-                               preview_handle_id.set(0);
-                               show_sound_picker.set(false);
-                           },
-                           div {
-                               class: "challenge-overlay-content",
-                               onclick: move |evt| { evt.stop_propagation(); },
-                               h3 { "{sound_picker_title}" }
-
-    // Default sounds
-                               div { class: "challenge-type-list",
-                                   for sound_name in default_sounds_list.read().clone().into_iter() {
-                                       {
-                                           let sn = sound_name.clone();
-                                           let sn2 = sound_name.clone();
-                                           let sn3 = sound_name.clone();
-                                           let is_selected = *sound_value.read() == sn;
-                                           let is_playing = *playing_sound.read() == sn;
-                                           let option_class = if is_selected { "sound-option selected" } else { "sound-option" };
-                                           let preview_class = if is_playing { "sound-preview-btn playing" } else { "sound-preview-btn" };
-                                           rsx! {
-                                               div {
-                                                   class: "{option_class}",
-                                                   onclick: move |_| {
-                                                       let hid = *preview_handle_id.read();
-                                                       if hid != 0 {
-                                                           stop_preview(hid);
-                                                       }
-                                                       sound_value.set(sn2.clone());
-                                                       playing_sound.set(String::new());
-                                                       preview_handle_id.set(0);
-                                                       show_sound_picker.set(false);
-                                                   },
-                                                   span { class: "sound-name", "{sn}" }
-                                                   if is_selected {
-                                                       span { class: "sound-selected-check",
-                                                           Icon { name: IconName::Check, size: 14 }
-                                                       }
-                                                   }
-                                                   button {
-                                                       class: "{preview_class}",
-                                                       "aria-label": "{preview_sound_text}",
-                                                       onclick: move |evt| {
-                                                           evt.stop_propagation();
-                                                           if is_playing {
-                                                               let hid = *preview_handle_id.read();
-                                                               if hid != 0 {
-                                                                   stop_preview(hid);
-                                                               }
-                                                               playing_sound.set(String::new());
-                                                               preview_handle_id.set(0);
-                                                           } else {
-                                                               let hid = *preview_handle_id.read();
-                                                               if hid != 0 {
-                                                                   stop_preview(hid);
-                                                               }
-                                                               let new_hid = play_preview(&sn3);
-                                                               preview_handle_id.set(new_hid);
-                                                               playing_sound.set(sn3.clone());
-                                                           }
-                                                       },
-                                                       if is_playing {
-                                                           Icon { name: IconName::Pause, size: 13 }
-                                                       } else {
-                                                           Icon { name: IconName::Play, size: 13 }
-                                                       }
-                                                   }
-                                               }
-                                           }
-                                       }
-                                   }
-
-    // Custom sound (if selected)
-                                   {
-                                       let custom_sound = sound_value.read().clone();
-                                       if crate::custom_sounds::is_custom_sound(&custom_sound) {
-                                           let display = crate::custom_sounds::display_name_translated(&custom_sound, &translations);
-                                           let cs = custom_sound.clone();
-                                           let is_custom_playing = *playing_sound.read() == custom_sound;
-                                           let preview_class = if is_custom_playing { "sound-preview-btn playing" } else { "sound-preview-btn" };
-                                           rsx! {
-                                               div {
-                                                   class: "sound-option selected",
-                                                   span { class: "sound-name", "{display}" }
-                                                   span { class: "sound-selected-check",
-                                                       Icon { name: IconName::Check, size: 14 }
-                                                   }
-                                                   button {
-                                                       class: "{preview_class}",
-                                                       "aria-label": "{preview_sound_text}",
-                                                       onclick: move |evt| {
-                                                           evt.stop_propagation();
-                                                           if is_custom_playing {
-                                                               let hid = *preview_handle_id.read();
-                                                               if hid != 0 {
-                                                                   stop_preview(hid);
-                                                               }
-                                                               playing_sound.set(String::new());
-                                                               preview_handle_id.set(0);
-                                                           } else {
-                                                               let hid = *preview_handle_id.read();
-                                                               if hid != 0 {
-                                                                   stop_preview(hid);
-                                                               }
-                                                               let new_hid = play_preview(&cs);
-                                                               preview_handle_id.set(new_hid);
-                                                               playing_sound.set(cs.clone());
-                                                           }
-                                                       },
-                                                       if is_custom_playing {
-                                                           Icon { name: IconName::Pause, size: 13 }
-                                                       } else {
-                                                           Icon { name: IconName::Play, size: 13 }
-                                                       }
-                                                   }
-                                               }
-                                           }
-                                       } else {
-                                           rsx! {}
-                                       }
-                                   }
-                               }
-
-    // Actions
-                               div { class: "overlay-actions",
-                                   button {
-                                       class: "overlay-btn-cancel",
-                                       onclick: move |_| {
-                                           let hid = *preview_handle_id.read();
-                                           if hid != 0 {
-                                               stop_preview(hid);
-                                           }
-                                           playing_sound.set(String::new());
-                                           preview_handle_id.set(0);
-                                           show_sound_picker.set(false);
-                                       },
-                                       "{close_btn_text}"
-                                   }
-                                   button {
-                                       class: "overlay-btn-add",
-                                       onclick: move |_| {
-                                           // Stop any running preview before opening the native
-                                           // picker — otherwise the previewed tone keeps looping
-                                           // behind the import dialog.
-                                           let hid = *preview_handle_id.read();
-                                           if hid != 0 {
-                                               stop_preview(hid);
-                                           }
-                                           playing_sound.set(String::new());
-                                           preview_handle_id.set(0);
-                                           pick_audio_requested.set(true);
-                                       },
-                                       "{import_sound_text}"
-                                   }
-                               }
-                           }
-                       }
-                   }
-               }
-
-    // Sound mode section
-               div { class: "config-section",
-                   label { class: "section-label", "{sound_mode_label}" }
-                   div { class: "radio-group",
-                       for (i, mode_label) in sound_mode_labels.iter().enumerate() {
-                           {
-                               let ml = mode_label.clone();
-                               let is_selected = *sound_mode_index.read() == i;
-                               rsx! {
-                                   div {
-                                       class: "radio-item",
-                                       onclick: move |_| { sound_mode_index.set(i); },
-                                       input {
-                                           r#type: "radio",
-                                           checked: is_selected,
-                                       }
-                                       span { class: "radio-label", "{ml}" }
-                                   }
-                               }
-                           }
-                       }
-                   }
-               }
-
-    // Fade-in section: how long the sound takes to reach full volume
-               div { class: "config-section",
-                   label { class: "section-label", "{fade_in_label}" }
-                   div { class: "schedule-toggle",
-                       for secs in [0u16, 15, 30, 60] {
-                           button {
-                               class: if *fade_in_secs.read() == secs { "toggle-btn active" } else { "toggle-btn" },
-                               onclick: move |_| { fade_in_secs.set(secs); },
-                               if secs == 0 { "{fade_off_text}" } else { "{secs}s" }
-                           }
-                       }
-                   }
-               }
-
-    // Challenges section
-               div { class: "config-section",
-                   label { class: "section-label", "{challenges_label}" }
-                   if !challenges.read().is_empty() {
-                       div { id: "challenge-list", class: "challenge-list",
-                           for (idx, (type_key, config_json)) in challenges.read().iter().enumerate() {
-                               {
-                                   let type_label = t(&translations, type_key);
-                                   let summary = challenge_config_summary(&translations, type_key, config_json);
-                                   let tk = type_key.clone();
-                                   let cj = config_json.clone();
-                                   let step_number = if total_challenges > 1 { format!("{}. ", idx + 1) } else { String::new() };
-                                   rsx! {
-                                       div { class: "challenge-item",
-                                           if total_challenges > 1 {
-                                               div {
-                                                   class: "drag-handle",
-                                                   "aria-label": "{drag_text}",
-                                                   Icon { name: IconName::Grip, size: 18 }
-                                               }
-                                           }
-                                           div { class: "challenge-info",
-                                               span { class: "challenge-name", "{step_number}{type_label}" }
-                                               span { class: "challenge-difficulty", "{summary}" }
-                                           }
-                                           div { class: "challenge-actions",
-                                               button {
-                                                   class: "edit-btn",
-                                                   "aria-label": "{edit_challenge_text}",
-                                                   onclick: move |_| {
-                                                       // Pre-fill the picker from the stored config and
-                                                       // open straight into config mode for this index.
-                                                       let parsed = parse_picker_config(&tk, &cj);
-                                                       picker_difficulty.set(parsed.difficulty.clone());
-                                                       picker_shake_count.set(parsed.shake_count);
-                                                       picker_step_count.set(parsed.step_count);
-                                                       picker_hold_count.set(parsed.hold_count);
-                                                       picker_hold_secs.set(parsed.hold_secs);
-                                                       picker_reaction_targets.set(parsed.reaction_targets);
-                                                       picker_reaction_secs.set(parsed.reaction_secs);
-                                                       picker_reaction_rounds.set(parsed.reaction_rounds);
-                                                       picker_scan_value.set(parsed.scan_value.clone());
-                                                       editing_index.set(Some(idx));
-                                                       picker_selected_type.set(tk.clone());
-                                                       show_challenge_picker.set(true);
-                                                   },
-                                                   Icon { name: IconName::Pencil, size: 13 }
-                                               }
-                                               button {
-                                                   class: "remove-btn",
-                                                   "aria-label": "{remove_challenge_text}",
-                                                   onclick: move |_| {
-                                                       challenges.write().remove(idx);
-                                                   },
-                                                   Icon { name: IconName::Xmark, size: 10 }
-                                               }
-                                           }
-                                       }
-                                   }
-                               }
-                           }
-                       }
-                   }
-                   button {
-                       class: "add-challenge-btn",
-                       onclick: move |_| {
-                           #[cfg(target_os = "android")]
-                           log::info!("[AlarmFree] Add Challenge button clicked");
-                           editing_index.set(None);
-                           picker_selected_type.set(String::new());
-                           show_challenge_picker.set(true);
-                       },
-                       "{add_challenge_text}"
-                   }
-                   if let Some(err) = validation_errors.read().get("challenges") {
-                       p { style: "color: var(--error); font-size: 12px; margin-top: 4px;", "{err}" }
-                   }
-               }
-
-    // Snooze section
-               div { class: "config-section",
-                   label { class: "section-label", "{snooze_label}" }
-                   div { class: "snooze-config",
-                       div { class: "snooze-field",
-                           span { class: "field-label", "{snooze_count_label}" }
-                           div { class: "stepper",
-                               button {
-                                   class: "stepper-btn",
-                                   disabled: *snooze_count.read() == 0,
-                                   "aria-label": "{decrease_text}",
-                                   onclick: move |_| {
-                                       let current = *snooze_count.read();
-                                       if current > 0 {
-                                           snooze_count.set(current - 1);
-                                       }
-                                   },
-                                   "\u{2212}"
-                               }
-                               span { class: "stepper-value", "{snooze_count}" }
-                               button {
-                                   class: "stepper-btn",
-                                   disabled: *snooze_count.read() >= 10,
-                                   "aria-label": "{increase_text}",
-                                   onclick: move |_| {
-                                       let current = *snooze_count.read();
-                                       if current < 10 {
-                                           snooze_count.set(current + 1);
-                                       }
-                                   },
-                                   "+"
-                               }
-                           }
-                       }
-                       div { class: "snooze-field",
-                           span { class: "field-label", "{snooze_interval_label}" }
-                           div { class: "stepper",
-                               button {
-                                   class: "stepper-btn",
-                                   disabled: *snooze_interval.read() <= 1,
-                                   "aria-label": "{decrease_text}",
-                                   onclick: move |_| {
-                                       let current = *snooze_interval.read();
-                                       if current > 1 {
-                                           snooze_interval.set(current - 1);
-                                       }
-                                       validation_errors.write().remove("snooze_interval");
-                                   },
-                                   "\u{2212}"
-                               }
-                               span { class: "stepper-value", "{snooze_interval}" }
-                               button {
-                                   class: "stepper-btn",
-                                   disabled: *snooze_interval.read() >= 30,
-                                   "aria-label": "{increase_text}",
-                                   onclick: move |_| {
-                                       let current = *snooze_interval.read();
-                                       if current < 30 {
-                                           snooze_interval.set(current + 1);
-                                       }
-                                       validation_errors.write().remove("snooze_interval");
-                                   },
-                                   "+"
-                               }
-                           }
-                       }
-                   }
-                   if let Some(err) = validation_errors.read().get("snooze_count") {
-                       p { style: "color: var(--error); font-size: 12px; margin-top: 4px;", "{err}" }
-                   }
-                   if let Some(err) = validation_errors.read().get("snooze_interval") {
-                       p { style: "color: var(--error); font-size: 12px; margin-top: 4px;", "{err}" }
-                   }
-               }
-           }
-       }
+    #[test]
+    fn a_time_can_be_typed_in_the_ways_people_type_it() {
+        assert_eq!(parse_typed_time("7"), Some((7, 0)));
+        assert_eq!(parse_typed_time("07"), Some((7, 0)));
+        assert_eq!(parse_typed_time("730"), Some((7, 30)));
+        assert_eq!(parse_typed_time("0730"), Some((7, 30)));
+        assert_eq!(parse_typed_time("07:30"), Some((7, 30)));
+        assert_eq!(parse_typed_time("7:30"), Some((7, 30)));
+        assert_eq!(parse_typed_time("7.30"), Some((7, 30)));
+        assert_eq!(parse_typed_time("23:59"), Some((23, 59)));
+        assert_eq!(parse_typed_time("24:00"), None);
+        assert_eq!(parse_typed_time("7:75"), None);
+        assert_eq!(parse_typed_time(""), None);
+        assert_eq!(parse_typed_time("12345"), None);
+    }
 }

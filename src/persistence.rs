@@ -179,7 +179,16 @@ pub fn save_settings(settings: &AppSettings) {
 
 pub fn load_settings() -> AppSettings {
     match DB.db.load_settings() {
-        Ok(Some(settings)) => settings,
+        Ok(Some(mut settings)) => {
+            if settings.prefs.language_follows_phone {
+                if let Some(locale) =
+                    Locale::from_language_code(&mobile_sentinel::device_language())
+                {
+                    settings.locale = locale;
+                }
+            }
+            settings
+        }
         // Nothing chosen yet: start in the phone's language.
         Ok(None) => AppSettings {
             locale: Locale::from_language_code(&mobile_sentinel::device_language())
@@ -233,6 +242,14 @@ mod tests {
             challenges: vec![],
             snooze_count: 1,
             snooze_interval: 5,
+            note: String::new(),
+            vibration: 0,
+            volume_percent: None,
+            random_order: false,
+            wake_check_minutes: 0,
+            pause_until_ms: None,
+            delete_after_ring: false,
+            hidden: false,
         }
     }
 

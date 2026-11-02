@@ -15,7 +15,7 @@ use rusqlite::Connection;
 use crate::db::schema;
 
 /// Current schema version.
-const CURRENT_VERSION: u32 = 3;
+const CURRENT_VERSION: u32 = 4;
 
 /// Run all pending migrations to bring the database up to `CURRENT_VERSION`.
 /// Safe to call on every app launch — it's a no-op if already at the latest version.
@@ -38,6 +38,9 @@ pub fn run_migrations(conn: &Connection) -> Result<(), rusqlite::Error> {
         if version < 3 {
             migrate_v2_to_v3(&tx)?;
         }
+        if version < 4 {
+            migrate_v3_to_v4(&tx)?;
+        }
     }
     set_user_version(&tx, CURRENT_VERSION)?;
     tx.commit()
@@ -57,6 +60,11 @@ fn migrate_v2_to_v3(conn: &Connection) -> Result<(), rusqlite::Error> {
         "ALTER TABLE alarm_events ADD COLUMN outcome TEXT NOT NULL DEFAULT 'solved';
          ALTER TABLE alarm_events ADD COLUMN seen INTEGER NOT NULL DEFAULT 1;",
     )
+}
+
+/// v3 → v4: everything the settings got since, as one JSON column.
+fn migrate_v3_to_v4(conn: &Connection) -> Result<(), rusqlite::Error> {
+    conn.execute_batch("ALTER TABLE settings ADD COLUMN prefs TEXT NOT NULL DEFAULT '{}'")
 }
 
 fn get_user_version(conn: &Connection) -> Result<u32, rusqlite::Error> {

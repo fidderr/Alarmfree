@@ -91,7 +91,7 @@ pub fn MemoryGameChallenge(
 
             // Status line is always rendered (fixed height) so the grid never
             // shifts when the progress/wrong counters appear during input.
-            p { class: "challenge-progress challenge-progress-fixed",
+            p { class: "challenge-progress",
                 if current_phase == MemoryPhase::Input {
                     "{progress_text}"
                     if wrong_count > 0 {

@@ -56,7 +56,7 @@ pub fn HoldButtonChallenge(
         let token = hold_token() + 1;
         hold_token.set(token);
         filling.set(true);
-        haptic(18);
+        crate::feedback::tick(18);
 
         // Completion timer: if the hold survives `hold_ms` uninterrupted,
         // this bubble is done. A release bumps `hold_token`, invalidating
@@ -70,7 +70,7 @@ pub fn HoldButtonChallenge(
             completed.set(done);
             filling.set(false);
             popping.set(true);
-            haptic(if done >= required { 130 } else { 45 });
+            crate::feedback::tick(if done >= required { 130 } else { 45 });
 
             sleep_ms(POP_MS).await;
             if done >= required {
@@ -165,14 +165,6 @@ pub fn HoldButtonChallenge(
 /// the bubble + glow never touch the clipped edge.
 fn random_pos() -> (f32, f32) {
     (rand::random::<f32>(), rand::random::<f32>())
-}
-
-/// Fire a short haptic pulse via the gated haptics capability. No-op if
-/// unavailable. (Reaching vibration through the raw sink is no longer
-/// possible — `haptics` must be declared as a feature.)
-fn haptic(_ms: u64) {
-    #[cfg(target_os = "android")]
-    mobile_sentinel::haptics::vibrate(Duration::from_millis(_ms));
 }
 
 /// Async sleep via a background thread + oneshot — keeps the UI layer

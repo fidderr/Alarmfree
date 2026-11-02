@@ -24,7 +24,17 @@ use crate::models::{AlarmOutcome, Locale};
 const ALARMFREE_ACTIVITY_FQCN: &str = "dev.dioxus.main.MainActivity";
 
 /// Notification channel id for the firing FGS notification.
-const FOREGROUND_CHANNEL_ID: &str = "alarmfree_firing";
+pub const FOREGROUND_CHANNEL_ID: &str = "alarmfree_firing";
+
+/// How an alarm can vibrate, as alternating wait and vibrate times.
+pub const VIBRATION_PATTERNS: [&[i64]; 3] = [
+    // Pulse: pause, long buzz, short gap, long buzz.
+    &[0, 500, 300, 500],
+    // Steady: hardly a break.
+    &[0, 2000, 100],
+    // Heartbeat: two quick beats and a rest.
+    &[0, 100, 100, 100, 700],
+];
 
 /// The backup screen, for when the app's own cannot come up: as many long holds as
 /// the slowest challenge takes, because it must not be the easy way out.
@@ -75,7 +85,7 @@ fn handle_ring_ends() {
     let mut switched_off = false;
     for (id, end) in &ended {
         record_outcome(&list, &id.0, outcome_of(*end), chrono::Utc::now());
-        switched_off |= crate::schedule::disable_if_one_time(&mut list, &id.0);
+        switched_off |= crate::schedule::finish_if_one_time(&mut list, &id.0);
     }
     if switched_off {
         crate::persistence::save_alarms(&list);
@@ -98,24 +108,13 @@ fn record_outcome(
     outcome: AlarmOutcome,
     at: chrono::DateTime<chrono::Utc>,
 ) {
-    let label = list
-        .iter()
-        .find(|a| a.id == alarm_id)
-        .map(display_name)
-        .unwrap_or_default();
-    crate::history_persistence::record_outcome(alarm_id, &label, outcome, at);
-}
-
-/// One-shot platform init plus the permission prompts (which need the UI).
-pub fn init_sentinel() {
-    init_platform();
-
-    // Permission prompts (POST_NOTIFICATIONS, SYSTEM_ALERT_WINDOW), but never
-    // over a ringing alarm: this also runs when an alarm starts the app.
-    #[cfg(target_os = "android")]
-    if crate::firing_state::peek_firing_alarm().is_none() {
-        request_runtime_permissions();
+    let alarm = list.iter().find(|a| a.id == alarm_id);
+    // A wake-up check or a test alarm is not one of the user's alarms.
+    if alarm.is_some_and(|a| a.hidden) {
+        return;
     }
+    let label = alarm.map(display_name).unwrap_or_default();
+    crate::history_persistence::record_outcome(alarm_id, &label, outcome, at);
 }
 
 /// Platform setup happens once per process, whichever comes first: the UI, or
@@ -158,6 +157,9 @@ pub extern "system" fn Java_com_mobilesentinel_SentinelRearm_nativeRearm(
         log::error!("[AlarmFree] re-arming panicked");
     }
 }
+
+/// Bring the notifications before alarms in line with the alarms and the setting.
+pub fn refresh_reminders() {}
 
 /// Change the minimum alarm volume for rings from now on. An alarm rings by the
 /// plan it was armed with, so the alarms already armed get a new one.
@@ -357,7 +359,7 @@ fn sync_alarms(kit: &'static AlarmKit, woken: bool) {
         .chain(report.missed.iter().map(|m| &m.id));
     let mut switched_off = false;
     for id in finished {
-        switched_off |= crate::schedule::disable_if_one_time(&mut list, &id.0);
+        switched_off |= crate::schedule::finish_if_one_time(&mut list, &id.0);
     }
     if switched_off {
         crate::persistence::save_alarms(&list);
@@ -386,14 +388,6 @@ fn forget_unlisted_alarms(kit: &AlarmKit, listed: &[(String, AlarmSpec)]) {
         if !ringing && !listed.iter().any(|(listed_id, _)| *listed_id == id.0) {
             forget_alarm(&id.0);
         }
-    }
-}
-
-#[cfg(target_os = "android")]
-fn request_runtime_permissions() {
-    let _ = mobile_sentinel::permissions::request("android.permission.POST_NOTIFICATIONS");
-    if !mobile_sentinel::overlay::is_granted() {
-        mobile_sentinel::overlay::request();
     }
 }
 
@@ -457,6 +451,7 @@ fn debug_auto_schedule() {
             skip_until_unix_ms: None,
             fade_in_secs: 0,
             ring_limit_secs: None,
+            min_volume_percent: None,
         };
         match kit.create_with_id(id.clone(), spec) {
             Ok(()) => log::info!(
@@ -683,15 +678,17 @@ pub fn alarm_data_to_spec(alarm: &AlarmData) -> AlarmSpec {
             })
             .collect(),
         vibration_enabled: matches!(alarm.sound_mode, 0 | 2),
-        // alarmfree uses one app-wide buzz (the AlarmClassConfig default), so
-        // every alarm inherits it. `None` = inherit; a future per-alarm
-        // "vibration style" picker would set `Some(pattern)` here.
-        vibration_pattern: None,
+        vibration_pattern: Some(
+            VIBRATION_PATTERNS[usize::from(alarm.vibration).min(VIBRATION_PATTERNS.len() - 1)]
+                .to_vec(),
+        ),
         kiosk_mode: true,
         bypass_dnd: true,
-        skip_until_unix_ms: alarm.skip_until_ms,
+        // A skipped ring and a holiday are separate, and the later one holds.
+        skip_until_unix_ms: alarm.skip_until_ms.max(alarm.pause_until_ms),
         fade_in_secs: alarm.fade_in_secs,
         ring_limit_secs: alarm.ring_limit_secs,
+        min_volume_percent: alarm.volume_percent,
     }
 }
 
@@ -720,6 +717,14 @@ mod tests {
             challenges: vec![],
             snooze_count: 3,
             snooze_interval: 5,
+            note: String::new(),
+            vibration: 0,
+            volume_percent: None,
+            random_order: false,
+            wake_check_minutes: 0,
+            pause_until_ms: None,
+            delete_after_ring: false,
+            hidden: false,
         }
     }
 

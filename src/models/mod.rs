@@ -2,6 +2,7 @@ pub mod alarm;
 pub mod challenge;
 pub mod history;
 pub mod settings;
+pub mod setup;
 
 // Re-export key types
 pub use alarm::AlarmId;
@@ -10,4 +11,5 @@ pub use challenge::{
     ChallengePrompt, ChallengeType, Difficulty, DifficultyParams, ReferenceData,
 };
 pub use history::{AggregateMetrics, AlarmEvent, AlarmOutcome, ChallengeSolve, HistoryFilter};
-pub use settings::{AppSettings, Locale, ThemeMode};
+pub use settings::{AppSettings, Locale, Prefs, SortMode, ThemeMode, TimeFormat, WeekStart};
+pub use setup::ChallengeSetup;
