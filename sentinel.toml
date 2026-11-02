@@ -15,6 +15,10 @@ activity = "dev.dioxus.main.MainActivity"
 icon = "assets/icon.webp"
 assets = ["assets/sounds"]
 
+# An alarm has to ring after a reboot, also before the first unlock. Its files are
+# device-encrypted for that, as a system clock's are.
+direct_boot = true
+
 # Capabilities are NOT declared here — every capability is a Cargo FEATURE on
 # the mobile-sentinel dependency in Cargo.toml (the single, compile-enforced
 # source of truth). build_sentinel derives the manifest permissions/components

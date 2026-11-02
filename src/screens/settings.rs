@@ -171,6 +171,7 @@ pub fn Settings() -> Element {
                                                    let mut settings = crate::persistence::load_settings();
                                                    settings.locale = lv;
                                                    crate::persistence::save_settings(&settings);
+                                                   crate::platform::set_ring_language(lv);
                                                },
                                                "{display}"
                                            }

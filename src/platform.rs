@@ -10,11 +10,13 @@ use std::sync::Arc;
 
 use chrono::Local;
 use mobile_sentinel::context::schema::{ChallengeSpec, ScheduleSpec, SnoozePolicy, SoundIdSpec};
+use mobile_sentinel::jobs::RingEnd;
+use mobile_sentinel::recipes::alarm_class::AlarmClassConfig;
 use mobile_sentinel::{AlarmKit, AlarmKitConfig, AlarmSpec, ContextStore, InstanceId};
 use once_cell::sync::OnceCell;
 
 use crate::app::AlarmData;
-use crate::models::AlarmOutcome;
+use crate::models::{AlarmOutcome, Locale};
 
 /// Fully-qualified name of the Dioxus mobile entry activity. The same
 /// value is injected into the Android manifest by `prepare_android` and
@@ -24,14 +26,13 @@ const ALARMFREE_ACTIVITY_FQCN: &str = "dev.dioxus.main.MainActivity";
 /// Notification channel id for the firing FGS notification.
 const FOREGROUND_CHANNEL_ID: &str = "alarmfree_firing";
 
-/// Notification channel display name.
-const FOREGROUND_CHANNEL_NAME: &str = "Alarms";
+/// The backup screen, for when the app's own cannot come up: as many long holds as
+/// the slowest challenge takes, because it must not be the easy way out.
+const BACKUP_HOLDS: u32 = 20;
+const BACKUP_HOLD_MS: u32 = 3_000;
 
-/// Notification body shown while firing.
-const FOREGROUND_BODY: &str = "Tap to open";
-
-/// Notification title for an alarm without a label.
-const FOREGROUND_TITLE_FALLBACK: &str = "Alarm";
+/// The UI may fail this often during a ring before the backup screen takes over.
+const UI_FAILURES_BEFORE_BACKUP: u32 = 2;
 
 /// An alarm whose time passed during a restart still rings if it is less than
 /// this late; later than that it is reported as missed.
@@ -52,27 +53,34 @@ pub fn alarm_kit_optional() -> Option<&'static AlarmKit> {
     ALARM_KIT.get()
 }
 
-/// Record the alarms that just rang until their limit with the app running, and
-/// switch off the one-time ones among them. Returns whether there were any.
-pub fn handle_ended_by_limit() -> bool {
+/// Record the rings that just ended without the app having a say, while it runs, and
+/// switch off the one-time alarms among them. Returns whether there were any.
+pub fn handle_ring_ends() -> bool {
     let Some(kit) = alarm_kit_optional() else {
         return false;
     };
-    let ended = kit.take_ended_by_limit();
+    let ended = kit.take_ring_ends();
     if ended.is_empty() {
         return false;
     }
     let mut list = crate::persistence::load_alarms();
     let mut switched_off = false;
-    for id in &ended {
+    for (id, end) in &ended {
         clear_session_files(&id.0);
-        record_outcome(&list, &id.0, AlarmOutcome::Limit, chrono::Utc::now());
+        record_outcome(&list, &id.0, outcome_of(*end), chrono::Utc::now());
         switched_off |= crate::schedule::disable_if_one_time(&mut list, &id.0);
     }
     if switched_off {
         crate::persistence::save_alarms(&list);
     }
     true
+}
+
+fn outcome_of(end: RingEnd) -> AlarmOutcome {
+    match end {
+        RingEnd::Limit => AlarmOutcome::Limit,
+        RingEnd::BackupScreen => AlarmOutcome::Backup,
+    }
 }
 
 /// An alarm ended some other way than the user solving it: history keeps it, and
@@ -156,6 +164,28 @@ pub fn set_min_volume(percent: u8) {
     }
 }
 
+/// The texts an alarm rings with, in the user's language.
+fn apply_ring_texts(config: &mut AlarmClassConfig, locale: Locale) {
+    let translations = crate::i18n::load_translations(locale);
+    let text = |key: &str| translations.get(key).cloned().unwrap_or_default();
+    config.channel_name = text("ring.channel");
+    config.firing_body = text("ring.body");
+    config.fallback_title = text("ring.fallback_title");
+    config.backup_text = text("ring.backup_hold");
+}
+
+/// The user picked another language. An alarm rings by the plan it was armed with,
+/// so the alarms already armed get a new one.
+pub fn set_ring_language(locale: Locale) {
+    let runtime = mobile_sentinel::alarm_class_runtime();
+    let mut config = runtime.config();
+    apply_ring_texts(&mut config, locale);
+    runtime.configure(config);
+    if let Some(kit) = alarm_kit_optional() {
+        kit.refresh_ring_plans();
+    }
+}
+
 /// Per-session files the firing screen keeps for an alarm.
 fn clear_session_files(alarm_id: &str) {
     let dir = mobile_sentinel::app_files_dir();
@@ -176,10 +206,11 @@ fn setup_platform(woken: bool) {
         mobile_sentinel::app_files_dir().join("sentinel/context"),
     ));
 
-    let alarm_class_config = mobile_sentinel::recipes::alarm_class::AlarmClassConfig {
+    let settings = crate::persistence::load_settings();
+    let mut alarm_class_config = AlarmClassConfig {
         channel_id: FOREGROUND_CHANNEL_ID.into(),
-        channel_name: FOREGROUND_CHANNEL_NAME.into(),
-        firing_body: FOREGROUND_BODY.into(),
+        channel_name: String::new(),
+        firing_body: String::new(),
         importance: 5, // IMPORTANCE_MAX
         audio_usage: "alarm".into(),
         audio_content_type: "sonification".into(),
@@ -205,13 +236,17 @@ fn setup_platform(woken: bool) {
         vibration_pattern: vec![0, 500, 300, 500],
         // The user's minimum alarm volume (Settings); updated live by
         // `set_min_volume` when it changes.
-        min_volume_percent: crate::persistence::load_settings().min_volume_percent,
+        min_volume_percent: settings.min_volume_percent,
         late_ring_window_ms: LATE_RING_WINDOW_MS,
         fallback_sound_id: Some(SoundIdSpec::Bundled(
             crate::custom_sounds::FALLBACK_SOUND.into(),
         )),
-        fallback_title: FOREGROUND_TITLE_FALLBACK.into(),
+        fallback_title: String::new(),
+        backup_holds: BACKUP_HOLDS,
+        backup_hold_ms: BACKUP_HOLD_MS,
+        backup_text: String::new(),
     };
+    apply_ring_texts(&mut alarm_class_config, settings.locale);
 
     #[cfg(target_os = "android")]
     let firing_sink: Option<Arc<dyn mobile_sentinel::firing::FiringSink>> = Some(Arc::new(
@@ -304,8 +339,8 @@ fn sync_alarms(kit: &'static AlarmKit, woken: bool) {
     for id in &report.ended_by_reboot {
         record_outcome(&list, &id.0, AlarmOutcome::Reboot, now);
     }
-    for id in &report.ended_by_limit {
-        record_outcome(&list, &id.0, AlarmOutcome::Limit, now);
+    for (id, end) in &report.ring_ends {
+        record_outcome(&list, &id.0, outcome_of(*end), now);
     }
     for missed in &report.missed {
         let due = chrono::DateTime::from_timestamp_millis(missed.due_unix_ms).unwrap_or(now);
@@ -314,7 +349,7 @@ fn sync_alarms(kit: &'static AlarmKit, woken: bool) {
     let over = report
         .ended_by_reboot
         .iter()
-        .chain(&report.ended_by_limit)
+        .chain(report.ring_ends.iter().map(|(id, _)| id))
         .chain(report.missed.iter().map(|m| &m.id));
     for id in over {
         clear_session_files(&id.0);
@@ -323,7 +358,7 @@ fn sync_alarms(kit: &'static AlarmKit, woken: bool) {
         .finished
         .iter()
         .chain(&report.ended_by_reboot)
-        .chain(&report.ended_by_limit)
+        .chain(report.ring_ends.iter().map(|(id, _)| id))
         .chain(report.missed.iter().map(|m| &m.id));
     let mut switched_off = false;
     for id in finished {
@@ -564,6 +599,7 @@ fn job_config() -> mobile_sentinel::JobConfig {
     mobile_sentinel::JobConfig {
         poll_interval_ms: POLL_INTERVAL_MS,
         ui_liveness_timeout_ms: UI_LIVENESS_TIMEOUT_MS,
+        ui_failures_before_backup: UI_FAILURES_BEFORE_BACKUP,
         ..Default::default()
     }
 }
@@ -579,9 +615,7 @@ fn register_alarm_job(alarm_id: &str) -> Result<(), mobile_sentinel::jobs::JobGu
 /// Make sure an enabled alarm's job exists with the current settings.
 fn ensure_alarm_job(alarm_id: &str) {
     if let Ok(Some(job)) = mobile_sentinel::jobs::get_job(alarm_id) {
-        if job.config.ui_liveness_timeout_ms == UI_LIVENESS_TIMEOUT_MS
-            && job.config.poll_interval_ms == POLL_INTERVAL_MS
-        {
+        if job.config == job_config() {
             return;
         }
     }

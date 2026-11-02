@@ -359,6 +359,7 @@ fn EventCard(event: AlarmEvent) -> Element {
         AlarmOutcome::Missed => Some("history.outcome.missed"),
         AlarmOutcome::Limit => Some("history.outcome.limit"),
         AlarmOutcome::Reboot => Some("history.outcome.reboot"),
+        AlarmOutcome::Backup => Some("history.outcome.backup"),
     };
     if let Some(key) = outcome_key {
         let outcome_text = t(&translations, key);

@@ -185,14 +185,17 @@ pub fn App() -> Element {
             if current != *firing_id.peek() {
                 firing_id.set(current);
             }
-            // Rang until its limit with nobody there: nothing else tells the user.
-            if crate::platform::handle_ended_by_limit() {
+            if crate::platform::handle_ring_ends() {
                 let mut list = alarms;
                 list.set(crate::persistence::load_alarms());
-                toast_signal.set(Some(crate::components::ToastMessage {
-                    message: unseen_outcome_notices(&translations).join(" "),
-                    level: crate::components::ToastLevel::Error,
-                }));
+                // Rang until its limit with nobody there: nothing else tells the user.
+                let notices = unseen_outcome_notices(&translations);
+                if !notices.is_empty() {
+                    toast_signal.set(Some(crate::components::ToastMessage {
+                        message: notices.join(" "),
+                        level: crate::components::ToastLevel::Error,
+                    }));
+                }
             }
         }
     });

@@ -29,6 +29,8 @@ pub enum AlarmOutcome {
     Limit,
     /// The phone restarted while it rang.
     Reboot,
+    /// The user solved the backup screen's challenge.
+    Backup,
 }
 
 impl AlarmOutcome {
@@ -39,6 +41,7 @@ impl AlarmOutcome {
             Self::Missed => "missed",
             Self::Limit => "limit",
             Self::Reboot => "reboot",
+            Self::Backup => "backup",
         }
     }
 
@@ -47,6 +50,7 @@ impl AlarmOutcome {
             "missed" => Self::Missed,
             "limit" => Self::Limit,
             "reboot" => Self::Reboot,
+            "backup" => Self::Backup,
             _ => Self::Solved,
         }
     }
