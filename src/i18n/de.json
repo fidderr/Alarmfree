@@ -357,10 +357,10 @@
   "reliability.autostart": "Autostart",
   "reliability.autostart_note": "Auf diesem Telefon nicht lesbar. Prüfe, ob es an ist, sonst kommen Wecker nach einem Neustart evtl. nicht zurück.",
   "reliability.last_ring": "Letztes Klingeln: Ton nach {seconds} s.",
-  "reliability.test": "Testwecker in 60 s",
-  "reliability.test_note": "Klingelt in einer Minute wirklich, bei geschlossener App. Sperre dein Telefon und warte.",
+  "reliability.test": "Testwecker",
+  "reliability.test_note": "Klingelt innerhalb von 2 Minuten wirklich, bei geschlossener App. Sperre dein Telefon und warte.",
   "reliability.test_label": "Testwecker",
-  "reliability.test_set": "Klingelt in etwa einer Minute. Sperre dein Telefon.",
+  "reliability.test_set": "Klingelt innerhalb von 2 Minuten. Sperre dein Telefon.",
   "setup.title": "Willkommen",
   "setup.intro": "Ein Wecker muss klingeln, egal was das Telefon gerade macht. Dafür muss es ein paar Dinge erlauben. Nichts davon wird irgendwohin gesendet.",
   "setup.done": "Loslegen",
@@ -405,5 +405,8 @@
   "history.delete_one": "Diesen löschen",
   "filter.last_prefix": "Letzte",
   "reliability.banner": "{check}: Wecker könnten zu spät sein",
-  "home.pause_one": "Bis zu einem Datum pausieren"
+  "home.pause_one": "Bis zu einem Datum pausieren",
+  "reminder.title": "Wecker um {time}",
+  "reminder.channel": "Vor einem Wecker",
+  "home.pick": "Wähle einen Wecker zum Ändern oder erstelle einen neuen."
 }

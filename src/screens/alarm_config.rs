@@ -167,9 +167,17 @@ fn seconds_label(translations: &Translations, secs: u16) -> String {
 }
 
 /// Alarm configuration screen for creating/editing alarms, and for what new alarms
-/// start from ("defaults").
+/// start from ("defaults"). Next to the list on a wide screen another alarm can be picked
+/// while this is open, and the editor must start over for it.
 #[component]
 pub fn AlarmConfig(id: String) -> Element {
+    rsx! {
+        Editor { key: "{id}", id }
+    }
+}
+
+#[component]
+fn Editor(id: String) -> Element {
     let mut alarms = use_context::<Signal<Vec<AlarmData>>>();
     let translations = use_context::<Translations>();
     let mut settings = use_context::<Signal<AppSettings>>();

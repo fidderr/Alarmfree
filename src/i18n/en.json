@@ -357,10 +357,10 @@
   "reliability.autostart": "Auto-start",
   "reliability.autostart_note": "Cannot be read on this phone. Check it is on, or alarms may not return after a restart.",
   "reliability.last_ring": "Last ring: sound after {seconds} s.",
-  "reliability.test": "Test alarm in 60 s",
-  "reliability.test_note": "Rings for real in a minute, with the app closed. Lock your phone and wait.",
+  "reliability.test": "Test alarm",
+  "reliability.test_note": "Rings for real within 2 minutes, with the app closed. Lock your phone and wait.",
   "reliability.test_label": "Test alarm",
-  "reliability.test_set": "Rings in about a minute. Lock your phone.",
+  "reliability.test_set": "Rings within 2 minutes. Lock your phone.",
   "setup.title": "Welcome",
   "setup.intro": "An alarm has to ring, whatever the phone is doing. For that, your phone has to allow a few things. Nothing here sends anything anywhere.",
   "setup.done": "Get started",
@@ -405,5 +405,8 @@
   "history.delete_one": "Delete this one",
   "filter.last_prefix": "Last",
   "reliability.banner": "{check}: alarms may be late",
-  "home.pause_one": "Pause until a date"
+  "home.pause_one": "Pause until a date",
+  "reminder.title": "Alarm at {time}",
+  "reminder.channel": "Before an alarm",
+  "home.pick": "Pick an alarm to change it, or make a new one."
 }

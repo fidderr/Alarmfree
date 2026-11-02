@@ -863,31 +863,365 @@ s25() {
     next_minute 3600
     seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
     arm a
-    sleep 3
-    screenshot s25_home
-    local p0 p1
+    sleep 2
+    local p0 problems=""
     p0=$(main_pid)
-    # First card, roughly a third down the screen on any phone.
-    local size w h
-    size=$(dev wm size | tail -1 | sed 's/.*: //')
-    w=${size%x*}
-    h=${size#*x}
-    dev input tap $((w / 3)) $((h / 5))
-    sleep 3
-    screenshot s25_editor
-    dev input keyevent KEYCODE_BACK
-    sleep 3
-    screenshot s25_after_back
-    p1=$(main_pid)
-    if [ "$p0" = "$p1" ] && top_is_app; then
-        pass "Back stayed in the app"
+    # A sheet closes first, and the screen stays.
+    click .alarm-menu
+    on_screen .sheet || problems="$problems; no menu"
+    press_back
+    on_screen .sheet && problems="$problems; Back left the menu open"
+    on_screen .home-header || problems="$problems; Back from the menu left Home"
+    # Then the screen.
+    click .alarm-main
+    on_screen .time-big || problems="$problems; no editor"
+    click .row-btn
+    on_screen .sheet || problems="$problems; no editor sheet"
+    press_back
+    on_screen .sheet && problems="$problems; Back left the editor sheet open"
+    on_screen .time-big || problems="$problems; Back from the sheet left the editor"
+    press_back
+    on_screen .home-header || problems="$problems; Back from the editor did not reach Home"
+    # With changes it asks first.
+    click .alarm-main
+    click .time-shift
+    press_back
+    on_screen .sheet || problems="$problems; no question about discarding"
+    press_back
+    on_screen .time-big || problems="$problems; Back from the question left the editor"
+    click .icon-btn
+    click .sheet-item
+    on_screen .home-header || problems="$problems; discarding did not reach Home"
+    # The main screens do not stack up.
+    click .nav-item 1
+    click .nav-item 2
+    on_screen .main-header || problems="$problems; no settings"
+    press_back
+    on_screen .home-header || problems="$problems; Back from settings did not reach Home"
+    # And Home goes to the background, without ending anything.
+    press_back
+    top_is_app && problems="$problems; Back on Home stayed on top"
+    [ "$(main_pid)" = "$p0" ] || problems="$problems; main $p0 to $(main_pid)"
+    start_app
+    sleep 2
+    on_screen .home-header || problems="$problems; not back on Home"
+    screenshot s25_end
+    if [ -z "$problems" ]; then
+        pass "sheet, screen, Home, background, same process"
     else
-        fail "Back closed the app: main $p0 to ${p1:-dead}, on top: $(top_is_app && echo yes || echo no)"
+        fail "${problems#; }"
     fi
     save_log
 }
 
-ALL="s01 s02 s03 s04 s05 s06 s07a s07b s07c s09 s10 s11a s11b s12 s12b s13 s14 s15 s16 s16b s17 s19 s20 s21 s22 s22b s23a s23b s23c s23d s24 s25 s26x5 s27"
+# What sticks out of the screen, if anything.
+NOTHING_CLIPPED='var w = innerWidth; var bad = [...document.querySelectorAll(".screen *")].filter(e => { var r = e.getBoundingClientRect(); return r.width > 0 && (r.right > w + 1 || r.left < -1) && !e.closest(".chip-scroll"); }).map(e => e.className.baseVal === undefined ? e.className : "svg").slice(0, 3); return bad.join(",");'
+
+# Turning it off through the screens, solving a sum, and landing on history.
+s28() {
+    scenario s28_solve_a_challenge
+    if [ -n "$NO_UI" ]; then
+        skip "no UI"
+        return
+    fi
+    fresh
+    next_minute 45
+    seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null air 0 0 3 1 '[["challenge.math","{\"difficulty\":\"easy\"}"]]')"
+    arm a
+    await_sound 90 || { fail "never started"; save_log; return; }
+    sleep 4
+    screenshot s28_ringing
+    local clipped
+    clipped=$(js "$NOTHING_CLIPPED")
+    click .ring-off 0 1.5
+    screenshot s28_challenge
+    clipped="$clipped$(js "$NOTHING_CLIPPED")"
+    [ -z "$clipped" ] || { fail "clipped: $clipped"; save_log; action dismiss:a; return; }
+    local sum answer quiet=no
+    sound_on || quiet=yes
+    sum=$(read_text .math-expression)
+    answer=$(($(echo "$sum" | sed 's/×/*/; s/ //g')))
+    local digit digits="$answer"
+    while [ -n "$digits" ]; do
+        digit=${digits:0:1}
+        digits=${digits:1}
+        js "[...document.querySelectorAll('.math-key')].find(k => k.textContent === '$digit').click(); return 'ok'" > /dev/null
+    done
+    sleep 4
+    screenshot s28_after
+    if [ "$quiet" = yes ] && ! sound_on && [ "$(state a)" = scheduled ] && [ "$(outcomes solved)" = 1 ] && on_screen .summary; then
+        pass "$sum = $answer turned it off, recorded, on history"
+    else
+        fail "quiet during the challenge: $quiet, sound=$(sound_on && echo ON || echo off) state=$(state a) solved=$(outcomes solved) sum='$sum'"
+    fi
+    save_log
+    action dismiss:a
+}
+
+# Doing nothing in a challenge: it goes back to ringing.
+s28b() {
+    scenario s28b_idle_challenge_rings_again
+    if [ -n "$NO_UI" ]; then
+        skip "no UI"
+        return
+    fi
+    fresh
+    next_minute 45
+    seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null air 0 0 3 1 '[["challenge.math","{\"difficulty\":\"easy\"}"]]')"
+    arm a
+    await_sound 90 || { fail "never started"; save_log; return; }
+    sleep 4
+    click .ring-off 0 2
+    sound_on && { fail "still loud in the challenge"; save_log; action dismiss:a; return; }
+    local i=0
+    while [ "$i" -lt 75 ] && ! sound_on; do
+        sleep 1
+        i=$((i + 1))
+    done
+    if sound_on && on_screen .ring-off; then
+        pass "ringing again after ${i}s"
+    else
+        fail "after ${i}s: sound=$(sound_on && echo ON || echo off)"
+    fi
+    save_log
+    action dismiss:a
+}
+
+# The wake-up check: a little later it asks again, as loud as any alarm.
+s29() {
+    scenario s29_wake_up_check
+    if [ -n "$NO_UI" ]; then
+        skip "no UI"
+        return
+    fi
+    fresh
+    next_minute 45
+    ALARM_EXTRA=',"wake_check_minutes":1' seed a "$(ALARM_EXTRA=',"wake_check_minutes":1' alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null air 0 0 0 1)"
+    arm a
+    await_sound 90 || { fail "never started"; save_log; return; }
+    sleep 4
+    click .ring-off 0 2
+    local hidden
+    hidden=$(db_count '"hidden":true')
+    [ "$hidden" = 1 ] || { fail "no check waiting: $hidden"; save_log; return; }
+    sound_on && { fail "still ringing after turning it off"; save_log; return; }
+    T=$(now_s)
+    await_sound 130 || { fail "the check never rang"; save_log; return; }
+    sleep 4
+    screenshot s29_check
+    local label
+    label=$(read_text .ring-label)
+    click .ring-off 0 3
+    if ! sound_on && [ "$(db_count '"hidden":true')" = 0 ] && [ "$(outcomes solved)" = 1 ] && [ "$label" = "Are you up?" ]; then
+        pass "rang again after ${SOUND_AT}s, and is gone after confirming"
+    else
+        fail "sound=$(sound_on && echo ON || echo off) hidden=$(db_count '"hidden":true') solved=$(outcomes solved) label='$label'"
+    fi
+    save_log
+}
+
+# A nap in two taps, and Undo.
+s30() {
+    scenario s30_quick_alarm_and_undo
+    if [ -n "$NO_UI" ]; then
+        skip "no UI"
+        return
+    fi
+    fresh
+    start_app
+    sleep 5
+    click .chip-slim 0 1
+    local made toast_text
+    made=$(db_count '"delete_after_ring":true')
+    toast_text=$(read_text .toast-text)
+    os_has_alarm || { fail "not armed: made=$made"; save_log; return; }
+    click .toast-undo 0 1.5
+    local left
+    left=$(db_count '"delete_after_ring":true')
+    if [ "$made" = 1 ] && [ "$left" = 0 ]; then
+        pass "made ($toast_text) and undone"
+    else
+        fail "made=$made left=$left"
+    fi
+    save_log
+}
+
+# Pausing everything moves the next ring past the date, and Undo brings it back.
+s31() {
+    scenario s31_pause_all
+    if [ -n "$NO_UI" ]; then
+        skip "no UI"
+        return
+    fi
+    fresh
+    next_minute 3600
+    seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
+    arm a
+    sleep 2
+    local before during after
+    before=$(armed_at_ms a)
+    click .round-icon-btn 0
+    click .sheet-item 1 2
+    during=$(armed_at_ms a)
+    local text_paused
+    text_paused=$(read_text .alarm-when)
+    click .toast-undo 0 2
+    after=$(armed_at_ms a)
+    local week=$((6 * 24 * 3600 * 1000))
+    if [ "$during" -ge "$((before + week))" ] && [ "$after" = "$before" ]; then
+        pass "moved past the week ($text_paused), undone"
+    else
+        fail "armed: before $before, during $during, after $after"
+    fi
+    save_log
+}
+
+# The test alarm rings for real, and leaves nothing behind.
+s32() {
+    scenario s32_test_alarm
+    if [ -n "$NO_UI" ]; then
+        skip "no UI"
+        return
+    fi
+    fresh
+    start_app
+    sleep 5
+    click .nav-item 2
+    click .banner
+    screenshot s32_reliability
+    click '.save-bar .btn-primary' 0 2
+    [ "$(db_count '"hidden":true')" = 1 ] || { fail "no test alarm"; save_log; return; }
+    go_home
+    T=$(now_s)
+    await_sound 150 || { fail "it never rang"; save_log; return; }
+    sleep 5
+    click .ring-off 0 3
+    if ! sound_on && [ "$(db_count '"hidden":true')" = 0 ] && [ "$(outcomes solved)" = 0 ]; then
+        pass "rang ${SOUND_AT}s later, nothing left, nothing in history"
+    else
+        fail "sound=$(sound_on && echo ON || echo off) hidden=$(db_count '"hidden":true') solved=$(outcomes solved)"
+    fi
+    save_log
+}
+
+# The quiet notification before an alarm.
+s33() {
+    scenario s33_notification_before_alarm
+    if [ -n "$NO_UI" ]; then
+        skip "no UI"
+        return
+    fi
+    fresh
+    use_settings '"Dark"' '"English"' '"setup_done":true,"language_follows_phone":false,"notify_before_minutes":5'
+    next_minute 340
+    seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
+    arm a
+    local i=0
+    while [ "$i" -lt 120 ]; do
+        dev dumpsys notification --noredact | grep -q 'sentinel_reminders' && break
+        sleep 2
+        i=$((i + 2))
+    done
+    if dev dumpsys notification --noredact | grep -q 'sentinel_reminders'; then
+        pass "shown after ${i}s"
+    else
+        fail "not shown in ${i}s, alarm in $((T - $(now_s)))s"
+    fi
+    save_log
+}
+
+# Turning the phone and unfolding it mid-ring: it rings on, and the screen fits.
+s35() {
+    scenario s35_rotate_and_unfold_mid_ring
+    if [ -n "$NO_UI" ]; then
+        skip "no UI"
+        return
+    fi
+    fresh
+    next_minute 45
+    seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
+    arm a
+    await_sound 90 || { fail "never started"; save_log; return; }
+    sleep 5
+    local p0 problems=""
+    p0=$(main_pid)
+    dev settings put system accelerometer_rotation 0
+    dev settings put system user_rotation 1
+    sleep 4
+    screenshot s35_rotated
+    [ "$(main_pid)" = "$p0" ] || problems="$problems; rotating ended the process"
+    sound_on || problems="$problems; silent after rotating"
+    on_screen .ring-off || problems="$problems; no alarm screen after rotating"
+    dev settings put system user_rotation 0
+    # Unfolding, as a screen size.
+    local size
+    size=$(dev wm size | tail -1 | sed 's/.*: //')
+    dev wm size 2200x2480
+    sleep 4
+    screenshot s35_unfolded
+    [ "$(main_pid)" = "$p0" ] || problems="$problems; resizing ended the process"
+    sound_on || problems="$problems; silent after resizing"
+    on_screen .ring-off || problems="$problems; no alarm screen after resizing"
+    dev wm size reset
+    dev settings put system accelerometer_rotation 1
+    sleep 2
+    if [ -z "$problems" ]; then
+        pass "same process, still ringing ($size and 2200x2480)"
+    else
+        fail "${problems#; }"
+    fi
+    save_log
+    action dismiss:a
+    sleep 2
+}
+
+# Nothing sticks out of the screen in any language, also with large text.
+s34() {
+    scenario s34_nothing_clipped
+    if [ -n "$NO_UI" ]; then
+        skip "no UI"
+        return
+    fi
+    local check=$NOTHING_CLIPPED
+    local problems="" scale locale screen result
+    for scale in 1.0 1.3; do
+        dev settings put system font_scale "$scale"
+        for locale in English Dutch Spanish French German; do
+            fresh
+            use_settings '"Dark"' "\"$locale\"" '"setup_done":true,"language_follows_phone":false'
+            next_minute 3600
+            seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
+            arm a
+            sleep 2
+            result=$(js "$check")
+            [ -z "$result" ] || problems="$problems $locale/$scale/home: $result;"
+            click .alarm-main
+            result=$(js "$check")
+            [ -z "$result" ] || problems="$problems $locale/$scale/editor: $result;"
+            [ "$scale" = 1.3 ] && screenshot "s34_editor_$locale"
+            press_back
+            click .nav-item 1
+            result=$(js "$check")
+            [ -z "$result" ] || problems="$problems $locale/$scale/history: $result;"
+            click .nav-item 2
+            result=$(js "$check")
+            [ -z "$result" ] || problems="$problems $locale/$scale/settings: $result;"
+            [ "$scale" = 1.3 ] && screenshot "s34_settings_$locale"
+            click .banner
+            result=$(js "$check")
+            [ -z "$result" ] || problems="$problems $locale/$scale/reliability: $result;"
+        done
+    done
+    dev settings put system font_scale 1.0
+    if [ -z "$problems" ]; then
+        pass "5 languages, normal and large text"
+    else
+        fail "$problems"
+    fi
+    save_log
+}
+
+ALL="s01 s02 s03 s04 s05 s06 s07a s07b s07c s09 s10 s11a s11b s12 s12b s13 s14 s15 s16 s16b s17 s19 s20 s21 s22 s22b s23a s23b s23c s23d s24 s25 s26x5 s27 s28 s28b s29 s30 s31 s32 s33 s34 s35"
 [ -n "$NO_UI" ] && ALL="$ALL s22c"
 : > "$RESULTS"
 for s in ${*:-$ALL}; do

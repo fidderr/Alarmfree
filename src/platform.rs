@@ -13,7 +13,7 @@ use mobile_sentinel::context::schema::{ChallengeSpec, ScheduleSpec, SnoozePolicy
 use mobile_sentinel::jobs::RingEnd;
 use mobile_sentinel::recipes::alarm_class::AlarmClassConfig;
 use mobile_sentinel::{AlarmKit, AlarmKitConfig, AlarmSpec, ContextStore, InstanceId};
-use once_cell::sync::OnceCell;
+use std::sync::OnceLock;
 
 use crate::app::AlarmData;
 use crate::models::{AlarmOutcome, Locale};
@@ -49,7 +49,7 @@ const UI_FAILURES_BEFORE_BACKUP: u32 = 2;
 const LATE_RING_WINDOW_MS: i64 = 15 * 60 * 1000;
 
 /// Global AlarmKit handle; populated during `init_sentinel`.
-static ALARM_KIT: OnceCell<AlarmKit> = OnceCell::new();
+static ALARM_KIT: OnceLock<AlarmKit> = OnceLock::new();
 
 /// Borrow the global AlarmKit handle. Panics if called before `init_sentinel`.
 pub fn alarm_kit() -> &'static AlarmKit {
@@ -158,8 +158,39 @@ pub extern "system" fn Java_com_mobilesentinel_SentinelRearm_nativeRearm(
     }
 }
 
-/// Bring the notifications before alarms in line with the alarms and the setting.
-pub fn refresh_reminders() {}
+/// Bring the notifications before alarms in line with the alarms and the setting. An
+/// alarm that has gone is taken care of by [`forget_alarm`].
+pub fn refresh_reminders() {
+    let Some(kit) = alarm_kit_optional() else {
+        return;
+    };
+    let settings = crate::persistence::load_settings();
+    let before_ms = i64::from(settings.prefs.notify_before_minutes) * 60_000;
+    let translations = crate::i18n::load_translations(settings.locale);
+    let text = |key: &str| translations.get(key).cloned().unwrap_or_default();
+    let twenty_four = crate::text::uses_24_hours(&settings);
+    let now_ms = chrono::Utc::now().timestamp_millis();
+    for alarm in crate::persistence::load_alarms() {
+        let id = InstanceId::new(alarm.id.clone());
+        let next = kit.next_fire(&id).ok().flatten();
+        match next
+            .filter(|at| before_ms > 0 && alarm.enabled && !alarm.hidden && at - before_ms > now_ms)
+        {
+            Some(at) => {
+                let time = crate::text::clock(alarm.time_hour, alarm.time_minute, twenty_four);
+                kit.set_reminder(
+                    &id,
+                    at - before_ms,
+                    &text("reminder.title").replace("{time}", &time),
+                    &alarm.label,
+                    &text("reminder.channel"),
+                    before_ms,
+                );
+            }
+            None => kit.clear_reminder(&id),
+        }
+    }
+}
 
 /// Change the minimum alarm volume for rings from now on. An alarm rings by the
 /// plan it was armed with, so the alarms already armed get a new one.
@@ -364,6 +395,7 @@ fn sync_alarms(kit: &'static AlarmKit, woken: bool) {
     if switched_off {
         crate::persistence::save_alarms(&list);
     }
+    refresh_reminders();
 }
 
 /// The name to tell the user an alarm by: its label, else its time.
@@ -471,6 +503,33 @@ fn debug_auto_schedule() {
 #[cfg(debug_assertions)]
 static DEBUG_HANG_UI: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
+/// JavaScript from the harness, waiting for the UI to run it.
+#[cfg(debug_assertions)]
+static DEBUG_SCRIPT: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+/// Debug-only: run what the harness sent in the page, and leave the result in a file.
+/// It is how the scenarios press buttons and read the screen on any phone size.
+#[cfg(debug_assertions)]
+pub async fn debug_script_loop() {
+    loop {
+        crate::timer::sleep_ms(200).await;
+        let script = DEBUG_SCRIPT
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take();
+        let Some(script) = script else {
+            continue;
+        };
+        let mut eval = dioxus::document::eval(&format!(
+            "try {{ dioxus.send(String((function () {{ {script} }})())); }} \
+             catch (e) {{ dioxus.send('error: ' + e); }}"
+        ));
+        let result = eval.recv::<String>().await.unwrap_or_default();
+        let path = mobile_sentinel::app_files_dir().join("debug_script_result.txt");
+        let _ = std::fs::write(path, format!("={result}"));
+    }
+}
+
 /// Debug-only: freeze the calling thread (the UI's) for an hour when the
 /// `hang_ui` debug action asked for it, to exercise the `:sentinel` liveness
 /// watchdog.
@@ -515,6 +574,10 @@ fn debug_action_poller() {
                 } else {
                     log::info!("[AlarmFree] DEBUG snooze({id}) ok");
                 }
+            } else if let Some(script) = contents.strip_prefix("js:") {
+                *DEBUG_SCRIPT
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(script.to_owned());
             } else if contents == "hang_ui" {
                 DEBUG_HANG_UI.store(true, std::sync::atomic::Ordering::SeqCst);
                 log::info!("[AlarmFree] DEBUG hang_ui requested");
@@ -567,6 +630,7 @@ pub(crate) fn apply_alarm(alarm: &AlarmData) {
 /// more, and a later alarm with its id starts clean.
 pub(crate) fn forget_alarm(alarm_id: &str) {
     if let Some(kit) = alarm_kit_optional() {
+        kit.clear_reminder(&InstanceId::new(alarm_id.to_owned()));
         if let Err(e) = kit.delete(&InstanceId::new(alarm_id.to_owned())) {
             log::warn!("[AlarmFree] AlarmKit delete({alarm_id}) failed: {e:?}");
         }

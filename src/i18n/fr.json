@@ -357,10 +357,10 @@
   "reliability.autostart": "Démarrage automatique",
   "reliability.autostart_note": "Illisible sur ce téléphone. Vérifiez qu'il est activé, sinon les alarmes pourraient ne pas revenir après un redémarrage.",
   "reliability.last_ring": "Dernière sonnerie : son après {seconds} s.",
-  "reliability.test": "Alarme de test dans 60 s",
-  "reliability.test_note": "Sonne pour de vrai dans une minute, appli fermée. Verrouillez le téléphone et attendez.",
+  "reliability.test": "Alarme de test",
+  "reliability.test_note": "Sonne pour de vrai dans les 2 minutes, appli fermée. Verrouillez le téléphone et attendez.",
   "reliability.test_label": "Alarme de test",
-  "reliability.test_set": "Sonne dans environ une minute. Verrouillez le téléphone.",
+  "reliability.test_set": "Sonne dans les 2 minutes. Verrouillez le téléphone.",
   "setup.title": "Bienvenue",
   "setup.intro": "Une alarme doit sonner, quoi que fasse le téléphone. Pour cela, il doit autoriser quelques éléments. Rien n'est envoyé nulle part.",
   "setup.done": "Commencer",
@@ -405,5 +405,8 @@
   "history.delete_one": "Supprimer celui-ci",
   "filter.last_prefix": "Derniers",
   "reliability.banner": "{check} : les alarmes peuvent être en retard",
-  "home.pause_one": "Mettre en pause jusqu'à une date"
+  "home.pause_one": "Mettre en pause jusqu'à une date",
+  "reminder.title": "Alarme à {time}",
+  "reminder.channel": "Avant une alarme",
+  "home.pick": "Choisissez une alarme à modifier ou créez-en une."
 }

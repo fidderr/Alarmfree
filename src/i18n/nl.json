@@ -357,10 +357,10 @@
   "reliability.autostart": "Automatisch starten",
   "reliability.autostart_note": "Kan op deze telefoon niet worden gelezen. Controleer of het aan staat, anders komen wekkers misschien niet terug na een herstart.",
   "reliability.last_ring": "Laatste keer: geluid na {seconds} s.",
-  "reliability.test": "Testwekker over 60 s",
-  "reliability.test_note": "Gaat over een minuut echt af, met de app dicht. Vergrendel je telefoon en wacht.",
+  "reliability.test": "Testwekker",
+  "reliability.test_note": "Gaat binnen 2 minuten echt af, met de app dicht. Vergrendel je telefoon en wacht.",
   "reliability.test_label": "Testwekker",
-  "reliability.test_set": "Gaat over ongeveer een minuut af. Vergrendel je telefoon.",
+  "reliability.test_set": "Gaat binnen 2 minuten af. Vergrendel je telefoon.",
   "setup.title": "Welkom",
   "setup.intro": "Een wekker moet afgaan, wat de telefoon ook doet. Daarvoor moet je telefoon een paar dingen toestaan. Er wordt nergens iets naartoe gestuurd.",
   "setup.done": "Beginnen",
@@ -405,5 +405,8 @@
   "history.delete_one": "Deze verwijderen",
   "filter.last_prefix": "Laatste",
   "reliability.banner": "{check}: wekkers kunnen te laat zijn",
-  "home.pause_one": "Pauzeren tot een datum"
+  "home.pause_one": "Pauzeren tot een datum",
+  "reminder.title": "Wekker om {time}",
+  "reminder.channel": "Vóór een wekker",
+  "home.pick": "Kies een wekker om te wijzigen, of maak een nieuwe."
 }

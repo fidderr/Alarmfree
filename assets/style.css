@@ -223,6 +223,28 @@ button:disabled { opacity: 0.5; }
   color: var(--text2);
 }
 
+/* The list and an alarm next to each other, on a wide screen. */
+.split { display: flex; height: 100%; }
+
+.split-list {
+  flex: none;
+  width: 400px;
+  height: 100%;
+  border-right: 1px solid var(--line);
+}
+
+.split-detail { flex: 1; min-width: 0; height: 100%; }
+
+.split-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 32px;
+  text-align: center;
+  color: var(--text2);
+}
+
 /* ===== Buttons ===== */
 .btn {
   display: block;
@@ -1093,6 +1115,8 @@ button:disabled { opacity: 0.5; }
   text-align: center;
   white-space: nowrap;
 }
+
+.ring-clock.h12 { font-size: 64px; }
 
 .ring-label {
   margin-top: 16px;

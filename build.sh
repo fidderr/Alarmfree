@@ -83,8 +83,27 @@ elif [ "$MODE" = "aab" ]; then
     OUT_REL="bundle/release/app-release.aab"
 fi
 
+# A release the test scenarios (devtest/) can drive: the same R8 and optimisation as the
+# real thing, because R8 can strip what a debug build keeps, but debuggable, signed with
+# the debug key, and with the debug hooks in. RELEASE_TEST=1 ./build.sh workspace release
+if [ -n "${RELEASE_TEST:-}" ]; then
+    export CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true
+    export CARGO_PROFILE_ANDROID_RELEASE_DEBUG_ASSERTIONS=true
+    OUT_REL="apk/release/app-release.apk"
+fi
+
+# Play delivers each phone only its own ABI out of a bundle, so 32-bit phones cost the
+# others nothing. An APK holds what TARGET says.
+if [ "$MODE" = "aab" ]; then
+    TARGETS="${TARGETS:-armv7-linux-androideabi aarch64-linux-android}"
+else
+    TARGETS="${TARGETS:-$TARGET}"
+fi
+
 echo "=== [1/2] Building Rust .so (dx build) ==="
-dx build --platform android --target "$TARGET" --package alarmfree $DX_RELEASE
+for BUILD_TARGET in $TARGETS; do
+    dx build --platform android --target "$BUILD_TARGET" --package alarmfree $DX_RELEASE
+done
 
 # Patch the generated Gradle for release/AAB (Play Store) builds.
 # - Force a good, monotonically increasing versionCode (dx currently hardcodes low values like 1
@@ -145,6 +164,10 @@ if [ "$MODE" = "release" ] || [ "$MODE" = "aab" ]; then
     NDK_VER="$(basename "${ANDROID_NDK_HOME:-${NDK_HOME:-}}")"
     if [ -n "$NDK_VER" ] && ! grep -q "ndkVersion" "$GRADLE_FILE"; then
       sed -i "s/^android {/android {\n    ndkVersion = \"$NDK_VER\"/" "$GRADLE_FILE" || true
+    fi
+
+    if [ -n "${RELEASE_TEST:-}" ] && ! grep -q "isDebuggable = true" <(sed -n '/getByName("release")/,$p' "$GRADLE_FILE"); then
+      sed -i '/getByName("release") {/a\            isDebuggable = true\n            signingConfig = signingConfigs.getByName("debug")' "$GRADLE_FILE"
     fi
 
     # Force-keep all sentinel JNI entry points + manifest components.

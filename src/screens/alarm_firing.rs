@@ -198,13 +198,8 @@ pub fn AlarmFiring(id: String) -> Element {
     }
 
     let moment = now();
-    let settings_now = settings.read();
-    let clock = crate::text::clock(
-        moment.hour() as u8,
-        moment.minute() as u8,
-        crate::text::uses_24_hours(&settings_now),
-    );
-    drop(settings_now);
+    let twenty_four = crate::text::uses_24_hours(&settings.read());
+    let clock = crate::text::clock(moment.hour() as u8, moment.minute() as u8, twenty_four);
     let date_text = format!(
         "{} {} {}",
         t(
@@ -228,7 +223,7 @@ pub fn AlarmFiring(id: String) -> Element {
     rsx! {
         div { class: "screen ring-screen",
             p { class: "ring-date", "{date_text}" }
-            p { class: "ring-clock", "{clock}" }
+            p { class: if twenty_four { "ring-clock" } else { "ring-clock h12" }, "{clock}" }
             h1 { class: "ring-label", "{label}" }
             if !note.is_empty() {
                 p { class: "ring-note", "{note}" }

@@ -81,8 +81,15 @@ fresh() {
     sleep 3
     dev am force-stop "$PKG"
     sleep 1
+    use_settings '"Dark"' '"English"' '"setup_done":true,"language_follows_phone":false'
     # Force-stop leaves a package "stopped": clear that by starting it once
     # more in arm(), which every scenario does before relying on an alarm.
+}
+
+# The app's settings: theme, language, and more preferences as JSON fields. Past the
+# first-run screen and in one language, unless a scenario wants otherwise.
+use_settings() {
+    printf "INSERT OR REPLACE INTO settings (id, theme, locale, default_snooze_count, default_snooze_interval_minutes, min_volume_percent, prefs) VALUES (1, '%s', '%s', 3, 5, 50, '{%s}');\n" "$1" "$2" "$3" | sql
 }
 
 grant_all() {
@@ -136,11 +143,12 @@ next_minute() {
 }
 
 # alarm_json id hour minute days date [sound] [sound_mode] [fade] [snooze_n] [snooze_min] [challenges] [ring_limit_secs]
+# ALARM_EXTRA adds JSON fields to it.
 alarm_json() {
     local id=$1 h=$2 m=$3 days=$4 date=$5 sound=${6:-air} mode=${7:-0} fade=${8:-0}
     local sn=${9:-3} si=${10:-1} ch=${11:-[]} limit=${12:-1800}
-    printf '{"id":"%s","time_hour":%s,"time_minute":%s,"label":"%s","days":%s,"date":%s,"skip_until_ms":null,"fade_in_secs":%s,"ring_limit_secs":%s,"order":0,"enabled":true,"sound":"%s","sound_mode":%s,"challenges":%s,"snooze_count":%s,"snooze_interval":%s}' \
-        "$id" "$h" "$m" "$id" "$days" "$date" "$fade" "$limit" "$sound" "$mode" "$ch" "$sn" "$si"
+    printf '{"id":"%s","time_hour":%s,"time_minute":%s,"label":"%s","days":%s,"date":%s,"skip_until_ms":null,"fade_in_secs":%s,"ring_limit_secs":%s,"order":0,"enabled":true,"sound":"%s","sound_mode":%s,"challenges":%s,"snooze_count":%s,"snooze_interval":%s%s}' \
+        "$id" "$h" "$m" "$id" "$days" "$date" "$fade" "$limit" "$sound" "$mode" "$ch" "$sn" "$si" "${ALARM_EXTRA:-}"
 }
 EVERY_DAY='[true,true,true,true,true,true,true]'
 NO_DAYS='[false,false,false,false,false,false,false]'
@@ -188,6 +196,41 @@ job_status() { # active / pending / none
     fi
 }
 action() { as_app "echo $1 > files/debug_action.txt"; }
+
+# Run JavaScript in the page and print what it returns, in debug builds. It is how the
+# scenarios press buttons and read the screen on any phone size.
+js() {
+    as_app "rm -f files/debug_script_result.txt"
+    # In one go: the app deletes the file once it has seen it, also if it was still empty.
+    printf 'js:%s' "$1" | adb_ shell "run-as $PKG sh -c 'cat > $DATA/files/debug_action.tmp && mv $DATA/files/debug_action.tmp $DATA/files/debug_action.txt'"
+    local i=0 out
+    while [ "$i" -lt 30 ]; do
+        out=$(as_app "cat files/debug_script_result.txt 2>/dev/null")
+        case "$out" in
+            =*)
+                echo "${out#=}"
+                return 0
+                ;;
+        esac
+        sleep 0.3
+        i=$((i + 1))
+    done
+    # Never empty: that reads as an answer.
+    echo "no answer from the page"
+    return 1
+}
+# click selector [which of them] [seconds to wait]
+click() {
+    js "var e = document.querySelectorAll('$1')[${2:-0}]; if (!e) return 'nothing like $1'; e.click(); return 'ok'" > /dev/null
+    sleep "${3:-0.8}"
+}
+on_screen() { [ "$(js "return document.querySelector('$1') ? 'y' : 'n'")" = y ]; }
+read_text() { js "var e = document.querySelector('$1'); return e ? e.textContent : ''"; }
+press_back() {
+    dev input keyevent KEYCODE_BACK
+    sleep 1.5
+}
+db_count() { printf "SELECT count(*) FROM alarms WHERE data LIKE '%%%s%%';\n" "$1" | sql; }
 
 # Pretend the alarm was due `$2` minutes ago, with the app stopped.
 make_overdue() {

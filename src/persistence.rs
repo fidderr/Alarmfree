@@ -7,7 +7,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 
 use crate::app::AlarmData;
 use crate::db::Database;
@@ -32,7 +32,7 @@ struct Opened {
     recovery: DbRecovery,
 }
 
-static DB: Lazy<Opened> = Lazy::new(|| {
+static DB: LazyLock<Opened> = LazyLock::new(|| {
     let path = mobile_sentinel::app_files_dir().join("alarmfree.db");
     let (db, recovery) = open_with_recovery(&path);
     Opened {
@@ -164,6 +164,7 @@ pub fn save_alarms(alarms: &[AlarmData]) {
         }
         crate::platform::apply_alarm(alarm);
     }
+    crate::platform::refresh_reminders();
 }
 
 /// Load all alarms from the database.

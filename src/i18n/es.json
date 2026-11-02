@@ -357,10 +357,10 @@
   "reliability.autostart": "Inicio automático",
   "reliability.autostart_note": "No se puede leer en este teléfono. Comprueba que esté activado, o puede que las alarmas no vuelvan tras reiniciar.",
   "reliability.last_ring": "Último aviso: sonido tras {seconds} s.",
-  "reliability.test": "Alarma de prueba en 60 s",
-  "reliability.test_note": "Suena de verdad en un minuto, con la app cerrada. Bloquea el teléfono y espera.",
+  "reliability.test": "Alarma de prueba",
+  "reliability.test_note": "Suena de verdad en menos de 2 minutos, con la app cerrada. Bloquea el teléfono y espera.",
   "reliability.test_label": "Alarma de prueba",
-  "reliability.test_set": "Suena en aproximadamente un minuto. Bloquea el teléfono.",
+  "reliability.test_set": "Suena en menos de 2 minutos. Bloquea el teléfono.",
   "setup.title": "Bienvenido",
   "setup.intro": "Una alarma tiene que sonar, haga lo que haga el teléfono. Para eso debe permitir algunas cosas. Nada de esto envía datos a ningún sitio.",
   "setup.done": "Empezar",
@@ -405,5 +405,8 @@
   "history.delete_one": "Eliminar este",
   "filter.last_prefix": "Últimos",
   "reliability.banner": "{check}: las alarmas pueden retrasarse",
-  "home.pause_one": "Pausar hasta una fecha"
+  "home.pause_one": "Pausar hasta una fecha",
+  "reminder.title": "Alarma a las {time}",
+  "reminder.channel": "Antes de una alarma",
+  "home.pick": "Elige una alarma para cambiarla o crea una nueva."
 }

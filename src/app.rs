@@ -64,8 +64,12 @@ fn NavWatcher() -> Element {
     let mut nav_intent = use_context::<Signal<Option<Route>>>();
     let mut leave_screen = use_context::<Signal<u32>>();
     let settings = use_context::<Signal<AppSettings>>();
+    let wide = use_context::<WideScreen>();
+    let translations = use_context::<Translations>();
     let nav = use_navigator();
     let route = use_route::<Route>();
+    let split = wide.0() && matches!(route, Route::Home {} | Route::AlarmConfig { .. });
+    let only_the_list = route == (Route::Home {});
     use_effect(move || {
         if let Some(route) = nav_intent() {
             nav_intent.set(None);
@@ -100,8 +104,29 @@ fn NavWatcher() -> Element {
             }
         }
     });
+    if split {
+        return rsx! {
+            div { class: "split",
+                div { class: "split-list", Home {} }
+                div { class: "split-detail",
+                    if only_the_list {
+                        p { class: "split-empty", {t(&translations, "home.pick")} }
+                    } else {
+                        Outlet::<Route> {}
+                    }
+                }
+            }
+        };
+    }
     rsx! { Outlet::<Route> {} }
 }
+
+/// The screen is wide enough for the list and an alarm next to each other.
+#[derive(Clone, Copy)]
+struct WideScreen(Signal<bool>);
+
+/// From this width in CSS pixels on: a tablet, or a foldable when unfolded.
+const SPLIT_FROM_WIDTH: i32 = 840;
 
 /// Shared alarm data stored in global state.
 #[derive(Clone, PartialEq, Debug, serde::Serialize, serde::Deserialize)]
@@ -303,31 +328,56 @@ pub fn App() -> Element {
         }
     });
 
+    #[cfg(debug_assertions)]
+    use_future(crate::platform::debug_script_loop);
+
     // System bars. Android 15+ draws the app edge-to-edge (under the status
     // and navigation bars), so the UI needs to know how far the bars overlap
     // (exposed to CSS as --safe-*), and the bar icons must contrast with our
     // background (dark icons on the light theme).
+    let mut wide = use_signal(|| false);
+    use_context_provider(|| WideScreen(wide));
     let mut safe_area = use_signal(SafeArea::default);
     let mut system_dark = use_signal(mobile_sentinel::display::system_dark);
     use_effect(move || {
         let light = settings.read().theme.is_light(system_dark());
         mobile_sentinel::display::set_light_system_bars(light);
     });
+    let mut read_window = move || {
+        let current = SafeArea::query();
+        if current != *safe_area.peek() {
+            safe_area.set(current);
+            // A recreated window can reset the icon colour.
+            let light = settings.peek().theme.is_light(*system_dark.peek());
+            mobile_sentinel::display::set_light_system_bars(light);
+        }
+        let dark = mobile_sentinel::display::system_dark();
+        if dark != *system_dark.peek() {
+            system_dark.set(dark);
+        }
+    };
+    // These only change with the window: a rotation, a fold, coming back from the
+    // phone's settings. The page says when; the bars may settle just after the start.
     use_future(move || async move {
-        loop {
-            // Cheap JNI read; values only change on rotation / window changes.
-            let current = SafeArea::query();
-            if current != *safe_area.peek() {
-                safe_area.set(current);
-                // A recreated window can reset the icon colour.
-                let light = settings.peek().theme.is_light(*system_dark.peek());
-                mobile_sentinel::display::set_light_system_bars(light);
+        for delay_ms in [0, 300, 1500] {
+            crate::timer::sleep_ms(delay_ms).await;
+            read_window();
+        }
+    });
+    use_future(move || async move {
+        let mut changes = document::eval(
+            "const tell = () => dioxus.send(innerWidth); \
+             addEventListener('resize', tell); \
+             document.addEventListener('visibilitychange', tell); \
+             matchMedia('(prefers-color-scheme: dark)').addEventListener('change', tell); \
+             tell();",
+        );
+        while let Ok(width) = changes.recv::<i32>().await {
+            let is_wide = width >= SPLIT_FROM_WIDTH;
+            if is_wide != *wide.peek() {
+                wide.set(is_wide);
             }
-            let dark = mobile_sentinel::display::system_dark();
-            if dark != *system_dark.peek() {
-                system_dark.set(dark);
-            }
-            crate::timer::sleep_ms(1000).await;
+            read_window();
         }
     });
 
