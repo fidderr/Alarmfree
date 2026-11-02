@@ -92,6 +92,9 @@ grant_all() {
 
 start_app() { dev am start -n "$PKG/$ACTIVITY" > /dev/null; }
 
+# Start the app's core without a screen, as a reboot or a ring does.
+headless() { dev am broadcast -f 32 -n "$PKG/com.mobilesentinel.SentinelRearmReceiver" -a com.mobilesentinel.RING_STARTED > /dev/null; }
+
 wait_file() {
     local f=$1 t=${2:-30} i=0
     while [ "$i" -lt $((t * 2)) ]; do
@@ -105,12 +108,15 @@ wait_file() {
 # The time `lead` seconds from now, rounded up to a whole minute. Sets T
 # (unix s), T_H, T_M, T_DATE. Alarms have minute resolution.
 next_minute() {
-    local lead=${1:-45} n
+    local lead=${1:-45} n off local_s
     n=$(now_s)
     T=$(((n + lead + 59) / 60 * 60))
-    T_H=$(dev date -d "@$T" +%-H)
-    T_M=$(dev date -d "@$T" +%-M)
-    T_DATE=$(dev date -d "@$T" +%Y-%m-%d)
+    # The device's own `date -d @T` is UTC on Android 8's toybox.
+    off=$(dev date +%z | tr -d '\r')
+    local_s=$((T + ${off:0:1}(10#${off:1:2} * 3600 + 10#${off:3:2} * 60)))
+    T_H=$(date -u -d "@$local_s" +%-H)
+    T_M=$(date -u -d "@$local_s" +%-M)
+    T_DATE=$(date -u -d "@$local_s" +%Y-%m-%d)
 }
 
 # alarm_json id hour minute days date [sound] [sound_mode] [fade] [snooze_n] [snooze_min] [challenges] [ring_limit_secs]
@@ -185,7 +191,7 @@ unseen() { # how many history rows the user has not been told about
 sound_on() {
     local uid
     uid=$(dev cmd package list packages -U "$PKG" | sed -E 's/.*uid:([0-9]+).*/\1/')
-    dev dumpsys audio | grep -E "u/pid:$uid/[0-9]+ .*state:started.*USAGE_ALARM" > /dev/null
+    dev dumpsys audio | grep -E "u/pid:$uid/[0-9]+ .*state:started.*(USAGE_ALARM|usage=4 )" > /dev/null
 }
 
 # Milliseconds from the alarm being delivered until the sound plays, from the

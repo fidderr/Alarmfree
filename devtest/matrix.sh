@@ -646,6 +646,53 @@ s22b() {
     sleep 2
 }
 
+# A page that stays blank, on a WebView too old for the UI. Only for such a device: the
+# backup screen is there at once with the version check, and without it the frozen-UI
+# path has to get there in the end.
+s22c() {
+    scenario s22c_page_stays_blank
+    # Rust only renders once the page's JavaScript runs, so opening the app sets up
+    # nothing here. Arm the way a reboot does, without a screen. Needs `adb root`.
+    adb_ root > /dev/null
+    sleep 3
+    dev am force-stop "$PKG"
+    dev pm clear "$PKG" > /dev/null
+    grant_all
+    headless
+    wait_file files/sentinel 30
+    sleep 3
+    dev am force-stop "$PKG"
+    next_minute 45
+    seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
+    headless
+    wait_file files/sentinel/context/a.json 45
+    screen_off
+    await_sound 90 || { fail "never started"; save_log; return; }
+    wake
+    local i=0
+    while [ "$i" -lt 150 ]; do
+        top_is_backup && break
+        sleep 1
+        i=$((i + 1))
+    done
+    screenshot s22c_backup
+    if top_is_backup; then
+        note "backup screen after ${i}s"
+        solve_backup 20
+        sleep 8
+        if ! sound_on && [ "$(state a)" = scheduled ] && [ "$(outcomes backup)" = 1 ]; then
+            pass "backup screen after ${i}s, solving it ended the alarm"
+        else
+            fail "after solving: sound=$(sound_on && echo ON || echo off) state=$(state a) backup=$(outcomes backup)"
+        fi
+    else
+        fail "no backup screen in ${i}s: $(dev dumpsys activity activities | grep -m1 ResumedActivity)"
+    fi
+    save_log
+    action dismiss:a
+    sleep 2
+}
+
 # A frozen UI gets restarted by the guardian; the alarm carries on.
 s22() {
     scenario s22_hung_ui
