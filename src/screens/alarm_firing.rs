@@ -650,6 +650,7 @@ pub fn AlarmFiring(id: String) -> Element {
                                                            total_dismissal_time: (now - *fire_timestamp.read())
                                                                .to_std()
                                                                .unwrap_or(std::time::Duration::from_secs(0)),
+                                                           outcome: crate::models::AlarmOutcome::Solved,
                                                        };
                                                        crate::history_persistence::record_alarm_event(&event);
                                                        let _ = std::fs::remove_file(&snooze_file2);
@@ -683,6 +684,7 @@ pub fn AlarmFiring(id: String) -> Element {
                                                        total_dismissal_time: (now - *fire_timestamp.read())
                                                            .to_std()
                                                            .unwrap_or(std::time::Duration::from_secs(0)),
+                                                       outcome: crate::models::AlarmOutcome::Solved,
                                                    };
                                                    crate::history_persistence::record_alarm_event(&event);
                                                    let _ = std::fs::remove_file(&snooze_file3);
@@ -767,6 +769,7 @@ pub fn AlarmFiring(id: String) -> Element {
                                                    total_dismissal_time: (now - *fire_timestamp.read())
                                                        .to_std()
                                                        .unwrap_or(std::time::Duration::from_secs(0)),
+                                                   outcome: crate::models::AlarmOutcome::Solved,
                                                };
                                                crate::history_persistence::record_alarm_event(&event);
         // Clean up snooze persistence file

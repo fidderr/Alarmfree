@@ -10,6 +10,7 @@
 
 cd "$(dirname "$0")/.." || exit 1
 . devtest/lib.sh
+APK="${APK:-target/dx/alarmfree/debug/android/app/app/build/outputs/apk/debug/app-debug.apk}"
 
 # A repeating alarm fires with no app process alive and the screen off.
 s01() {
@@ -234,8 +235,7 @@ s11a() {
     arm a
     await_sound 30 || { fail "never started"; save_log; return; }
     sleep 3
-    adb_ reboot
-    boot_wait
+    reboot_and_wait || { fail "reboot hung"; return; }
     start_app
     sleep 20
     if ! sound_on && [ "$(state a)" = scheduled ]; then
@@ -258,8 +258,7 @@ s11b() {
     action snooze:a
     sleep 3
     T=$(($(next_fire_ms a) / 1000))
-    adb_ reboot
-    boot_wait
+    reboot_and_wait || { fail "reboot hung"; return; }
     if await_sound 40; then
         pass "snooze rang after the reboot, ${SOUND_AT}s late, no app opened"
     else
@@ -281,8 +280,7 @@ s12() {
     dead
     # Reboot so the time passes before the device is back.
     until_past $((T - 12))
-    adb_ reboot
-    boot_wait
+    reboot_and_wait || { fail "reboot hung"; return; }
     sleep 15
     local late=no armed
     sound_on && late=yes
@@ -293,6 +291,47 @@ s12() {
         fail "no late ring, armed record='${armed}' os_alarm=$(os_has_alarm && echo yes || echo NO), state=$(state a)"
     fi
     save_log
+}
+
+# Much later than that it is a miss: nothing rings, it is on record, the next
+# occurrence is armed, and all of that without opening the app.
+s12b() {
+    scenario s12b_missed_during_restart
+    fresh
+    next_minute 3600
+    seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
+    arm a
+    dead
+    make_overdue a 30
+    reboot_and_wait || { fail "reboot hung"; return; }
+    sleep 15
+    local next
+    next=$(armed_at_ms a)
+    if ! sound_on && [ "$(outcomes missed)" = 1 ] && [ "${next:-0}" -gt "$(($(now_s) * 1000))" ]; then
+        pass "not rung, recorded as missed, next ring armed, no app opened"
+    else
+        fail "sound=$(sound_on && echo ON || echo off) missed=$(outcomes missed) armed='$next' state=$(state a)"
+    fi
+    save_log
+}
+
+# The app comes down for an update with an alarm armed: it still rings.
+s15() {
+    scenario s15_app_update
+    fresh
+    next_minute 90
+    seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
+    arm a
+    adb_ install -r -g "$APK" > /dev/null
+    sleep 5
+    if await_sound 40; then
+        pass "rang after the update, $(ring_ms)ms after delivery"
+    else
+        fail "no sound in 40s, state=$(state a) job=$(job_status a)"
+    fi
+    save_log
+    action dismiss:a
+    sleep 2
 }
 
 # A time-zone change re-arms for the new local time, no app opened.
@@ -373,6 +412,59 @@ s26() {
     sleep 2
 }
 s26x5() { for r in 1 2 3 4 5; do s26 "$r"; done; }
+
+# Opening the app long after a force-stop removed the alarm: a miss, explained.
+s16b() {
+    scenario s16b_force_stop_long_ago
+    fresh
+    next_minute 3600
+    seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
+    arm a
+    dev am force-stop "$PKG"
+    make_overdue a 30
+    start_app
+    sleep 12
+    screenshot s16b_notice
+    local missed left
+    missed=$(outcomes missed)
+    left=$(unseen)
+    if ! sound_on && [ "$missed" = 1 ] && [ "$left" = 0 ] && [ "$(state a)" = scheduled ]; then
+        pass "recorded as missed and told, next ring armed"
+    else
+        fail "sound=$(sound_on && echo ON || echo off) missed=$missed unseen=$left state=$(state a)"
+    fi
+    save_log
+}
+
+# The screen cannot come up (phone in use, no overlay permission). The sound
+# plays and the alarm still moves on: the next occurrence gets armed, with no UI.
+s27() {
+    scenario s27_state_machine_without_ui
+    fresh
+    next_minute 45
+    seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
+    arm a
+    dev appops set "$PKG" SYSTEM_ALERT_WINDOW deny
+    dead
+    wake
+    go_home
+    await_sound 40 || { fail "no sound"; save_log; grant_all; return; }
+    sleep 8
+    local s next ui
+    s=$(state a)
+    next=$(armed_at_ms a)
+    ui=$(top_is_app && echo yes || echo no)
+    screenshot s27_heads_up
+    if [ "$s" = firing ] && [ "${next:-0}" -gt "$(($(now_s) * 1000))" ]; then
+        pass "firing and next ring armed, UI on top: $ui"
+    else
+        fail "state=$s armed='$next' UI on top: $ui main=$(main_pid)"
+    fi
+    save_log
+    grant_all
+    action dismiss:a
+    sleep 3
+}
 
 # An unplayable custom sound must still make noise.
 s17() {
@@ -648,7 +740,7 @@ s25() {
     save_log
 }
 
-ALL="s01 s02 s03 s04 s05 s06 s07a s07b s07c s09 s10 s11a s11b s12 s14 s16 s17 s19 s20 s21 s22 s23a s23b s23c s23d s24 s25 s26x5"
+ALL="s01 s02 s03 s04 s05 s06 s07a s07b s07c s09 s10 s11a s11b s12 s12b s14 s15 s16 s16b s17 s19 s20 s21 s22 s23a s23b s23c s23d s24 s25 s26x5 s27"
 : > "$RESULTS"
 for s in ${*:-$ALL}; do
     "$s"

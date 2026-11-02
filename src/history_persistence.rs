@@ -4,7 +4,7 @@
 
 use chrono::Utc;
 
-use crate::models::{AggregateMetrics, AlarmEvent, HistoryFilter};
+use crate::models::{AggregateMetrics, AlarmEvent, AlarmId, AlarmOutcome, HistoryFilter};
 use crate::persistence;
 
 /// Record an alarm event after dismissal.
@@ -13,6 +13,42 @@ pub fn record_alarm_event(event: &AlarmEvent) {
     if let Err(e) = db.insert_event(event) {
         eprintln!("[AlarmFree] Failed to record history event: {}", e);
     }
+}
+
+/// Record an alarm that ended without the user. The user has not seen this yet;
+/// see [`take_unseen_outcomes`].
+pub fn record_outcome(
+    alarm_id: &str,
+    label: &str,
+    outcome: AlarmOutcome,
+    at: chrono::DateTime<Utc>,
+) {
+    let event = AlarmEvent {
+        id: uuid::Uuid::new_v4().to_string(),
+        alarm_id: AlarmId(alarm_id.to_owned()),
+        alarm_label: label.to_owned(),
+        fire_timestamp: at,
+        first_interaction_timestamp: None,
+        dismiss_timestamp: at,
+        snooze_count: 0,
+        snooze_intervals_minutes: Vec::new(),
+        challenge_solves: Vec::new(),
+        total_dismissal_time: std::time::Duration::ZERO,
+        outcome,
+    };
+    if let Err(e) = persistence::database().insert_unseen_event(&event) {
+        log::error!("[AlarmFree] Failed to record that alarm {alarm_id} ended: {e}");
+    }
+}
+
+/// How and which alarms ended without the user since the last call, by name.
+pub fn take_unseen_outcomes() -> Vec<(AlarmOutcome, String)> {
+    persistence::database()
+        .take_unseen_outcomes()
+        .unwrap_or_else(|e| {
+            log::error!("[AlarmFree] Failed to read what happened to alarms: {e}");
+            Vec::new()
+        })
 }
 
 /// Query history events with a filter.

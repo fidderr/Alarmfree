@@ -11,7 +11,9 @@ ACTIVITY=dev.dioxus.main.MainActivity
 OUT="${OUT:-devtest-out}"
 mkdir -p "$OUT"
 
-adb_() { "$ADB" -s "$SERIAL" "$@"; }
+# Nothing may hang a run: an unresponsive device fails instead of waiting forever.
+adb_() { timeout 120 "$ADB" -s "$SERIAL" "$@"; }
+device_ok() { [ "$(timeout 20 "$ADB" -s "$SERIAL" shell echo ok | tr -d '\r')" = ok ]; }
 dev() { adb_ shell "$@" | tr -d '\r'; }
 as_app() { adb_ shell "run-as $PKG sh -c '$*'" | tr -d '\r'; }
 
@@ -27,9 +29,39 @@ screen_off() { dev input keyevent KEYCODE_SLEEP; }
 go_home() { dev input keyevent KEYCODE_HOME; }
 screenshot() { adb_ exec-out screencap -p > "$OUT/$1.png"; }
 
-boot_wait() {
-    adb_ wait-for-device
-    adb_ shell 'while [ -z "$(getprop sys.boot_completed)" ]; do sleep 1; done'
+# Restart the device and wait until it is back. A device that does not come back
+# fails the scenario instead of hanging the run.
+#
+# An emulator gets a cold start. `adb reboot` itself is unreliable on them: with no
+# app running at all, the emulator can freeze for good or exit (emulator 37.2.13,
+# Windows). For the app it is the same restart: every process and OS alarm is gone,
+# and BOOT_COMPLETED comes. A clean shutdown is what only a real phone tests.
+AVD="${AVD:-af36}"
+EMULATOR="${EMULATOR:-$LOCALAPPDATA/Android/Sdk/emulator/emulator.exe}"
+
+emulator_start() {
+    powershell.exe -NoProfile -Command "Start-Process -WindowStyle Hidden -FilePath '$(cygpath -w "$EMULATOR")' -ArgumentList '-avd $AVD -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -port ${SERIAL#emulator-}'"
+}
+
+emulator_stop() {
+    powershell.exe -NoProfile -Command "Get-Process | Where-Object { \$_.ProcessName -match 'emulator|qemu' } | Stop-Process -Force -ErrorAction SilentlyContinue"
+    sleep 3
+}
+
+reboot_and_wait() {
+    case "$SERIAL" in
+        emulator-*)
+            adb_ shell sync
+            emulator_stop
+            emulator_start
+            ;;
+        *)
+            timeout 60 "$ADB" -s "$SERIAL" reboot || { note "adb reboot did not return in 60s"; return 1; }
+            ;;
+    esac
+    timeout 240 "$ADB" -s "$SERIAL" wait-for-device || { note "device did not come back"; return 1; }
+    timeout 240 "$ADB" -s "$SERIAL" shell 'while [ -z "$(getprop sys.boot_completed)" ]; do sleep 1; done' ||
+        { note "boot did not complete"; return 1; }
     sleep 3
 }
 
@@ -133,6 +165,22 @@ job_status() { # active / pending / none
 }
 action() { as_app "echo $1 > files/debug_action.txt"; }
 
+# Pretend the alarm was due `$2` minutes ago, with the app stopped.
+make_overdue() {
+    local due=$(($(now_s) * 1000 - $2 * 60000))
+    as_app "sed -i -E \"s/(next_fire_unix_ms\\\": )[0-9]+/\\1$due/\" files/sentinel/context/$1.json"
+    as_app "sed -i -E \"1s/.*/$due/\" files/sentinel/armed/$1.armed"
+}
+
+outcomes() { # how many history rows have this outcome
+    printf "SELECT count(*) FROM alarm_events WHERE outcome='%s';\n" "$1" |
+        adb_ shell "run-as $PKG sqlite3 files/alarmfree.db" 2>&1 | tr -d '\r'
+}
+unseen() { # how many history rows the user has not been told about
+    printf "SELECT count(*) FROM alarm_events WHERE seen=0;\n" |
+        adb_ shell "run-as $PKG sqlite3 files/alarmfree.db" 2>&1 | tr -d '\r'
+}
+
 # Is the app's alarm sound playing right now?
 sound_on() {
     local uid
@@ -201,6 +249,11 @@ scenario() {
     CURRENT=$1
     echo
     echo "=== $CURRENT"
+    if ! device_ok; then
+        echo "device not responding, stopping the run"
+        echo "STOP  $CURRENT  device not responding" >> "$RESULTS"
+        exit 2
+    fi
     adb_ logcat -c
 }
 pass() { echo "PASS  $CURRENT  $1" | tee -a "$RESULTS"; }

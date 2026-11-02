@@ -122,9 +122,6 @@ pub fn App() -> Element {
     // Load persisted settings (theme + locale).
     let settings = use_hook(crate::persistence::load_settings);
 
-    // Extract bundled sounds from APK assets to internal storage (idempotent)
-    use_hook(crate::custom_sounds::extract_bundled_sounds);
-
     // Initialize platform: logger, FiringSink, AlarmKit, alarm rearm. First,
     // so the alarm list below already reflects one-time alarms it switched off.
     use_hook(crate::platform::init_sentinel);
@@ -152,7 +149,7 @@ pub fn App() -> Element {
 
     // Anything the user must know about what happened while the app was away:
     // a database that had to be reset (or cannot persist) instead of a silently
-    // empty alarm list, alarms a reboot interrupted, alarms that did not ring.
+    // empty alarm list, and alarms that ended without the user.
     use_hook(|| {
         use crate::persistence::DbRecovery;
         let mut notices = Vec::new();
@@ -161,18 +158,7 @@ pub fn App() -> Element {
             DbRecovery::Recovered { .. } => notices.push(t(&translations, "db.recovered")),
             DbRecovery::Volatile => notices.push(t(&translations, "db.volatile")),
         }
-        for (key, names) in [
-            ("alarm.ended_by_reboot", crate::platform::ended_by_reboot()),
-            ("alarm.missed", crate::platform::missed_alarms()),
-            (
-                "alarm.ended_by_limit",
-                crate::platform::ended_by_limit_at_startup(),
-            ),
-        ] {
-            if !names.is_empty() {
-                notices.push(t(&translations, key).replace("{alarm}", &names.join(", ")));
-            }
-        }
+        notices.extend(unseen_outcome_notices(&translations));
         if !notices.is_empty() {
             toast_signal.set(Some(crate::components::ToastMessage {
                 message: notices.join(" "),
@@ -200,13 +186,11 @@ pub fn App() -> Element {
                 firing_id.set(current);
             }
             // Rang until its limit with nobody there: nothing else tells the user.
-            let names = crate::platform::take_ended_by_limit();
-            if !names.is_empty() {
+            if crate::platform::handle_ended_by_limit() {
                 let mut list = alarms;
                 list.set(crate::persistence::load_alarms());
                 toast_signal.set(Some(crate::components::ToastMessage {
-                    message: t(&translations, "alarm.ended_by_limit")
-                        .replace("{alarm}", &names.join(", ")),
+                    message: unseen_outcome_notices(&translations).join(" "),
                     level: crate::components::ToastLevel::Error,
                 }));
             }
@@ -279,6 +263,29 @@ pub fn App() -> Element {
                }
            }
        }
+}
+
+/// What to tell the user about alarms that ended without them, since the last time
+/// the app was on screen.
+fn unseen_outcome_notices(translations: &Translations) -> Vec<String> {
+    use crate::models::AlarmOutcome;
+    let unseen = crate::history_persistence::take_unseen_outcomes();
+    let mut notices = Vec::new();
+    for (outcome, key) in [
+        (AlarmOutcome::Reboot, "alarm.ended_by_reboot"),
+        (AlarmOutcome::Missed, "alarm.missed"),
+        (AlarmOutcome::Limit, "alarm.ended_by_limit"),
+    ] {
+        let names: Vec<&str> = unseen
+            .iter()
+            .filter(|(o, _)| *o == outcome)
+            .map(|(_, name)| name.as_str())
+            .collect();
+        if !names.is_empty() {
+            notices.push(t(translations, key).replace("{alarm}", &names.join(", ")));
+        }
+    }
+    notices
 }
 
 /// A round trip through the page: Rust asks the WebView to answer, the

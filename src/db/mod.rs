@@ -91,6 +91,30 @@ impl Database {
     // --- History ---
 
     pub fn insert_event(&self, event: &AlarmEvent) -> Result<(), rusqlite::Error> {
+        self.insert_event_seen(event, true)
+    }
+
+    /// Insert an event the user still has to be told about; see
+    /// [`Self::take_unseen_outcomes`].
+    pub fn insert_unseen_event(&self, event: &AlarmEvent) -> Result<(), rusqlite::Error> {
+        self.insert_event_seen(event, false)
+    }
+
+    /// How and which alarms ended since the last call, by name.
+    pub fn take_unseen_outcomes(&self) -> Result<Vec<(AlarmOutcome, String)>, rusqlite::Error> {
+        let conn = self.conn.lock().unwrap_or_else(|p| p.into_inner());
+        let unseen = conn
+            .prepare("SELECT outcome, alarm_label FROM alarm_events WHERE seen = 0")?
+            .query_map([], |row| {
+                let outcome: String = row.get(0)?;
+                Ok((AlarmOutcome::parse(&outcome), row.get(1)?))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        conn.execute("UPDATE alarm_events SET seen = 1 WHERE seen = 0", [])?;
+        Ok(unseen)
+    }
+
+    fn insert_event_seen(&self, event: &AlarmEvent, seen: bool) -> Result<(), rusqlite::Error> {
         let conn = self.conn.lock().unwrap_or_else(|p| p.into_inner());
         let snooze_intervals_json = serde_json::to_string(&event.snooze_intervals_minutes)
             .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?;
@@ -100,8 +124,8 @@ impl Database {
         conn.execute(
             "INSERT INTO alarm_events (id, alarm_id, alarm_label, fire_timestamp, \
              first_interaction_timestamp, dismiss_timestamp, snooze_count, snooze_intervals, \
-             challenge_solves, total_dismissal_time_ms) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+             challenge_solves, total_dismissal_time_ms, outcome, seen) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
             params![
                 event.id,
                 event.alarm_id.0,
@@ -113,6 +137,8 @@ impl Database {
                 snooze_intervals_json,
                 challenge_solves_json,
                 event.total_dismissal_time.as_millis() as i64,
+                event.outcome.as_str(),
+                seen,
             ],
         )?;
         Ok(())
@@ -124,7 +150,7 @@ impl Database {
         let mut stmt = conn.prepare(
             "SELECT id, alarm_id, alarm_label, fire_timestamp, first_interaction_timestamp, \
              dismiss_timestamp, snooze_count, snooze_intervals, challenge_solves, \
-             total_dismissal_time_ms \
+             total_dismissal_time_ms, outcome \
              FROM alarm_events WHERE fire_timestamp >= ?1 AND fire_timestamp <= ?2 \
              ORDER BY fire_timestamp DESC",
         )?;
@@ -140,7 +166,9 @@ impl Database {
         &self,
         filter: &HistoryFilter,
     ) -> Result<AggregateMetrics, rusqlite::Error> {
-        let events = self.query_events(filter)?;
+        // What an alarm that ended by itself did says nothing about waking up.
+        let mut events = self.query_events(filter)?;
+        events.retain(|e| e.outcome == AlarmOutcome::Solved);
         Ok(compute_aggregate_metrics(&events))
     }
 
@@ -221,6 +249,7 @@ fn row_to_event(row: &rusqlite::Row) -> Result<AlarmEvent, rusqlite::Error> {
     let snooze_intervals_json: String = row.get(7)?;
     let challenge_solves_json: String = row.get(8)?;
     let total_ms: i64 = row.get(9)?;
+    let outcome: String = row.get(10)?;
 
     let fire_timestamp = DateTime::parse_from_rfc3339(&fire_ts_str)
         .map_err(|e| {
@@ -256,6 +285,7 @@ fn row_to_event(row: &rusqlite::Row) -> Result<AlarmEvent, rusqlite::Error> {
         snooze_intervals_minutes,
         challenge_solves,
         total_dismissal_time: Duration::from_millis(total_ms as u64),
+        outcome: AlarmOutcome::parse(&outcome),
     })
 }
 
@@ -417,4 +447,56 @@ fn avg_durations(durations: &[Duration]) -> Duration {
     }
     let total_ms: u128 = durations.iter().map(|d| d.as_millis()).sum();
     Duration::from_millis((total_ms / durations.len() as u128) as u64)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn ended(id: &str, outcome: AlarmOutcome) -> AlarmEvent {
+        let at = Utc::now();
+        AlarmEvent {
+            id: id.to_owned(),
+            alarm_id: AlarmId("a".to_owned()),
+            alarm_label: format!("label {id}"),
+            fire_timestamp: at,
+            first_interaction_timestamp: None,
+            dismiss_timestamp: at,
+            snooze_count: 0,
+            snooze_intervals_minutes: Vec::new(),
+            challenge_solves: Vec::new(),
+            total_dismissal_time: Duration::ZERO,
+            outcome,
+        }
+    }
+
+    #[test]
+    fn an_alarm_that_ended_without_the_user_is_told_once_and_stays_in_history() {
+        let db = Database::open_in_memory().unwrap();
+        db.insert_unseen_event(&ended("1", AlarmOutcome::Missed))
+            .unwrap();
+        db.insert_event(&ended("2", AlarmOutcome::Solved)).unwrap();
+
+        assert_eq!(
+            db.take_unseen_outcomes().unwrap(),
+            vec![(AlarmOutcome::Missed, "label 1".to_owned())]
+        );
+        assert!(db.take_unseen_outcomes().unwrap().is_empty());
+
+        let all = db.query_events(&HistoryFilter::LastDays(1)).unwrap();
+        assert_eq!(all.len(), 2);
+        assert!(all.iter().any(|e| e.outcome == AlarmOutcome::Missed));
+    }
+
+    #[test]
+    fn only_alarms_the_user_solved_count_in_the_metrics() {
+        let db = Database::open_in_memory().unwrap();
+        db.insert_unseen_event(&ended("1", AlarmOutcome::Limit))
+            .unwrap();
+        db.insert_event(&ended("2", AlarmOutcome::Solved)).unwrap();
+
+        let metrics = db.aggregate_metrics(&HistoryFilter::LastDays(1)).unwrap();
+
+        assert_eq!(metrics.total_events, 1);
+    }
 }

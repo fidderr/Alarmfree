@@ -17,6 +17,41 @@ pub struct ChallengeSolve {
     pub duration: Duration,
 }
 
+/// How an alarm ended.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum AlarmOutcome {
+    /// The user dealt with it.
+    #[default]
+    Solved,
+    /// Its time passed without it ringing.
+    Missed,
+    /// It rang until its limit with nobody responding.
+    Limit,
+    /// The phone restarted while it rang.
+    Reboot,
+}
+
+impl AlarmOutcome {
+    /// How it is stored in the database.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Solved => "solved",
+            Self::Missed => "missed",
+            Self::Limit => "limit",
+            Self::Reboot => "reboot",
+        }
+    }
+
+    pub fn parse(s: &str) -> Self {
+        match s {
+            "missed" => Self::Missed,
+            "limit" => Self::Limit,
+            "reboot" => Self::Reboot,
+            _ => Self::Solved,
+        }
+    }
+}
+
 /// A recorded alarm firing event with all metrics.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AlarmEvent {
@@ -32,6 +67,8 @@ pub struct AlarmEvent {
     /// Per-challenge solve records.
     pub challenge_solves: Vec<ChallengeSolve>,
     pub total_dismissal_time: Duration,
+    #[serde(default)]
+    pub outcome: AlarmOutcome,
 }
 
 impl AlarmEvent {

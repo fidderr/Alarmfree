@@ -15,28 +15,47 @@ use rusqlite::Connection;
 use crate::db::schema;
 
 /// Current schema version.
-const CURRENT_VERSION: u32 = 2;
+const CURRENT_VERSION: u32 = 3;
 
 /// Run all pending migrations to bring the database up to `CURRENT_VERSION`.
 /// Safe to call on every app launch — it's a no-op if already at the latest version.
 pub fn run_migrations(conn: &Connection) -> Result<(), rusqlite::Error> {
     let version = get_user_version(conn)?;
-
-    if version < 1 {
-        // A fresh database is created at the current layout.
-        create_initial_schema(conn)?;
-    } else if version < 2 {
-        migrate_v1_to_v2(conn)?;
+    if version == CURRENT_VERSION {
+        return Ok(());
     }
 
-    set_user_version(conn, CURRENT_VERSION)?;
-    Ok(())
+    // All or nothing: a kill halfway must not leave a half-migrated database that
+    // the next launch would try to migrate again.
+    let tx = conn.unchecked_transaction()?;
+    if version < 1 {
+        // A fresh database is created at the current layout.
+        create_initial_schema(&tx)?;
+    } else {
+        if version < 2 {
+            migrate_v1_to_v2(&tx)?;
+        }
+        if version < 3 {
+            migrate_v2_to_v3(&tx)?;
+        }
+    }
+    set_user_version(&tx, CURRENT_VERSION)?;
+    tx.commit()
 }
 
 /// v1 → v2: the minimum alarm volume setting (existing users get the default).
 fn migrate_v1_to_v2(conn: &Connection) -> Result<(), rusqlite::Error> {
     conn.execute_batch(
         "ALTER TABLE settings ADD COLUMN min_volume_percent INTEGER NOT NULL DEFAULT 50",
+    )
+}
+
+/// v2 → v3: how an alarm ended, and whether the user has been told. Existing rows
+/// are alarms the user solved.
+fn migrate_v2_to_v3(conn: &Connection) -> Result<(), rusqlite::Error> {
+    conn.execute_batch(
+        "ALTER TABLE alarm_events ADD COLUMN outcome TEXT NOT NULL DEFAULT 'solved';
+         ALTER TABLE alarm_events ADD COLUMN seen INTEGER NOT NULL DEFAULT 1;",
     )
 }
 
@@ -96,6 +115,8 @@ mod tests {
              );
              INSERT INTO settings (id, theme, locale, default_snooze_count)
                 VALUES (1, '\"Light\"', '\"Dutch\"', 7);
+             CREATE TABLE alarm_events (id TEXT PRIMARY KEY);
+             INSERT INTO alarm_events (id) VALUES ('old');
              PRAGMA user_version = 1;",
         )
         .unwrap();
@@ -109,6 +130,32 @@ mod tests {
             })
             .unwrap();
         assert_eq!(snooze, 7, "existing settings survive");
+        let (outcome, seen): (String, u32) = conn
+            .query_row("SELECT outcome, seen FROM alarm_events", [], |r| {
+                Ok((r.get(0)?, r.get(1)?))
+            })
+            .unwrap();
+        assert_eq!(
+            (outcome.as_str(), seen),
+            ("solved", 1),
+            "not all migrations ran, or history was reinterpreted"
+        );
+        assert_eq!(get_user_version(&conn).unwrap(), CURRENT_VERSION);
         run_migrations(&conn).unwrap(); // idempotent
+    }
+
+    #[test]
+    fn a_failed_migration_changes_nothing() {
+        let conn = Connection::open_in_memory().unwrap();
+        // v2 without the table v3 alters, so the migration fails.
+        conn.execute_batch(
+            "CREATE TABLE settings (id INTEGER PRIMARY KEY);
+             PRAGMA user_version = 2;",
+        )
+        .unwrap();
+
+        assert!(run_migrations(&conn).is_err());
+
+        assert_eq!(get_user_version(&conn).unwrap(), 2);
     }
 }

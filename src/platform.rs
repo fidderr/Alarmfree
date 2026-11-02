@@ -14,6 +14,7 @@ use mobile_sentinel::{AlarmKit, AlarmKitConfig, AlarmSpec, ContextStore, Instanc
 use once_cell::sync::OnceCell;
 
 use crate::app::AlarmData;
+use crate::models::AlarmOutcome;
 
 /// Fully-qualified name of the Dioxus mobile entry activity. The same
 /// value is injected into the Android manifest by `prepare_android` and
@@ -51,61 +52,43 @@ pub fn alarm_kit_optional() -> Option<&'static AlarmKit> {
     ALARM_KIT.get()
 }
 
-/// Names of the alarms that were ringing when the phone restarted and were
-/// ended by [`init_platform`], for a notice to the user.
-static ENDED_BY_REBOOT: OnceCell<Vec<String>> = OnceCell::new();
-
-/// Alarms ended by a reboot during startup (empty if none, or before
-/// [`init_platform`] ran).
-pub fn ended_by_reboot() -> &'static [String] {
-    ENDED_BY_REBOOT.get().map_or(&[], Vec::as_slice)
-}
-
-/// Names of the alarms whose time passed without ringing, found during startup.
-static MISSED: OnceCell<Vec<String>> = OnceCell::new();
-
-/// Alarms that did not ring at their time (empty if none, or before
-/// [`init_platform`] ran).
-pub fn missed_alarms() -> &'static [String] {
-    MISSED.get().map_or(&[], Vec::as_slice)
-}
-
-/// Names of the alarms found at startup to have rung until their limit.
-static ENDED_BY_LIMIT: OnceCell<Vec<String>> = OnceCell::new();
-
-/// Alarms that rang until their limit with the app away (empty if none, or before
-/// [`init_platform`] ran).
-pub fn ended_by_limit_at_startup() -> &'static [String] {
-    ENDED_BY_LIMIT.get().map_or(&[], Vec::as_slice)
-}
-
-/// Alarms that just rang until their limit with the app running. Clears them, and
-/// switches off the one-time ones among them. Returns their names.
-pub fn take_ended_by_limit() -> Vec<String> {
+/// Record the alarms that just rang until their limit with the app running, and
+/// switch off the one-time ones among them. Returns whether there were any.
+pub fn handle_ended_by_limit() -> bool {
     let Some(kit) = alarm_kit_optional() else {
-        return Vec::new();
+        return false;
     };
     let ended = kit.take_ended_by_limit();
     if ended.is_empty() {
-        return Vec::new();
+        return false;
     }
     let mut list = crate::persistence::load_alarms();
     let mut switched_off = false;
-    let mut names = Vec::with_capacity(ended.len());
     for id in &ended {
         clear_session_files(&id.0);
+        record_outcome(&list, &id.0, AlarmOutcome::Limit, chrono::Utc::now());
         switched_off |= crate::schedule::disable_if_one_time(&mut list, &id.0);
-        names.push(
-            list.iter()
-                .find(|a| a.id == id.0)
-                .map(display_name)
-                .unwrap_or_default(),
-        );
     }
     if switched_off {
         crate::persistence::save_alarms(&list);
     }
-    names
+    true
+}
+
+/// An alarm ended some other way than the user solving it: history keeps it, and
+/// the user is told next time the app is on screen.
+fn record_outcome(
+    list: &[AlarmData],
+    alarm_id: &str,
+    outcome: AlarmOutcome,
+    at: chrono::DateTime<chrono::Utc>,
+) {
+    let label = list
+        .iter()
+        .find(|a| a.id == alarm_id)
+        .map(display_name)
+        .unwrap_or_default();
+    crate::history_persistence::record_outcome(alarm_id, &label, outcome, at);
 }
 
 /// One-shot platform init plus the permission prompts (which need the UI).
@@ -120,14 +103,45 @@ pub fn init_sentinel() {
     }
 }
 
+/// Platform setup happens once per process, whichever comes first: the UI, or
+/// something else that started the app (see [`on_wake`]).
+static SETUP: std::sync::Once = std::sync::Once::new();
+
 /// Platform setup, idempotent and free of UI. Initialises mobile-sentinel
 /// (logger + crash mitigation), installs the Android `FiringSink`, installs
 /// AlarmKit with that sink + the Android sound backend, then re-arms every
 /// persisted alarm via the universal SDK and switches off the one-time alarms
 /// it reports as over.
 pub fn init_platform() {
-    static ONCE: std::sync::Once = std::sync::Once::new();
-    ONCE.call_once(setup_platform);
+    // `force`: a setup that panicked must not take the app down for good.
+    SETUP.call_once_force(|_| setup_platform(false));
+}
+
+/// The app was started for something other than the UI, or something happened
+/// while it runs without one: alarms may have to be armed again. Needs no Activity.
+#[cfg(target_os = "android")]
+fn on_wake() {
+    let mut first = false;
+    SETUP.call_once_force(|_| {
+        first = true;
+        setup_platform(true);
+    });
+    if !first {
+        sync_alarms(alarm_kit(), true);
+    }
+}
+
+/// The SDK's hook for [`on_wake`]: a boot, an app update, the clock or time zone
+/// changing, or an alarm going off with the app down.
+#[cfg(target_os = "android")]
+#[no_mangle]
+pub extern "system" fn Java_com_mobilesentinel_SentinelRearm_nativeRearm(
+    _env: *mut std::ffi::c_void,
+    _class: *mut std::ffi::c_void,
+) {
+    if std::panic::catch_unwind(on_wake).is_err() {
+        log::error!("[AlarmFree] re-arming panicked");
+    }
 }
 
 /// Change the minimum alarm volume for rings from now on. An alarm rings by the
@@ -149,11 +163,14 @@ fn clear_session_files(alarm_id: &str) {
     let _ = std::fs::remove_file(dir.join(format!("snooze_intervals_{alarm_id}.txt")));
 }
 
-fn setup_platform() {
+fn setup_platform(woken: bool) {
     mobile_sentinel::init(mobile_sentinel::InitConfig {
         log_tag: "AlarmFree".to_string(),
         ..Default::default()
     });
+
+    // Before arming: an alarm's plan names the file its sound plays from.
+    crate::custom_sounds::extract_bundled_sounds();
 
     let store = Arc::new(ContextStore::new(
         mobile_sentinel::app_files_dir().join("sentinel/context"),
@@ -232,7 +249,28 @@ fn setup_platform() {
     });
     let _ = ALARM_KIT.set(kit);
 
-    let kit = alarm_kit();
+    sync_alarms(alarm_kit(), woken);
+
+    // Debug helpers (test harness only)
+    #[cfg(debug_assertions)]
+    debug_auto_schedule();
+    #[cfg(debug_assertions)]
+    debug_action_poller();
+
+    #[cfg(target_os = "android")]
+    log::info!("[AlarmFree] Platform fully configured");
+}
+
+/// Bring what AlarmKit has in line with the saved alarms: end what cannot go on,
+/// arm everything, ring what is due, and switch off the one-time alarms it reports
+/// as over.
+fn sync_alarms(kit: &'static AlarmKit, woken: bool) {
+    // A boot and a clock change can arrive together.
+    static SYNC: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _sync = SYNC
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+
     let stored = crate::persistence::database().list_alarms();
     let readable = stored.is_ok();
     let mut list = stored.unwrap_or_else(|e| {
@@ -256,25 +294,23 @@ fn setup_platform() {
     if readable {
         forget_unlisted_alarms(kit, &alarms);
     }
-    let report = kit.on_startup(&alarms);
-
-    let name_of = |id: &str| {
-        list.iter()
-            .find(|a| a.id == id)
-            .map(display_name)
-            .unwrap_or_default()
+    let report = if woken {
+        kit.on_wake(&alarms)
+    } else {
+        kit.on_startup(&alarms)
     };
-    let ended_names: Vec<String> = report
-        .ended_by_reboot
-        .iter()
-        .map(|id| name_of(&id.0))
-        .collect();
-    let missed_names: Vec<String> = report.missed.iter().map(|m| name_of(&m.id.0)).collect();
-    let limit_names: Vec<String> = report
-        .ended_by_limit
-        .iter()
-        .map(|id| name_of(&id.0))
-        .collect();
+
+    let now = chrono::Utc::now();
+    for id in &report.ended_by_reboot {
+        record_outcome(&list, &id.0, AlarmOutcome::Reboot, now);
+    }
+    for id in &report.ended_by_limit {
+        record_outcome(&list, &id.0, AlarmOutcome::Limit, now);
+    }
+    for missed in &report.missed {
+        let due = chrono::DateTime::from_timestamp_millis(missed.due_unix_ms).unwrap_or(now);
+        record_outcome(&list, &missed.id.0, AlarmOutcome::Missed, due);
+    }
     let over = report
         .ended_by_reboot
         .iter()
@@ -296,18 +332,6 @@ fn setup_platform() {
     if switched_off {
         crate::persistence::save_alarms(&list);
     }
-    let _ = ENDED_BY_REBOOT.set(ended_names);
-    let _ = MISSED.set(missed_names);
-    let _ = ENDED_BY_LIMIT.set(limit_names);
-
-    // Debug helpers (test harness only)
-    #[cfg(debug_assertions)]
-    debug_auto_schedule();
-    #[cfg(debug_assertions)]
-    debug_action_poller();
-
-    #[cfg(target_os = "android")]
-    log::info!("[AlarmFree] Platform fully configured");
 }
 
 /// The name to tell the user an alarm by: its label, else its time.

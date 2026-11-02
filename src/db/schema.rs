@@ -22,7 +22,9 @@ CREATE TABLE IF NOT EXISTS alarm_events (
     snooze_count INTEGER NOT NULL DEFAULT 0,
     snooze_intervals TEXT NOT NULL DEFAULT '[]',
     challenge_solves TEXT NOT NULL DEFAULT '[]',
-    total_dismissal_time_ms INTEGER NOT NULL
+    total_dismissal_time_ms INTEGER NOT NULL,
+    outcome TEXT NOT NULL DEFAULT 'solved',
+    seen INTEGER NOT NULL DEFAULT 1
 )
 "#;
 

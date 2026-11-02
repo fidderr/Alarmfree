@@ -2,7 +2,9 @@ use std::time::Duration;
 
 use crate::app::{t, Route, Translations};
 use crate::components::{Icon, IconName};
-use crate::models::{AggregateMetrics, AlarmEvent, ChallengeType, Difficulty, HistoryFilter};
+use crate::models::{
+    AggregateMetrics, AlarmEvent, AlarmOutcome, ChallengeType, Difficulty, HistoryFilter,
+};
 use dioxus::prelude::*;
 
 const FILTER_KEYS: &[&str] = &[
@@ -350,6 +352,35 @@ fn EventCard(event: AlarmEvent) -> Element {
     let time_str = local_fire.format("%H:%M").to_string();
     let date_str = local_fire.format("%b %d").to_string();
     let label = event.alarm_label.clone();
+
+    // Nobody dealt with it, so there is nothing to measure.
+    let outcome_key = match event.outcome {
+        AlarmOutcome::Solved => None,
+        AlarmOutcome::Missed => Some("history.outcome.missed"),
+        AlarmOutcome::Limit => Some("history.outcome.limit"),
+        AlarmOutcome::Reboot => Some("history.outcome.reboot"),
+    };
+    if let Some(key) = outcome_key {
+        let outcome_text = t(&translations, key);
+        return rsx! {
+            div { class: "history-card event-card",
+                div { class: "event-card-header",
+                    div {
+                        div { class: "event-card-time-row",
+                            span { class: "event-card-time", "{time_str}" }
+                            span { class: "event-card-date", "{date_str}" }
+                        }
+                        if !label.is_empty() {
+                            p { class: "event-card-label", "{label}" }
+                        }
+                    }
+                    div { class: "event-card-summary",
+                        span { class: "event-card-snooze-pill", "{outcome_text}" }
+                    }
+                }
+            }
+        };
+    }
 
     let dismiss_str = format_duration(event.total_dismissal_time);
     let reaction_str = event
