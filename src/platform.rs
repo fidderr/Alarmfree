@@ -53,15 +53,23 @@ pub fn alarm_kit_optional() -> Option<&'static AlarmKit> {
     ALARM_KIT.get()
 }
 
+/// Set when [`handle_ring_ends`] changed something the UI shows, if there is a UI.
+static RING_END_NEWS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Whether rings ended since the last call, for the UI to catch up.
+pub fn take_ring_end_news() -> bool {
+    RING_END_NEWS.swap(false, std::sync::atomic::Ordering::Relaxed)
+}
+
 /// Record the rings that just ended without the app having a say, while it runs, and
-/// switch off the one-time alarms among them. Returns whether there were any.
-pub fn handle_ring_ends() -> bool {
+/// switch off the one-time alarms among them.
+fn handle_ring_ends() {
     let Some(kit) = alarm_kit_optional() else {
-        return false;
+        return;
     };
     let ended = kit.take_ring_ends();
     if ended.is_empty() {
-        return false;
+        return;
     }
     let mut list = crate::persistence::load_alarms();
     let mut switched_off = false;
@@ -72,7 +80,7 @@ pub fn handle_ring_ends() -> bool {
     if switched_off {
         crate::persistence::save_alarms(&list);
     }
-    true
+    RING_END_NEWS.store(true, std::sync::atomic::Ordering::Relaxed);
 }
 
 fn outcome_of(end: RingEnd) -> AlarmOutcome {
@@ -274,6 +282,7 @@ fn setup_platform(woken: bool) {
         sound_resolver,
         alarm_class_config,
     });
+    kit.on_ring_end(handle_ring_ends);
     let _ = ALARM_KIT.set(kit);
 
     sync_alarms(alarm_kit(), woken);

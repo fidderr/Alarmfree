@@ -183,6 +183,18 @@ pub fn App() -> Element {
         let mut watch = crate::firing_state::FiringWatch::default();
         loop {
             crate::timer::sleep_ms(crate::firing_state::POLL_MS).await;
+            if crate::platform::take_ring_end_news() {
+                let mut list = alarms;
+                list.set(crate::persistence::load_alarms());
+                // Rang until its limit with nobody there: nothing else tells the user.
+                let notices = unseen_outcome_notices(&translations);
+                if !notices.is_empty() {
+                    toast_signal.set(Some(crate::components::ToastMessage {
+                        message: notices.join(" "),
+                        level: crate::components::ToastLevel::Error,
+                    }));
+                }
+            }
             // One `stat` per tick; the records are only re-read on change.
             if !watch.should_reread(crate::firing_state::store_marker()) {
                 continue;
@@ -196,18 +208,6 @@ pub fn App() -> Element {
                     message: t(&translations, "db.save_failed"),
                     level: crate::components::ToastLevel::Error,
                 }));
-            }
-            if crate::platform::handle_ring_ends() {
-                let mut list = alarms;
-                list.set(crate::persistence::load_alarms());
-                // Rang until its limit with nobody there: nothing else tells the user.
-                let notices = unseen_outcome_notices(&translations);
-                if !notices.is_empty() {
-                    toast_signal.set(Some(crate::components::ToastMessage {
-                        message: notices.join(" "),
-                        level: crate::components::ToastLevel::Error,
-                    }));
-                }
             }
         }
     });
