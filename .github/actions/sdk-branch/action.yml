@@ -1,0 +1,16 @@
+name: SDK branch
+description: Point mobile-sentinel at its branch of the same name, on branches that need it.
+runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@v5
+      if: github.ref_name == 'alarm-reliability-qol' || github.head_ref == 'alarm-reliability-qol'
+      with:
+        repository: fidderr/mobile-sentinel
+        ref: alarm-reliability-qol
+        path: _sdk
+    - if: github.ref_name == 'alarm-reliability-qol' || github.head_ref == 'alarm-reliability-qol'
+      shell: bash
+      run: |
+        printf '\n[patch.crates-io]\nmobile-sentinel = { path = "_sdk" }\n' >> Cargo.toml
+        cargo update -p mobile-sentinel

@@ -23,7 +23,7 @@ s01() {
     if await_sound 40; then
         note "sound after ${SOUND_AT}s"
         sleep 8
-        [ "$(state a)" = firing ] && pass "rang, sound ${SOUND_AT}s after alarm time" || fail "sound but state=$(state a)"
+        [ "$(state a)" = firing ] && pass "rang, sound $(ring_ms)ms after delivery" || fail "sound but state=$(state a)"
     else
         fail "no sound in 40s, state=$(state a) job=$(job_status a)"
     fi
@@ -43,7 +43,7 @@ s02() {
     dead || note "process still alive"
     screen_off
     if await_sound 40; then
-        pass "rang, sound ${SOUND_AT}s after alarm time"
+        pass "rang, sound $(ring_ms)ms after delivery"
     else
         fail "no sound in 40s, db_enabled=$(db_enabled a) state=$(state a) job=$(job_status a)"
     fi
@@ -110,11 +110,13 @@ s05() {
     scenario s05_toggled_back_on
     fresh
     next_minute 3600
-    local past
-    past=$(dev date -d "@$((T - 90000))" +%Y-%m-%d)
-    # The row as the home toggle leaves it: enabled, with its old date.
-    seed a "$(alarm_json a "$T_H" "$T_M" "$NO_DAYS" "\"$past\"")"
+    # The row as the home toggle leaves it: enabled, dated to its next occurrence.
+    seed a "$(alarm_json a "$T_H" "$T_M" "$NO_DAYS" "\"$T_DATE\"")"
     arm a
+    dev am force-stop "$PKG"
+    sleep 1
+    start_app
+    sleep 8
     if [ "$(db_enabled a)" = true ] && [ "$(state a)" = scheduled ]; then
         pass "still on and armed"
     else
@@ -157,16 +159,17 @@ ring_then() { # ring_then name kill_fn
     await_sound 30 || { fail "never started"; save_log; return 1; }
     sleep 4
     "$2"
-    local t0 i=0
+    local t0 i=0 silent=0
     t0=$(now_s)
     sleep 1
     while [ "$i" -lt 40 ]; do
+        sound_on || silent=$((silent + 1))
         sound_on && [ -n "$(main_pid)" ] && top_is_app && break
         sleep 1
         i=$((i + 1))
     done
     if sound_on && [ "$(state a)" = firing ]; then
-        pass "back after $(($(now_s) - t0))s, UI on top: $(top_is_app && echo yes || echo no)"
+        pass "back after $(($(now_s) - t0))s, silent for ${silent} checks, UI on top: $(top_is_app && echo yes || echo no)"
     else
         fail "after 40s sound=$(sound_on && echo on || echo OFF) state=$(state a) main=$(main_pid)"
     fi
@@ -315,7 +318,8 @@ s14() {
     dev cmd alarm set-timezone "$zone" 2> /dev/null || dev service call alarm 3 s16 "$zone" > /dev/null
 }
 
-# A force-stop removes the alarm: opening the app must re-arm and explain.
+# A force-stop removes the alarm, so it passes unnoticed. Opening the app less
+# than 15 minutes late rings it.
 s16() {
     scenario s16_force_stop
     fresh
@@ -326,15 +330,49 @@ s16() {
     until_past $((T + 15))
     sound_on && note "rang despite force-stop"
     start_app
-    sleep 20
-    note "after opening: state=$(state a) next_in=$((($(next_fire_ms a) / 1000 - $(now_s)) / 60))min"
-    # Passes once a miss is recorded; history gets an outcome column in Phase 4.
-    local missed
-    missed=$(printf "SELECT count(*) FROM alarm_events WHERE outcome='missed';\n" |
-        adb_ shell "run-as $PKG sqlite3 files/alarmfree.db" 2>&1 | tr -d '\r')
-    [ "$missed" = 1 ] && pass "miss recorded" || fail "miss not recorded ($missed)"
+    sleep 15
+    if sound_on && [ "$(state a)" = firing ]; then
+        pass "rang late on opening"
+    else
+        fail "sound=$(sound_on && echo on || echo OFF) state=$(state a)"
+    fi
     save_log
+    action dismiss:a
+    sleep 2
 }
+
+# Everything against it: no process, screen off, overlay denied, forced idle.
+# The time from delivery to sound is what the plan promises to keep under 1 s.
+s26() {
+    local run=${1:-1}
+    scenario "s26_cold_ring_$run"
+    fresh
+    next_minute 45
+    seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
+    arm a
+    dev appops set "$PKG" SYSTEM_ALERT_WINDOW deny
+    dead
+    screen_off
+    dev dumpsys deviceidle force-idle > /dev/null
+    if await_sound 40; then
+        local ms
+        ms=$(ring_ms)
+        if [ -n "$ms" ] && [ "$ms" -lt 1000 ]; then
+            pass "sound ${ms}ms after delivery"
+        else
+            fail "sound ${ms:-?}ms after delivery"
+        fi
+    else
+        fail "no sound in 40s, state=$(state a) job=$(job_status a)"
+    fi
+    save_log
+    dev dumpsys deviceidle unforce > /dev/null
+    grant_all
+    wake
+    action dismiss:a
+    sleep 2
+}
+s26x5() { for r in 1 2 3 4 5; do s26 "$r"; done; }
 
 # An unplayable custom sound must still make noise.
 s17() {
@@ -466,10 +504,10 @@ s24() {
     await_sound 40 || { fail "no sound"; save_log; return; }
     sleep 6
     local plays
-    plays=$(adb_ logcat -d -s MobileSentinel.FiringAudio:I | tr -d '\r' | grep playSound)
+    plays=$(adb_ logcat -d -s MobileSentinel.FiringAudio:I | tr -d '\r' | grep 'playing ')
     note "$plays"
     local n
-    n=$(echo "$plays" | grep -c playSound)
+    n=$(echo "$plays" | grep -c 'playing ')
     if [ "$n" = 1 ] && echo "$plays" | grep -q 'fadeIn=30000ms'; then
         pass "one playback with fade"
     else
@@ -511,7 +549,7 @@ s25() {
     save_log
 }
 
-ALL="s01 s02 s03 s04 s05 s06 s07a s07b s07c s09 s10 s11a s11b s12 s14 s16 s17 s19 s20 s21 s22 s24 s25"
+ALL="s01 s02 s03 s04 s05 s06 s07a s07b s07c s09 s10 s11a s11b s12 s14 s16 s17 s19 s20 s21 s22 s24 s25 s26x5"
 : > "$RESULTS"
 for s in ${*:-$ALL}; do
     "$s"

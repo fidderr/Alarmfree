@@ -97,6 +97,10 @@ pub fn list_default_sounds() -> Vec<String> {
     sounds
 }
 
+/// The bundled sound an alarm falls back to when its own sound and the system
+/// default cannot be played.
+pub const FALLBACK_SOUND: &str = "happy";
+
 /// Format the bundled default sounds ship in. Older releases shipped `.mp3`.
 const BUNDLED_EXTENSION: &str = "ogg";
 

@@ -29,6 +29,9 @@ const FOREGROUND_CHANNEL_NAME: &str = "Alarms";
 /// Notification body shown while firing.
 const FOREGROUND_BODY: &str = "Tap to open";
 
+/// Notification title for an alarm without a label.
+const FOREGROUND_TITLE_FALLBACK: &str = "Alarm";
+
 /// An alarm whose time passed during a restart still rings if it is less than
 /// this late; later than that it is reported as missed.
 const LATE_RING_WINDOW_MS: i64 = 15 * 60 * 1000;
@@ -89,12 +92,16 @@ pub fn init_platform() {
     ONCE.call_once(setup_platform);
 }
 
-/// Change the minimum alarm volume for rings from now on.
+/// Change the minimum alarm volume for rings from now on. An alarm rings by the
+/// plan it was armed with, so the alarms already armed get a new one.
 pub fn set_min_volume(percent: u8) {
     let runtime = mobile_sentinel::alarm_class_runtime();
     let mut config = runtime.config();
     config.min_volume_percent = percent;
     runtime.configure(config);
+    if let Some(kit) = alarm_kit_optional() {
+        kit.refresh_ring_plans();
+    }
 }
 
 /// Per-session files the firing screen keeps for an alarm.
@@ -129,6 +136,7 @@ fn setup_platform() {
         kiosk_block_home: true,
         kiosk_block_back: true,
         kiosk_block_recents: true,
+        kiosk_block_volume: true,
         // Show the app normally while firing — keep both system bars
         // visible (status bar with clock/battery, and the nav bar).
         kiosk_hide_status_bar: false,
@@ -144,6 +152,10 @@ fn setup_platform() {
         // `set_min_volume` when it changes.
         min_volume_percent: crate::persistence::load_settings().min_volume_percent,
         late_ring_window_ms: LATE_RING_WINDOW_MS,
+        fallback_sound_id: Some(SoundIdSpec::Bundled(
+            crate::custom_sounds::FALLBACK_SOUND.into(),
+        )),
+        fallback_title: FOREGROUND_TITLE_FALLBACK.into(),
     };
 
     #[cfg(target_os = "android")]
@@ -473,10 +485,13 @@ pub(crate) fn forget_alarm(alarm_id: &str) {
 /// is generous: a cold start extracts sounds and loads the WebView first.
 const UI_LIVENESS_TIMEOUT_MS: u64 = 15_000;
 
+/// How often the guardian checks on a job. The sound does not depend on it.
+const POLL_INTERVAL_MS: u64 = 500;
+
 /// Guardian settings for an alarm's job.
 fn job_config() -> mobile_sentinel::JobConfig {
     mobile_sentinel::JobConfig {
-        poll_interval_ms: 100,
+        poll_interval_ms: POLL_INTERVAL_MS,
         ui_liveness_timeout_ms: UI_LIVENESS_TIMEOUT_MS,
         ..Default::default()
     }
@@ -493,7 +508,9 @@ fn register_alarm_job(alarm_id: &str) -> Result<(), mobile_sentinel::jobs::JobGu
 /// Make sure an enabled alarm's job exists with the current settings.
 fn ensure_alarm_job(alarm_id: &str) {
     if let Ok(Some(job)) = mobile_sentinel::jobs::get_job(alarm_id) {
-        if job.config.ui_liveness_timeout_ms == UI_LIVENESS_TIMEOUT_MS {
+        if job.config.ui_liveness_timeout_ms == UI_LIVENESS_TIMEOUT_MS
+            && job.config.poll_interval_ms == POLL_INTERVAL_MS
+        {
             return;
         }
     }

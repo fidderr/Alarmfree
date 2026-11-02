@@ -597,8 +597,10 @@ pub fn AlarmFiring(id: String) -> Element {
                                                            #[cfg(target_os = "android")]
                                                            log::warn!("[AlarmFree] AlarmKit snooze failed for {}: {:?}", id_for_snooze, _e);
                                                        }
+                                                       // With another alarm still ringing, the
+                                                       // screen moves on to that one.
                                                        #[cfg(target_os = "android")]
-                                                       {
+                                                       if matches!(kit.current_session(), Ok(None)) {
                                                            mobile_sentinel::foregrounding::finish_activity();
                                                        }
                                                    }

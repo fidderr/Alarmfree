@@ -122,10 +122,14 @@ state() { # idle / scheduled / firing / snoozed / dismissed / none
     echo "${s:-none}"
 }
 next_fire_ms() { as_app "grep next_fire_unix_ms files/sentinel/context/$1.json 2>/dev/null" | sed -E 's/[^0-9]//g'; }
-job_status() {
-    local s
-    s=$(as_app "grep \"\\\"status\\\"\" files/sentinel/jobs/$1.json 2>/dev/null" | sed -E 's/.*"status": "([a-z]+)".*/\1/')
-    echo "${s:-none}"
+job_status() { # active / pending / none
+    if [ "$(as_app "test -e files/sentinel/jobs/$1.active && echo y")" = y ]; then
+        echo active
+    elif [ "$(as_app "test -e files/sentinel/jobs/$1.json && echo y")" = y ]; then
+        echo pending
+    else
+        echo none
+    fi
 }
 action() { as_app "echo $1 > files/debug_action.txt"; }
 
@@ -134,6 +138,15 @@ sound_on() {
     local uid
     uid=$(dev cmd package list packages -U "$PKG" | sed -E 's/.*uid:([0-9]+).*/\1/')
     dev dumpsys audio | grep -E "u/pid:$uid/[0-9]+ .*state:started.*USAGE_ALARM" > /dev/null
+}
+
+# Milliseconds from the alarm being delivered until the sound plays, from the
+# log (needs the log since the alarm). Empty when either line is missing.
+ring_ms() {
+    adb_ logcat -d -v epoch 2> /dev/null | tr -d '\r' | awk '
+        /MobileSentinel.AlarmRx/ && /onReceive: instance=/ && !/#watchdog/ && !rx { rx = $1 }
+        /MobileSentinel.FiringAudio/ && /playing / && !play { play = $1 }
+        END { if (rx && play) printf "%d", (play - rx) * 1000 }'
 }
 
 # Seconds from T until the sound starts, or empty after `limit` seconds past T.
@@ -155,7 +168,7 @@ until_past() { # wait until device time is past unix second $1
 }
 
 top_is_app() { dev dumpsys activity activities | grep -E "topResumedActivity|ResumedActivity:" | head -1 | grep -q "$PKG"; }
-armed_at_ms() { as_app "cat files/sentinel/armed/$1.armed 2>/dev/null"; }
+armed_at_ms() { as_app "head -n 1 files/sentinel/armed/$1.armed 2>/dev/null"; }
 os_has_alarm() { dev dumpsys alarm | grep -q "$PKG.*ALARM_DISPATCH\|ALARM_DISPATCH.*$PKG\|walarm\*:com.mobilesentinel.ALARM_DISPATCH"; }
 alarm_volume() { dev cmd media_session volume --stream 4 --get 2> /dev/null | grep -oE 'volume is [0-9]+' | grep -oE '[0-9]+'; }
 
