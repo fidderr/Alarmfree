@@ -255,7 +255,11 @@ top_is_app() { dev dumpsys activity activities | grep -E "topResumedActivity|Res
 armed_at_ms() { as_app "head -n 1 files/sentinel/armed/$1.armed 2>/dev/null"; }
 os_has_alarm() { dev dumpsys alarm | grep -q "$PKG.*ALARM_DISPATCH\|ALARM_DISPATCH.*$PKG\|walarm\*:com.mobilesentinel.ALARM_DISPATCH"; }
 alarm_volume() { dev cmd media_session volume --stream 4 --get 2> /dev/null | grep -oE 'volume is [0-9]+' | grep -oE '[0-9]+'; }
-set_alarm_volume() { dev cmd audio set-volume 4 "$1" > /dev/null 2>&1; }
+# Android 16 only listens to the first of these, older versions only to the second.
+set_alarm_volume() {
+    dev cmd audio set-volume 4 "$1" > /dev/null 2>&1
+    dev cmd media_session volume --stream 4 --set "$1" > /dev/null 2>&1
+}
 
 # Wait until Android has told the app about the boot: on a software-rendered
 # emulator that is well after sys.boot_completed. Opening the app before it can get
