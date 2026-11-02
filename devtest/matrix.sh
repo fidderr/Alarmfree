@@ -360,7 +360,7 @@ s14() {
     local before after zone
     before=$(armed_at_ms a)
     zone=$(dev getprop persist.sys.timezone)
-    dev cmd alarm set-timezone Asia/Tokyo 2> /dev/null || dev service call alarm 3 s16 Asia/Tokyo > /dev/null
+    set_zone Asia/Tokyo
     sleep 12
     after=$(armed_at_ms a)
     if [ -n "$before" ] && [ "$before" != "$after" ]; then
@@ -369,7 +369,7 @@ s14() {
         fail "armed time unchanged after zone change ($zone to Asia/Tokyo), main=$(main_pid)"
     fi
     save_log
-    dev cmd alarm set-timezone "$zone" 2> /dev/null || dev service call alarm 3 s16 "$zone" > /dev/null
+    set_zone "$zone"
 }
 
 # A force-stop removes the alarm, so it passes unnoticed. Opening the app less
@@ -443,6 +443,8 @@ s16b() {
     local missed left
     missed=$(outcomes missed)
     left=$(unseen)
+    # Telling the user takes a UI.
+    [ -n "$NO_UI" ] && left=0
     if ! sound_on && [ "$missed" = 1 ] && [ "$left" = 0 ] && [ "$(state a)" = scheduled ]; then
         pass "recorded as missed and told, next ring armed"
     else
@@ -578,6 +580,12 @@ s21() {
 # out, because the app's own screen cannot come up yet.
 s13() {
     scenario s13_before_first_unlock
+    # With full-disk encryption and a PIN, Android stops before /data is mounted: no app
+    # exists until the PIN is entered, and the PIN cannot even be cleared in that state.
+    if [ "$(dev getprop ro.crypto.type)" = block ]; then
+        skip "full-disk encryption: nothing runs before the PIN"
+        return
+    fi
     fresh
     next_minute 180
     seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
@@ -602,7 +610,7 @@ s13() {
             fail "rang, but the backup screen is not on top: $(dev dumpsys activity activities | grep -m1 ResumedActivity)"
         fi
     else
-        fail "no sound in 60s, locked users: $locked, state=$(state a) job=$(job_status a) main=$(main_pid)"
+        fail "no sound in 60s, locked users: $locked, state=$(state a) job=$(job_status a) main=$(main_pid) $(dev dumpsys package "$PKG" | grep -m1 -oE 'stopped=[a-z]+')"
     fi
     save_log
     dev locksettings clear --old 1234 > /dev/null
@@ -690,6 +698,10 @@ s22c() {
 # A frozen UI gets restarted by the guardian; the alarm carries on.
 s22() {
     scenario s22_hung_ui
+    if [ -n "$NO_UI" ]; then
+        skip "no UI to hang"
+        return
+    fi
     fresh
     next_minute 45
     seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
@@ -843,6 +855,10 @@ s23d() {
 # Back from the editor stays in the app.
 s25() {
     scenario s25_back_navigation
+    if [ -n "$NO_UI" ]; then
+        skip "no UI to navigate"
+        return
+    fi
     fresh
     next_minute 3600
     seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
