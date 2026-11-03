@@ -238,7 +238,8 @@ pub(super) fn BackupSheet() -> Element {
             SheetItem {
                 label: t(&translations, "settings.backup_restore"),
                 on_click: move |_| {
-                    sheet.set(None);
+                    // A task ends with the component it came from, so the panel stays until
+                    // this is done.
                     spawn(async move {
                         let (tx, rx) = futures_channel::oneshot::channel();
                         std::thread::spawn(move || {
@@ -268,6 +269,7 @@ pub(super) fn BackupSheet() -> Element {
                             }
                             Err(_) => {}
                         }
+                        sheet.set(None);
                     });
                 },
             }

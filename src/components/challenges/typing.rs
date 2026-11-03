@@ -133,7 +133,8 @@ pub fn TypingChallenge(
                 autocorrect: "off",
                 autocapitalize: "off",
                 spellcheck: "false",
-                value: "{typed_text}",
+                // No value from here: one that comes back late would overwrite what was typed
+                // since, and lose a letter.
                 oninput: move |evt| {
                     let val = evt.value();
                     let typed = val.chars().count();
