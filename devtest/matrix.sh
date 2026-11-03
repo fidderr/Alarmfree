@@ -839,6 +839,9 @@ s25() {
     click .time-shift
     press_back
     on_screen .sheet || problems="$problems; no question about discarding"
+    local under
+    under=$(covered)
+    [ -z "$under" ] || problems="$problems; in the question: $under"
     press_back
     on_screen .time-big || problems="$problems; Back from the question left the editor"
     click .icon-btn
@@ -1433,18 +1436,18 @@ s40() {
     save_log
 }
 
-# At the end of a sheet, nothing is left under its Done button.
-done_covers() {
+# The text of the open panel that lies under something else, at the end of a long panel.
+covered() {
     js 'var s = document.querySelector(".sheet"); if (s) s.scrollTop = s.scrollHeight; return "ok"' > /dev/null
     sleep 0.3
-    [ "$(js 'var d = document.querySelector(".sheet .sheet-done"); return d && d.previousElementSibling.getBoundingClientRect().bottom > d.getBoundingClientRect().top + 1 ? "y" : "n"')" = y ]
+    js 'var s = document.querySelector(".sheet"), bad = []; if (!s) return ""; var box = s.getBoundingClientRect(); s.querySelectorAll("*").forEach(e => { if (e.children.length || !e.textContent.trim()) return; var r = e.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2; if (r.width < 2 || r.height < 2 || y < box.top || y > box.bottom) return; var on = document.elementFromPoint(x, y); if (on && on !== e && !e.contains(on) && !on.contains(e)) bad.push(e.textContent.trim().slice(0, 24) + " under " + (on.className || on.tagName)); }); return bad.slice(0, 3).join(", ");'
 }
 
 # Every row and button does something and can be left again, and every kind of challenge
 # can be tried. Not how well: that they are there, since a control nothing uses breaks
 # without anything else noticing.
 sweep_rows() { # where, for the messages
-    local where=$1 i=0 n kind now title
+    local where=$1 i=0 n kind now title found
     n=$(js "return document.querySelectorAll('.row-btn').length")
     case "$n" in
         '' | *[!0-9]*)
@@ -1461,7 +1464,8 @@ sweep_rows() { # where, for the messages
             if ! on_screen .sheet && ! on_screen .screen-header; then
                 dev dumpsys window | grep -m1 mCurrentFocus | grep -q "$PKG" && echo "$where: '$title' does nothing"
             fi
-            done_covers && echo "$where: Done covers the end of '$title'"
+            found=$(covered)
+            [ -z "$found" ] || echo "$where: in '$title': $found"
             press_back
         else
             click .row-btn "$i" 0.6
@@ -1488,10 +1492,14 @@ s41() {
     # Home.
     click .alarm-menu
     on_screen .sheet || problems="$problems; no alarm menu"
+    found=$(covered)
+    [ -z "$found" ] || problems="$problems; in the alarm menu: $found"
     press_back
     for i in 0 1; do
         click .round-icon-btn "$i"
         on_screen .sheet || problems="$problems; home button $i does nothing"
+        found=$(covered)
+        [ -z "$found" ] || problems="$problems; in home sheet $i: $found"
         press_back
     done
     for i in 0 1 2; do
@@ -1884,9 +1892,9 @@ s49() {
     free=$(js "$left")
     [ "$free" = "$before" ] || problems="$problems; no room given back: $before, now $free"
     # The challenge. It has to show the passage and the box together.
-    js "var d = document.querySelector('.sheet-item.danger'); if (d) d.click(); return 'ok'" > /dev/null
-    sleep 1
-    on_screen .home-header || press_back
+    press_back
+    click '.sheet-item.danger' 0 1
+    on_screen .home-header || problems="$problems; not back on Home"
     click .alarm-menu
     click .sheet-item 0 2
     read -r x y <<< "$(screen_point .typing-input-area)"
