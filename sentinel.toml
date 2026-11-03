@@ -13,6 +13,8 @@
 [android]
 activity = "dev.dioxus.main.MainActivity"
 icon = "assets/icon.webp"
+# The picture's own background, so launchers can give it any shape without a box in it.
+icon_background = "F7F7F7"
 assets = ["assets/sounds"]
 
 # An alarm has to ring after a reboot, also before the first unlock. Its files are

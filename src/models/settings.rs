@@ -35,6 +35,47 @@ impl ThemeMode {
     }
 }
 
+/// The colour of what stands out. The colorblind theme keeps its own.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Accent {
+    #[default]
+    Blue,
+    Teal,
+    Purple,
+    Pink,
+    Amber,
+}
+
+impl Accent {
+    pub const ALL: [Accent; 5] = [
+        Accent::Blue,
+        Accent::Teal,
+        Accent::Purple,
+        Accent::Pink,
+        Accent::Amber,
+    ];
+
+    pub fn css_class(self) -> &'static str {
+        match self {
+            Accent::Blue => "accent-blue",
+            Accent::Teal => "accent-teal",
+            Accent::Purple => "accent-purple",
+            Accent::Pink => "accent-pink",
+            Accent::Amber => "accent-amber",
+        }
+    }
+
+    pub fn name_key(self) -> &'static str {
+        match self {
+            Accent::Blue => "accent.blue",
+            Accent::Teal => "accent.teal",
+            Accent::Purple => "accent.purple",
+            Accent::Pink => "accent.pink",
+            Accent::Amber => "accent.amber",
+        }
+    }
+}
+
 /// UI language. Persisted via serde directly.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Locale {
@@ -98,6 +139,9 @@ pub struct Prefs {
     pub touch_feedback: bool,
     pub less_motion: bool,
     pub confetti: bool,
+    pub accent: Accent,
+    /// What the user called their own sounds, by file name.
+    pub sound_names: std::collections::BTreeMap<String, String>,
     /// Show a notification this long before an alarm rings (0 = off).
     pub notify_before_minutes: u8,
     /// The first-run setup was gone through.
@@ -116,6 +160,8 @@ impl Default for Prefs {
             touch_feedback: true,
             less_motion: false,
             confetti: true,
+            accent: Accent::default(),
+            sound_names: std::collections::BTreeMap::new(),
             notify_before_minutes: 0,
             setup_done: false,
             alarm_defaults: None,
@@ -201,6 +247,7 @@ mod tests {
         assert!(prefs.less_motion);
         assert!(prefs.touch_feedback, "on unless turned off");
         assert!(prefs.confetti);
+        assert_eq!(prefs.accent, Accent::Blue);
         assert!(!prefs.setup_done);
     }
 

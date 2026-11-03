@@ -178,6 +178,12 @@ pub struct AlarmData {
     /// This long after it was turned off, confirm being up or it rings again (0 = off).
     #[serde(default)]
     pub wake_check_minutes: u8,
+    /// The screen goes to full brightness while it rings.
+    #[serde(default)]
+    pub max_brightness: bool,
+    /// Only vibrate this long before the sound starts. Needs both on (`sound_mode` 0).
+    #[serde(default)]
+    pub sound_delay_secs: u16,
     /// Nothing rings until then, for a holiday. Separate from a skipped ring, so
     /// undoing one leaves the other.
     #[serde(default)]
@@ -396,11 +402,12 @@ pub fn App() -> Element {
     } else {
         ""
     };
+    let accent_class = settings.read().prefs.accent.css_class();
     let safe_style = safe_area.read().css_vars();
 
     rsx! {
            style { "{STYLESHEET}" }
-           div { class: "app-root {theme_class} {motion_class}", style: "{safe_style}",
+           div { class: "app-root {theme_class} {accent_class} {motion_class}", style: "{safe_style}",
                if let Some(alarm_id) = firing_id_val {
     // Show alarm firing screen directly, bypassing router
                    crate::screens::AlarmFiring { key: "{alarm_id}", id: alarm_id }

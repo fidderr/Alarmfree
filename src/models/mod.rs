@@ -11,5 +11,7 @@ pub use challenge::{
     ChallengePrompt, ChallengeType, Difficulty, DifficultyParams, ReferenceData,
 };
 pub use history::{AggregateMetrics, AlarmEvent, AlarmOutcome, ChallengeSolve, HistoryFilter};
-pub use settings::{AppSettings, Locale, Prefs, SortMode, ThemeMode, TimeFormat, WeekStart};
+pub use settings::{
+    Accent, AppSettings, Locale, Prefs, SortMode, ThemeMode, TimeFormat, WeekStart,
+};
 pub use setup::ChallengeSetup;

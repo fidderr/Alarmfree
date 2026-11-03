@@ -273,10 +273,17 @@ pub fn is_custom_sound(sound: &str) -> bool {
 }
 
 /// The name to show for a sound: a bundled one is capitalised ("New world"), the user's
-/// own keeps its file name.
-pub fn display_name(sound: &str) -> String {
+/// own has the name they gave it, or else its file name.
+pub fn display_name(sound: &str, names: &std::collections::BTreeMap<String, String>) -> String {
     if is_custom_sound(sound) {
-        return sound.to_owned();
+        if let Some(name) = names.get(sound) {
+            return name.clone();
+        }
+        return Path::new(sound)
+            .file_stem()
+            .and_then(|stem| stem.to_str())
+            .unwrap_or(sound)
+            .to_owned();
     }
     let spaced = sound.replace(['_', '-'], " ");
     let mut chars = spaced.chars();
@@ -329,6 +336,15 @@ mod tests {
         left.sort();
         // `funk.mp3` has no replacement, so it stays playable.
         assert_eq!(left, ["funk.mp3", "lofi.ogg", "power.ogg"]);
+    }
+
+    #[test]
+    fn a_sound_shows_the_name_it_was_given_or_else_its_file_name() {
+        let mut names = std::collections::BTreeMap::new();
+        assert_eq!(display_name("new world", &names), "New world");
+        assert_eq!(display_name("my tune.mp3", &names), "my tune");
+        names.insert("my tune.mp3".to_owned(), "Morning".to_owned());
+        assert_eq!(display_name("my tune.mp3", &names), "Morning");
     }
 
     #[test]

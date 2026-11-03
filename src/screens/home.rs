@@ -221,6 +221,28 @@ pub fn Home() -> Element {
         toast.set(Some(ToastMessage::with_undo(message, before)));
     };
 
+    let mut toggle_skip = move |id: String, next: Option<i64>, skip_active: bool| {
+        let message = if skip_active {
+            t(&translations, "home.skip_undone")
+        } else {
+            t(&translations, "home.skipped")
+        };
+        change(message, &mut |list| {
+            // Skipping remembers the occurrence to skip (the next ring); undoing clears it.
+            if let Some(alarm) = list.iter_mut().find(|a| a.id == id) {
+                alarm.skip_until_ms = if skip_active { None } else { next };
+            }
+        });
+    };
+    let mut delete_alarm = move |id: String, name: &str| {
+        let message = if name.is_empty() {
+            t(&translations, "home.deleted_plain")
+        } else {
+            t(&translations, "home.deleted").replace("{alarm}", name)
+        };
+        change(message, &mut |list| list.retain(|a| a.id != id));
+    };
+
     let next_label = t(&translations, "home.next_label");
     let pause_aria = t(&translations, "home.pause_aria");
     let sort_aria = t(&translations, "home.sort_aria");
@@ -380,19 +402,7 @@ pub fn Home() -> Element {
                                         t(&translations, "action.skip_next")
                                     },
                                     on_click: move |_| {
-                                        let message = if skip_active {
-                                            t(&translations, "home.skip_undone")
-                                        } else {
-                                            t(&translations, "home.skipped")
-                                        };
-                                        let id = id_skip.clone();
-                                        change(message, &mut |list| {
-                                            // Skipping remembers the occurrence to skip (the
-                                            // next ring); undoing clears it.
-                                            if let Some(alarm) = list.iter_mut().find(|a| a.id == id) {
-                                                alarm.skip_until_ms = if skip_active { None } else { next };
-                                            }
-                                        });
+                                        toggle_skip(id_skip.clone(), next, skip_active);
                                         sheet.set(None);
                                     },
                                 }
@@ -429,13 +439,7 @@ pub fn Home() -> Element {
                                 label: t(&translations, "action.delete"),
                                 danger: true,
                                 on_click: move |_| {
-                                    let message = if name.is_empty() {
-                                        t(&translations, "home.deleted_plain")
-                                    } else {
-                                        t(&translations, "home.deleted").replace("{alarm}", &name)
-                                    };
-                                    let id = id_delete.clone();
-                                    change(message, &mut |list| list.retain(|a| a.id != id));
+                                    delete_alarm(id_delete.clone(), &name);
                                     sheet.set(None);
                                 },
                             }
@@ -516,7 +520,8 @@ pub fn Home() -> Element {
 
             div { class: "scroll scroll-fab",
                 if has_alarms {
-                    ul { id: "alarm-list", class: "list alarm-list",
+                    // Dragging only means something in the user's own order.
+                    ul { id: if sort == SortMode::Own { "alarm-list" } else { "alarm-list-sorted" }, class: "list alarm-list",
                         for alarm in list.iter() {
                             {
                                 let open_id = alarm.id.clone();
@@ -530,61 +535,94 @@ pub fn Home() -> Element {
                                 let one_time = schedule::is_one_time(alarm);
                                 let switch_aria = t(&translations, "home.switch_aria");
                                 let name = alarm.label.clone();
+                                let (skip_id, delete_id, delete_name) = (alarm.id.clone(), alarm.id.clone(), alarm.label.clone());
+                                let next = next_fire.get(&alarm.id).copied();
+                                let skip_active = alarm.skip_until_ms.is_some_and(|skip| skip > now_ms);
+                                let can_skip = on && !one_time && (skip_active || next.is_some());
+                                let skip_aria = if skip_active {
+                                    t(&translations, "action.undo_skip")
+                                } else {
+                                    t(&translations, "action.skip_next")
+                                };
+                                let delete_aria = t(&translations, "action.delete");
                                 rsx! {
                                     li { key: "{alarm.id}", class: if on { "alarm-card" } else { "alarm-card off" },
-                                        // 12 hours take more room, and all the times stay in line.
-                                        button {
-                                            class: "alarm-main",
-                                            onclick: move |_| { nav.push(Route::AlarmConfig { id: open_id.clone() }); },
-                                            span { class: if twenty_four { "alarm-time" } else { "alarm-time h12" }, "{time}" }
-                                            span { class: "alarm-info",
-                                                span { class: "alarm-label", "{label}" }
-                                                span { class: "alarm-when",
-                                                    span { "{when}" }
-                                                    if !one_time {
-                                                        span { class: "alarm-days",
-                                                            for day in week_start.day_order() {
-                                                                span {
-                                                                    class: if days[day] && on { "alarm-day on" } else { "alarm-day" },
-                                                                    "{crate::text::day_letter(&translations, day)}"
+                                        div { class: "alarm-face",
+                                            // 12 hours take more room, and all the times stay in line.
+                                            button {
+                                                class: "alarm-main hold-to-drag",
+                                                onclick: move |_| { nav.push(Route::AlarmConfig { id: open_id.clone() }); },
+                                                span { class: if twenty_four { "alarm-time" } else { "alarm-time h12" }, "{time}" }
+                                                span { class: "alarm-info",
+                                                    span { class: "alarm-label", "{label}" }
+                                                    span { class: "alarm-when",
+                                                        span { "{when}" }
+                                                        if !one_time {
+                                                            span { class: "alarm-days",
+                                                                for day in week_start.day_order() {
+                                                                    span {
+                                                                        class: if days[day] && on { "alarm-day on" } else { "alarm-day" },
+                                                                        "{crate::text::day_letter(&translations, day)}"
+                                                                    }
                                                                 }
                                                             }
                                                         }
                                                     }
                                                 }
                                             }
-                                        }
-                                        button {
-                                            class: "alarm-menu",
-                                            "aria-label": "{menu_aria}",
-                                            onclick: move |_| sheet.set(Some(HomeSheet::Menu(menu_id.clone()))),
-                                            Icon { name: IconName::EllipsisVertical, size: 18 }
-                                        }
-                                        button {
-                                            class: "alarm-switch",
-                                            role: "switch",
-                                            "aria-checked": if on { "true" } else { "false" },
-                                            "aria-label": "{switch_aria} {name}",
-                                            onclick: move |_| {
-                                                let now = chrono::Local::now().naive_local();
-                                                let id = toggle_id.clone();
-                                                let mut message = String::new();
-                                                change(String::new(), &mut |list| {
-                                                    if let Some(alarm) = list.iter_mut().find(|a| a.id == id) {
-                                                        alarm.enabled = !alarm.enabled;
-                                                        if alarm.enabled {
-                                                            schedule::refresh_one_time_date(alarm, now);
-                                                            message = rings_in(&translations, alarm);
-                                                        } else {
-                                                            message = t(&translations, "home.switched_off");
+                                            button {
+                                                class: "alarm-menu",
+                                                "aria-label": "{menu_aria}",
+                                                onclick: move |_| sheet.set(Some(HomeSheet::Menu(menu_id.clone()))),
+                                                Icon { name: IconName::EllipsisVertical, size: 18 }
+                                            }
+                                            button {
+                                                class: "alarm-switch",
+                                                role: "switch",
+                                                "aria-checked": if on { "true" } else { "false" },
+                                                "aria-label": "{switch_aria} {name}",
+                                                onclick: move |_| {
+                                                    let now = chrono::Local::now().naive_local();
+                                                    let id = toggle_id.clone();
+                                                    let mut message = String::new();
+                                                    change(String::new(), &mut |list| {
+                                                        if let Some(alarm) = list.iter_mut().find(|a| a.id == id) {
+                                                            alarm.enabled = !alarm.enabled;
+                                                            if alarm.enabled {
+                                                                schedule::refresh_one_time_date(alarm, now);
+                                                                message = rings_in(&translations, alarm);
+                                                            } else {
+                                                                message = t(&translations, "home.switched_off");
+                                                            }
                                                         }
+                                                    });
+                                                    if let Some(toast_now) = toast.write().as_mut() {
+                                                        toast_now.message = message;
                                                     }
-                                                });
-                                                if let Some(toast_now) = toast.write().as_mut() {
-                                                    toast_now.message = message;
+                                                },
+                                                Switch { on }
+                                            }
+                                        }
+                                        // Behind the card: swiping it aside shows these.
+                                        div { class: "alarm-swipe",
+                                            if can_skip {
+                                                button {
+                                                    class: "swipe-action",
+                                                    "aria-label": "{skip_aria}",
+                                                    onclick: move |_| {
+                                                        toggle_skip(skip_id.clone(), next, skip_active);
+                                                        // The card stays: back to showing the alarm.
+                                                        let _ = document::eval("document.querySelectorAll('.alarm-card').forEach(function (c) { c.scrollTo({ left: 0, behavior: 'smooth' }); });");
+                                                    },
+                                                    Icon { name: IconName::Skip, size: 20 }
                                                 }
-                                            },
-                                            Switch { on }
+                                            }
+                                            button {
+                                                class: "swipe-action danger",
+                                                "aria-label": "{delete_aria}",
+                                                onclick: move |_| delete_alarm(delete_id.clone(), &delete_name),
+                                                Icon { name: IconName::Trash, size: 20 }
+                                            }
                                         }
                                     }
                                 }

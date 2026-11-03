@@ -170,9 +170,15 @@ pub fn refresh_reminders() {
     let text = |key: &str| translations.get(key).cloned().unwrap_or_default();
     let twenty_four = crate::text::uses_24_hours(&settings);
     let now_ms = chrono::Utc::now().timestamp_millis();
+    let mut soonest: Option<(i64, AlarmData)> = None;
     for alarm in crate::persistence::load_alarms() {
         let id = InstanceId::new(alarm.id.clone());
         let next = kit.next_fire(&id).ok().flatten();
+        if let Some(at) = next.filter(|_| alarm.enabled && !alarm.hidden) {
+            if soonest.as_ref().map_or(true, |(first, _)| at < *first) {
+                soonest = Some((at, alarm.clone()));
+            }
+        }
         match next
             .filter(|at| before_ms > 0 && alarm.enabled && !alarm.hidden && at - before_ms > now_ms)
         {
@@ -190,6 +196,45 @@ pub fn refresh_reminders() {
             None => kit.clear_reminder(&id),
         }
     }
+    let (title, detail) = widget_text(
+        soonest
+            .as_ref()
+            .map(|(at, alarm)| (*at, alarm.label.as_str())),
+        &text,
+        twenty_four,
+        now_ms,
+    );
+    mobile_sentinel::home_widget::set_text(&title, &detail);
+}
+
+/// What the home-screen widget says about the next ring. It stays up with the app gone,
+/// so nothing that stops being true by itself, like "tomorrow".
+fn widget_text(
+    next: Option<(i64, &str)>,
+    text: &dyn Fn(&str) -> String,
+    twenty_four: bool,
+    now_ms: i64,
+) -> (String, String) {
+    use chrono::{Datelike, TimeZone, Timelike};
+    let Some(at) = next.and_then(|(at, label)| {
+        let at = chrono::Local.timestamp_millis_opt(at).single();
+        at.map(|at| (at, label))
+    }) else {
+        return ("--:--".to_owned(), text("widget.none"));
+    };
+    let (at, label) = at;
+    let title = crate::text::clock(at.hour() as u8, at.minute() as u8, twenty_four);
+    let mut day = text(crate::text::FULL_DAY_KEYS[at.weekday().num_days_from_monday() as usize]);
+    // A weekday alone is only clear for the coming week.
+    if at.timestamp_millis() - now_ms >= 6 * 24 * 60 * 60 * 1000 {
+        day = format!("{day} {}-{}", at.day(), at.month());
+    }
+    let detail = if label.is_empty() {
+        day
+    } else {
+        format!("{day} \u{b7} {label}")
+    };
+    (title, detail)
 }
 
 /// Change the minimum alarm volume for rings from now on. An alarm rings by the
@@ -493,6 +538,7 @@ fn debug_auto_schedule() {
             fade_in_secs: 0,
             ring_limit_secs: None,
             min_volume_percent: None,
+            sound_delay_secs: 0,
         };
         match kit.create_with_id(id.clone(), spec) {
             Ok(()) => log::info!(
@@ -762,6 +808,11 @@ pub fn alarm_data_to_spec(alarm: &AlarmData) -> AlarmSpec {
         fade_in_secs: alarm.fade_in_secs,
         ring_limit_secs: alarm.ring_limit_secs,
         min_volume_percent: alarm.volume_percent,
+        sound_delay_secs: if alarm.sound_mode == 0 {
+            alarm.sound_delay_secs
+        } else {
+            0
+        },
     }
 }
 
@@ -771,6 +822,34 @@ pub fn alarm_data_to_spec(alarm: &AlarmData) -> AlarmSpec {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_widget_says_when_the_next_alarm_rings_and_nothing_that_goes_stale() {
+        use chrono::TimeZone;
+        let text = |key: &str| key.to_owned();
+        let at = chrono::Local
+            .with_ymd_and_hms(2026, 11, 3, 7, 5, 0)
+            .unwrap();
+        let at_ms = at.timestamp_millis();
+        let soon = at_ms - 3_600_000;
+        assert_eq!(
+            widget_text(Some((at_ms, "Work")), &text, true, soon),
+            ("07:05".to_owned(), "day.tuesday \u{b7} Work".to_owned())
+        );
+        assert_eq!(
+            widget_text(Some((at_ms, "")), &text, true, soon).1,
+            "day.tuesday"
+        );
+        let far = at_ms - 7 * 24 * 3_600_000;
+        assert_eq!(
+            widget_text(Some((at_ms, "")), &text, true, far).1,
+            "day.tuesday 3-11"
+        );
+        assert_eq!(
+            widget_text(None, &text, true, soon),
+            ("--:--".to_owned(), "widget.none".to_owned())
+        );
+    }
 
     fn weekday_alarm() -> AlarmData {
         AlarmData {
@@ -795,6 +874,8 @@ mod tests {
             volume_percent: None,
             random_order: false,
             wake_check_minutes: 0,
+            max_brightness: false,
+            sound_delay_secs: 0,
             pause_until_ms: None,
             delete_after_ring: false,
             hidden: false,

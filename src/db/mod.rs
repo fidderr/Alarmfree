@@ -543,6 +543,8 @@ mod tests {
             volume_percent: None,
             random_order: false,
             wake_check_minutes: 0,
+            max_brightness: false,
+            sound_delay_secs: 0,
             pause_until_ms: None,
             delete_after_ring: false,
             hidden: false,

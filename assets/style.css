@@ -485,7 +485,16 @@ button:disabled { opacity: 0.5; }
   color: var(--text2);
 }
 
-.sheet-done { margin-top: 14px; }
+/* Always in reach on a long sheet, above the navigation bar. What scrolls behind it stays
+   out of sight by the sheet's colour around and below it. */
+.sheet-done {
+  position: sticky;
+  bottom: calc(8px + var(--safe-bottom));
+  z-index: 1;
+  flex: none;
+  margin-top: 14px;
+  box-shadow: 0 0 0 8px var(--surface), 0 calc(8px + var(--safe-bottom)) 0 8px var(--surface);
+}
 
 .sheet-item {
   flex: none;
@@ -641,9 +650,11 @@ button:disabled { opacity: 0.5; }
   font-weight: 500;
 }
 
-.slider { flex: 1; min-width: 0; }
+.slider { flex: 1; min-width: 0; accent-color: var(--accent); }
 
 .slider-value { min-width: 40px; text-align: right; }
+
+.radio-row .field { flex: 1; width: auto; min-width: 0; }
 
 .radio-row { flex: none; display: flex; align-items: center; }
 
@@ -814,11 +825,60 @@ button:disabled { opacity: 0.5; }
 
 .alarm-list { margin-top: 4px; }
 
+/* The card scrolls sideways onto the actions behind it: no script, and the browser
+   keeps it apart from scrolling the list. */
 .alarm-card {
   display: flex;
+  overflow-x: auto;
+  overscroll-behavior-x: none;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+}
+
+.alarm-card::-webkit-scrollbar { display: none; }
+
+.alarm-face {
+  flex: none;
+  display: flex;
   align-items: center;
+  width: 100%;
   min-height: 59px;
   padding-right: 4px;
+  scroll-snap-align: start;
+}
+
+.alarm-swipe {
+  flex: none;
+  display: flex;
+  scroll-snap-align: end;
+}
+
+.swipe-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  background: var(--surface2);
+  color: var(--text);
+}
+
+.swipe-action.danger {
+  background: var(--danger);
+  color: var(--bg);
+}
+
+/* Set by reorder.js while a row is dragged. */
+.reorder-active.list { overflow: visible; }
+
+.reorder-active .alarm-card,
+.reorder-active .challenge-row { transition: transform 0.15s ease; }
+
+.reorder-dragging {
+  position: relative;
+  z-index: 20;
+  background: var(--surface2);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  transition: none !important;
 }
 
 .alarm-main {
@@ -893,6 +953,84 @@ button:disabled { opacity: 0.5; }
   width: 52px;
   height: 44px;
 }
+
+/* ===== Accent colours =====
+   Blue is what the themes have already; colorblind keeps its own. */
+.theme-dark.accent-teal,
+.theme-black.accent-teal {
+  --accent: #5fd4c4;
+  --on-accent: #06231f;
+  --accent-soft: #15322e;
+  --accent-glow: rgba(95, 212, 196, 0.45);
+  --bar-soft: #2f6f68;
+}
+
+.theme-dark.accent-purple,
+.theme-black.accent-purple {
+  --accent: #b9a0ff;
+  --on-accent: #1b1136;
+  --accent-soft: #2b2347;
+  --accent-glow: rgba(185, 160, 255, 0.45);
+  --bar-soft: #5a4a8c;
+}
+
+.theme-dark.accent-pink,
+.theme-black.accent-pink {
+  --accent: #ff94c8;
+  --on-accent: #33101f;
+  --accent-soft: #3d1f30;
+  --accent-glow: rgba(255, 148, 200, 0.45);
+  --bar-soft: #8c4a6b;
+}
+
+.theme-dark.accent-amber,
+.theme-black.accent-amber {
+  --accent: #ffc45c;
+  --on-accent: #2b1d00;
+  --accent-soft: #382b12;
+  --accent-glow: rgba(255, 196, 92, 0.45);
+  --bar-soft: #8c6a2e;
+}
+
+.theme-light.accent-teal {
+  --accent: #00736a;
+  --accent-soft: #d3efeb;
+  --accent-glow: rgba(0, 115, 106, 0.35);
+  --bar-soft: #8fcfc8;
+}
+
+.theme-light.accent-purple {
+  --accent: #6a3fd1;
+  --accent-soft: #e8e0fa;
+  --accent-glow: rgba(106, 63, 209, 0.35);
+  --bar-soft: #c0adef;
+}
+
+.theme-light.accent-pink {
+  --accent: #b8246f;
+  --accent-soft: #fbdfed;
+  --accent-glow: rgba(184, 36, 111, 0.35);
+  --bar-soft: #eeaacb;
+}
+
+.theme-light.accent-amber {
+  --accent: #8a5a00;
+  --accent-soft: #f8e8c8;
+  --accent-glow: rgba(138, 90, 0, 0.35);
+  --bar-soft: #e0c489;
+}
+
+.swatches { display: flex; gap: 12px; padding: 8px 4px; }
+
+.swatch { width: 40px; height: 40px; border-radius: 50%; }
+
+.swatch.selected { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--text); }
+
+.swatch.accent-blue { background: #4f8ff0; }
+.swatch.accent-teal { background: #2fb3a3; }
+.swatch.accent-purple { background: #8f6ff0; }
+.swatch.accent-pink { background: #e668a6; }
+.swatch.accent-amber { background: #e0a030; }
 
 /* ===== Editor ===== */
 .editor-time { padding: 8px 16px 0; }

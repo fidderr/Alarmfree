@@ -1,10 +1,11 @@
 use crate::alarm_ops;
 use crate::app::{t, AlarmData, Route, Translations};
 use crate::components::{
-    BottomNav, Chips, Icon, IconName, Row, Sheet, SheetDone, SheetItem, SwitchRow, ToastMessage,
+    BottomNav, Chips, GroupTitle, Icon, IconName, Row, Sheet, SheetDone, SheetItem, SwitchRow,
+    ToastMessage,
 };
 use crate::i18n;
-use crate::models::{AppSettings, Locale, ThemeMode, TimeFormat, WeekStart};
+use crate::models::{Accent, AppSettings, Locale, ThemeMode, TimeFormat, WeekStart};
 use dioxus::prelude::*;
 
 /// What "Before an alarm" offers, in minutes.
@@ -46,7 +47,10 @@ pub fn Settings() -> Element {
     let mut update = move |change: &mut dyn FnMut(&mut AppSettings)| {
         change(&mut settings.write());
         crate::persistence::save_settings(&settings.peek());
+        // The widget speaks the language and writes the time as set here.
+        crate::platform::refresh_reminders();
     };
+    let can_add_widget = use_hook(mobile_sentinel::home_widget::can_add);
 
     let now = settings.read().clone();
     let prefs = now.prefs.clone();
@@ -118,6 +122,19 @@ pub fn Settings() -> Element {
                             update(&mut |s| s.theme = mode);
                             sheet.set(None);
                         },
+                    }
+                }
+                if now.theme != ThemeMode::Colorblind {
+                    GroupTitle { text: t(&translations, "settings.accent") }
+                    div { class: "swatches",
+                        for accent in Accent::ALL {
+                            button {
+                                class: if prefs.accent == accent { "swatch selected {accent.css_class()}" } else { "swatch {accent.css_class()}" },
+                                "aria-label": t(&translations, accent.name_key()),
+                                "aria-pressed": if prefs.accent == accent { "true" } else { "false" },
+                                onclick: move |_| update(&mut |s| s.prefs.accent = accent),
+                            }
+                        }
                     }
                 }
             }
@@ -355,6 +372,15 @@ pub fn Settings() -> Element {
                     Row { title: t(&translations, "settings.language"), value: language_name, on_click: move |_| sheet.set(Some(SettingsSheet::Language)) }
                     Row { title: t(&translations, "settings.time_format"), value: format_name(prefs.time_format, &translations), on_click: move |_| sheet.set(Some(SettingsSheet::TimeFormat)) }
                     Row { title: t(&translations, "settings.week_start"), value: week_name(prefs.week_start, &translations), on_click: move |_| sheet.set(Some(SettingsSheet::WeekStart)) }
+                    if can_add_widget {
+                        Row {
+                            title: t(&translations, "settings.add_widget"),
+                            value: String::new(),
+                            on_click: move |_| {
+                                mobile_sentinel::home_widget::add();
+                            },
+                        }
+                    }
                 }
 
                 h2 { class: "list-title", {t(&translations, "settings.alarm_defaults")} }

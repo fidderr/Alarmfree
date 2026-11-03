@@ -140,12 +140,29 @@ pub fn AlarmFiring(id: String) -> Element {
         }
     });
 
+    // Full brightness if this alarm asks for it, as long as this screen is up.
+    let bright = alarm.as_ref().is_some_and(|a| a.max_brightness);
+    use_hook(move || {
+        if bright {
+            mobile_sentinel::display::set_max_brightness();
+        }
+    });
+    use_drop(move || {
+        if bright {
+            mobile_sentinel::display::restore_brightness();
+        }
+    });
+
     // A live clock, so a glance tells how long this has been going.
     let mut now = use_signal(chrono::Local::now);
     use_future(move || async move {
         loop {
             crate::timer::sleep_ms(5000).await;
             now.set(chrono::Local::now());
+            // Again: the window may only be on top by now, or be a new one.
+            if bright {
+                mobile_sentinel::display::set_max_brightness();
+            }
         }
     });
 

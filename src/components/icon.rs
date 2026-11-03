@@ -18,6 +18,8 @@ pub enum IconName {
     Sort,
     Warning,
     Play,
+    Pencil,
+    Skip,
 }
 
 /// One outline icon set, as inline SVG. No external fonts or CDN needed.
@@ -30,6 +32,8 @@ pub fn Icon(name: IconName, #[props(default = 16)] size: u32) -> Element {
         IconName::Trash => "M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13",
         IconName::Check => "M5 12.5 10 17.5 19 7",
         IconName::Xmark => "M6 6l12 12M18 6 6 18",
+        IconName::Pencil => "M4 20h4L19 9l-4-4L4 16v4ZM13.5 6.5l4 4",
+        IconName::Skip => "M5 5l10 7-10 7V5ZM19 5v14",
         IconName::Plus => "M12 5v14M5 12h14",
         IconName::ChevronRight => "m9 5 7 7-7 7",
         IconName::ArrowLeft => "m15 5-7 7 7 7",

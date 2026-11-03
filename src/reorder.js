@@ -2,7 +2,8 @@
 //
 // Arguments: the container's id, the CSS class of its rows, the CSS class of
 // a drag handle inside each row (or null: then a long press on the row starts
-// the drag), and the long-press time in ms. When a row is dropped somewhere
+// the drag; on a button only if it has the class hold-to-drag, or its press
+// would count for nothing), and the long-press time in ms. When a row is dropped somewhere
 // else the page sends `[from, to]` (row positions) back to Rust through
 // `dioxus.send`; Rust reorders its list and re-renders. The helper only moves
 // rows visually while dragging and puts everything back on drop.
@@ -127,7 +128,7 @@ function (containerId, rowClass, handleClass, longPressMs) {
       start(c, row, e.clientY, e.pointerId);
       return;
     }
-    if (e.target.closest('button, input, label, a, select, textarea')) return;
+    if (e.target.closest('button:not(.hold-to-drag), input, label, a, select, textarea')) return;
     pending = { x: e.clientX, y: e.clientY, c: c, row: row, id: e.pointerId };
     clearTimeout(timer);
     timer = setTimeout(function () {

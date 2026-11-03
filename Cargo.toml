@@ -17,7 +17,7 @@ name = "alarmfree"
 path = "src/main.rs"
 
 [dependencies]
-mobile-sentinel = { version = "0.2.1", features = ["alarm-kit", "scanner", "haptics", "audio", "overlay", "permissions", "sensors", "foregrounding", "media_picker", "display", "share"]}
+mobile-sentinel = { version = "0.2.1", features = ["alarm-kit", "scanner", "haptics", "home_widget", "audio", "overlay", "permissions", "sensors", "foregrounding", "media_picker", "display", "share"]}
 dioxus = { version = "0.7", features = ["router"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

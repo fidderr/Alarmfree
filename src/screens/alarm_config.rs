@@ -10,7 +10,7 @@ use crate::back::use_back_handler;
 use crate::components::time_picker::TimePicker;
 use crate::components::{
     Chips, GroupTitle, Icon, IconName, Row, ScreenHeader, Sheet, SheetDone, SheetItem, Stepper,
-    ToastMessage,
+    SwitchRow, ToastMessage,
 };
 use crate::models::setup::{difficulty_name, preset, CHALLENGE_TYPES};
 use crate::models::{AppSettings, ChallengeSetup, Difficulty};
@@ -35,6 +35,7 @@ const DIFFICULTIES: [Difficulty; 4] = [
 ];
 
 const FADE_SECONDS: [u16; 6] = [0, 15, 30, 60, 120, 300];
+const SOUND_DELAY_SECONDS: [u16; 4] = [0, 15, 30, 60];
 const LIMIT_MINUTES: [u32; 4] = [30, 60, 90, 120];
 const CHECK_MINUTES: [u8; 4] = [0, 3, 5, 10];
 
@@ -219,6 +220,8 @@ fn Editor(id: String) -> Element {
     let mut sheet: Signal<Option<EditorSheet>> = use_signal(|| None);
     let mut error = use_signal(String::new);
     let mut typed_time = use_signal(String::new);
+    // The user's own sound being renamed, and its name so far.
+    let mut renaming: Signal<Option<(String, String)>> = use_signal(|| None);
     // Challenges being tried; shown instead of the editor, which keeps its state.
     let mut trying: Signal<Option<Vec<ChallengeSetup>>> = use_signal(|| None);
 
@@ -405,7 +408,7 @@ fn Editor(id: String) -> Element {
     } else {
         format!(
             "{}, {} {}",
-            crate::custom_sounds::display_name(&current.sound),
+            crate::custom_sounds::display_name(&current.sound, &settings.read().prefs.sound_names),
             t(&translations, "config.fade_in_lower"),
             seconds_label(&translations, current.fade_in_secs),
         )
@@ -413,10 +416,20 @@ fn Editor(id: String) -> Element {
     let vibration_summary = if current.sound_mode == 1 {
         t(&translations, "vibration.off")
     } else {
-        t(
+        let pattern = t(
             &translations,
             VIBRATION_KEYS[usize::from(current.vibration).min(VIBRATION_KEYS.len() - 1)],
-        )
+        );
+        if current.sound_mode == 0 && current.sound_delay_secs > 0 {
+            t(&translations, "config.sound_delay_summary")
+                .replace("{pattern}", &pattern)
+                .replace(
+                    "{time}",
+                    &seconds_label(&translations, current.sound_delay_secs),
+                )
+        } else {
+            pattern
+        }
     };
     let snooze_summary = if current.snooze_count == 0 {
         t(&translations, "config.no_snooze")
@@ -580,6 +593,7 @@ fn Editor(id: String) -> Element {
         Some(EditorSheet::Sound) => {
             let defaults = crate::custom_sounds::list_default_sounds();
             let custom = crate::custom_sounds::list_custom_sounds();
+            let names = settings.read().prefs.sound_names.clone();
             let general_volume = settings.read().min_volume_percent;
             let volume = current.volume_percent.unwrap_or(general_volume);
             let selected_sound = current.sound.clone();
@@ -604,57 +618,114 @@ fn Editor(id: String) -> Element {
                     for sound in defaults.into_iter().chain(custom.clone()) {
                         {
                             let is_selected = !vibrate_only && sound == selected_sound;
-                            let name = crate::custom_sounds::display_name(&sound);
+                            let name = crate::custom_sounds::display_name(&sound, &names);
                             let to_pick = sound.clone();
                             let to_delete = sound.clone();
+                            let to_rename = sound.clone();
                             let is_custom = crate::custom_sounds::is_custom_sound(&sound);
                             let delete_aria = t(&translations, "sound.delete");
+                            let rename_aria = t(&translations, "sound.rename");
+                            let done_aria = done_text.clone();
+                            let new_name = renaming
+                                .read()
+                                .as_ref()
+                                .filter(|(file, _)| *file == sound)
+                                .map(|(_, text)| text.clone());
+                            let shown_name = name.clone();
                             rsx! {
-                                div { class: "radio-row",
-                                    button {
-                                        class: if is_selected { "radio selected" } else { "radio" },
-                                        onclick: move |_| {
-                                            {
-                                                let mut alarm = draft.write();
-                                                alarm.sound = to_pick.clone();
-                                                if alarm.sound_mode == 2 {
-                                                    alarm.sound_mode = 0;
+                                if let Some(new_name) = new_name {
+                                    div { class: "radio-row",
+                                        input {
+                                            class: "field",
+                                            r#type: "text",
+                                            maxlength: "60",
+                                            "aria-label": "{rename_aria}",
+                                            value: "{new_name}",
+                                            oninput: move |evt| {
+                                                if let Some(editing) = renaming.write().as_mut() {
+                                                    editing.1 = evt.value();
                                                 }
-                                            }
-                                            play_for(to_pick.clone(), SOUND_PREVIEW_MS);
-                                        },
-                                        span { class: "radio-mark" }
-                                        span { class: "radio-text", "{name}" }
-                                    }
-                                    if is_custom {
+                                            },
+                                        }
                                         button {
                                             class: "icon-btn",
-                                            "aria-label": "{delete_aria}",
+                                            "aria-label": "{done_aria}",
                                             onclick: move |_| {
-                                                stop_sound();
-                                                // An alarm that uses it falls back to the first sound
-                                                // when it is saved or edited, and always rings: the
-                                                // ring has its own fallbacks.
-                                                let replacement = alarm_ops::factory_alarm().sound;
+                                                let Some((file, name)) = renaming.write().take() else {
+                                                    return;
+                                                };
+                                                {
+                                                    let mut now = settings.write();
+                                                    let names = &mut now.prefs.sound_names;
+                                                    match name.trim() {
+                                                        "" => names.remove(&file),
+                                                        name => names.insert(file, name.to_owned()),
+                                                    };
+                                                }
+                                                crate::persistence::save_settings(&settings.peek());
+                                            },
+                                            Icon { name: IconName::Check, size: 18 }
+                                        }
+                                    }
+                                } else {
+                                    div { class: "radio-row",
+                                        button {
+                                            class: if is_selected { "radio selected" } else { "radio" },
+                                            onclick: move |_| {
                                                 {
                                                     let mut alarm = draft.write();
-                                                    if alarm.sound == to_delete {
-                                                        alarm.sound = replacement.clone();
+                                                    alarm.sound = to_pick.clone();
+                                                    if alarm.sound_mode == 2 {
+                                                        alarm.sound_mode = 0;
                                                     }
                                                 }
-                                                let mut list = alarms.write();
-                                                let mut changed = false;
-                                                for alarm in list.iter_mut().filter(|a| a.sound == to_delete) {
-                                                    alarm.sound = replacement.clone();
-                                                    changed = true;
-                                                }
-                                                drop(list);
-                                                if changed {
-                                                    crate::persistence::save_alarms(&alarms.peek());
-                                                }
-                                                crate::custom_sounds::delete_sound(&to_delete);
+                                                play_for(to_pick.clone(), SOUND_PREVIEW_MS);
                                             },
-                                            Icon { name: IconName::Xmark, size: 16 }
+                                            span { class: "radio-mark" }
+                                            span { class: "radio-text", "{name}" }
+                                        }
+                                        if is_custom {
+                                            button {
+                                                class: "icon-btn",
+                                                "aria-label": "{rename_aria}",
+                                                onclick: move |_| {
+                                                    stop_sound();
+                                                    renaming.set(Some((to_rename.clone(), shown_name.clone())));
+                                                },
+                                                Icon { name: IconName::Pencil, size: 16 }
+                                            }
+                                            button {
+                                                class: "icon-btn",
+                                                "aria-label": "{delete_aria}",
+                                                onclick: move |_| {
+                                                    stop_sound();
+                                                    // An alarm that uses it falls back to the first sound
+                                                    // when it is saved or edited, and always rings: the
+                                                    // ring has its own fallbacks.
+                                                    let replacement = alarm_ops::factory_alarm().sound;
+                                                    {
+                                                        let mut alarm = draft.write();
+                                                        if alarm.sound == to_delete {
+                                                            alarm.sound = replacement.clone();
+                                                        }
+                                                    }
+                                                    let mut list = alarms.write();
+                                                    let mut changed = false;
+                                                    for alarm in list.iter_mut().filter(|a| a.sound == to_delete) {
+                                                        alarm.sound = replacement.clone();
+                                                        changed = true;
+                                                    }
+                                                    drop(list);
+                                                    if changed {
+                                                        crate::persistence::save_alarms(&alarms.peek());
+                                                    }
+                                                    if settings.write().prefs.sound_names.remove(&to_delete).is_some() {
+                                                        crate::persistence::save_settings(&settings.peek());
+                                                    }
+                                                    crate::custom_sounds::delete_sound(&to_delete);
+                                                },
+                                                Icon { name: IconName::Xmark, size: 16 }
+                                            }
                                         }
                                     }
                                 }
@@ -761,6 +832,24 @@ fn Editor(id: String) -> Element {
                                 crate::feedback::pattern(crate::platform::VIBRATION_PATTERNS[usize::from(pattern)]);
                             }
                         },
+                    }
+                    if current.sound_mode == 0 {
+                        GroupTitle { text: t(&translations, "config.sound_delay") }
+                        Chips::<u16> {
+                            grow: true,
+                            options: SOUND_DELAY_SECONDS
+                                .iter()
+                                .map(|secs| {
+                                    let text = match secs {
+                                        0 => t(&translations, "config.sound_together"),
+                                        secs => seconds_label(&translations, *secs),
+                                    };
+                                    (*secs, text)
+                                })
+                                .collect::<Vec<_>>(),
+                            selected: Some(current.sound_delay_secs),
+                            on_pick: move |secs: u16| draft.write().sound_delay_secs = secs,
+                        }
                     }
                     SheetDone { label: done_text.clone(), on_click: move |_| sheet.set(None) }
                 }
@@ -1341,6 +1430,11 @@ fn Editor(id: String) -> Element {
                     Row { title: t(&translations, "config.challenges"), value: challenge_summary_text, on_click: move |_| sheet.set(Some(EditorSheet::Challenges)) }
                     Row { title: t(&translations, "config.ring_limit"), value: limit_summary, on_click: move |_| sheet.set(Some(EditorSheet::Limit)) }
                     Row { title: t(&translations, "config.wake_check"), value: check_summary, on_click: move |_| sheet.set(Some(EditorSheet::WakeCheck)) }
+                    SwitchRow {
+                        title: t(&translations, "config.max_brightness"),
+                        on: current.max_brightness,
+                        on_toggle: move |on: bool| draft.write().max_brightness = on,
+                    }
                 }
             }
 
