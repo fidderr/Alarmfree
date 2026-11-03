@@ -280,8 +280,9 @@ on_home_or_setup() { is_there '.home-header, .setup-header'; }
 
 # The app's settings: theme, language, and more preferences as JSON fields. Past the
 # first-run screen and in one language, unless a scenario wants otherwise.
+# MIN_VOLUME: not to have a phone ring out loud for an hour.
 use_settings() {
-    printf "INSERT OR REPLACE INTO settings (id, theme, locale, min_volume_percent, prefs) VALUES (1, '%s', '%s', 50, '{%s}');\n" "$1" "$2" "$3" | sql
+    printf "INSERT OR REPLACE INTO settings (id, theme, locale, min_volume_percent, prefs) VALUES (1, '%s', '%s', ${MIN_VOLUME:-50}, '{%s}');\n" "$1" "$2" "$3" | sql
 }
 
 # In one go: each of these starts a program on the device.
@@ -300,15 +301,21 @@ remove_widgets() {
     done
 }
 
+# A phone can refuse these to the shell. Then what comes next is not about what was asked for, and
+# that has to show.
 deny_overlay() {
     PERMISSIONS_TOUCHED=1
-    dev appops set "$PKG" SYSTEM_ALERT_WINDOW deny
+    dev appops set "$PKG" SYSTEM_ALERT_WINDOW deny > /dev/null && return 0
+    echo "NOTE  $CURRENT  this device does not let the overlay be denied, it stays allowed" | tee -a "$RESULTS"
+    return 1
 }
 deny_notifications() {
     PERMISSIONS_TOUCHED=1
-    dev pm revoke "$PKG" android.permission.POST_NOTIFICATIONS
+    local denied=""
+    dev pm revoke "$PKG" android.permission.POST_NOTIFICATIONS > /dev/null && denied=1
     # Android 12 has no such permission, and this is what its switch comes down to.
-    dev appops set "$PKG" POST_NOTIFICATION ignore
+    dev appops set "$PKG" POST_NOTIFICATION ignore > /dev/null && denied=1
+    [ -n "$denied" ]
 }
 # Doze, as deep as it goes. Android refuses with an alarm less than an hour away, and only what
 # the command prints says so.
@@ -579,6 +586,9 @@ scenario() {
 took() { echo "$((SECONDS - SCENARIO_START))s"; }
 pass() { echo "PASS  $CURRENT  [$(took)] $1" | tee -a "$RESULTS"; }
 # The log of what went wrong, right when it did. It takes a moment, so only then.
+skip() {
+    echo "SKIP  $CURRENT  [$(took)] $1" | tee -a "$RESULTS"
+}
 fail() {
     echo "FAIL  $CURRENT  [$(took)] $1" | tee -a "$RESULTS"
     write_log

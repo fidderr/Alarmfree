@@ -171,7 +171,10 @@ s10() {
     fresh
     next_minute
     seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
-    deny_notifications
+    if ! deny_notifications; then
+        skip "this device does not let the shell deny notifications"
+        return
+    fi
     arm a
     dead
     screen_off
@@ -1525,7 +1528,10 @@ s44() {
 s45() {
     scenario s45_hide_a_warning
     fresh
-    deny_overlay
+    if ! deny_overlay; then
+        skip "needs a warning to hide"
+        return
+    fi
     start_app
     on_screen .banner-text 10
     local problems="" first
@@ -2216,6 +2222,6 @@ dev am force-stop "$PKG"
 echo
 echo "===== SUMMARY ($SERIAL) ====="
 cat "$RESULTS"
-echo "passed: $(grep -c '^PASS' "$RESULTS")  failed: $(grep -c '^FAIL' "$RESULTS")  in $(((SECONDS - RUN_START) / 60)) min $(((SECONDS - RUN_START) % 60)) s"
+echo "passed: $(grep -c '^PASS' "$RESULTS")  failed: $(grep -c '^FAIL' "$RESULTS")  skipped: $(grep -c '^SKIP' "$RESULTS")  in $(((SECONDS - RUN_START) / 60)) min $(((SECONDS - RUN_START) % 60)) s"
 slow=$(sed -nE 's/^[A-Z]+ +([^ ]+) +\[([0-9]+)s\].*/\2 \1/p' "$RESULTS" | awk '$1 > 60 { printf "%s (%ss) ", $2, $1 }')
 [ -z "$slow" ] || echo "over a minute: $slow"
