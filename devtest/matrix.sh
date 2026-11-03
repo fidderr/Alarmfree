@@ -2174,6 +2174,47 @@ s54() {
     fi
 }
 
+# A scan challenge during a real ring. The camera stays up for as long as it takes, past when a
+# frozen screen would be restarted, with the lock on. What it scans turns the alarm off, the camera
+# being one more thing that used to leave the screen standing still.
+s55() {
+    scenario s55_scan_during_a_ring
+    fresh
+    shorten ui_timeout_ms 4000
+    next_minute
+    seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null air 0 0 3 1 '[["challenge.scan","{}"]]')"
+    arm a
+    await_ring a 30 || { fail "never started"; return; }
+    on_screen .ring-off 10
+    click .ring-off 0 0.3
+    if ! on_screen button.scan-button 10; then
+        fail "no scan button: $(read_text .ring-screen)"
+        return
+    fi
+    local p0 problems=""
+    p0=$(main_pid)
+    scanner_on_top() { dev "dumpsys window | grep -m1 mCurrentFocus | grep -q SentinelScannerActivity" > /dev/null; }
+    click .scan-button 0 0.3
+    if ! wait_for 8 scanner_on_top; then
+        fail "the camera does not open: $(dev dumpsys window | grep -m1 mCurrentFocus)"
+        return
+    fi
+    sleep 8
+    scanner_on_top || problems="$problems; pushed off the screen: $(dev dumpsys window | grep -m1 mCurrentFocus)"
+    [ "$(main_pid)" = "$p0" ] || problems="$problems; the app was restarted under the camera"
+    sound_on || problems="$problems; silent under the camera"
+    # What the scanner does with a code, without a code to show an emulator's camera.
+    as_app "echo a-code > /data/user/0/$PKG/files/sentinel_scan_result.txt"
+    ended() { state_is a scheduled && sound_off; }
+    wait_for 8 ended || problems="$problems; the code did not turn it off: state=$(state a) sound=$(sound_on && echo on || echo off)"
+    wait_for 5 scanner_on_top && press_back
+    if [ -z "$problems" ]; then
+        pass "the camera stays up during the ring, and a code turns it off"
+    else
+        fail "${problems#; }"
+    fi
+}
+
 # What depends on the size. Another screen on this Android is all the app can tell of a tablet
 # or an open foldable, and it is what a new AVD would cost a minute to start for.
 with_screen() { # size density scenarios...
@@ -2194,8 +2235,8 @@ big_screens() {
     with_screen 2208x1840 420 s34 s49
 }
 
-ALL="s01 s03 s04 s05 s06 s07 s10 s11 s13 s14 s15 s16 s16b s17 s19 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s34 s36 s37 s38 s39 s40 s41 s42 s43 s44 s45 s46 s47 s48 s49 s50 s51 s52 s53 s54 big_screens"
-ON_A_PHONE="s01 s03 s04 s05 s06 s07 s10 s15 s16 s16b s17 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s36 s37 s38 s39 s41 s42 s43 s45 s46 s47 s49 s50 s51 s52 s53"
+ALL="s01 s03 s04 s05 s06 s07 s10 s11 s13 s14 s15 s16 s16b s17 s19 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s34 s36 s37 s38 s39 s40 s41 s42 s43 s44 s45 s46 s47 s48 s49 s50 s51 s52 s53 s54 s55 big_screens"
+ON_A_PHONE="s01 s03 s04 s05 s06 s07 s10 s15 s16 s16b s17 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s36 s37 s38 s39 s41 s42 s43 s45 s46 s47 s49 s50 s51 s52 s53 s55"
 
 : > "$RESULTS"
 RUN_START=$SECONDS

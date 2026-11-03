@@ -93,7 +93,7 @@ sql() {
         as_app "test -x $tool || { cp $PHONE_SQLITE $tool; chmod 700 $tool; }" > /dev/null
     fi
     query=$(cat)
-    as_app "$tool $DATA/files/alarmfree.db '${query//\'/\'\\\'\'}'"
+    as_app "print -r -- '${query//\'/\'\\\'\'}' | $tool $DATA/files/alarmfree.db"
 }
 
 # Run a check again until it holds, for at most `$1` seconds.
