@@ -48,7 +48,9 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
   camera, with everything behind it waiting too, also what ends an alarm after a challenge.
 - The keyboard no longer covers what you type in: on Android 15 and newer the window does not
   shrink for it.
-- The button at the bottom of a panel no longer covers its last line, such as Discard.
+- The button at the bottom of a panel no longer covers its last line, such as Discard, and a
+  message no longer covers a panel's buttons: it moves to the top while one is open.
+- Scanning again right after cancelling a scan no longer loses what was scanned.
 - On a narrow phone the day letters of a card no longer run under its menu.
 - A snoozed alarm rang with the process dead instead of being reported as stopped by a restart.
 - A one-time alarm rang with the process dead instead of being switched off unheard.

@@ -216,6 +216,8 @@ a `Locale` variant, and an arm in `load_translations`.
 - Classes set from JavaScript do not show up in Rust: see `reorder.js` before removing CSS.
 - The page applies changes at once, not in an animation frame (`WINDOW_WATCH` in `app.rs`): the
   UI's tasks wait for the last change, and a WebView that is not drawing has no frames.
+- `App` keeps the event loop awake (`keep_event_loop_awake` in the SDK): tao on Android can lose a
+  wake when another screen closes, and everything in the UI waits for one.
 
 ## Releasing
 

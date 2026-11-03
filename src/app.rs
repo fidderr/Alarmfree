@@ -245,6 +245,7 @@ pub fn App() -> Element {
     // Initialize platform: logger, FiringSink, AlarmKit, alarm rearm. First,
     // so the alarm list below already reflects one-time alarms it switched off.
     use_hook(crate::platform::init_platform);
+    use_hook(mobile_sentinel::keep_event_loop_awake);
 
     // Global state signals provided via context.
     let settings: Signal<AppSettings> = use_signal(crate::persistence::load_settings);
@@ -276,6 +277,8 @@ pub fn App() -> Element {
     // Toast notification state
     let mut toast_signal: Signal<Option<crate::components::ToastMessage>> = use_signal(|| None);
     use_context_provider(|| toast_signal);
+    let open_sheets = use_signal(|| 0u32);
+    use_context_provider(|| crate::components::ui::OpenSheets(open_sheets));
 
     // Anything the user must know about what happened while the app was away:
     // a database that had to be reset (or cannot persist) instead of a silently

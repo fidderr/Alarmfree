@@ -1,5 +1,6 @@
 use dioxus::prelude::*;
 
+use super::ui::OpenSheets;
 use crate::app::{t, AlarmData, Translations};
 
 /// Toast notification level.
@@ -45,8 +46,8 @@ impl ToastMessage {
     }
 }
 
-/// A message at the bottom of the screen, gone after a while. It stays longer the more
-/// it matters and can undo what it reports.
+/// A message at the bottom of the screen, or at the top while a sheet has the bottom, gone
+/// after a while. It stays longer the more it matters and can undo what it reports.
 #[component]
 pub fn Toast(
     msg: ToastMessage,
@@ -54,6 +55,8 @@ pub fn Toast(
     on_undo: EventHandler<Vec<AlarmData>>,
 ) -> Element {
     let translations = use_context::<Translations>();
+    let OpenSheets(open_sheets) = use_context();
+    let place_class = if open_sheets() > 0 { "toast-top" } else { "" };
     let level_class = match msg.level {
         ToastLevel::Info => "toast-info",
         ToastLevel::Error => "toast-error",
@@ -73,7 +76,7 @@ pub fn Toast(
     let undo_text = t(&translations, "action.undo");
     rsx! {
         div {
-            class: "toast {level_class}",
+            class: "toast {level_class} {place_class}",
             role: "status",
             onclick: move |_| on_dismiss.call(()),
             p { class: "toast-text", "{msg.message}" }

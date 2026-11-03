@@ -15,6 +15,9 @@ pub fn Sheet(
     children: Element,
 ) -> Element {
     use_back_handler(on_close);
+    let OpenSheets(mut open) = use_context();
+    use_effect(move || open.with_mut(|count| *count += 1));
+    use_drop(move || open.with_mut(|count| *count = count.saturating_sub(1)));
     rsx! {
         button {
             class: "sheet-scrim",
@@ -31,6 +34,10 @@ pub fn Sheet(
         }
     }
 }
+
+/// How many sheets are open. A message moves out of the way of their buttons.
+#[derive(Clone, Copy)]
+pub struct OpenSheets(pub Signal<u32>);
 
 /// The main button at the bottom of a sheet.
 #[component]
