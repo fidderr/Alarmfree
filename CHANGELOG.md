@@ -5,14 +5,61 @@ All notable changes to **AlarmFree** are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project aims to adhere to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-Pre-1.0, the SQLite schema ships as a single clean migration — no back-compat
-shims. Uninstall/reinstall on a schema change.
-
 ## [Unreleased]
 
 ### Changed
 
-- Needs Android 12 or newer, on a 64-bit phone.
+- **Rings first, from its own process.** The sound starts from a plan made when the alarm was
+  armed, with no UI and no Rust. Measured on a real phone with every process dead: within 200 ms
+  of the alarm's time.
+- **New design**: compact cards, an editor that fits on one screen with everything else one tap
+  away in a sheet, one set of sizes and colours, half the CSS.
+- Back does the same on every Android version: closes a sheet, leaves a screen, and on Home goes
+  to the background instead of ending the app.
+- Your files live in device-encrypted storage, so an alarm rings before the first unlock. Alarms
+  from before this version start over once.
+- Needs Android 12 or newer, on a 64-bit phone. The download went from 10.4 to 9.4 MB.
+
+### Added
+
+- Ring limit per alarm: 30 to 120 minutes or forever, which starts over when you do something.
+- Native backup screen for when the alarm's own screen cannot come up.
+- Reliability screen with what the phone allows and a way to each setting, a first-run version
+  of it, and a test alarm through the real ring path. The record of how fast rings were can be
+  saved, for someone with a phone nobody here has.
+- Quick alarms for a nap, skip the next ring from the card, pause one or all until a date, sort
+  by time or next ring, swipe to skip or delete, Undo, templates when the list is empty.
+- Wake-up check, note while ringing, full brightness, vibrate first, three vibration patterns,
+  minimum volume per alarm, fade in up to 5 minutes, try the alarm for 10 seconds.
+- Presets and random order for challenges. Typed time, 12-hour wheels, a date picker with quick
+  choices. What new alarms start from can be set up.
+- Your own sounds can be renamed, and keep the name they came with.
+- History: outcomes (missed, stopped at the limit, phone restarted, backup screen), streak, chart,
+  delete one, and it starts on the day your week starts on.
+- Themes System and Pure black, five accent colours, language following the phone, 12 or 24
+  hours, first day of the week, less motion, confetti and touch feedback switches.
+- Home-screen widget, a quiet notification before an alarm, alarms to a file and back.
+- Tablets and foldables: the list and an alarm side by side.
+
+### Fixed
+
+- A snoozed alarm rang with the process dead instead of being reported as stopped by a restart.
+- A one-time alarm rang with the process dead instead of being switched off unheard.
+- Reopening the app or saving another alarm no longer cancels a snooze.
+- A restart no longer loses an alarm that came due: under 15 minutes late it rings, later it is
+  reported as missed.
+- Dark mode, a font change or folding the phone no longer restarts the app in the middle of a ring.
+- A sound that cannot play falls back to another, and in the end to vibration, instead of silence.
+- Two alarms at once: dismissing one keeps the other loud.
+- The volume keys and the system panel can no longer silence a ring.
+- Typing: capitals and a skipped letter no longer fail you, and the words are in your language.
+- Two shake or step challenges in a row switched the sensor off for the second.
+- A one-time alarm whose date has passed can be switched on again, and stays on.
+
+### Removed
+
+- The rate limit after wrong answers, which never stopped anybody and only wasted time.
+- Android 8 to 11 and 32-bit phones.
 
 ## [0.2.1] - 2026-10-16
 
