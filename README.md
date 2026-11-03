@@ -177,6 +177,11 @@ summary names the ones that do. An emulator's clock moves instead of a scenario 
 time to pass, what can be asked is asked until it is true, what can happen during the same ring
 or restart does, and two shells on the device stay open instead of starting adb for every call.
 
+`s57` goes to every screen and panel by clicking what a person clicks and scrolls by touch. It
+checks each stop for text that is cut off, sticks out or lies under something else, tries the
+choices, and leaves a picture of each stop in `<run>/panels/`: looking at those finds what no check
+does. `s56` tries to get out of a ringing alarm and out of its challenge in every way there is.
+
 On a real phone: `NO_LOCK=1` for a phone with a PIN (nothing here sets or asks for one), and
 `PHONE_SQLITE=<path>` for a `sqlite3` pushed to it. A phone's clock is left alone, so there the
 time has to pass, and it only gets what needs no restart and changes none of its settings. Some

@@ -129,6 +129,7 @@ kill_sentinel() { local p; p=$(sentinel_pid); [ -n "$p" ] && kill_pids "$p"; tru
 # In one go: with a moment in between, what survives can bring back what did not.
 kill_all() { kill_pids "$(main_pid) $(sentinel_pid)"; }
 no_process() { [ -z "$(main_pid)$(sentinel_pid)" ]; }
+sentinel_up() { [ -n "$(sentinel_pid)" ]; }
 
 now_s() { dev date +%s; }
 wake() {

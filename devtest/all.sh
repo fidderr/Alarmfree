@@ -10,7 +10,16 @@ NAME=${1:-full}
 # page. What depends on the size, on the newest only: from Android 16 on an app has no say in
 # how it turns on a big screen. Also the restart with a PIN, which works the same on all of them
 # and takes a minute.
-OLDEST_ONLY="s29 s30 s31 s32 s38 s43 s44 s45 s46 s47 s50 s51 s52"
+# A build that fails leaves the last APK where it was: this would then test something older.
+built=$(stat -c %Y "$APK") || exit 1
+for repo in . ../mobile-sentinel; do
+    if [ "$built" -lt "$(git -C "$repo" log -1 --format=%ct)" ]; then
+        echo "$APK is older than the last commit in $repo: build first"
+        exit 1
+    fi
+done
+
+OLDEST_ONLY="s29 s30 s31 s32 s34 s38 s43 s44 s45 s46 s47 s50 s51 s52"
 NEWEST_ONLY="s13 big_screens"
 
 run_on() { # avd port scenarios...
@@ -20,7 +29,15 @@ run_on() { # avd port scenarios...
         export AVD=$avd SERIAL=emulator-$port OUT="devtest-out/${NAME}_$avd"
         . devtest/lib.sh
         reboot_and_wait || { echo "FAIL  $avd did not start"; exit 1; }
-        adb_ install -r -g "$APK" | tail -1
+        # A failed install would go on to test what is already on it.
+        said=$(adb_ install -r -g "$APK" 2>&1)
+        case "$said" in
+            *Success*) ;;
+            *)
+                echo "STOP  $avd: the install failed: $said"
+                exit 1
+                ;;
+        esac
         # Without a working page nearly everything fails, and slowly: stop the run at once.
         fresh
         export CLEAN_COPY

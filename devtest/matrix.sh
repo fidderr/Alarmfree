@@ -673,6 +673,19 @@ s26x2() { for r in 1 2; do s26 "$r"; done; }
 # What sticks out of the screen, if anything.
 NOTHING_CLIPPED='var w = innerWidth; var bad = [...document.querySelectorAll(".screen *")].filter(e => { var r = e.getBoundingClientRect(); return r.width > 0 && (r.right > w + 1 || r.left < -1) && !e.closest(".chip-scroll, .alarm-swipe"); }).map(e => e.className.baseVal === undefined ? e.className : "svg").slice(0, 3); return bad.join(",");'
 
+# The sum on screen, answered with the keys.
+solve_math() {
+    local digit digits
+    SUM=$(read_text .math-expression)
+    ANSWER=$(($(echo "$SUM" | sed 's/×/*/; s/ //g')))
+    digits="$ANSWER"
+    while [ -n "$digits" ]; do
+        digit=${digits:0:1}
+        digits=${digits:1}
+        js "[...document.querySelectorAll('.math-key')].find(k => k.textContent === '$digit').click(); return 'ok'" > /dev/null
+    done
+}
+
 # In a challenge the sound is quiet. Doing nothing brings it back. Turning it off through the
 # screens, solving a sum, and landing on history.
 s28() {
@@ -704,19 +717,11 @@ s28() {
     clipped="$clipped$(js "$NOTHING_CLIPPED")"
     [ -z "$clipped" ] || { fail "clipped: $clipped"; return; }
     wait_for 4 sound_off
-    local sum answer digit digits
-    sum=$(read_text .math-expression)
-    answer=$(($(echo "$sum" | sed 's/×/*/; s/ //g')))
-    digits="$answer"
-    while [ -n "$digits" ]; do
-        digit=${digits:0:1}
-        digits=${digits:1}
-        js "[...document.querySelectorAll('.math-key')].find(k => k.textContent === '$digit').click(); return 'ok'" > /dev/null
-    done
+    solve_math
     solved() { state_is a scheduled && [ "$(outcomes solved)" = 1 ]; }
     if wait_for 8 solved && on_screen .summary 8 && ! sound_on; then
         screenshot s28_after
-        pass "$sum = $answer turned it off, recorded, on history"
+        pass "$SUM = $ANSWER turned it off, recorded, on history"
     else
         fail "sound=$(sound_on && echo ON || echo off) state=$(state a) solved=$(outcomes solved) sum='$sum'"
     fi
@@ -1160,6 +1165,7 @@ s39() {
     ALARM_EXTRA=
     arm a
     ring_started() { adb_ logcat -d 2> /dev/null | grep -q 'ringing a:'; }
+    until_past "$T"
     wait_for 30 ring_started || { fail "never started"; return; }
     local started problems="" heard=""
     started=$SECONDS
@@ -1249,138 +1255,6 @@ covered() {
     js 'var s = document.querySelector(".sheet"); if (s) s.scrollTop = s.scrollHeight; return "ok"' > /dev/null
     sleep 0.1
     js 'var s = document.querySelector(".sheet"), bad = []; if (!s) return ""; var box = s.getBoundingClientRect(); s.querySelectorAll("*").forEach(e => { if (e.children.length || !e.textContent.trim()) return; var r = e.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2; if (r.width < 2 || r.height < 2 || y < box.top || y > box.bottom) return; var on = document.elementFromPoint(x, y); if (on && on !== e && !e.contains(on) && !on.contains(e)) bad.push(e.textContent.trim().slice(0, 24) + " under " + (on.className || on.tagName)); }); return bad.slice(0, 3).join(", ");'
-}
-
-# Every row and button does something and can be left again, and every kind of challenge
-# can be tried. Not how well: that they are there, since a control nothing uses breaks
-# without anything else noticing.
-sweep_rows() { # where, for the messages
-    local where=$1 i=0 n kind now title found
-    n=$(js "return document.querySelectorAll('.row-btn').length")
-    case "$n" in
-        '' | *[!0-9]*)
-            echo "$where: no rows ($n)"
-            return
-            ;;
-    esac
-    while [ "$i" -lt "$n" ]; do
-        IFS='|' read -r kind title <<< "$(js "var e = document.querySelectorAll('.row-btn')[$i], t = e.querySelector('.row-title'), k = e.getAttribute('role') === 'switch' ? e.getAttribute('aria-checked') : 'row', w = t && t.textContent.includes('widget'); if (w) return 'skip|'; e.click(); return k + '|' + (t ? t.textContent : '')")"
-        if [ "$kind" = skip ]; then
-            i=$((i + 1))
-            continue
-        fi
-        if [ "$kind" = row ]; then
-            sleep 0.15
-            # A sheet, a screen of its own, or something of the system's on top.
-            if ! is_there '.sheet, .screen-header'; then
-                sleep 0.5
-                if ! is_there '.sheet, .screen-header' && focus_in_app; then
-                    echo "$where: '$title' does nothing"
-                fi
-            fi
-            found=$(covered)
-            [ -z "$found" ] || echo "$where: in '$title': $found"
-            press_back
-        else
-            sleep 0.1
-            now=$(js "var e = document.querySelectorAll('.row-btn')[$i], a = e.getAttribute('aria-checked'); e.click(); return a")
-            [ "$now" != "$kind" ] || echo "$where: switch '$title' stays $now"
-            sleep 0.1
-        fi
-        now=$(js "return document.querySelectorAll('.row-btn').length")
-        [ "$now" = "$n" ] || {
-            sleep 0.5
-            now=$(js "return document.querySelectorAll('.row-btn').length")
-        }
-        [ "$now" = "$n" ] || {
-            echo "$where: after '$title', $now rows instead of $n"
-            return
-        }
-        i=$((i + 1))
-    done
-}
-
-s41() {
-    scenario s41_every_control
-    fresh
-    local every='[["challenge.math","{}"],["challenge.typing","{}"],["challenge.memory","{}"],["challenge.reaction","{}"],["challenge.hold","{}"],["challenge.steps","{}"],["challenge.shake","{}"],["challenge.scan","{}"]]'
-    seed a "$(alarm_json a 7 0 "$EVERY_DAY" null air 0 0 3 1 "$every")"
-    arm a
-    on_screen .alarm-menu 10
-    local problems="" i n found
-    # Home.
-    click .alarm-menu
-    on_screen .sheet || problems="$problems; no alarm menu"
-    found=$(covered)
-    [ -z "$found" ] || problems="$problems; in the alarm menu: $found"
-    press_back
-    gone .sheet
-    for i in 0 1; do
-        click .round-icon-btn "$i"
-        on_screen .sheet || problems="$problems; home button $i does nothing"
-        found=$(covered)
-        [ -z "$found" ] || problems="$problems; in home sheet $i: $found"
-        press_back
-        gone .sheet
-    done
-    for i in 0 1 2; do
-        click .round-icon-btn 1
-        on_screen .sheet-item
-        click .sheet-item "$i"
-        gone .sheet 1 || press_back
-        on_screen .alarm-card || problems="$problems; sorting $i lost the list"
-    done
-    # History, with or without anything in it.
-    click .nav-item 1
-    on_screen .chip-pill
-    n=$(js "return document.querySelectorAll('.chip-pill').length")
-    [ "${n:-0}" -ge 2 ] 2> /dev/null || problems="$problems; no history filters: $n"
-    i=0
-    while [ "$i" -lt "${n:-0}" ] 2> /dev/null; do
-        click .chip-pill "$i" 0.1
-        i=$((i + 1))
-    done
-    on_screen .screen-title-large || problems="$problems; a history filter broke the screen"
-    # Settings and the editor.
-    click .nav-item 2
-    on_screen .row-btn
-    found=$(sweep_rows settings)
-    [ -z "$found" ] || problems="$problems; $found"
-    click .nav-item 0
-    on_screen .alarm-main
-    click .alarm-main
-    on_screen .row-btn
-    found=$(sweep_rows editor)
-    [ -z "$found" ] || problems="$problems; $found"
-    # Every kind of challenge can be tried, and added.
-    click_row Challenges
-    on_screen '.challenge-row .link-btn'
-    local name opened=""
-    i=0
-    while [ "$i" -lt 8 ]; do
-        name=$(js "var e = document.querySelectorAll('.challenge-name')[$i]; return e ? e.textContent : ''")
-        click '.challenge-row .link-btn' "$i" 0.2
-        is_there .run-screen || sleep 0.5
-        is_there .run-screen || focus_in_app || press_back
-        if on_screen .run-screen; then
-            opened="$opened $name"
-            click '.run-top .link-btn' 0 0.2
-        else
-            problems="$problems; $name cannot be tried"
-            press_back
-        fi
-        on_screen '.challenge-row, .row-btn'
-        is_there .challenge-row || { click_row Challenges; on_screen .challenge-row; }
-        i=$((i + 1))
-    done
-    click '.sheet .btn-quiet' 0
-    on_screen .add-option
-    [ "$(js "return document.querySelectorAll('.add-option').length")" = 8 ] || problems="$problems; not all challenges can be added"
-    if [ -z "$problems" ]; then
-        pass "all rows and sheets, tried:$opened"
-    else
-        fail "$problems"
-    fi
 }
 
 # The camera scanner really opens, also in a release: what only a layout refers to is the
@@ -2137,6 +2011,8 @@ s53() {
 # phone's settings, or what only an emulator can do: name those to run them anyway.
 # Over the lock screen, with a PIN: it rings, its screen comes up on top, and ending the alarm
 # leaves the phone locked.
+# Last of all: Android 12 goes on asking for a PIN that is gone, until it restarts. The next one to
+# ask the lock screen to go away gets that prompt, which is no fault of the app's.
 s54() {
     if ! on_emulator; then
         note "s54 sets a PIN: not here"
@@ -2146,7 +2022,7 @@ s54() {
     fresh
     dev locksettings set-pin 1234 > /dev/null
     next_minute 10
-    seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
+    seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null air 0 0 3 1 '[["challenge.scan","{}"]]')"
     arm a
     dead
     screen_off
@@ -2161,17 +2037,161 @@ s54() {
         screenshot s54_over_the_lock_screen
         locked || problems="$problems; ringing unlocked the phone"
         click .ring-off
-        wait_for 10 sound_off || problems="$problems; still ringing after turning it off"
-        await_state a scheduled 5 || problems="$problems; state=$(state a) after turning it off"
+        on_screen button.scan-button 8 || problems="$problems; no scan button"
+        # The power button, by accident: what comes back is the challenge, not the PIN.
+        dev input keyevent KEYCODE_SLEEP
+        sleep 1
+        dev input keyevent KEYCODE_WAKEUP
+        challenge_is_up() { focus_in_app && is_there button.scan-button; }
+        wait_for 8 challenge_is_up || problems="$problems; no challenge after the power button: $(dev dumpsys window | grep -m1 mCurrentFocus)"
+        click .scan-button 0 0.3
+        camera_has_keys() { dev "dumpsys window | grep -m1 mCurrentFocus | grep -q SentinelScannerActivity" > /dev/null; }
+        wait_for 8 camera_has_keys || problems="$problems; no camera over the lock screen: $(dev dumpsys window | grep -m1 mCurrentFocus)"
+        sleep 1
+        camera_has_keys || problems="$problems; the camera lost the keys to: $(dev dumpsys window | grep -m1 mCurrentFocus)"
+        screenshot s54_camera_over_the_lock_screen
+        locked || problems="$problems; the camera unlocked the phone"
+        as_app "echo a-code > /data/user/0/$PKG/files/sentinel_scan_result.txt"
+        wait_for 10 sound_off || problems="$problems; still ringing after the scan"
+        await_state a scheduled 5 || problems="$problems; state=$(state a) after the scan"
+        wait_for 3 camera_has_keys && press_back
         sleep 1
         locked || problems="$problems; ending the alarm unlocked the phone"
     fi
     dev locksettings clear --old 1234 > /dev/null
     wake
     if [ -z "$problems" ]; then
-        pass "rang ${SOUND_AT}s after its time, on top of the lock screen, and the phone stayed locked"
+        pass "rang ${SOUND_AT}s after its time, on top of the lock screen, with the camera too, and the phone stayed locked"
     else
         fail "${problems#; }"
+    fi
+}
+
+# The promise of this app: with a challenge on it, an alarm has no way out but solving it. Whatever
+# is tried, on its ring screen and in the middle of the challenge when it is quiet, it is back on top
+# and not over, and nothing is recorded as solved. Only then the challenge turns it off.
+s56() {
+    scenario s56a_no_way_out_of_the_ring_screen
+    fresh
+    next_minute
+    seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null air 0 0 3 1 '[["challenge.math","{\"difficulty\":\"easy\"}"]]')"
+    arm a
+    await_ring a 30 || { fail "never started"; return; }
+    on_screen .ring-off 10
+    local problems="" next
+    next=$(next_fire_ms a)
+    # Back on top, still on, nothing solved. Android 12 removes the task it hid from recents, which
+    # brings the alarm back as a new screen: that counts too.
+    back_on_it() { focus_in_app && is_there '.ring-off, .run-screen'; }
+    held() { # what was tried
+        if ! wait_for 20 back_on_it; then
+            problems="$problems; $1: not back on top: $(dev dumpsys window | grep -m1 mCurrentFocus)"
+            screenshot "${CURRENT}_not_back"
+            dev dumpsys window | grep -E 'mCurrentFocus|isKeyguard|mDreamingLockscreen|mShowingDream' | sed 's/^/    /' >> "$RESULTS"
+        fi
+        state_is a firing || problems="$problems; $1: state=$(state a)"
+        [ "$(outcomes solved)" = 0 ] || problems="$problems; $1: recorded as solved"
+    }
+    try_key() { dev input keyevent "$1"; sleep 1.5; }
+    try_key KEYCODE_BACK
+    held "Back"
+    sound_on || problems="$problems; Back: silent"
+    try_key KEYCODE_HOME
+    held "Home"
+    wait_for 10 sound_on || problems="$problems; Home: silent"
+    try_key KEYCODE_RECENT_APPS
+    held "Recents"
+    wait_for 10 sound_on || problems="$problems; Recents: silent"
+    if [ -z "$problems" ]; then
+        pass "Back, Home and Recents all end up back on it, still ringing"
+    else
+        fail "${problems#; }"
+    fi
+
+    # Into the challenge, where it is quiet: this is where one could go back to sleep.
+    into_challenge() {
+        on_screen '.ring-off, .run-screen' 15
+        is_there .ring-off && click .ring-off 0 0.3
+        on_screen .math-expression 10 || problems="$problems; no challenge after $1"
+        wait_for 5 sound_off || problems="$problems; still loud in the challenge after $1"
+    }
+    scenario s56b_no_way_out_of_the_challenge
+    problems=""
+    into_challenge "the ring screen"
+    try_key KEYCODE_BACK
+    held "Back"
+    into_challenge "Back"
+    try_key KEYCODE_HOME
+    held "Home"
+    into_challenge "Home"
+    try_key KEYCODE_RECENT_APPS
+    held "Recents"
+    if [ -z "$problems" ]; then
+        pass "Back, Home and Recents in the challenge all end up back on it"
+    else
+        fail "${problems#; }"
+    fi
+
+    # Killed in the challenge, when it was quiet: it has to come back loud.
+    scenario s56c_killed_in_the_challenge
+    problems=""
+    local p0
+    into_challenge "Recents"
+    p0=$(main_pid)
+    kill_main
+    held "killing the app"
+    [ "$(main_pid)" != "$p0" ] || problems="$problems; killing the app: same process"
+    wait_for 15 sound_on || problems="$problems; killing the app: silent"
+    into_challenge "killing the app"
+    kill_sentinel
+    held "killing the ring"
+    wait_for 15 sentinel_up || problems="$problems; killing the ring: it did not come back"
+    into_challenge "killing the ring"
+    kill_all
+    sleep 0.3
+    held "killing both"
+    wait_for 15 sound_on || problems="$problems; killing both: silent"
+    if [ -z "$problems" ]; then
+        pass "killed three ways in the challenge, back on it each time and loud"
+    else
+        fail "${problems#; }"
+    fi
+
+    # Turning off the screen in the challenge and going back to sleep.
+    scenario s56d_screen_off_in_the_challenge
+    problems=""
+    shorten idle_secs 4
+    # A new challenge reads that: leave this one by doing nothing.
+    into_challenge "killing both"
+    wait_for 70 sound_on || problems="$problems; doing nothing in the challenge stays silent"
+    into_challenge "doing nothing"
+    screen_off
+    wait_for 5 sound_off || problems="$problems; loud just after the screen went off"
+    if wait_for 15 sound_on; then
+        [ -z "${SCREEN_WENT_OFF:-}" ] || wake
+        held "the screen off"
+    else
+        problems="$problems; silent with the screen off: back to sleep"
+        [ -z "${SCREEN_WENT_OFF:-}" ] || wake
+    fi
+    shorten idle_secs 60
+    if [ -z "$problems" ]; then
+        pass "with the screen off it rings again after doing nothing"
+    else
+        fail "${problems#; }"
+    fi
+
+    # And then the one way out.
+    scenario s56e_only_solving_ends_it
+    problems=""
+    into_challenge "the screen off"
+    [ "$(next_fire_ms a)" = "$next" ] || note "next ring moved during the ring"
+    solve_math
+    solved() { state_is a scheduled && [ "$(outcomes solved)" = 1 ]; }
+    if wait_for 8 solved && wait_for 5 sound_off; then
+        pass "solving it turned it off, and that is recorded"
+    else
+        fail "${problems#; }; sound=$(sound_on && echo ON || echo off) state=$(state a) solved=$(outcomes solved)"
     fi
 }
 
@@ -2253,14 +2273,20 @@ big_screens() {
     with_screen 2208x1840 420 s34 s49
 }
 
-ALL="s01 s03 s04 s05 s06 s07 s10 s11 s13 s14 s15 s16 s16b s17 s19 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s34 s36 s37 s38 s39 s40 s41 s42 s43 s44 s45 s46 s47 s48 s49 s50 s51 s52 s53 s54 s55 big_screens"
-ON_A_PHONE="s01 s03 s04 s05 s06 s07 s10 s15 s16 s16b s17 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s36 s37 s38 s39 s41 s42 s43 s45 s46 s47 s49 s50 s51 s52 s53 s55"
+. "$(dirname "$0")/panels.sh"
+
+ALL="s01 s03 s04 s05 s06 s07 s10 s11 s13 s14 s15 s16 s16b s17 s19 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s34 s36 s37 s38 s39 s40 s42 s43 s44 s45 s46 s47 s48 s49 s50 s51 s52 s53 s55 s56 s57 big_screens s54"
+ON_A_PHONE="s01 s03 s04 s05 s06 s07 s10 s15 s16 s16b s17 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s36 s37 s38 s39 s42 s43 s45 s46 s47 s49 s50 s51 s52 s53 s55 s56 s57"
 
 : > "$RESULTS"
 RUN_START=$SECONDS
 open_shells
 if on_emulator; then
     dev settings put global auto_time 0
+    # What an earlier run that did not get to its end left.
+    dev wm size reset
+    dev wm density reset
+    dev locksettings set-disabled false > /dev/null
     # The one time Android 12 explains full screen, over the scanner, it takes the keys.
     dev settings put secure immersive_mode_confirmations confirmed
     remove_widgets
