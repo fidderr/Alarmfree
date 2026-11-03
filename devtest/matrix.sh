@@ -918,7 +918,8 @@ s33() {
     arm a
     jump_to $((T - 303))
     reminded() { dev dumpsys notification --noredact | grep -q 'sentinel_reminders'; }
-    if wait_for 60 reminded; then
+    # Not an exact alarm, on purpose. On a phone its time has to come first, too.
+    if wait_for 180 reminded; then
         pass "shown $((T - $(now_s)))s before the ring"
     else
         fail "not shown, $((T - $(now_s)))s before the ring: $(dev dumpsys alarm | grep -m1 -A3 'reminder:a' | tr -s ' ' | cut -c1-160)"
@@ -2110,14 +2111,14 @@ s53() {
     # Another app has the keys. A system screen can take a while to start, and Back goes nowhere
     # until it has.
     away() { dev "dumpsys window | grep -m1 mCurrentFocus | grep -v null | grep -qv $PKG/" > /dev/null; }
+    # And a second Back in the middle of the change closes the screen it comes back to.
+    back_in_app() {
+        press_back
+        wait_for 4 focus_in_app
+    }
     while [ "$i" -lt "${n:-0}" ] 2> /dev/null; do
         click .btn-small "$i" 0.3
         wait_for 15 away || problems="$problems; fix button $i stays in the app"
-        # And a second Back in the middle of the change closes the screen it comes back to.
-        back_in_app() {
-            press_back
-            wait_for 4 focus_in_app
-        }
         wait_for 12 back_in_app || problems="$problems; Back from fix button $i leaves the keys with:$(dev dumpsys window | grep -m1 mCurrentFocus)"
         on_screen .check-title 20 || problems="$problems; not back from fix button $i"
         i=$((i + 1))
@@ -2174,13 +2175,14 @@ s54() {
     fi
 }
 
-# A scan challenge during a real ring. The camera stays up for as long as it takes, past when a
-# frozen screen would be restarted, with the lock on. What it scans turns the alarm off, the camera
-# being one more thing that used to leave the screen standing still.
+# A scan challenge during a real ring, with the lock on. The camera stays up past when a frozen
+# screen would be restarted. It is quiet, but not for ever: that would be a way out. Closing it is
+# quiet again, Home does not get away from it, and what it scans turns the alarm off.
 s55() {
     scenario s55_scan_during_a_ring
     fresh
     shorten ui_timeout_ms 4000
+    shorten scan_quiet_secs 8
     next_minute
     seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null air 0 0 3 1 '[["challenge.scan","{}"]]')"
     arm a
@@ -2199,17 +2201,33 @@ s55() {
         fail "the camera does not open: $(dev dumpsys window | grep -m1 mCurrentFocus)"
         return
     fi
-    sleep 8
+    wait_for 3 sound_off || problems="$problems; loud with the camera just opened"
+    wait_for 14 sound_on || problems="$problems; silent under the camera for good, a way out"
+    sleep 1
     scanner_on_top || problems="$problems; pushed off the screen: $(dev dumpsys window | grep -m1 mCurrentFocus)"
     [ "$(main_pid)" = "$p0" ] || problems="$problems; the app was restarted under the camera"
-    sound_on || problems="$problems; silent under the camera"
+    press_back
+    on_screen button.scan-button 8 || problems="$problems; not back from the camera"
+    wait_for 5 sound_off || problems="$problems; still loud with the camera closed"
+    click .scan-button 0 0.3
+    wait_for 8 scanner_on_top || problems="$problems; the camera does not open again"
+    # Past the moment the lock stands aside for an activity of its own to come up.
+    sleep 2.5
+    go_home
+    wait_for 8 focus_in_app || problems="$problems; Home got away from the camera: $(dev dumpsys window | grep -m1 mCurrentFocus)"
+    # Android 12 removes the task it hid from recents, so the alarm comes back as a new screen.
+    on_screen 'button.scan-button, .ring-off' 10
+    is_there .ring-off && click .ring-off 0 0.3
+    on_screen button.scan-button 8 || problems="$problems; no scan button after Home"
+    click .scan-button 0 0.3
+    wait_for 8 scanner_on_top || problems="$problems; the camera does not open after Home"
     # What the scanner does with a code, without a code to show an emulator's camera.
     as_app "echo a-code > /data/user/0/$PKG/files/sentinel_scan_result.txt"
     ended() { state_is a scheduled && sound_off; }
     wait_for 8 ended || problems="$problems; the code did not turn it off: state=$(state a) sound=$(sound_on && echo on || echo off)"
     wait_for 5 scanner_on_top && press_back
     if [ -z "$problems" ]; then
-        pass "the camera stays up during the ring, and a code turns it off"
+        pass "quiet, then loud again under the camera, no way out by Home, and a code turns it off"
     else
         fail "${problems#; }"
     fi
