@@ -391,8 +391,7 @@ fn Summary(
 ) -> Element {
     let translations = use_context::<Translations>();
     let duration = |d| crate::text::duration(&translations, d);
-    let streak_text =
-        t(&translations, "history.streak_days").replace("{count}", &streak_days.to_string());
+    let streak_text = crate::text::counted(&translations, "history.streak_days", streak_days);
     let stats = [
         (
             t(&translations, "history.alarms"),

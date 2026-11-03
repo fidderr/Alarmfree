@@ -258,7 +258,7 @@ pub(super) fn BackupSheet() -> Element {
                                     }
                                 }
                                 crate::persistence::save_alarms(&alarms.peek());
-                                let message = t(&translations, "settings.backup_restored").replace("{count}", &added.to_string());
+                                let message = crate::text::counted(&translations, "settings.backup_restored", added as u32);
                                 toast.set(Some(ToastMessage::with_undo(message, before)));
                             }
                             Ok(Err(e)) if e.is_empty() => {}

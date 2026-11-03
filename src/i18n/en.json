@@ -430,5 +430,11 @@
   "reliability.save_record": "Save the record of how fast alarms rang",
   "home.make_default": "Use for new alarms",
   "home.made_default": "New alarms now start like this one",
-  "text.decimal_point": "."
+  "text.decimal_point": ".",
+  "text.times_one": "once",
+  "config.snooze_summary_one": "{minutes} min, once",
+  "history.streak_days_one": "1 day",
+  "settings.backup_restored_one": "1 alarm added",
+  "challenge.summary.hold_one": "1 hold of {secs} s",
+  "challenge.summary.reaction_one": "{count} targets, {secs} s, 1 round"
 }

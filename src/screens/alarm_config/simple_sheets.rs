@@ -230,7 +230,7 @@ pub(super) fn SnoozeSheet() -> Element {
             }
             Stepper {
                 title: t(&translations, "config.snooze_count"),
-                value: t(&translations, "text.times").replace("{count}", &current.snooze_count.to_string()),
+                value: crate::text::counted(&translations, "text.times", u32::from(current.snooze_count)),
                 on_less: move |_| {
                     let mut alarm = draft.write();
                     alarm.snooze_count = alarm.snooze_count.saturating_sub(1);

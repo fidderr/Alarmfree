@@ -430,5 +430,11 @@
   "reliability.save_record": "Aufzeichnung der Weckzeiten speichern",
   "home.make_default": "Für neue Wecker verwenden",
   "home.made_default": "Neue Wecker starten jetzt wie dieser",
-  "text.decimal_point": ","
+  "text.decimal_point": ",",
+  "text.times_one": "1-mal",
+  "config.snooze_summary_one": "{minutes} Min, 1-mal",
+  "history.streak_days_one": "1 Tag",
+  "settings.backup_restored_one": "1 Wecker hinzugefügt",
+  "challenge.summary.hold_one": "1-mal {secs} s halten",
+  "challenge.summary.reaction_one": "{count} Ziele, {secs} s, 1 Runde"
 }

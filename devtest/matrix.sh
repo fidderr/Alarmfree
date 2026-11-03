@@ -1885,7 +1885,7 @@ s49() {
         problems="$problems; the field or Done is under the keyboard"
     dev input text Morning
     sleep 1.5
-    [ "$(js "return document.querySelector('.sheet .field').value")" = Morning ] || problems="$problems; typed text did not arrive: $(js "return document.querySelector('.sheet .field').value")"
+    [ "$(js "return document.querySelector('.sheet .field').value")" = aMorning ] || problems="$problems; typed text did not arrive: $(js "return document.querySelector('.sheet .field').value")"
     press_back
     press_back
     sleep 1
@@ -1904,9 +1904,7 @@ s49() {
     free=$(js "$left")
     [ "$(js "var a = document.querySelector('.typing-input-area').getBoundingClientRect(), p = document.querySelector('.typing-passage').getBoundingClientRect(); return a.bottom <= $free && p.top >= 0 && p.height >= 60 ? 'y' : 'n'")" = y ] ||
         problems="$problems; passage and box do not fit above the keyboard"
-    local passage
-    passage=$(js "return document.querySelector('.typing-passage').textContent")
-    dev input text "$(echo "$passage" | sed 's/ /%s/g')"
+    dev input text "$(js "return document.querySelector('.typing-passage').textContent.replace(/\\s+/g, '%s')")"
     sleep 4
     screenshot s49_typed
     on_screen .typing-input-area && problems="$problems; typing it all did not finish: '$(js "return document.querySelector('.typing-input-area').value")'"

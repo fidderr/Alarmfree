@@ -43,17 +43,25 @@ fn challenge_summary(translations: &Translations, setup: &ChallengeSetup) -> Str
         ChallengeSetup::Steps { count } => {
             t(translations, "challenge.summary.steps").replace("{count}", &count.to_string())
         }
-        ChallengeSetup::Hold { count, secs } => t(translations, "challenge.summary.hold")
-            .replace("{count}", &count.to_string())
-            .replace("{secs}", &secs.to_string()),
+        ChallengeSetup::Hold { count, secs } => {
+            crate::text::counted(translations, "challenge.summary.hold", *count)
+                .replace("{secs}", &secs.to_string())
+        }
         ChallengeSetup::Reaction {
             targets,
             secs,
             rounds,
-        } => t(translations, "challenge.summary.reaction")
-            .replace("{count}", &targets.to_string())
-            .replace("{secs}", &secs.to_string())
-            .replace("{rounds}", &rounds.to_string()),
+        } => t(
+            translations,
+            if *rounds == 1 {
+                "challenge.summary.reaction_one"
+            } else {
+                "challenge.summary.reaction"
+            },
+        )
+        .replace("{count}", &targets.to_string())
+        .replace("{secs}", &secs.to_string())
+        .replace("{rounds}", &rounds.to_string()),
         ChallengeSetup::Scan { code } if code.is_empty() => {
             t(translations, "challenge.summary.any")
         }

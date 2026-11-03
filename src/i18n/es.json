@@ -430,5 +430,11 @@
   "reliability.save_record": "Guardar el registro de la rapidez de las alarmas",
   "home.make_default": "Usar para alarmas nuevas",
   "home.made_default": "Las alarmas nuevas empiezan ahora como esta",
-  "text.decimal_point": ","
+  "text.decimal_point": ",",
+  "text.times_one": "1 vez",
+  "config.snooze_summary_one": "{minutes} min, 1 vez",
+  "history.streak_days_one": "1 día",
+  "settings.backup_restored_one": "1 alarma añadida",
+  "challenge.summary.hold_one": "1 pulsación de {secs} s",
+  "challenge.summary.reaction_one": "{count} objetivos, {secs} s, 1 ronda"
 }

@@ -381,9 +381,12 @@ fn Editor(id: String) -> Element {
     let snooze_summary = if current.snooze_count == 0 {
         t(&translations, "config.no_snooze")
     } else {
-        t(&translations, "config.snooze_summary")
-            .replace("{minutes}", &current.snooze_interval.to_string())
-            .replace("{count}", &current.snooze_count.to_string())
+        crate::text::counted(
+            &translations,
+            "config.snooze_summary",
+            u32::from(current.snooze_count),
+        )
+        .replace("{minutes}", &current.snooze_interval.to_string())
     };
     let challenge_summary_text = if setups.read().is_empty() {
         t(&translations, "config.none")

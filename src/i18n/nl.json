@@ -430,5 +430,11 @@
   "reliability.save_record": "Opslaan hoe snel wekkers afgingen",
   "home.make_default": "Gebruiken voor nieuwe wekkers",
   "home.made_default": "Nieuwe wekkers beginnen nu zoals deze",
-  "text.decimal_point": ","
+  "text.decimal_point": ",",
+  "text.times_one": "1 keer",
+  "config.snooze_summary_one": "{minutes} min, 1 keer",
+  "history.streak_days_one": "1 dag",
+  "settings.backup_restored_one": "1 wekker toegevoegd",
+  "challenge.summary.hold_one": "1 keer {secs} s vasthouden",
+  "challenge.summary.reaction_one": "{count} doelen, {secs} s, 1 ronde"
 }

@@ -85,6 +85,28 @@ mod tests {
         }
     }
 
+    /// What goes through `text::counted` has its form for one.
+    #[test]
+    fn every_counted_text_has_its_form_for_one() {
+        let mut files = Vec::new();
+        rust_files(
+            &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src"),
+            &mut files,
+        );
+        let en = load_translations(Locale::English);
+        let mut seen = 0;
+        for file in files {
+            let text = std::fs::read_to_string(&file).unwrap();
+            for call in text.split("counted(").skip(1) {
+                if let Some(key) = call.split('"').nth(1).filter(|key| en.contains_key(*key)) {
+                    seen += 1;
+                    assert!(en.contains_key(&format!("{key}_one")), "{key}");
+                }
+            }
+        }
+        assert!(seen >= 5, "found {seen}");
+    }
+
     /// A key that does not exist shows on screen as the key.
     #[test]
     fn every_key_the_code_names_exists() {
