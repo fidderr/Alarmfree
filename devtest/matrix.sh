@@ -1036,16 +1036,18 @@ s33() {
     next_minute 340
     seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
     arm a
-    local i=0
-    while [ "$i" -lt 120 ]; do
+    # A loose OS alarm, which Android may deliver late: what counts is that it comes
+    # before the ring.
+    local before
+    while [ "$(now_s)" -lt $((T - 15)) ]; do
         dev dumpsys notification --noredact | grep -q 'sentinel_reminders' && break
         sleep 2
-        i=$((i + 2))
     done
+    before=$((T - $(now_s)))
     if dev dumpsys notification --noredact | grep -q 'sentinel_reminders'; then
-        pass "shown after ${i}s"
+        pass "shown ${before}s before the ring"
     else
-        fail "not shown in ${i}s, alarm in $((T - $(now_s)))s"
+        fail "not shown, ${before}s before the ring: $(dev dumpsys alarm | grep -m1 -A3 'reminder:a' | tr -s ' ' | cut -c1-160)"
     fi
     save_log
 }
@@ -1536,7 +1538,44 @@ s41() {
     save_log
 }
 
-ALL="s01 s02 s03 s04 s05 s06 s07a s07b s07c s09 s10 s11a s11b s12 s12b s13 s14 s15 s16 s16b s17 s19 s20 s21 s22 s22b s23a s23b s23c s23d s24 s25 s26x5 s27 s28 s28b s29 s30 s31 s32 s33 s34 s35 s36 s37 s38 s39 s40 s41"
+# The camera scanner really opens, also in a release: what only a layout refers to is the
+# first thing R8 and the resource shrinker take.
+s42() {
+    scenario s42_scanner_opens
+    fresh
+    seed a "$(alarm_json a 7 0 "$EVERY_DAY" null air 0 0 3 1 '[["challenge.scan","{}"]]')"
+    arm a
+    sleep 2
+    click .alarm-main
+    click_row Challenges
+    click '.challenge-row .link-btn' 0 1.5
+    on_screen .run-screen || { fail "no challenge screen"; save_log; return; }
+    adb_ logcat -c
+    click .progress-ring 0 4
+    screenshot s42_scanner
+    local top crashed
+    top=$(dev dumpsys activity activities | grep -m1 ResumedActivity)
+    crashed=$(adb_ logcat -d 2> /dev/null | grep -E 'FATAL EXCEPTION|ClassNotFoundException|NoClassDefFoundError|Resources\$NotFoundException|InflateException' | head -3)
+    case "$top" in
+        *SentinelScannerActivity*)
+            if [ -z "$crashed" ]; then
+                press_back
+                sleep 1
+                if on_screen .run-screen; then
+                    pass "opened the camera and came back"
+                else
+                    fail "did not come back from the scanner"
+                fi
+            else
+                fail "opened, but: $crashed"
+            fi
+            ;;
+        *) fail "no scanner on top: $top; $crashed" ;;
+    esac
+    save_log
+}
+
+ALL="s01 s02 s03 s04 s05 s06 s07a s07b s07c s09 s10 s11a s11b s12 s12b s13 s14 s15 s16 s16b s17 s19 s20 s21 s22 s22b s23a s23b s23c s23d s24 s25 s26x5 s27 s28 s28b s29 s30 s31 s32 s33 s34 s35 s36 s37 s38 s39 s40 s41 s42"
 : > "$RESULTS"
 for s in ${*:-$ALL}; do
     "$s"
