@@ -140,17 +140,16 @@ pub fn earliest_future(now_ms: i64, times: impl IntoIterator<Item = i64>) -> Opt
     times.into_iter().filter(|&t| t > now_ms).min()
 }
 
-/// Fill one of the countdown templates (`{days}`, `{hours}`, `{minutes}`):
-/// `dhm` once a day or more is left, `hm` once an hour or more is, else `m`.
-pub fn format_countdown(c: Countdown, dhm: &str, hm: &str, m: &str) -> String {
-    let template = if c.days > 0 {
-        dhm
-    } else if c.hours > 0 {
-        hm
-    } else {
-        m
+/// Fill one of the countdown templates (`{days}`, `{hours}`, `{minutes}`): with a day or more
+/// to go the minutes say nothing, and neither do zero hours.
+pub fn format_countdown(c: Countdown, d: &str, dh: &str, hm: &str, m: &str) -> String {
+    let template = match (c.days, c.hours) {
+        (0, 0) => m,
+        (0, _) => hm,
+        (_, 0) => d,
+        _ => dh,
     };
-    let minutes = if c.days > 0 || c.hours > 0 {
+    let minutes = if c.hours > 0 {
         format!("{:02}", c.minutes)
     } else {
         c.minutes.to_string()
@@ -222,12 +221,13 @@ mod tests {
 
     const NO_DAYS: [bool; 7] = [false; 7];
 
-    const DHM: &str = "{days}d {hours}h {minutes}m";
+    const D: &str = "{days}d";
+    const DH: &str = "{days}d {hours}h";
     const HM: &str = "{hours}h {minutes}m";
     const M: &str = "{minutes}m";
 
     fn text(now_ms: i64, at_ms: i64) -> String {
-        format_countdown(countdown(now_ms, at_ms), DHM, HM, M)
+        format_countdown(countdown(now_ms, at_ms), D, DH, HM, M)
     }
 
     fn day(s: &str) -> NaiveDate {
@@ -293,8 +293,9 @@ mod tests {
         assert_eq!(text(0, 59 * min), "59m");
         assert_eq!(text(0, 60 * min), "1h 00m");
         assert_eq!(text(0, (23 * 60 + 59) * min), "23h 59m");
-        assert_eq!(text(0, 24 * 60 * min), "1d 0h 00m");
-        assert_eq!(text(0, (6 * 24 * 60 + 23 * 60 + 45) * min), "6d 23h 45m");
+        assert_eq!(text(0, 24 * 60 * min), "1d");
+        assert_eq!(text(0, (24 * 60 + 30) * min), "1d", "a day and a bit");
+        assert_eq!(text(0, (6 * 24 * 60 + 23 * 60 + 45) * min), "6d 23h");
     }
 
     #[test]

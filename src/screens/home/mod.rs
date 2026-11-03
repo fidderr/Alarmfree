@@ -76,12 +76,7 @@ impl HomeState {
 
 /// "in 7 h 12 min".
 fn countdown_text(translations: &Translations, now_ms: i64, at_ms: i64) -> String {
-    let time = schedule::format_countdown(
-        schedule::countdown(now_ms, at_ms),
-        &t(translations, "home.next_in_dhm"),
-        &t(translations, "home.next_in_hm"),
-        &t(translations, "home.next_in_m"),
-    );
+    let time = crate::text::time_left(translations, schedule::countdown(now_ms, at_ms));
     t(translations, "home.in").replace("{time}", &time)
 }
 

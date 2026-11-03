@@ -6,7 +6,7 @@ use dioxus::prelude::*;
 use super::EditorState;
 use crate::app::{t, AlarmData, Translations};
 use crate::components::time_picker::TimePicker;
-use crate::components::{Chips, GroupTitle, Sheet, SheetDone, SheetItem, Stepper};
+use crate::components::{Chips, GroupTitle, Sheet, SheetDone, SheetItem, Stepper, ToastMessage};
 use crate::models::AppSettings;
 
 const LIMIT_MINUTES: [u32; 4] = [30, 60, 90, 120];
@@ -323,6 +323,7 @@ pub(super) fn DeleteSheet(id: String) -> Element {
         mut sheet, preview, ..
     } = use_context();
     let mut alarms = use_context::<Signal<Vec<AlarmData>>>();
+    let mut toast = use_context::<Signal<Option<ToastMessage>>>();
     let translations = use_context::<Translations>();
     let nav = use_navigator();
     let delete_id = id.clone();
@@ -336,8 +337,20 @@ pub(super) fn DeleteSheet(id: String) -> Element {
                 danger: true,
                 on_click: move |_| {
                     preview.stop();
+                    let before = alarms.peek().clone();
+                    let name = before
+                        .iter()
+                        .find(|a| a.id == delete_id)
+                        .map(|a| a.label.clone())
+                        .unwrap_or_default();
                     alarms.write().retain(|a| a.id != delete_id);
                     crate::persistence::save_alarms(&alarms.peek());
+                    let message = if name.is_empty() {
+                        t(&translations, "home.deleted_plain")
+                    } else {
+                        t(&translations, "home.deleted").replace("{alarm}", &name)
+                    };
+                    toast.set(Some(ToastMessage::with_undo(message, before)));
                     nav.go_back();
                 },
             }

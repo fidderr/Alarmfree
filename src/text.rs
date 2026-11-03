@@ -104,15 +104,24 @@ pub fn rings_in(translations: &Translations, alarm: &AlarmData) -> String {
     schedule::next_ring_moment(alarm.time_hour, alarm.time_minute, alarm.days, date, from)
         .and_then(|moment| chrono::Local.from_local_datetime(&moment).earliest())
         .map(|at| {
-            let time = schedule::format_countdown(
+            let time = time_left(
+                translations,
                 schedule::countdown(now_ms, at.timestamp_millis()),
-                &t(translations, "home.next_in_dhm"),
-                &t(translations, "home.next_in_hm"),
-                &t(translations, "home.next_in_m"),
             );
             t(translations, "config.rings_in").replace("{time}", &time)
         })
         .unwrap_or_default()
+}
+
+/// "3 d 12 h", "7 h 05 min" or "12 min".
+pub fn time_left(translations: &Translations, left: schedule::Countdown) -> String {
+    schedule::format_countdown(
+        left,
+        &t(translations, "home.next_in_d"),
+        &t(translations, "home.next_in_dh"),
+        &t(translations, "home.next_in_hm"),
+        &t(translations, "home.next_in_m"),
+    )
 }
 
 /// The first letter of a day's short name, for the rows of day letters.

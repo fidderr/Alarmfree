@@ -52,6 +52,10 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
   message no longer covers a panel's buttons: it moves to the top while one is open.
 - Scanning again right after cancelling a scan no longer loses what was scanned.
 - An alarm no longer waits behind what else the phone is doing, as just after it started.
+- A code scanned after the camera had been open for a minute was ignored, and so was a file picked
+  after a few minutes. Now you can take your time, also to walk to the code in another room.
+- Deleting an alarm from its editor can be undone, as it can from the list.
+- One word for one thing: phone, turn off, try. "In 3 d 12 h" instead of "in 3 d 12 h 46 min".
 - On a narrow phone the day letters of a card no longer run under its menu.
 - A snoozed alarm rang with the process dead instead of being reported as stopped by a restart.
 - A one-time alarm rang with the process dead instead of being switched off unheard.

@@ -152,12 +152,7 @@ fn rings_text(
             .earliest()
             .map(|at| (at - now).num_milliseconds())
             .unwrap_or_else(|| (moment - now.naive_local()).num_milliseconds());
-        let time = crate::schedule::format_countdown(
-            crate::schedule::countdown(0, left_ms),
-            &t(translations, "home.next_in_dhm"),
-            &t(translations, "home.next_in_hm"),
-            &t(translations, "home.next_in_m"),
-        );
+        let time = crate::text::time_left(translations, crate::schedule::countdown(0, left_ms));
         let day = match crate::schedule::day_label(now.date_naive(), moment.date()) {
             crate::schedule::DayLabel::Today => t(translations, "home.today_lower"),
             crate::schedule::DayLabel::Tomorrow => t(translations, "home.tomorrow_lower"),
