@@ -193,6 +193,7 @@ pub fn AlarmFiring(id: String) -> Element {
     if let Some(challenges) = running() {
         let solved_id = id.clone();
         let idle_id = id.clone();
+        let scan_id = id.clone();
         return rsx! {
             ChallengeRun {
                 challenges,
@@ -208,6 +209,12 @@ pub fn AlarmFiring(id: String) -> Element {
                     // AlarmKit brings the sound back.
                     if let Some(kit) = crate::platform::alarm_kit_optional() {
                         let _ = kit.resume(&mobile_sentinel::InstanceId::new(idle_id.clone()));
+                    }
+                },
+                on_long_scan: move |long: bool| {
+                    if let Some(kit) = crate::platform::alarm_kit_optional() {
+                        let instance = mobile_sentinel::InstanceId::new(scan_id.clone());
+                        let _ = if long { kit.resume(&instance) } else { kit.pause(&instance) };
                     }
                 },
             }

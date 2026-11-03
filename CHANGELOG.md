@@ -52,6 +52,10 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
   message no longer covers a panel's buttons: it moves to the top while one is open.
 - Scanning again right after cancelling a scan no longer loses what was scanned.
 - An alarm no longer waits behind what else the phone is doing, as just after it started.
+- No banner over the alarm's screen when it rings while you use the phone: it hid the date for some
+  seconds.
+- Opening the camera for a scan silenced an alarm for as long as it stayed open, which was a way
+  out. After 3 minutes it rings again, with the camera still up to scan.
 - A code scanned after the camera had been open for a minute was ignored, and so was a file picked
   after a few minutes. Now you can take your time, also to walk to the code in another room.
 - Deleting an alarm from its editor can be undone, as it can from the list.
