@@ -171,10 +171,12 @@ ring_then() { # ring_then name kill_fn
         sleep 1
         i=$((i + 1))
     done
-    if sound_on && [ "$(state a)" = firing ]; then
-        pass "back after $(($(now_s) - t0))s, silent for ${silent} checks, UI on top: $(top_is_app && echo yes || echo no)"
-    else
+    if ! sound_on || [ "$(state a)" != firing ]; then
         fail "after 40s sound=$(sound_on && echo on || echo OFF) state=$(state a) main=$(main_pid)"
+    elif ! top_is_app; then
+        fail "the sound is back, the screen is not: main=$(main_pid)"
+    else
+        pass "back after $(($(now_s) - t0))s, silent for ${silent} checks"
     fi
     save_log
     action dismiss:a

@@ -19,17 +19,28 @@ dev() { adb_ shell "$@" | tr -d '\r'; }
 # starts in the credential-encrypted directory.
 DATA="/data/user_de/0/$PKG"
 as_app() { adb_ shell "run-as $PKG sh -c 'cd $DATA && $*'" | tr -d '\r'; }
-sql() { adb_ shell "run-as $PKG sqlite3 $DATA/files/alarmfree.db" 2>&1 | tr -d '\r'; }
+# A phone has no sqlite3: PHONE_SQLITE names a tool pushed to it for this. It has to run
+# from the app's own files, and clearing the app takes it along.
+sql() {
+    if [ -n "${PHONE_SQLITE:-}" ]; then
+        adb_ shell "run-as $PKG sh -c 'test -x $DATA/af_sqlite3 || { cp $PHONE_SQLITE $DATA/af_sqlite3; chmod 700 $DATA/af_sqlite3; }; $DATA/af_sqlite3 $DATA/files/alarmfree.db'" 2>&1 | tr -d '\r'
+    else
+        adb_ shell "run-as $PKG sqlite3 $DATA/files/alarmfree.db" 2>&1 | tr -d '\r'
+    fi
+}
 
 main_pid() { dev pidof "$PKG"; }
 sentinel_pid() { dev pidof "$PKG:sentinel"; }
 kill_main() { local p; p=$(main_pid); [ -n "$p" ] && as_app "kill -9 $p"; true; }
 kill_sentinel() { local p; p=$(sentinel_pid); [ -n "$p" ] && as_app "kill -9 $p"; true; }
-kill_all() { kill_main; kill_sentinel; }
+# In one go: with a moment in between, what survives can bring back what did not.
+kill_all() { as_app "kill -9 $(main_pid) $(sentinel_pid)"; true; }
 
 now_s() { dev date +%s; }
 wake() { dev input keyevent KEYCODE_WAKEUP; dev wm dismiss-keyguard; }
-screen_off() { dev input keyevent KEYCODE_SLEEP; }
+# NO_LOCK: a phone with a PIN cannot be unlocked by a script, and nothing here sets or asks
+# for one. It stays awake then, and being locked is tested by hand.
+screen_off() { [ -n "${NO_LOCK:-}" ] || dev input keyevent KEYCODE_SLEEP; }
 go_home() { dev input keyevent KEYCODE_HOME; }
 screenshot() { adb_ exec-out screencap -p > "$OUT/$1.png"; }
 
@@ -78,7 +89,11 @@ reboot_and_wait() {
 # A clean app: no alarms, normal permissions, database created.
 fresh() {
     dev am force-stop "$PKG"
-    dev pm clear "$PKG" > /dev/null
+    # ColorOS does not let the shell clear an app: then only what the app itself owns.
+    case "$(dev pm clear "$PKG" 2>&1)" in
+        *Success*) ;;
+        *) as_app "rm -rf ./*" ;;
+    esac
     grant_all
     start_app
     wait_file files/alarmfree.db 60
@@ -350,4 +365,4 @@ scenario() {
 pass() { echo "PASS  $CURRENT  $1" | tee -a "$RESULTS"; }
 fail() { echo "FAIL  $CURRENT  $1" | tee -a "$RESULTS"; }
 note() { echo "      $1"; }
-save_log() { adb_ logcat -d -v time 2> /dev/null | grep -E "AlarmFree|MobileSentinel|Sentinel|AlarmKit|AlarmClass|alarmfree|ActivityTaskManager.*(fidderr|Background)|BackgroundActivity|AndroidRuntime|FATAL" > "$OUT/$CURRENT.log"; }
+save_log() { adb_ logcat -d -b all -v time 2> /dev/null | grep -E "AlarmFree|MobileSentinel|Sentinel|AlarmKit|AlarmClass|alarmfree|ActivityTaskManager.*(fidderr|Background)|BackgroundActivity|AndroidRuntime|FATAL" > "$OUT/$CURRENT.log"; }
