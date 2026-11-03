@@ -6,7 +6,7 @@ math, walk a few steps, scan the barcode taped to your bathroom mirror. The
 alarm doesn't let go until you've actually woken up.
 
 No accounts, no tracking, no network calls, no ads. Everything ships in the APK
-and runs on-device.
+and runs on-device. Needs Android 12 or newer, on a 64-bit phone.
 
 AlarmFree is built entirely in Rust on top of
 [`mobile-sentinel`](../../crates/mobile-sentinel/README.md). The UI is
@@ -50,7 +50,8 @@ framework.
 - **Aggressive anti-kill** — kiosk lock-task, a foreground service, a
   cross-process job guardian that resurrects the app, and exclude-from-recents.
 - **Offline by default** — no CDN, no network, inline SVG icons, bundled sounds,
-  embedded translations.
+  embedded translations. The `INTERNET` permission is only there because Dioxus talks
+  to its page over a socket on the phone itself, and Android asks it for any socket.
 
 ## The challenges
 
@@ -94,11 +95,11 @@ for the scan challenge, `sensors` for shake/steps, `audio` for sound preview,
 `permissions`, and `foregrounding`.
 
 The single glue file is **`src/platform.rs`**. It runs `mobile_sentinel::init`,
-installs the Android `FiringSink` and sound backend, installs AlarmKit with
-AlarmFree's `AlarmClassConfig` (notification channel `alarmfree_firing`, activity
-`dev.dioxus.main.MainActivity`, full kiosk lockdown), and calls
-`kit.on_startup(&alarms)` to re-arm everything. All app-specific values live
-here and arrive in the SDK via config — never baked into the crate.
+installs AlarmKit with AlarmFree's `AlarmClassConfig` (notification channel
+`alarmfree_firing`, activity `dev.dioxus.main.MainActivity`, full kiosk lockdown), and
+calls `kit.on_startup(&alarms)` to re-arm everything. All app-specific values live
+here and arrive in the SDK via config — never baked into the crate. The app has no
+Kotlin or JNI of its own: what Android needs is the SDK's.
 
 ```
 ┌───────────────────────────────────────────────┐   ┌──────────────────┐
@@ -155,7 +156,7 @@ apps/alarmfree/
 │   ├── icon.webp         // launcher icon
 │   ├── style.css         // dark / light / colorblind themes
 │   └── sounds/
-│       ├── default/      // 10 bundled mp3s
+│       ├── default/      // 10 bundled sounds
 │       └── custom/       // user-imported, written at runtime
 └── src/
     ├── main.rs / lib.rs
@@ -165,10 +166,12 @@ apps/alarmfree/
     ├── history_persistence.rs  // history query façade
     ├── custom_sounds.rs  // bundled + custom sound management
     ├── firing_state.rs   // cross-process firing detection (500 ms file poll)
+    ├── debug_hooks.rs    // what devtest/ drives the app with, never in a user's build
     ├── sanitize.rs       // input sanitization for scanned values
     ├── db/               // schema + migrations + CRUD + AggregateMetrics
     ├── models/           // alarm / challenge / history / settings types
-    ├── screens/          // home / alarm_config / alarm_firing / history / settings
+    ├── screens/          // home/ alarm_config/ settings/ (screen + sheets), alarm_firing,
+    │                     // challenge_run, history, practice, reliability
     ├── components/       // challenges/, celebration, icon, time_picker, toast
     └── i18n/             // en, nl, es, fr, de  (embedded via include_str!)
 ```
@@ -177,7 +180,7 @@ apps/alarmfree/
 
 You need:
 
-- Rust 1.76+ with the Android target: `rustup target add aarch64-linux-android`.
+- Rust 1.80+ with the Android target: `rustup target add aarch64-linux-android`.
 - Android SDK + NDK (`ANDROID_HOME` / `ANDROID_NDK_HOME`).
 - The Dioxus CLI: `cargo install dioxus-cli --version 0.7.x`.
 - A connected device or emulator with USB debugging on.
@@ -186,18 +189,18 @@ You need:
 
 ```bash
 # Default: uses the published mobile-sentinel crate (the real end-user flow)
-bash apps/alarmfree/build.sh                     # build only (debug)
-bash apps/alarmfree/build.sh install             # build + install on default device
-bash apps/alarmfree/build.sh install <device-id> # build + install on a specific device
+./build.sh                     # build only (debug)
+./build.sh install             # build + install on default device
+./build.sh install <device-id> # build + install on a specific device
 
 # Final builds (release / Play Store AAB)
-bash apps/alarmfree/build.sh release
-bash apps/alarmfree/build.sh aab
+./build.sh release
+./build.sh aab
 
 # Local development (uses the local sibling mobile-sentinel/ source instead of the published crate)
-bash apps/alarmfree/build.sh workspace
-bash apps/alarmfree/build.sh workspace install
-bash apps/alarmfree/build.sh workspace aab
+./build.sh workspace
+./build.sh workspace install
+./build.sh workspace aab
 ```
 
 ### Manual

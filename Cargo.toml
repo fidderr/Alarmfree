@@ -51,7 +51,3 @@ codegen-units = 1
 [dev-dependencies]
 tempfile = "3"
 tokio = { version = "1", features = ["rt", "macros", "time"] }
-
-[patch.crates-io]
-# manganis 0.7.9 refuses to build for 32-bit Android, over a guard that is not needed.
-manganis = { path = "vendor/manganis" }

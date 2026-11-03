@@ -12,5 +12,5 @@ runs:
     - if: github.ref_name == 'alarm-reliability-qol' || github.head_ref == 'alarm-reliability-qol'
       shell: bash
       run: |
-        sed -i '/^\[patch\.crates-io\]/a mobile-sentinel = { path = "_sdk" }' Cargo.toml
+        printf '\n[patch.crates-io]\nmobile-sentinel = { path = "_sdk" }\n' >> Cargo.toml
         cargo update -p mobile-sentinel

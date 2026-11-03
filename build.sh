@@ -16,7 +16,7 @@
 # Usage (default = published crate — the "real" flow):
 #   ./build.sh                    # build debug APK only
 #   ./build.sh install            # build debug + install on connected device
-#   ./build.sh install bb741d88   # build debug + install on specific device
+#   ./build.sh install <serial>   # build debug + install on specific device
 #   ./build.sh release            # build release APK (unsigned by default)
 #   ./build.sh aab                # build release AAB (then run ./sign-aab.sh)
 #
@@ -92,18 +92,8 @@ if [ -n "${RELEASE_TEST:-}" ]; then
     OUT_REL="apk/release/app-release.apk"
 fi
 
-# Play delivers each phone only its own ABI out of a bundle, so 32-bit phones cost the
-# others nothing. An APK holds what TARGET says.
-if [ "$MODE" = "aab" ]; then
-    TARGETS="${TARGETS:-armv7-linux-androideabi aarch64-linux-android}"
-else
-    TARGETS="${TARGETS:-$TARGET}"
-fi
-
 echo "=== [1/2] Building Rust .so (dx build) ==="
-for BUILD_TARGET in $TARGETS; do
-    dx build --platform android --target "$BUILD_TARGET" --package alarmfree $DX_RELEASE
-done
+dx build --platform android --target "$TARGET" --package alarmfree $DX_RELEASE
 
 # Patch the generated Gradle for release/AAB (Play Store) builds.
 # - Force a good, monotonically increasing versionCode (dx currently hardcodes low values like 1
@@ -169,33 +159,6 @@ if [ "$MODE" = "release" ] || [ "$MODE" = "aab" ]; then
     if [ -n "${RELEASE_TEST:-}" ] && ! grep -q "isDebuggable = true" <(sed -n '/getByName("release")/,$p' "$GRADLE_FILE"); then
       sed -i '/getByName("release") {/a\            isDebuggable = true\n            signingConfig = signingConfigs.getByName("debug")' "$GRADLE_FILE"
     fi
-
-    # Force-keep all sentinel JNI entry points + manifest components.
-    # Without this, R8 in release minify can strip the *Primitives / *Helper
-    # classes (they are only referenced by string name from Rust JNI and by
-    # the manifest injection). This caused "could not load class" for
-    # permissions/overlay/scanner etc, making popups and scan not work.
-    #
-    # This keep rule does NOT pull in extra code. The set of modules that get
-    # their Kotlin compiled is decided *before* this patch, by build_sentinel
-    # reading the exact Cargo features from the .so (or --app). Only those
-    # modules are include'd in settings.gradle. The keep below just protects
-    # whatever was selected.
-    #
-    # Place sibling to this build.gradle.kts so the fileTree("**/*.pro") picks it.
-    PROGUARD_KEEP_DIR="$(dirname "$GRADLE_FILE")"
-    PROGUARD_KEEP="$PROGUARD_KEEP_DIR/proguard-sentinel-keep.pro"
-    cat > "$PROGUARD_KEEP" << 'PRO'
-# Keep sentinel classes/methods for JNI (exact names) + manifest components.
-# Broad but safe: only affects the internal com.mobilesentinel package.
-# IMPORTANT: This does not cause extra modules to be built.
-# The list of :sentinel-xxx modules that Gradle sees comes exclusively
-# from the earlier build_sentinel step, which only includes modules for
-# the Cargo features that were actually enabled when the .so was compiled.
--keep class com.mobilesentinel.** { *; }
--keepclassmembers class com.mobilesentinel.** { *; }
-PRO
-    echo "  [play] Added proguard keep for sentinel JNI classes (permissions, overlay, scanner, ...)"
 
     echo "  [play] Patched Gradle for release: versionCode=$VC , debugSymbolLevel=FULL (see message above for upgrade warning)"
   fi

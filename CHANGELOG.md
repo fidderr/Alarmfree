@@ -10,6 +10,10 @@ shims. Uninstall/reinstall on a schema change.
 
 ## [Unreleased]
 
+### Changed
+
+- Needs Android 12 or newer, on a 64-bit phone.
+
 ## [0.2.1] - 2026-10-16
 
 ### Changed
