@@ -63,7 +63,7 @@ pub fn alarm_kit_optional() -> Option<&'static AlarmKit> {
     ALARM_KIT.get()
 }
 
-/// Set when [`handle_ring_ends`] changed something the UI shows, if there is a UI.
+/// Set when something changed that the UI shows or has to tell, if there is a UI.
 static RING_END_NEWS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 /// Whether rings ended since the last call, for the UI to catch up.
@@ -382,6 +382,14 @@ fn sync_alarms(kit: &'static AlarmKit, woken: bool) {
         let due = chrono::DateTime::from_timestamp_millis(missed.due_unix_ms).unwrap_or(now);
         record_outcome(&list, &missed.id.0, AlarmOutcome::Missed, due);
     }
+    // A sync can run next to the UI: Android hands over the boot signals when a
+    // force-stopped app is opened, so this may come after the UI looked for news.
+    if !report.ended_by_reboot.is_empty()
+        || !report.ring_ends.is_empty()
+        || !report.missed.is_empty()
+    {
+        RING_END_NEWS.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
     let finished = report
         .finished
         .iter()
@@ -394,6 +402,7 @@ fn sync_alarms(kit: &'static AlarmKit, woken: bool) {
     }
     if switched_off {
         crate::persistence::save_alarms(&list);
+        RING_END_NEWS.store(true, std::sync::atomic::Ordering::Relaxed);
     }
     refresh_reminders();
 }
