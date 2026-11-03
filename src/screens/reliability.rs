@@ -14,7 +14,7 @@ use crate::models::AppSettings;
 const TEST_SECONDS: i64 = 60;
 
 /// The checks in the order the screen lists them.
-const CHECKS: [Check; 9] = [
+const CHECKS: [Check; 10] = [
     Check::ExactAlarms,
     Check::Notifications,
     Check::FullScreen,
@@ -24,6 +24,7 @@ const CHECKS: [Check; 9] = [
     Check::KeptWhenUnused,
     Check::ChannelImportance,
     Check::NotTotalSilence,
+    Check::BootSignal,
 ];
 
 fn report() -> HealthReport {
@@ -47,6 +48,7 @@ pub fn check_text(translations: &Translations, check: Check) -> (String, String)
         Check::KeptWhenUnused => "unused",
         Check::ChannelImportance => "channel",
         Check::NotTotalSilence => "silence",
+        Check::BootSignal => "boot_signal",
     };
     (
         t(translations, &format!("reliability.{name}")),
@@ -135,7 +137,6 @@ fn ReliabilityScreen(first_run: bool) -> Element {
                 .replace("{seconds}", &format!("{:.1}", took_ms as f64 / 1000.0))
         })
         .unwrap_or_default();
-    let maker = health.maker_restricts_background();
 
     rsx! {
         div { class: "screen",
@@ -181,7 +182,8 @@ fn ReliabilityScreen(first_run: bool) -> Element {
                                             span { class: "check-note", "{note}" }
                                         }
                                     }
-                                    if !ok {
+                                    // No app can open the maker's page for this one.
+                                    if !ok && check != Check::BootSignal {
                                         button {
                                             class: "btn-small",
                                             onclick: move |_| {
@@ -191,26 +193,18 @@ fn ReliabilityScreen(first_run: bool) -> Element {
                                                     let _ = mobile_sentinel::permissions::request("android.permission.POST_NOTIFICATIONS");
                                                     return;
                                                 }
+                                                // One tap in Android's own dialog, instead of a list
+                                                // of every app on the phone.
+                                                if check == Check::BatteryUnrestricted {
+                                                    mobile_sentinel::battery::request_exemption();
+                                                    return;
+                                                }
                                                 health::open_settings(check, crate::platform::FOREGROUND_CHANNEL_ID);
                                             },
                                             {t(&translations, "reliability.fix")}
                                         }
                                     }
                                 }
-                            }
-                        }
-                    }
-                    if maker {
-                        li { class: "check-row",
-                            span { class: "check-icon warn", Icon { name: IconName::Warning, size: 20 } }
-                            span { class: "check-text",
-                                span { class: "check-title", {t(&translations, "reliability.autostart")} }
-                                span { class: "check-note", {t(&translations, "reliability.autostart_note")} }
-                            }
-                            button {
-                                class: "btn-small",
-                                onclick: move |_| { mobile_sentinel::permissions::open_app_settings(); },
-                                {t(&translations, "reliability.open")}
                             }
                         }
                     }
