@@ -164,17 +164,24 @@ device. They also check that every translation has every key and placeholder, an
 key the code names exists.
 
 `devtest/` drives a real app over adb and judges only what can be seen from outside: is the
-sound on, what is on screen, what is armed.
+sound on, what is on screen, what is armed, what is saved.
 
 ```bash
 SERIAL=emulator-5554 devtest/matrix.sh            # every scenario on one device
-SERIAL=emulator-5554 devtest/matrix.sh s01 s07c   # just these
-bash devtest/all.sh                               # all of them on each emulator
+SERIAL=emulator-5554 devtest/matrix.sh s01 s07    # just these
+bash devtest/all.sh                               # Android 16 and 12 at once, then tablet and foldable
 ```
 
+All of it should take under 15 minutes on an emulator, and no scenario over a minute: the
+summary names the ones that do. An emulator's clock moves instead of a scenario waiting for the
+time to pass, what can be asked is asked until it is true, what can happen during the same ring
+or restart does, and two shells on the device stay open instead of starting adb for every call.
+
 On a real phone: `NO_LOCK=1` for a phone with a PIN (nothing here sets or asks for one), and
-`PHONE_SQLITE=<path>` for a `sqlite3` pushed to it. Some scenarios need things only a person
-can give: a reboot with a PIN, real sound and vibration, an overnight run.
+`PHONE_SQLITE=<path>` for a `sqlite3` pushed to it. A phone's clock is left alone, so there the
+time has to pass, and it only gets what needs no restart and changes none of its settings. Some
+scenarios need things only a person can give: a reboot with a PIN, real sound and vibration, an
+overnight run.
 
 No device outside the emulators and one OnePlus has seen this yet. Phone makers differ, which
 is what the test alarm and the saved record of how fast rings were are for.

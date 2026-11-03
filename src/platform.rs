@@ -296,7 +296,7 @@ fn setup_platform(woken: bool) {
             crate::custom_sounds::FALLBACK_SOUND.into(),
         )),
         fallback_title: String::new(),
-        backup_holds: BACKUP_HOLDS,
+        backup_holds: shortened("backup_holds", BACKUP_HOLDS),
         backup_hold_ms: BACKUP_HOLD_MS,
         backup_text: String::new(),
     };
@@ -406,6 +406,16 @@ pub fn save_to_downloads(text: &str, name: &str, mime_type: &str) -> Result<Stri
     result
 }
 
+/// A wait or a count as it is, unless the scenarios asked for less, in a build for testing.
+pub fn shortened(name: &str, normal: u32) -> u32 {
+    #[cfg(debug_assertions)]
+    if let Some(value) = crate::debug_hooks::test_value(name) {
+        return value;
+    }
+    let _ = name;
+    normal
+}
+
 /// The name to tell the user an alarm by: its label, else its time.
 fn display_name(alarm: &AlarmData) -> String {
     if alarm.label.is_empty() {
@@ -480,7 +490,7 @@ pub(crate) fn forget_alarm(alarm_id: &str) {
 /// `:sentinel` guardian restarts the app (see `app::ui_round_trip`). The first
 /// beat has to follow the activity coming on screen within this time, so it
 /// is generous: a cold start extracts sounds and loads the WebView first.
-const UI_LIVENESS_TIMEOUT_MS: u64 = 15_000;
+const UI_LIVENESS_TIMEOUT_MS: u32 = 15_000;
 
 /// How often the guardian checks on a job. The sound does not depend on it.
 const POLL_INTERVAL_MS: u64 = 500;
@@ -489,7 +499,7 @@ const POLL_INTERVAL_MS: u64 = 500;
 fn job_config() -> mobile_sentinel::JobConfig {
     mobile_sentinel::JobConfig {
         poll_interval_ms: POLL_INTERVAL_MS,
-        ui_liveness_timeout_ms: UI_LIVENESS_TIMEOUT_MS,
+        ui_liveness_timeout_ms: u64::from(shortened("ui_timeout_ms", UI_LIVENESS_TIMEOUT_MS)),
         ui_failures_before_backup: UI_FAILURES_BEFORE_BACKUP,
         ..Default::default()
     }

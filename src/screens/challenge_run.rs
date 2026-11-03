@@ -187,6 +187,7 @@ pub fn ChallengeRun(
     // This challenge was swapped for the touch-only one.
     let mut fallback = use_signal(|| false);
     let mut asking_fallback = use_signal(|| false);
+    let idle_limit = use_hook(|| crate::platform::shortened("idle_secs", IDLE_LIMIT_SECS));
 
     use_future(move || async move {
         let Some(on_idle) = on_idle else {
@@ -214,7 +215,7 @@ pub fn ChallengeRun(
             }
             let idle = *idle_secs.peek() + 1;
             idle_secs.set(idle);
-            if idle >= IDLE_LIMIT_SECS {
+            if idle >= idle_limit {
                 on_idle.call(());
                 break;
             }
@@ -277,7 +278,7 @@ pub fn ChallengeRun(
     let cancel_text = t(&translations, "action.cancel");
     let time_left_text = t(&translations, "challenge.time_left");
     let confetti = settings.read().prefs.confetti;
-    let idle_left = 100 - idle_secs() * 100 / IDLE_LIMIT_SECS;
+    let idle_left = 100_u32.saturating_sub(idle_secs() * 100 / idle_limit);
     let can_swap = !matches!(current.challenge, Challenge::Hold { .. });
 
     let body = if fallback() {

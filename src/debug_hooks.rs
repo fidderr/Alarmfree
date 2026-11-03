@@ -7,6 +7,9 @@
 //!   `js:<script>`: run in the page, the result is left in `debug_script_result.txt`.
 //!     It is how the scenarios press buttons and read the screen on any phone size.
 //!   `hang_ui`: freeze the UI thread, to exercise the guardian.
+//!
+//! `<files>/debug_<name>.txt` holds a number to use instead of a wait that takes too long
+//! for a test, see [`crate::platform::shortened`].
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, PoisonError};
@@ -21,7 +24,7 @@ static SCRIPT: Mutex<Option<String>> = Mutex::new(None);
 /// Watch for what the harness writes.
 pub fn start() {
     std::thread::spawn(|| loop {
-        std::thread::sleep(std::time::Duration::from_millis(500));
+        std::thread::sleep(std::time::Duration::from_millis(30));
         let path = mobile_sentinel::app_files_dir().join("debug_action.txt");
         let Ok(contents) = std::fs::read_to_string(&path) else {
             continue;
@@ -47,10 +50,16 @@ pub fn start() {
     });
 }
 
+/// The number the harness left for `name`, if any.
+pub fn test_value(name: &str) -> Option<u32> {
+    let path = mobile_sentinel::app_files_dir().join(format!("debug_{name}.txt"));
+    std::fs::read_to_string(path).ok()?.trim().parse().ok()
+}
+
 /// Run what the harness sent in the page.
 pub async fn script_loop() {
     loop {
-        crate::timer::sleep_ms(200).await;
+        crate::timer::sleep_ms(30).await;
         let script = SCRIPT.lock().unwrap_or_else(PoisonError::into_inner).take();
         let Some(script) = script else {
             continue;
@@ -59,9 +68,19 @@ pub async fn script_loop() {
             "try {{ dioxus.send(String((function () {{ {script} }})())); }} \
              catch (e) {{ dioxus.send('error: ' + e); }}"
         ));
-        let result = eval.recv::<String>().await.unwrap_or_default();
-        let path = mobile_sentinel::app_files_dir().join("debug_script_result.txt");
-        let _ = std::fs::write(path, format!("={result}"));
+        // An answer can get lost while the page is away: the next script must still run.
+        let result = tokio::time::timeout(std::time::Duration::from_secs(2), eval.recv::<String>())
+            .await
+            .map_or_else(
+                |_| "error: no answer".to_owned(),
+                |answer| answer.unwrap_or_default(),
+            );
+        // In one go: the harness reads it as soon as it is there.
+        let dir = mobile_sentinel::app_files_dir();
+        let unfinished = dir.join("debug_script_result.tmp");
+        if std::fs::write(&unfinished, format!("={result}")).is_ok() {
+            let _ = std::fs::rename(unfinished, dir.join("debug_script_result.txt"));
+        }
     }
 }
 

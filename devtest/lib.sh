@@ -1,7 +1,10 @@
 #!/bin/bash
 # Helpers for the on-device scenarios in matrix.sh. Everything goes through
 # adb against one explicit device, so a connected phone is never touched by
-# accident. Needs a debug build (run-as, debug_action.txt).
+# accident. Needs a debug build, or a release with RELEASE_TEST (run-as, debug_action.txt).
+#
+# Nothing waits longer than it has to: what can be asked is asked until it is true, and on
+# an emulator the clock moves instead of a test waiting for the time to pass.
 
 export MSYS_NO_PATHCONV=1
 ADB="${ADB:-$LOCALAPPDATA/Android/Sdk/platform-tools/adb.exe}"
@@ -11,22 +14,96 @@ ACTIVITY=dev.dioxus.main.MainActivity
 OUT="${OUT:-devtest-out}"
 mkdir -p "$OUT"
 
+# Seconds from setting up an alarm until it rings: long enough to arm it and kill the app.
+LEAD="${LEAD:-6}"
+
 # Nothing may hang a run: an unresponsive device fails instead of waiting forever.
 adb_() { timeout 120 "$ADB" -s "$SERIAL" "$@"; }
 device_ok() { [ "$(timeout 20 "$ADB" -s "$SERIAL" shell echo ok | tr -d '\r')" = ok ]; }
-dev() { adb_ shell "$@" | tr -d '\r'; }
 # The app's files are device-encrypted (direct_boot in sentinel.toml), and run-as
 # starts in the credential-encrypted directory.
 DATA="/data/user_de/0/$PKG"
-as_app() { adb_ shell "run-as $PKG sh -c 'cd $DATA && $*'" | tr -d '\r'; }
+
+# Two shells on the device that stay open, one as adb and one as the app. Starting adb for
+# every call took 110 ms, a call in an open shell takes 30, and a scenario makes hundreds. Open
+# them from the script itself, not from a subshell: what a subshell opens goes with it.
+open_shells() {
+    { coproc DEV_SH { "$ADB" -s "$SERIAL" shell -T sh 2>&1; }; } 2> /dev/null
+    exec 5>&"${DEV_SH[1]}" 6<&"${DEV_SH[0]}"
+    DEV_PID=$DEV_SH_PID
+    { coproc APP_SH { "$ADB" -s "$SERIAL" shell -T "run-as $PKG sh" 2>&1; }; } 2> /dev/null
+    exec 7>&"${APP_SH[1]}" 8<&"${APP_SH[0]}"
+    APP_PID=$APP_SH_PID
+}
+DEV_PID=""
+APP_PID=""
+shells_open() { kill -0 "$DEV_PID" 2> /dev/null && kill -0 "$APP_PID" 2> /dev/null; }
+
+# A command in an open shell. Its output whole, and only then: a reader that stops early must
+# not leave the rest in the way of the next answer. Returns what the command returned.
+ask() { # pid in out command
+    local pid=$1 line text="" rest
+    printf '{ %s\n} < /dev/null 2>&1; echo "__DONE__$?"\n' "$4" >&"$2"
+    while :; do
+        if ! IFS= read -r -t 90 line <&"$3"; then
+            kill "$pid" 2> /dev/null
+            return 124
+        fi
+        line=${line%$'\r'}
+        case "$line" in
+            *__DONE__*)
+                rest=${line%__DONE__*}
+                [ -z "$rest" ] || text="$text$rest"$'\n'
+                printf '%s' "$text"
+                return "${line##*__DONE__}"
+                ;;
+        esac
+        text="$text$line"$'\n'
+    done
+}
+
+# As adb. What gives pages of output goes the old way: reading it line by line is slow. Filter
+# it on the device to have it both ways, like sound_on.
+dev() {
+    case "$1" in
+        dumpsys | cat | uiautomator) adb_ shell "$@" | tr -d '\r' ;;
+        *)
+            if kill -0 "$DEV_PID" 2> /dev/null; then
+                ask "$DEV_PID" 5 6 "$*"
+            else
+                adb_ shell "$@" | tr -d '\r'
+            fi
+            ;;
+    esac
+}
+# As the app, in its files.
+as_app() {
+    if kill -0 "$APP_PID" 2> /dev/null; then
+        ask "$APP_PID" 7 8 "( cd $DATA && $* )"
+    else
+        adb_ shell "run-as $PKG sh -c 'cd $DATA && $*'" | tr -d '\r'
+    fi
+}
 # A phone has no sqlite3: PHONE_SQLITE names a tool pushed to it for this. It has to run
 # from the app's own files, and clearing the app takes it along.
 sql() {
+    local tool=sqlite3 query
     if [ -n "${PHONE_SQLITE:-}" ]; then
-        adb_ shell "run-as $PKG sh -c 'test -x $DATA/af_sqlite3 || { cp $PHONE_SQLITE $DATA/af_sqlite3; chmod 700 $DATA/af_sqlite3; }; $DATA/af_sqlite3 $DATA/files/alarmfree.db'" 2>&1 | tr -d '\r'
-    else
-        adb_ shell "run-as $PKG sqlite3 $DATA/files/alarmfree.db" 2>&1 | tr -d '\r'
+        tool=$DATA/af_sqlite3
+        as_app "test -x $tool || { cp $PHONE_SQLITE $tool; chmod 700 $tool; }" > /dev/null
     fi
+    query=$(cat)
+    as_app "$tool $DATA/files/alarmfree.db '${query//\'/\'\\\'\'}'"
+}
+
+# Run a check again until it holds, for at most `$1` seconds.
+wait_for() {
+    local limit=$((SECONDS + $1))
+    shift
+    until "$@"; do
+        [ "$SECONDS" -ge "$limit" ] && return 1
+        sleep 0.1
+    done
 }
 
 main_pid() { dev pidof "$PKG"; }
@@ -35,15 +112,67 @@ kill_main() { local p; p=$(main_pid); [ -n "$p" ] && as_app "kill -9 $p"; true; 
 kill_sentinel() { local p; p=$(sentinel_pid); [ -n "$p" ] && as_app "kill -9 $p"; true; }
 # In one go: with a moment in between, what survives can bring back what did not.
 kill_all() { as_app "kill -9 $(main_pid) $(sentinel_pid)"; true; }
+no_process() { [ -z "$(main_pid)$(sentinel_pid)" ]; }
 
 now_s() { dev date +%s; }
 wake() { dev input keyevent KEYCODE_WAKEUP; dev wm dismiss-keyguard; }
 # NO_LOCK: a phone with a PIN cannot be unlocked by a script, and nothing here sets or asks
 # for one. It stays awake then, and being locked is tested by hand.
-screen_off() { [ -n "${NO_LOCK:-}" ] || dev input keyevent KEYCODE_SLEEP; }
+SCREEN_WENT_OFF=""
+screen_off() {
+    [ -n "${NO_LOCK:-}" ] && return 0
+    dev input keyevent KEYCODE_SLEEP
+    SCREEN_WENT_OFF=1
+}
 go_home() { dev input keyevent KEYCODE_HOME; }
 screenshot() { adb_ exec-out screencap -p > "$OUT/$1.png"; }
 
+# ---- The clock ----
+on_emulator() { case "$SERIAL" in emulator-*) return 0 ;; *) return 1 ;; esac; }
+set_clock() { dev cmd alarm set-time $(($1 * 1000)) > /dev/null; }
+
+# As if the time had passed, on an emulator. A phone's clock is left alone: there the time has
+# to pass by itself, which what comes next waits for. A running app gets told, and a killed one
+# wakes up for it, so a scenario that wants it dead kills it after this. An emulator's restart
+# puts its clock back on the true time, which a ring before the restart has to lie before.
+jump_to() {
+    on_emulator && set_clock "$1"
+    true
+}
+
+# The moment `lead` seconds from now, rounded up to a whole minute, as alarms have minute
+# resolution. Sets T (unix s), T_H, T_M, T_DATE. An emulator's clock is put so that the whole
+# minute is that near, and stays within half a minute of the true time, or of `$2` seconds
+# before it. Only with the app stopped, as `fresh` leaves it: a stopped app gets no signal of
+# the change.
+next_minute() {
+    local lead=${1:-$LEAD} n off local_s try=0 host
+    while :; do
+        if on_emulator && [ "$lead" -lt 600 ]; then
+            host=$(($(date +%s) - ${2:-0}))
+            set_clock $((host + ((-lead - 1 - host) % 60 + 90) % 60 - 30))
+        fi
+        n=$(now_s)
+        T=$(((n + lead + 59) / 60 * 60))
+        # A slow device can miss the minute it was aiming at.
+        on_emulator && [ "$lead" -lt 600 ] && [ $((T - n)) -gt $((lead + 5)) ] && [ "$try" -lt 3 ] || break
+        try=$((try + 1))
+    done
+    off=$(dev date +%z | tr -d '\r')
+    ZONE_S=$((${off:0:1}(10#${off:1:2} * 3600 + 10#${off:3:2} * 60)))
+    local_s=$((T + ZONE_S))
+    T_H=$(date -u -d "@$local_s" +%-H)
+    T_M=$(date -u -d "@$local_s" +%-M)
+    T_DATE=$(date -u -d "@$local_s" +%Y-%m-%d)
+}
+# Hour and minute of a moment, on the device's clock. After next_minute.
+at_hm() { date -u -d "@$(($1 + ZONE_S))" "+%-H %-M"; }
+
+until_past() { # wait until device time is past unix second $1
+    while [ "$(now_s)" -lt "$1" ]; do sleep 0.2; done
+}
+
+# ---- The device itself ----
 # Restart the device and wait until it is back. A device that does not come back
 # fails the scenario instead of hanging the run.
 #
@@ -55,15 +184,20 @@ AVD="${AVD:-af36}"
 EMULATOR="${EMULATOR:-$LOCALAPPDATA/Android/Sdk/emulator/emulator.exe}"
 
 emulator_start() {
-    powershell.exe -NoProfile -Command "Start-Process -WindowStyle Hidden -FilePath '$(cygpath -w "$EMULATOR")' -ArgumentList '-avd $AVD -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -port ${SERIAL#emulator-}'"
+    powershell.exe -NoProfile -Command "Start-Process -WindowStyle Hidden -FilePath '$(cygpath -w "$EMULATOR")' -ArgumentList '-avd $AVD -no-window -no-audio -no-boot-anim -no-snapshot -gpu ${EMULATOR_GPU:-host} -port ${SERIAL#emulator-}'"
 }
 
+# This emulator, and not another one running next to it.
 emulator_stop() {
-    powershell.exe -NoProfile -Command "Get-Process | Where-Object { \$_.ProcessName -match 'emulator|qemu' } | Stop-Process -Force -ErrorAction SilentlyContinue"
-    sleep 3
+    powershell.exe -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { \$_.Name -match 'emulator|qemu' -and \$_.CommandLine -match '-port ${SERIAL#emulator-}' } | ForEach-Object { Stop-Process -Id \$_.ProcessId -Force -ErrorAction SilentlyContinue }"
+    sleep 1
 }
 
 reboot_and_wait() {
+    reboot_only || return 1
+    open_shells
+}
+reboot_only() {
     case "$SERIAL" in
         emulator-*)
             # Android writes "no longer stopped" to disk 10-11 s after a force-stopped app
@@ -81,29 +215,39 @@ reboot_and_wait() {
             ;;
     esac
     timeout 240 "$ADB" -s "$SERIAL" wait-for-device || { note "device did not come back"; return 1; }
-    timeout 240 "$ADB" -s "$SERIAL" shell 'while [ -z "$(getprop sys.boot_completed)" ]; do sleep 1; done' ||
+    timeout 240 "$ADB" -s "$SERIAL" shell 'while [ -z "$(getprop sys.boot_completed)" ]; do sleep 0.5; done' ||
         { note "boot did not complete"; return 1; }
-    sleep 3
 }
 
-# A clean app: no alarms, normal permissions, database created.
+# ---- A clean app ----
+# No alarms, normal permissions, an empty database. The first time the real way, with the app
+# making its database; after that from a copy of what it made, in a second instead of ten.
+CLEAN_COPY=""
+PERMISSIONS_TOUCHED=""
 fresh() {
+    shells_open || open_shells
     dev am force-stop "$PKG"
-    # ColorOS does not let the shell clear an app: then only what the app itself owns.
-    case "$(dev pm clear "$PKG" 2>&1)" in
-        *Success*) ;;
-        *) as_app "rm -rf ./*" ;;
-    esac
-    grant_all
-    start_app
-    wait_file files/alarmfree.db 60
-    sleep 3
-    dev am force-stop "$PKG"
-    sleep 1
+    [ -z "$SCREEN_WENT_OFF" ] || { wake; SCREEN_WENT_OFF=""; }
+    [ -z "$PERMISSIONS_TOUCHED" ] || grant_all
+    if [ -z "$CLEAN_COPY" ]; then
+        # ColorOS does not let the shell clear an app: then only what the app itself owns.
+        case "$(dev pm clear "$PKG" 2>&1)" in
+            *Success*) ;;
+            *) as_app "rm -rf ./*" ;;
+        esac
+        grant_all
+        start_app
+        wait_file files/alarmfree.db 60
+        wait_for 20 on_home_or_setup
+        dev am force-stop "$PKG"
+        printf 'PRAGMA wal_checkpoint(TRUNCATE);\n' | sql > /dev/null
+        as_app "cp files/alarmfree.db clean.db"
+        CLEAN_COPY=1
+    fi
+    as_app 'cd files && for f in *; do [ "$f" = sounds ] || rm -rf "$f"; done; rm -rf sounds/custom ../shared_prefs; cp ../clean.db alarmfree.db'
     use_settings '"Dark"' '"English"' '"setup_done":true,"language_follows_phone":false'
-    # Force-stop leaves a package "stopped": clear that by starting it once
-    # more in arm(), which every scenario does before relying on an alarm.
 }
+on_home_or_setup() { is_there '.home-header, .setup-header'; }
 
 # The app's settings: theme, language, and more preferences as JSON fields. Past the
 # first-run screen and in one language, unless a scenario wants otherwise.
@@ -111,11 +255,18 @@ use_settings() {
     printf "INSERT OR REPLACE INTO settings (id, theme, locale, min_volume_percent, prefs) VALUES (1, '%s', '%s', 50, '{%s}');\n" "$1" "$2" "$3" | sql
 }
 
+# In one go: each of these starts a program on the device.
 grant_all() {
-    dev pm grant "$PKG" android.permission.POST_NOTIFICATIONS 2> /dev/null
-    dev pm grant "$PKG" android.permission.ACTIVITY_RECOGNITION 2> /dev/null
-    dev pm grant "$PKG" android.permission.CAMERA 2> /dev/null
-    dev appops set "$PKG" SYSTEM_ALERT_WINDOW allow
+    adb_ shell "pm grant $PKG android.permission.POST_NOTIFICATIONS; pm grant $PKG android.permission.ACTIVITY_RECOGNITION; pm grant $PKG android.permission.CAMERA; appops set $PKG SYSTEM_ALERT_WINDOW allow" > /dev/null 2>&1
+    PERMISSIONS_TOUCHED=""
+}
+deny_overlay() {
+    PERMISSIONS_TOUCHED=1
+    dev appops set "$PKG" SYSTEM_ALERT_WINDOW deny
+}
+deny_notifications() {
+    PERMISSIONS_TOUCHED=1
+    dev pm revoke "$PKG" android.permission.POST_NOTIFICATIONS
 }
 
 start_app() {
@@ -124,27 +275,12 @@ start_app() {
 }
 
 wait_file() {
-    local f=$1 t=${2:-30} i=0
-    while [ "$i" -lt $((t * 2)) ]; do
-        [ "$(as_app "test -e $f && echo y")" = y ] && return 0
-        sleep 0.5
-        i=$((i + 1))
-    done
-    return 1
+    local f=$1 t=${2:-30}
+    [ "$(as_app "i=0; while [ ! -e $f ] && [ \$i -lt $((t * 20)) ]; do sleep 0.05; i=\$((i + 1)); done; test -e $f && echo y")" = y ]
 }
 
-# The time `lead` seconds from now, rounded up to a whole minute. Sets T
-# (unix s), T_H, T_M, T_DATE. Alarms have minute resolution.
-next_minute() {
-    local lead=${1:-45} n off local_s
-    n=$(now_s)
-    T=$(((n + lead + 59) / 60 * 60))
-    off=$(dev date +%z | tr -d '\r')
-    local_s=$((T + ${off:0:1}(10#${off:1:2} * 3600 + 10#${off:3:2} * 60)))
-    T_H=$(date -u -d "@$local_s" +%-H)
-    T_M=$(date -u -d "@$local_s" +%-M)
-    T_DATE=$(date -u -d "@$local_s" +%Y-%m-%d)
-}
+# A number instead of a wait that takes too long for a test: see platform::shortened.
+shorten() { as_app "echo $2 > files/debug_$1.txt"; }
 
 # alarm_json id hour minute days date [sound] [sound_mode] [fade] [snooze_n] [snooze_min] [challenges] [ring_limit_secs]
 # ALARM_EXTRA adds JSON fields to it.
@@ -171,17 +307,16 @@ db_enabled() { # true / false / missing
 # Start the app so it arms the seeded alarms, then wait until `id` is armed.
 arm() {
     start_app
-    wait_file "files/sentinel/context/$1.json" 45
-    sleep 3
+    wait_file "files/sentinel/armed/$1.armed" 30
+    # Whatever else was seeded comes right after.
+    sleep 0.3
 }
 
 # Leave no app process running, the way the system leaves it overnight.
 dead() {
     go_home
-    sleep 1
     kill_all
-    sleep 1
-    [ -z "$(main_pid)$(sentinel_pid)" ]
+    wait_for 3 no_process
 }
 
 state() { # idle / scheduled / firing / snoozed / dismissed / none
@@ -189,6 +324,8 @@ state() { # idle / scheduled / firing / snoozed / dismissed / none
     s=$(as_app "grep \"\\\"state\\\": \\\"\" files/sentinel/context/$1.json 2>/dev/null" | sed -E 's/.*"state": "([a-z]+)".*/\1/')
     echo "${s:-none}"
 }
+state_is() { [ "$(state "$1")" = "$2" ]; }
+await_state() { wait_for "${3:-10}" state_is "$1" "$2"; } # id state seconds
 next_fire_ms() { as_app "grep next_fire_unix_ms files/sentinel/context/$1.json 2>/dev/null" | sed -E 's/[^0-9]//g'; }
 job_status() { # active / pending / none
     if [ "$(as_app "test -e files/sentinel/jobs/$1.active && echo y")" = y ]; then
@@ -199,26 +336,21 @@ job_status() { # active / pending / none
         echo none
     fi
 }
-action() { as_app "echo $1 > files/debug_action.txt"; }
+# In one go: the app deletes the file once it has seen it.
+action() { as_app "echo $1 > files/debug_action.tmp && mv files/debug_action.tmp files/debug_action.txt"; }
 
-# Run JavaScript in the page and print what it returns, in debug builds. It is how the
-# scenarios press buttons and read the screen on any phone size.
+# Run JavaScript in the page and print what it returns. It is how the scenarios press buttons
+# and read the screen on any phone size. One program on the device, that also waits for the
+# answer: under a tenth of a second, against a second when each step was its own.
 js() {
-    as_app "rm -f files/debug_script_result.txt"
-    # In one go: the app deletes the file once it has seen it, also if it was still empty.
-    printf 'js:%s' "$1" | adb_ shell "run-as $PKG sh -c 'cat > $DATA/files/debug_action.tmp && mv $DATA/files/debug_action.tmp $DATA/files/debug_action.txt'"
-    local i=0 out
-    while [ "$i" -lt 30 ]; do
-        out=$(as_app "cat files/debug_script_result.txt 2>/dev/null")
-        case "$out" in
-            =*)
-                echo "${out#=}"
-                return 0
-                ;;
-        esac
-        sleep 0.3
-        i=$((i + 1))
-    done
+    local out
+    out=$(as_app "cd files && rm -f debug_script_result.txt && print -r -- 'js:${1//\'/\'\\\'\'}' > debug_action.tmp && mv debug_action.tmp debug_action.txt && i=0; while [ ! -e debug_script_result.txt ] && [ \$i -lt 300 ]; do sleep 0.01; i=\$((i + 1)); done; cat debug_script_result.txt 2> /dev/null")
+    case "$out" in
+        =*)
+            echo "${out#=}"
+            return 0
+            ;;
+    esac
     # Never empty: that reads as an answer.
     echo "no answer from the page"
     return 1
@@ -226,17 +358,22 @@ js() {
 # click selector [which of them] [seconds to wait]
 click() {
     js "var e = document.querySelectorAll('$1')[${2:-0}]; if (!e) return 'nothing like $1'; e.click(); return 'ok'" > /dev/null
-    sleep "${3:-0.8}"
+    sleep "${3:-0.1}"
 }
-on_screen() { [ "$(js "return document.querySelector('$1') ? 'y' : 'n'")" = y ]; }
+# Right now, and until it shows or is gone: a screen takes a moment to change.
+is_there() { [ "$(js "return document.querySelector('$1') ? 'y' : 'n'")" = y ]; }
+is_not_there() { [ "$(js "return document.querySelector('$1') ? 'y' : 'n'")" = n ]; }
+on_screen() { wait_for "${2:-6}" is_there "$1"; }
+gone() { wait_for "${2:-6}" is_not_there "$1"; }
 read_text() { js "var e = document.querySelector('$1'); return e ? e.textContent : ''"; }
 press_back() {
     dev input keyevent KEYCODE_BACK
-    sleep 1.5
+    sleep 0.2
 }
 db_count() { printf "SELECT count(*) FROM alarms WHERE data LIKE '%%%s%%';\n" "$1" | sql; }
+alarm_count() { printf 'SELECT count(*) FROM alarms;\n' | sql; }
 
-# Pretend the alarm was due `$2` minutes ago, with the app stopped.
+# Pretend the alarm was due `$2` minutes ago.
 make_overdue() {
     local due=$(($(now_s) * 1000 - $2 * 60000))
     as_app "sed -i -E \"s/(next_fire_unix_ms\\\": )[0-9]+/\\1$due/\" files/sentinel/context/$1.json"
@@ -251,11 +388,13 @@ unseen() { # how many history rows the user has not been told about
 }
 
 # Is the app's alarm sound playing right now?
+APP_UID=""
 sound_on() {
-    local uid
-    uid=$(dev cmd package list packages -U "$PKG" | sed -E 's/.*uid:([0-9]+).*/\1/')
-    dev dumpsys audio | grep -E "u/pid:$uid/[0-9]+ .*state:started.*(USAGE_ALARM|usage=4 )" > /dev/null
+    local uid=$APP_UID
+    [ -n "$uid" ] || uid=$(dev cmd package list packages -U "$PKG" | sed -E 's/.*uid:([0-9]+).*/\1/')
+    dev "dumpsys audio | grep -E 'u/pid:$uid/[0-9]+ .*state:started.*(USAGE_ALARM|usage=4 )' > /dev/null"
 }
+sound_off() { ! sound_on; }
 
 # Milliseconds from the alarm being delivered until the sound plays, from the
 # log (needs the log since the alarm). Empty when either line is missing.
@@ -279,11 +418,11 @@ await_silence() {
     while :; do
         n=$(now_s)
         [ "$n" -gt $((T + limit)) ] && return 1
-        if ! sound_on; then
+        if sound_off; then
             STOPPED_AT=$((n - T))
             return 0
         fi
-        sleep 1
+        sleep 0.1
     done
 }
 
@@ -297,15 +436,16 @@ await_sound() {
             SOUND_AT=$((n - T))
             return 0
         fi
-        sleep 0.3
+        sleep 0.1
     done
 }
 
-until_past() { # wait until device time is past unix second $1
-    while [ "$(now_s)" -lt "$1" ]; do sleep 1; done
+# The sound is on and the app has taken it up.
+await_ring() { # id [seconds past T]
+    await_sound "${2:-30}" && await_state "$1" firing 15
 }
 
-top_is_backup() { dev dumpsys activity activities | grep -E "topResumedActivity|ResumedActivity:" | head -1 | grep -q SentinelBackupActivity; }
+top_is_backup() { dev "dumpsys activity activities | grep -E 'topResumedActivity|ResumedActivity:' | head -1 | grep -q SentinelBackupActivity" > /dev/null; }
 
 # Do the backup screen's challenge: `n` long presses where its button is.
 solve_backup() {
@@ -315,14 +455,15 @@ solve_backup() {
     h=${size#*x}
     while [ "$i" -lt "$n" ]; do
         dev input swipe $((w / 2)) $((h * 2 / 3)) $((w / 2)) $((h * 2 / 3)) 3300
-        sleep 0.3
+        sleep 0.2
         i=$((i + 1))
     done
 }
 
-top_is_app() { dev dumpsys activity activities | grep -E "topResumedActivity|ResumedActivity:" | head -1 | grep -q "$PKG"; }
+top_is_app() { dev "dumpsys activity activities | grep -E 'topResumedActivity|ResumedActivity:' | head -1 | grep -q $PKG" > /dev/null; }
+focus_in_app() { dev "dumpsys window | grep -m1 mCurrentFocus | grep -q $PKG/" > /dev/null; }
 armed_at_ms() { as_app "head -n 1 files/sentinel/armed/$1.armed 2>/dev/null"; }
-os_has_alarm() { dev dumpsys alarm | grep -q "$PKG.*ALARM_DISPATCH\|ALARM_DISPATCH.*$PKG\|walarm\*:com.mobilesentinel.ALARM_DISPATCH"; }
+os_has_alarm() { dev "dumpsys alarm | grep -q '$PKG.*ALARM_DISPATCH\\|ALARM_DISPATCH.*$PKG\\|walarm\\*:com.mobilesentinel.ALARM_DISPATCH'" > /dev/null; }
 alarm_volume() {
     dev cmd media_session volume --stream 4 --get 2> /dev/null |
         grep -oE 'volume is [0-9]+' | grep -oE '[0-9]+' | sed -n 1p
@@ -335,24 +476,13 @@ set_alarm_volume() {
 
 set_zone() { dev cmd alarm set-timezone "$1" > /dev/null 2>&1; }
 
-# Wait until Android has told the app about the boot: on a software-rendered
-# emulator that is well after sys.boot_completed. Opening the app before it can get
-# the activity relaunched, and any activity destroy ends the main process.
-await_boot_signal() {
-    local i=0
-    while [ "$i" -lt 60 ]; do
-        [ -n "$(sentinel_pid)" ] && return 0
-        sleep 1
-        i=$((i + 1))
-    done
-    return 1
-}
-
 # ---- results ----
 RESULTS="$OUT/results.txt"
 CURRENT=""
+SCENARIO_START=$SECONDS
 scenario() {
     CURRENT=$1
+    SCENARIO_START=$SECONDS
     echo
     echo "=== $CURRENT"
     if ! device_ok; then
@@ -362,7 +492,12 @@ scenario() {
     fi
     adb_ logcat -c
 }
-pass() { echo "PASS  $CURRENT  $1" | tee -a "$RESULTS"; }
-fail() { echo "FAIL  $CURRENT  $1" | tee -a "$RESULTS"; }
+took() { echo "$((SECONDS - SCENARIO_START))s"; }
+pass() { echo "PASS  $CURRENT  [$(took)] $1" | tee -a "$RESULTS"; }
+# The log of what went wrong, right when it did. It takes a moment, so only then.
+fail() {
+    echo "FAIL  $CURRENT  [$(took)] $1" | tee -a "$RESULTS"
+    write_log
+}
 note() { echo "      $1"; }
-save_log() { adb_ logcat -d -b all -v time 2> /dev/null | grep -E "AlarmFree|MobileSentinel|Sentinel|AlarmKit|AlarmClass|alarmfree|ActivityTaskManager.*(fidderr|Background)|BackgroundActivity|AndroidRuntime|FATAL" > "$OUT/$CURRENT.log"; }
+write_log() { adb_ logcat -d -b all -v time 2> /dev/null | grep -E "AlarmFree|MobileSentinel|Sentinel|AlarmKit|AlarmClass|alarmfree|ActivityTaskManager.*(fidderr|Background)|BackgroundActivity|AndroidRuntime|FATAL" > "$OUT/$CURRENT.log"; }
