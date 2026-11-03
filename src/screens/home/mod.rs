@@ -361,13 +361,12 @@ pub fn Home() -> Element {
                                         alarm.time_hour = hour;
                                         alarm.time_minute = 0;
                                         alarm.days = days;
-                                        alarm.label = t(&translations, key);
                                         alarm.order = crate::ordering::order_for_new(&alarms.peek());
-                                        alarms.write().push(alarm);
-                                        crate::persistence::save_alarms(&alarms.peek());
+                                        let message = crate::text::rings_in(&translations, &alarm);
+                                        state.change(message, &mut |list| list.push(alarm.clone()));
                                     }
                                 },
-                                {t(&translations, key)}
+                                {t(&translations, key).replace("{time}", &crate::text::clock(hour, 0, twenty_four))}
                             }
                         }
                     }

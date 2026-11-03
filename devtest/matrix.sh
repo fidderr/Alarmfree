@@ -1027,8 +1027,18 @@ s32() {
     await_sound 150 || { fail "it never rang"; save_log; return; }
     sleep 5
     click .ring-off 0 3
-    if ! sound_on && [ "$(db_count '"hidden":true')" = 0 ] && [ "$(outcomes solved)" = 0 ]; then
-        pass "rang ${SOUND_AT}s later, nothing left, nothing in history"
+    local record=no
+    dev rm -f /sdcard/Download/alarmfree-rings.txt
+    click .nav-item 2
+    click .banner
+    click_row 'Save the record'
+    sleep 1
+    [ "$(dev cat /sdcard/Download/alarmfree-rings.txt | grep -c ' sound ')" -ge 1 ] && record=yes
+    dev rm -f /sdcard/Download/alarmfree-rings.txt
+    if ! sound_on && [ "$(db_count '"hidden":true')" = 0 ] && [ "$(outcomes solved)" = 0 ] && [ "$record" = yes ]; then
+        pass "rang ${SOUND_AT}s later, nothing left, nothing in history, its record saved"
+    elif [ "$record" != yes ]; then
+        fail "no record of the ring in Downloads"
     else
         fail "sound=$(sound_on && echo ON || echo off) hidden=$(db_count '"hidden":true') solved=$(outcomes solved)"
     fi
@@ -1850,7 +1860,11 @@ s48() {
     click_row "Back up"
     click .sheet-item 1 3
     if picker_tap "$file"; then
-        sleep 4
+        local i=0
+        while [ "$i" -lt 12 ] && ! on_screen .toast-undo; do
+            sleep 0.3
+            i=$((i + 1))
+        done
         [ "$(printf 'SELECT count(*) FROM alarms;\n' | sql)" = 2 ] || problems="$problems; $(printf 'SELECT count(*) FROM alarms;\n' | sql) alarms after restoring"
         click .toast-undo 0 1.5
         [ "$(printf 'SELECT count(*) FROM alarms;\n' | sql)" = 1 ] || problems="$problems; undo left $(printf 'SELECT count(*) FROM alarms;\n' | sql) alarms"
@@ -1984,9 +1998,10 @@ s50() {
     done_sheet
     click_row 'Full brightness'
     screenshot s50_set
-    click .save-btn 0 2
-    on_screen .home-header || problems="$problems; Save did not go back"
+    click .save-btn 0 0.5
     on_screen .toast-text || problems="$problems; Save said nothing"
+    on_screen .home-header || problems="$problems; Save did not go back"
+    sleep 1
     row=$(printf 'SELECT data FROM alarms;\n' | sql)
     for field in '"time_hour":7' '"time_minute":10' '"label":"Morning"' '"note":"Take pills"' \
         '"days":[false,false,false,false,false,true,true]' '"sound":"funk' '"fade_in_secs":120' \
@@ -2112,7 +2127,7 @@ s52() {
         *'"pause_until_ms":null'*) problems="$problems; not paused" ;;
     esac
     has "$(read_text .alarm-when)" Paused
-    [ "$(printf "SELECT data FROM alarms WHERE id='b';\n" | sql | grep -c '"pause_until_ms":null')" = 1 ] || problems="$problems; paused the other one too"
+    [ "$(printf "SELECT data FROM alarms WHERE id='b';\n" | sql | grep -c '"pause_until_ms":[0-9]')" = 0 ] || problems="$problems; paused the other one too"
     local paused_at
     paused_at=$(armed_at_ms a)
     [ "${paused_at:-0}" -gt $((($(now_s) + 3 * 86400) * 1000)) ] || problems="$problems; armed for $paused_at, inside the pause"
@@ -2158,7 +2173,105 @@ s52() {
     save_log
 }
 
-ALL="s01 s02 s03 s04 s05 s06 s07a s07b s07c s09 s10 s11a s11b s12 s12b s13 s14 s15 s16 s16b s17 s19 s20 s21 s22 s22b s23a s23b s23c s23d s24 s25 s26x5 s27 s28 s28b s29 s30 s31 s32 s33 s34 s35 s36 s37 s38 s39 s40 s41 s42 s43 s44 s45 s46 s47 s48 s49 s50 s51 s52"
+# What is left of the screens: templates, a typed time, the wheels, one date, a challenge's
+# settings, deleting a sound, the history's own days, the reliability screen's buttons.
+s53() {
+    scenario s53_the_rest_of_the_screens
+    fresh
+    as_app "mkdir -p files/sounds/custom && cp files/sounds/default/air.ogg files/sounds/custom/mytune.ogg"
+    history_row near 3
+    history_row far 30
+    start_app
+    sleep 5
+    local problems="" row
+    on_screen .empty || problems="$problems; no empty state"
+    click .empty-template 0 0.5
+    on_screen .toast-undo || problems="$problems; a template says nothing"
+    sleep 1
+    [ "$(printf 'SELECT count(*) FROM alarms;\n' | sql)" = 1 ] || problems="$problems; a template makes no alarm"
+    click .alarm-main
+    on_screen .time-big || problems="$problems; the alarm from a template opens no editor"
+    # Typed, then a tap on the wheel: the row under the middle is one more.
+    click .time-big
+    set_field '.sheet .field' 0 835
+    done_sheet
+    has "$(read_text .time-big)" ':35'
+    click .time-big
+    js "document.querySelectorAll('.wheel-column')[1].querySelectorAll('.wheel-cell-near')[1].click(); return 'ok'" > /dev/null
+    sleep 0.6
+    done_sheet
+    has "$(read_text .time-big)" ':36'
+    # One date.
+    click_text .chip-small 'One date'
+    click_text '.sheet .chip' Tomorrow
+    done_sheet
+    # A challenge with a setting, and one taken away again.
+    click_row Challenges
+    click '.sheet .btn-quiet' 0
+    click_text '.sheet .add-name' Math 1
+    on_screen .challenge-list || { on_screen .sheet && press_back; }
+    click .challenge-open 0
+    click_text '.sheet .chip' Hard
+    done_sheet
+    click '.sheet .btn-quiet' 0
+    click_text '.sheet .add-name' Shake 1
+    on_screen .challenge-list || { on_screen .sheet && press_back; }
+    [ "$(js "return document.querySelectorAll('.challenge-row').length")" = 2 ] || problems="$problems; added: $(texts_of .challenge-name)"
+    click '.challenge-row .icon-btn' 1
+    [ "$(js "return document.querySelectorAll('.challenge-row').length")" = 1 ] || problems="$problems; not taken away: $(texts_of .challenge-name)"
+    done_sheet
+    # A sound of one's own: asks first, then it is gone.
+    click_row Sound
+    has "$(texts_of .radio-text)" mytune
+    click '.radio-row .icon-btn' 1
+    click '.radio-row .link-btn.danger' 0 1
+    case "$(texts_of .radio-text)" in
+        *mytune*) problems="$problems; sound still listed" ;;
+    esac
+    [ -z "$(as_app "ls files/sounds/custom")" ] || problems="$problems; file still there"
+    done_sheet
+    click .save-btn 0 2
+    row=$(printf 'SELECT data FROM alarms;\n' | sql)
+    has "$row" '"time_hour":8'
+    has "$row" '"time_minute":36'
+    has "$row" "\"date\":\"$(date -u -d "@$(($(now_s) + 86400))" +%Y-%m-%d)"
+    has "$row" '"days":[false,false,false,false,false,false,false]'
+    has "$row" 'hard'
+    case "$row" in
+        *challenge.shake*) problems="$problems; the taken away challenge was saved" ;;
+    esac
+    # The history over your own number of days: only the one within them.
+    click .nav-item 1
+    click_text .chip-pill 'Your own days'
+    set_field '.custom-days .field' 0 7 change
+    sleep 1
+    [ "$(js "return document.querySelectorAll('.event-main').length")" = 1 ] || problems="$problems; $(js "return document.querySelectorAll('.event-main').length") rows in the last 7 days"
+    # The reliability screen's buttons leave for the phone's own screens, and come back.
+    click .nav-item 2
+    click .banner
+    local i=0 n
+    n=$(js "return document.querySelectorAll('.btn-small').length")
+    while [ "$i" -lt "${n:-0}" ] 2> /dev/null; do
+        click .btn-small "$i" 2
+        dev dumpsys window | grep -m1 mCurrentFocus | grep -q "$PKG/" && problems="$problems; fix button $i stays in the app"
+        press_back
+        sleep 1
+        on_screen .check-title || problems="$problems; not back from fix button $i"
+        i=$((i + 1))
+    done
+    click_row "This app in the phone"
+    sleep 1
+    dev dumpsys window | grep -m1 mCurrentFocus | grep -q "$PKG/" && problems="$problems; the app's settings stay in the app"
+    press_back
+    if [ -z "$problems" ]; then
+        pass "templates, time, wheels, date, challenge settings, deleting a sound, own days, $n fix buttons"
+    else
+        fail "${problems#; }"
+    fi
+    save_log
+}
+
+ALL="s01 s02 s03 s04 s05 s06 s07a s07b s07c s09 s10 s11a s11b s12 s12b s13 s14 s15 s16 s16b s17 s19 s20 s21 s22 s22b s23a s23b s23c s23d s24 s25 s26x5 s27 s28 s28b s29 s30 s31 s32 s33 s34 s35 s36 s37 s38 s39 s40 s41 s42 s43 s44 s45 s46 s47 s48 s49 s50 s51 s52 s53"
 : > "$RESULTS"
 for s in ${*:-$ALL}; do
     "$s"
