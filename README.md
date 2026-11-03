@@ -172,8 +172,8 @@ SERIAL=emulator-5554 devtest/matrix.sh s01 s07    # just these
 bash devtest/all.sh                               # Android 16 and 12 at once, 16 also on big screens
 ```
 
-All of it should take about 15 minutes on two emulators, and no scenario over a minute: the
-summary names the ones that do. An emulator's clock moves instead of a scenario waiting for the
+All of it takes about 15 to 20 minutes on two emulators, and no scenario over a minute apart from
+the tour of every panel: the summary names the ones that do. An emulator's clock moves instead of a scenario waiting for the
 time to pass, what can be asked is asked until it is true, what can happen during the same ring
 or restart does, and two shells on the device stay open instead of starting adb for every call.
 

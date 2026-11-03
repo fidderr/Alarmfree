@@ -284,9 +284,12 @@ pub fn AlarmFiring(id: String) -> Element {
             if total_challenges > 0 {
                 div { class: "ring-challenges",
                     span { "{to_go_text}" }
-                    span { class: "dots", "aria-hidden": "true",
-                        for _ in 0..total_challenges {
-                            span { class: "dot" }
+                    // One dot after "1 challenge" only looks like a stray full stop.
+                    if total_challenges > 1 {
+                        span { class: "dots", "aria-hidden": "true",
+                            for _ in 0..total_challenges {
+                                span { class: "dot" }
+                            }
                         }
                     }
                 }

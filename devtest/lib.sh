@@ -132,6 +132,8 @@ no_process() { [ -z "$(main_pid)$(sentinel_pid)" ]; }
 sentinel_up() { [ -n "$(sentinel_pid)" ]; }
 
 now_s() { dev date +%s; }
+# Awake, Asleep or Dozing. A picture of an asleep screen is black and says nothing.
+wakefulness() { dev dumpsys power | grep -m1 -E 'mWakefulness=' | sed 's/.*=//'; }
 wake() {
     dev input keyevent KEYCODE_WAKEUP
     dev wm dismiss-keyguard
@@ -140,7 +142,7 @@ wake() {
     true
 }
 no_keyguard() {
-    dev "dumpsys window | grep -q 'isKeyguardShowing=false'" > /dev/null && return 0
+    dev "dumpsys window displays | grep -q 'isKeyguardShowing=false'" > /dev/null && return 0
     dev wm dismiss-keyguard
     return 1
 }
@@ -552,7 +554,10 @@ solve_backup() {
 }
 
 top_is_app() { dev "dumpsys activity activities | grep -E 'topResumedActivity|ResumedActivity:' | head -1 | grep -q $PKG" > /dev/null; }
-focus_in_app() { dev "dumpsys window | grep -m1 mCurrentFocus | grep -q $PKG/" > /dev/null; }
+# The window that has the keys. `dumpsys window` opens with the report of the last ANR, which has
+# a line like it from back then: only the displays part says what is so now.
+focused_window() { dev "dumpsys window displays | grep -m1 mCurrentFocus"; }
+focus_in_app() { focused_window | grep -q "$PKG/"; }
 armed_at_ms() { as_app "head -n 1 files/sentinel/armed/$1.armed 2>/dev/null"; }
 os_has_alarm() { dev "dumpsys alarm | grep -qE '$PKG.*ALARM_DISPATCH|ALARM_DISPATCH.*$PKG|walarm\\*:com.mobilesentinel.ALARM_DISPATCH'" > /dev/null; }
 alarm_volume() {
@@ -595,4 +600,4 @@ fail() {
     write_log
 }
 note() { echo "      $1"; }
-write_log() { adb_ logcat -d -b all -v time 2> /dev/null | grep -E "AlarmFree|MobileSentinel|Sentinel|AlarmKit|AlarmClass|alarmfree|ActivityTaskManager.*(fidderr|Background)|BackgroundActivity|AndroidRuntime|FATAL" > "$OUT/$CURRENT.log"; }
+write_log() { adb_ logcat -d -b all -v time 2> /dev/null | grep -E "AlarmFree|MobileSentinel|Sentinel|AlarmKit|AlarmClass|alarmfree|ActivityTaskManager.*(fidderr|Background)|BackgroundActivity|AndroidRuntime|FATAL|am_anr|ANR in" > "$OUT/$CURRENT.log"; }

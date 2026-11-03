@@ -18,7 +18,6 @@ fn parse_typed_time(text: &str) -> Option<(u8, u8)> {
     let separated = text.contains([':', '.', ' ', 'h']);
     let (hour, minute) = match digits.len() {
         1 | 2 if !separated => (digits.parse().ok()?, 0),
-        3 if !separated => (digits[..1].parse().ok()?, digits[1..].parse().ok()?),
         3 => (digits[..1].parse().ok()?, digits[1..].parse().ok()?),
         4 => (digits[..2].parse().ok()?, digits[2..].parse().ok()?),
         _ => return None,
