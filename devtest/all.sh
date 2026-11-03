@@ -24,7 +24,7 @@ for entry in af36: af31: af30:no_ui af26:no_ui af36tab: af36fold:; do
         on_screen .home-header || { echo "STOP  $AVD: the page does not render"; exit 1; }
     fi
     case "$AVD" in
-        af36tab | af36fold) bash devtest/matrix.sh s01 s25 s28 s31 s34 s35 ;;
+        af36tab | af36fold) bash devtest/matrix.sh s01 s25 s28 s31 s34 s35 s36 s37 ;;
         *) bash devtest/matrix.sh ;;
     esac
 done

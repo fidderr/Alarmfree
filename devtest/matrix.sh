@@ -915,7 +915,7 @@ s25() {
 }
 
 # What sticks out of the screen, if anything.
-NOTHING_CLIPPED='var w = innerWidth; var bad = [...document.querySelectorAll(".screen *")].filter(e => { var r = e.getBoundingClientRect(); return r.width > 0 && (r.right > w + 1 || r.left < -1) && !e.closest(".chip-scroll"); }).map(e => e.className.baseVal === undefined ? e.className : "svg").slice(0, 3); return bad.join(",");'
+NOTHING_CLIPPED='var w = innerWidth; var bad = [...document.querySelectorAll(".screen *")].filter(e => { var r = e.getBoundingClientRect(); return r.width > 0 && (r.right > w + 1 || r.left < -1) && !e.closest(".chip-scroll, .alarm-swipe"); }).map(e => e.className.baseVal === undefined ? e.className : "svg").slice(0, 3); return bad.join(",");'
 
 # Turning it off through the screens, solving a sum, and landing on history.
 s28() {
@@ -1221,7 +1221,434 @@ s34() {
     save_log
 }
 
-ALL="s01 s02 s03 s04 s05 s06 s07a s07b s07c s09 s10 s11a s11b s12 s12b s13 s14 s15 s16 s16b s17 s19 s20 s21 s22 s22b s23a s23b s23c s23d s24 s25 s26x5 s27 s28 s28b s29 s30 s31 s32 s33 s34 s35"
+# Where the middle of an element is on the screen, in device pixels. The page counts from
+# the top of the WebView, which can start below the status bar.
+webview_top() {
+    dev uiautomator dump /sdcard/af_ui.xml > /dev/null 2>&1
+    dev cat /sdcard/af_ui.xml | tr '>' '\n' | grep -m1 'android.webkit.WebView' | sed -E 's/.*bounds="\[[0-9]+,([0-9]+)\].*/\1/'
+}
+screen_point() { # selector [index]
+    local top
+    top=$(webview_top)
+    js "var r = document.querySelectorAll('$1')[${2:-0}].getBoundingClientRect(); return Math.round((r.left + r.width / 2) * devicePixelRatio) + ' ' + (Math.round((r.top + r.height / 2) * devicePixelRatio) + ${top:-0});"
+}
+# Hold an element, then move it down by `$3` device pixels, as a finger does.
+hold_and_drag() { # selector index pixels
+    local x y step
+    read -r x y <<< "$(screen_point "$1" "$2")"
+    # Numbers or nothing: a failure here must fail the scenario, not end the run.
+    case "$x$y$3" in
+        '' | *[!0-9-]*)
+            echo "nothing to drag: $x $y $3"
+            return 1
+            ;;
+    esac
+    dev input motionevent DOWN "$x" "$y"
+    sleep 0.9
+    for step in 1 2 3 4; do
+        dev input motionevent MOVE "$x" $((y + $3 * step / 4))
+    done
+    sleep 0.4
+    dev input motionevent UP "$x" $((y + $3))
+    sleep 1
+}
+# The distance between two elements of a kind, in device pixels.
+gap_between() { # selector from to
+    js "var c = document.querySelectorAll('$1'); return Math.round((c[$3].getBoundingClientRect().top - c[$2].getBoundingClientRect().top) * devicePixelRatio);"
+}
+texts_of() { js "return [...document.querySelectorAll('$1')].map(e => e.textContent).join(' ')"; }
+click_row() { # the row of a list with this title
+    js "var e = [...document.querySelectorAll('.row-btn')].find(e => e.textContent.includes('$1')); if (!e) return 'no row $1'; e.click(); return 'ok'" > /dev/null
+    sleep 0.8
+}
+
+# Hold an alarm on the list and move it; the same for a challenge, by its handle.
+s36() {
+    scenario s36_hold_and_drag
+    if [ -n "$NO_UI" ]; then
+        skip "no UI"
+        return
+    fi
+    fresh
+    local two='[["challenge.math","{\"difficulty\":\"easy\"}"],["challenge.memory","{\"difficulty\":\"easy\"}"]]'
+    seed a "$(alarm_json a 7 0 "$EVERY_DAY" null air 0 0 3 1 "$two")"
+    seed b "$(alarm_json b 8 0 "$EVERY_DAY" null)"
+    seed c "$(alarm_json c 9 0 "$EVERY_DAY" null)"
+    arm a
+    sleep 2
+    local before after again gap
+    before=$(texts_of .alarm-label)
+    gap=$(gap_between .alarm-card 0 2)
+    hold_and_drag .alarm-main 0 $((gap + 30))
+    screenshot s36_dragged
+    after=$(texts_of .alarm-label)
+    dev am force-stop "$PKG"
+    sleep 1
+    start_app
+    sleep 5
+    again=$(texts_of .alarm-label)
+    local problems=""
+    [ "$before" = "a b c" ] || problems="$problems; started as '$before'"
+    [ "$after" = "b c a" ] || problems="$problems; after dragging '$after'"
+    [ "$again" = "$after" ] || problems="$problems; after restarting '$again'"
+    # In the editor. The first card is now b, a is the last.
+    click .alarm-main 2
+    click_row Challenges
+    local rows_before rows_after
+    rows_before=$(texts_of .challenge-row)
+    gap=$(gap_between .challenge-row 0 1)
+    hold_and_drag .drag-handle 0 $((gap + 20))
+    screenshot s36_dragged_challenge
+    rows_after=$(texts_of .challenge-row)
+    [ -n "$rows_before" ] && [ "$rows_before" != "$rows_after" ] || problems="$problems; challenges stayed: '$rows_after'"
+    if [ -z "$problems" ]; then
+        pass "alarms $before -> $after, kept after a restart, challenges too"
+    else
+        fail "$problems"
+    fi
+    save_log
+}
+
+# Swiping a card aside shows skip and delete; both have an undo.
+s37() {
+    scenario s37_swipe_a_card
+    if [ -n "$NO_UI" ]; then
+        skip "no UI"
+        return
+    fi
+    fresh
+    next_minute 3600
+    seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
+    arm a
+    sleep 2
+    swipe_card() {
+        local x y width
+        read -r x y <<< "$(screen_point .alarm-card)"
+        width=$(js "return Math.round(document.querySelector('.alarm-card').getBoundingClientRect().width * devicePixelRatio)")
+        case "$x$y$width" in
+            '' | *[!0-9-]*)
+                echo "nothing to swipe: $x $y $width"
+                return 1
+                ;;
+        esac
+        dev input swipe $((x + width * 35 / 100)) "$y" $((x - width * 35 / 100)) "$y" 300
+        sleep 1.2
+    }
+    local problems=""
+    swipe_card
+    screenshot s37_swiped
+    [ "$(js "return document.querySelector('.alarm-card').scrollLeft > 0 ? 'y' : 'n'")" = y ] || problems="$problems; did not move"
+    [ "$(js "return document.querySelector('.swipe-action.danger').getBoundingClientRect().right <= innerWidth ? 'y' : 'n'")" = y ] || problems="$problems; delete not in view"
+    click .swipe-action 0 1.5
+    [ "$(db_count '"skip_until_ms":null')" = 0 ] || problems="$problems; not skipped"
+    [ "$(js "return document.querySelector('.alarm-card').scrollLeft === 0 ? 'y' : 'n'")" = y ] || problems="$problems; stayed aside"
+    click .toast-undo 0 1.5
+    [ "$(db_count '"skip_until_ms":null')" = 1 ] || problems="$problems; skip not undone"
+    swipe_card
+    click .swipe-action.danger 0 1.5
+    [ "$(db_count '"id":"a"')" = 0 ] || problems="$problems; not deleted"
+    on_screen .alarm-card && problems="$problems; card still there"
+    click .toast-undo 0 1.5
+    [ "$(db_count '"id":"a"')" = 1 ] || problems="$problems; delete not undone"
+    on_screen .alarm-card || problems="$problems; card not back"
+    os_has_alarm || problems="$problems; not armed after undo"
+    # A swipe does not get in the way of an ordinary tap.
+    click .alarm-main
+    on_screen .time-big || problems="$problems; no editor"
+    if [ -z "$problems" ]; then
+        pass "skip and delete by swiping, both undone"
+    else
+        fail "$problems"
+    fi
+    save_log
+}
+
+# The accent colour, and a name for a sound of one's own.
+s38() {
+    scenario s38_accent_and_sound_name
+    if [ -n "$NO_UI" ]; then
+        skip "no UI"
+        return
+    fi
+    fresh
+    as_app "mkdir -p files/sounds/custom && cp files/sounds/default/air.ogg files/sounds/custom/mytune.ogg"
+    seed a "$(alarm_json a 7 0 "$EVERY_DAY" null)"
+    arm a
+    sleep 2
+    local problems="" accent
+    click .nav-item 2
+    click_row Theme
+    screenshot s38_swatches
+    [ "$(js "return document.querySelectorAll('.swatch').length")" = 5 ] || problems="$problems; no swatches"
+    click .swatch 2
+    accent="getComputedStyle(document.querySelector('.app-root')).getPropertyValue('--accent').trim()"
+    [ "$(js "return $accent")" = "#b9a0ff" ] || problems="$problems; colour is $(js "return $accent")"
+    dev am force-stop "$PKG"
+    sleep 1
+    start_app
+    sleep 5
+    [ "$(js "return $accent")" = "#b9a0ff" ] || problems="$problems; not kept: $(js "return $accent")"
+    screenshot s38_purple
+    # Its own name.
+    click .alarm-main
+    click_row Sound
+    local names
+    names=$(texts_of .radio-text)
+    case "$names" in
+        *mytune*) ;;
+        *) problems="$problems; own sound not listed: $names" ;;
+    esac
+    click '.radio-row .icon-btn' 0
+    js "var i = document.querySelector('.radio-row .field'); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(i, 'Morning'); i.dispatchEvent(new Event('input', { bubbles: true })); return 'ok'" > /dev/null
+    sleep 0.5
+    screenshot s38_renaming
+    click '.radio-row .icon-btn' 0 1
+    names=$(texts_of .radio-text)
+    case "$names" in
+        *Morning*) ;;
+        *) problems="$problems; name not shown: $names" ;;
+    esac
+    printf "SELECT prefs FROM settings;\n" | sql | grep -q '"mytune.ogg":"Morning"' || problems="$problems; name not saved"
+    if [ -z "$problems" ]; then
+        pass "accent purple kept, sound renamed"
+    else
+        fail "$problems"
+    fi
+    save_log
+}
+
+# An alarm can vibrate first and go to full brightness.
+s39() {
+    scenario s39_vibrate_first_and_brightness
+    if [ -n "$NO_UI" ]; then
+        skip "no UI"
+        return
+    fi
+    fresh
+    next_minute 45
+    local extra=',"sound_delay_secs":15,"max_brightness":true'
+    ALARM_EXTRA=$extra seed a "$(ALARM_EXTRA=$extra alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null air 0 0 0 1)"
+    arm a
+    wait_ring_started() {
+        local i=0
+        while [ "$i" -lt 240 ]; do
+            adb_ logcat -d 2> /dev/null | grep -q 'ringing a:' && return 0
+            sleep 0.5
+            i=$((i + 1))
+        done
+        return 1
+    }
+    wait_ring_started || { fail "never started"; save_log; return; }
+    local started problems="" i=0 heard=""
+    started=$(now_s)
+    sound_on && problems="$problems; sound at once"
+    sleep 8
+    sound_on && problems="$problems; sound after 8s"
+    while [ "$i" -lt 40 ]; do
+        if sound_on; then
+            heard=$(($(now_s) - started))
+            break
+        fi
+        sleep 0.5
+        i=$((i + 1))
+    done
+    [ -n "$heard" ] && [ "$heard" -ge 12 ] && [ "$heard" -le 20 ] || problems="$problems; sound after '${heard}'s"
+    local bright=no
+    dev dumpsys window | grep -q 'sbrt=1.0' && bright=yes
+    [ "$bright" = yes ] || problems="$problems; not at full brightness"
+    click .ring-off 0 3
+    sound_on && problems="$problems; still ringing"
+    dev dumpsys window | grep -q 'sbrt=1.0' && problems="$problems; brightness stayed"
+    if [ -z "$problems" ]; then
+        pass "sound ${heard}s after the vibration, full brightness until over"
+    else
+        fail "$problems"
+    fi
+    save_log
+    action dismiss:a
+}
+
+# The home-screen widget: placed from the settings, says the next ring, follows changes.
+s40() {
+    scenario s40_home_widget
+    if [ -n "$NO_UI" ]; then
+        skip "no UI"
+        return
+    fi
+    fresh
+    next_minute 3600
+    seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
+    arm a
+    sleep 2
+    ui_texts() {
+        dev uiautomator dump /sdcard/af_ui.xml > /dev/null 2>&1
+        dev cat /sdcard/af_ui.xml | tr '>' '\n' | grep -oE ' text="[^"]+"' | sed -E 's/ text="(.*)"/\1/'
+    }
+    click .nav-item 2
+    on_screen .row-btn || { fail "no settings"; save_log; return; }
+    click_row "Add widget"
+    sleep 3
+    screenshot s40_asked
+    # The launcher asks the user first.
+    dev uiautomator dump /sdcard/af_ui.xml > /dev/null 2>&1
+    local add
+    add=$(dev cat /sdcard/af_ui.xml | tr '>' '\n' | grep -iE ' text="(add|add to home screen|add automatically)"' | grep -m1 'clickable="true"' | sed -E 's/.*bounds="\[([0-9]+),([0-9]+)\]\[([0-9]+),([0-9]+)\].*/\1 \2 \3 \4/')
+    if [ -z "$add" ]; then
+        fail "the launcher did not ask: $(ui_texts | tr '\n' '|')"
+        save_log
+        return
+    fi
+    local x1 y1 x2 y2
+    read -r x1 y1 x2 y2 <<< "$add"
+    dev input tap $(((x1 + x2) / 2)) $(((y1 + y2) / 2))
+    sleep 3
+    local problems=""
+    dev dumpsys appwidget | grep -q 'SentinelHomeWidget' || problems="$problems; not registered"
+    go_home
+    sleep 3
+    screenshot s40_on_home
+    local minute texts
+    minute=$(printf ':%02d' "$T_M")
+    texts=$(ui_texts | tr '\n' '|')
+    case "$texts" in
+        *"$minute"*) ;;
+        *) problems="$problems; no time on it: $texts" ;;
+    esac
+    # Follows a change, without the widget being asked.
+    start_app
+    sleep 3
+    click .nav-item 0
+    click .alarm-switch 0 2
+    go_home
+    sleep 3
+    texts=$(ui_texts | tr '\n' '|')
+    case "$texts" in
+        *"No alarm set"*) ;;
+        *) problems="$problems; still old: $texts" ;;
+    esac
+    screenshot s40_none
+    if [ -z "$problems" ]; then
+        pass "placed, shows the next ring, follows a change"
+    else
+        fail "$problems"
+    fi
+    save_log
+}
+
+# Every row and button does something and can be left again, and every kind of challenge
+# can be tried. Not how well: that they are there, since a control nothing uses breaks
+# without anything else noticing.
+sweep_rows() { # where, for the messages
+    local where=$1 i=0 n kind now title
+    n=$(js "return document.querySelectorAll('.row-btn').length")
+    case "$n" in
+        '' | *[!0-9]*)
+            echo "$where: no rows ($n)"
+            return
+            ;;
+    esac
+    while [ "$i" -lt "$n" ]; do
+        kind=$(js "var e = document.querySelectorAll('.row-btn')[$i]; return e.getAttribute('role') === 'switch' ? e.getAttribute('aria-checked') : 'row'")
+        title=$(js "var e = document.querySelectorAll('.row-btn')[$i].querySelector('.row-title'); return e ? e.textContent : ''")
+        if [ "$kind" = row ]; then
+            click .row-btn "$i" 1.5
+            # A sheet, a screen of its own, or something of the system's on top.
+            if ! on_screen .sheet && ! on_screen .screen-header; then
+                dev dumpsys window | grep -m1 mCurrentFocus | grep -q "$PKG" && echo "$where: '$title' does nothing"
+            fi
+            press_back
+        else
+            click .row-btn "$i" 0.6
+            now=$(js "return document.querySelectorAll('.row-btn')[$i].getAttribute('aria-checked')")
+            [ "$now" != "$kind" ] || echo "$where: switch '$title' stays $now"
+            click .row-btn "$i" 0.6
+        fi
+        now=$(js "return document.querySelectorAll('.row-btn').length")
+        [ "$now" = "$n" ] || {
+            echo "$where: after '$title', $now rows instead of $n"
+            return
+        }
+        i=$((i + 1))
+    done
+}
+
+s41() {
+    scenario s41_every_control
+    if [ -n "$NO_UI" ]; then
+        skip "no UI"
+        return
+    fi
+    fresh
+    seed a "$(alarm_json a 7 0 "$EVERY_DAY" null)"
+    arm a
+    sleep 2
+    local problems="" i n found
+    # Home.
+    click .alarm-menu
+    on_screen .sheet || problems="$problems; no alarm menu"
+    press_back
+    for i in 0 1; do
+        click .round-icon-btn "$i"
+        on_screen .sheet || problems="$problems; home button $i does nothing"
+        press_back
+    done
+    for i in 0 1 2; do
+        click .round-icon-btn 1
+        click .sheet-item "$i"
+        on_screen .sheet && press_back
+        on_screen .alarm-card || problems="$problems; sorting $i lost the list"
+    done
+    # History, with or without anything in it.
+    click .nav-item 1
+    n=$(js "return document.querySelectorAll('.chip-pill').length")
+    [ "${n:-0}" -ge 2 ] 2> /dev/null || problems="$problems; no history filters: $n"
+    i=0
+    while [ "$i" -lt "${n:-0}" ] 2> /dev/null; do
+        click .chip-pill "$i" 0.4
+        i=$((i + 1))
+    done
+    on_screen .screen-title-large || problems="$problems; a history filter broke the screen"
+    # Settings and the editor.
+    click .nav-item 2
+    found=$(sweep_rows settings)
+    [ -z "$found" ] || problems="$problems; $found"
+    click .nav-item 0
+    click .alarm-main
+    found=$(sweep_rows editor)
+    [ -z "$found" ] || problems="$problems; $found"
+    # Every kind of challenge, added and tried, from a list that starts empty.
+    click_row Challenges
+    local name opened=""
+    i=0
+    while [ "$i" -lt 8 ]; do
+        click '.sheet .btn-quiet' 0 0.6
+        name=$(js "var e = document.querySelectorAll('.add-name')[$i]; return e ? e.textContent : ''")
+        click .add-option "$i" 1
+        press_back
+        on_screen .challenge-list || click_row Challenges
+        n=$(js "return document.querySelectorAll('.challenge-row').length")
+        click '.challenge-row .link-btn' $((n - 1)) 1.5
+        dev dumpsys window | grep -m1 mCurrentFocus | grep -q "$PKG" || press_back
+        if on_screen .run-screen; then
+            opened="$opened $name"
+            click '.run-top .link-btn' 0 1
+        else
+            problems="$problems; $name cannot be tried"
+            press_back
+        fi
+        on_screen .challenge-list || click_row Challenges
+        i=$((i + 1))
+    done
+    screenshot s41_challenges
+    if [ -z "$problems" ]; then
+        pass "all rows and sheets, tried:$opened"
+    else
+        fail "$problems"
+    fi
+    save_log
+}
+
+ALL="s01 s02 s03 s04 s05 s06 s07a s07b s07c s09 s10 s11a s11b s12 s12b s13 s14 s15 s16 s16b s17 s19 s20 s21 s22 s22b s23a s23b s23c s23d s24 s25 s26x5 s27 s28 s28b s29 s30 s31 s32 s33 s34 s35 s36 s37 s38 s39 s40 s41"
 [ -n "$NO_UI" ] && ALL="$ALL s22c"
 : > "$RESULTS"
 for s in ${*:-$ALL}; do
