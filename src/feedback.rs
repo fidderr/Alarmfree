@@ -10,18 +10,16 @@ pub fn set_enabled(enabled: bool) {
 }
 
 /// A short tick.
-pub fn tick(_ms: u64) {
-    #[cfg(target_os = "android")]
+pub fn tick(ms: u64) {
     if ENABLED.load(Ordering::Relaxed) {
-        mobile_sentinel::haptics::vibrate(std::time::Duration::from_millis(_ms));
+        mobile_sentinel::haptics::vibrate(std::time::Duration::from_millis(ms));
     }
 }
 
 /// A pattern of alternating wait and vibrate times.
-pub fn pattern(_pattern: &[i64]) {
-    #[cfg(target_os = "android")]
+pub fn pattern(pattern: &[i64]) {
     if ENABLED.load(Ordering::Relaxed) {
-        let pattern: Vec<u64> = _pattern.iter().map(|ms| *ms as u64).collect();
+        let pattern: Vec<u64> = pattern.iter().map(|ms| *ms as u64).collect();
         mobile_sentinel::haptics::vibrate_pattern(&pattern);
     }
 }

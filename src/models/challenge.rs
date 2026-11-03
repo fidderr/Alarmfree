@@ -1,21 +1,10 @@
-//! Challenge configuration types: ChallengeConfig, ChallengeType, Difficulty.
-//!
-//! Also hosts the [`ChallengeEngine`] generator — it emits new challenge
-//! instances on demand. Each challenge component evaluates its own
-//! correctness UI-side; this module only generates.
-
-use std::time::Duration;
+//! The kinds of challenge, and [`ChallengeEngine`], which makes the sums, sequences and
+//! passages of those that differ each time. Each challenge component evaluates its own
+//! correctness; this module only generates.
 
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 use serde::{Deserialize, Serialize};
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct ChallengeConfig {
-    pub challenge_type: ChallengeType,
-    pub difficulty: Difficulty,
-    pub reference_data: Option<ReferenceData>,
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum ChallengeType {
@@ -40,87 +29,7 @@ pub enum Difficulty {
     Extreme,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum ReferenceData {
-    /// Expected code value for the scanner challenge (barcode or QR).
-    Scan(String),
-}
-
-/// A generated challenge instance ready for presentation.
-#[derive(Debug, Clone)]
-pub struct ChallengeInstance {
-    pub challenge_type: ChallengeType,
-    pub difficulty: Difficulty,
-    pub prompt: ChallengePrompt,
-    pub expected_answer: ChallengeAnswer,
-}
-
-#[derive(Debug, Clone)]
-pub enum ChallengePrompt {
-    Math {
-        expression: String,
-    },
-    Scan {
-        expected_value: String,
-    },
-    ShakeToWake {
-        required_shakes: u32,
-    },
-    StepCount {
-        required_steps: u32,
-    },
-    MemoryGame {
-        sequence: Vec<u8>,
-        display_duration: Duration,
-    },
-    Typing {
-        passage: String,
-    },
-    /// Hold a circle for `hold_duration`, repeated `required_holds` times.
-    /// Pure count + duration — no difficulty.
-    HoldButton {
-        required_holds: u32,
-        hold_duration: Duration,
-    },
-    /// Pop `targets_per_round` targets within `time_limit`, for `rounds`
-    /// rounds. Pure count + time + rounds — no difficulty.
-    Reaction {
-        targets_per_round: u32,
-        time_limit: Duration,
-        rounds: u32,
-    },
-}
-
-#[derive(Debug, Clone)]
-pub enum ChallengeAnswer {
-    Numeric(i64),
-    ExactString(String),
-    ShakeCount(u32),
-    StepCount(u32),
-    Sequence(Vec<u8>),
-    TypedText {
-        expected: String,
-        min_accuracy: f32,
-    },
-    HoldCount(u32),
-    /// Total number of target pops required across all reaction rounds.
-    ReactionTargets(u32),
-}
-
-/// Difficulty parameters for challenge generation.
-#[derive(Debug, Clone, PartialEq)]
-pub struct DifficultyParams {
-    pub shake_count: u32,
-    pub step_count: u32,
-    pub memory_sequence_length: u8,
-    pub typing_word_count: (u8, u8),
-}
-
-// ---------------------------------------------------------------------------
-// Challenge generation engine
-// ---------------------------------------------------------------------------
-
-/// Challenge generation engine. Emits new [`ChallengeInstance`]s on demand.
+/// Makes the challenges that differ each time.
 pub struct ChallengeEngine {
     rng: StdRng,
     locale: crate::models::Locale,
@@ -943,280 +852,110 @@ const WORD_POOL: &[&str] = &[
 ];
 
 impl ChallengeEngine {
-    /// Create a new ChallengeEngine with a random seed.
-    pub fn new() -> Self {
+    /// With a random seed, and passages in this language.
+    pub fn new(locale: crate::models::Locale) -> Self {
         Self {
             rng: StdRng::from_entropy(),
-            locale: crate::models::Locale::default(),
+            locale,
         }
     }
 
-    /// The language of what the user is asked to type.
-    pub fn set_locale(&mut self, locale: crate::models::Locale) {
-        self.locale = locale;
-    }
-
-    /// Generate a challenge instance from config.
-    pub fn generate(&mut self, config: &ChallengeConfig) -> ChallengeInstance {
-        let params = Self::difficulty_params(config.challenge_type, config.difficulty);
-
-        match config.challenge_type {
-            ChallengeType::Math => self.generate_math(config.difficulty),
-            ChallengeType::Scan => self.generate_scan(config),
-            ChallengeType::ShakeToWake => self.generate_shake(&params, config.difficulty),
-            ChallengeType::StepCount => self.generate_step_count(&params, config.difficulty),
-            ChallengeType::MemoryGame => self.generate_memory(&params, config.difficulty),
-            ChallengeType::Typing => self.generate_typing(&params, config.difficulty),
-            ChallengeType::HoldButton => self.generate_hold_button(config.difficulty),
-            ChallengeType::Reaction => self.generate_reaction(config.difficulty),
-        }
-    }
-
-    /// Get difficulty parameters for a challenge type.
-    pub fn difficulty_params(
-        _challenge_type: ChallengeType,
-        difficulty: Difficulty,
-    ) -> DifficultyParams {
+    /// A sum and its answer. Easy: XX +/- XX, Medium: XXX +/- XXX, Hard: XX × XX,
+    /// Extreme: XXX × XX.
+    pub fn math(&mut self, difficulty: Difficulty) -> (String, i64) {
         match difficulty {
-            Difficulty::Easy => DifficultyParams {
-                shake_count: 10,
-                step_count: 10,
-                memory_sequence_length: 4,
-                typing_word_count: (5, 10),
-            },
-            Difficulty::Medium => DifficultyParams {
-                shake_count: 25,
-                step_count: 30,
-                memory_sequence_length: 6,
-                typing_word_count: (15, 20),
-            },
-            Difficulty::Hard => DifficultyParams {
-                shake_count: 40,
-                step_count: 60,
-                memory_sequence_length: 9,
-                typing_word_count: (25, 35),
-            },
-            Difficulty::Extreme => DifficultyParams {
-                shake_count: 50,
-                step_count: 100,
-                memory_sequence_length: 12,
-                typing_word_count: (40, 60),
-            },
-        }
-    }
-
-    // --- Private generation methods ---
-
-    fn generate_math(&mut self, difficulty: Difficulty) -> ChallengeInstance {
-        // Generate clean, unambiguous math expressions per difficulty:
-        // Easy: XX +/- XX (2-digit), Medium: XXX +/- XXX (3-digit),
-        // Hard: XX × XX, Extreme: XXX × XX.
-        let (expression, result) = match difficulty {
-            Difficulty::Easy => {
-                let a = self.rng.gen_range(10..99);
-                let b = self.rng.gen_range(10..99);
-                if self.rng.gen_bool(0.5) {
-                    (format!("{} + {}", a, b), a + b)
-                } else {
-                    let (big, small) = if a >= b { (a, b) } else { (b, a) };
-                    (format!("{} - {}", big, small), big - small)
-                }
-            }
-            Difficulty::Medium => {
-                let a = self.rng.gen_range(100..999);
-                let b = self.rng.gen_range(100..999);
-                if self.rng.gen_bool(0.5) {
-                    (format!("{} + {}", a, b), a + b)
-                } else {
-                    let (big, small) = if a >= b { (a, b) } else { (b, a) };
-                    (format!("{} - {}", big, small), big - small)
-                }
-            }
+            Difficulty::Easy => self.add_or_subtract(10..99),
+            Difficulty::Medium => self.add_or_subtract(100..999),
             Difficulty::Hard => {
                 let a = self.rng.gen_range(11..49);
                 let b = self.rng.gen_range(2..19);
-                (format!("{} × {}", a, b), a * b)
+                (format!("{a} × {b}"), a * b)
             }
             Difficulty::Extreme => {
                 let a = self.rng.gen_range(100..499);
                 let b = self.rng.gen_range(2..12);
-                (format!("{} × {}", a, b), a * b)
+                (format!("{a} × {b}"), a * b)
             }
+        }
+    }
+
+    fn add_or_subtract(&mut self, range: std::ops::Range<i64>) -> (String, i64) {
+        let a = self.rng.gen_range(range.clone());
+        let b = self.rng.gen_range(range);
+        if self.rng.gen_bool(0.5) {
+            (format!("{a} + {b}"), a + b)
+        } else {
+            let (big, small) = (a.max(b), a.min(b));
+            (format!("{big} - {small}"), big - small)
+        }
+    }
+
+    /// Cells to remember in order, and the width of the grid they are on: 3 by 3, or
+    /// 4 by 3 from Hard on. No cell twice.
+    pub fn memory(&mut self, difficulty: Difficulty) -> (Vec<u8>, u8) {
+        let (len, width, cells) = match difficulty {
+            Difficulty::Easy => (4, 3, 9u8),
+            Difficulty::Medium => (6, 3, 9),
+            Difficulty::Hard => (9, 4, 12),
+            Difficulty::Extreme => (12, 4, 12),
         };
-
-        ChallengeInstance {
-            challenge_type: ChallengeType::Math,
-            difficulty,
-            prompt: ChallengePrompt::Math { expression },
-            expected_answer: ChallengeAnswer::Numeric(result),
-        }
-    }
-
-    fn generate_scan(&mut self, config: &ChallengeConfig) -> ChallengeInstance {
-        let expected_value = config
-            .reference_data
-            .as_ref()
-            .map(|ReferenceData::Scan(v)| v.clone())
-            .unwrap_or_default();
-
-        ChallengeInstance {
-            challenge_type: ChallengeType::Scan,
-            difficulty: config.difficulty,
-            prompt: ChallengePrompt::Scan {
-                expected_value: expected_value.clone(),
-            },
-            expected_answer: ChallengeAnswer::ExactString(expected_value),
-        }
-    }
-
-    fn generate_shake(
-        &mut self,
-        params: &DifficultyParams,
-        difficulty: Difficulty,
-    ) -> ChallengeInstance {
-        ChallengeInstance {
-            challenge_type: ChallengeType::ShakeToWake,
-            difficulty,
-            prompt: ChallengePrompt::ShakeToWake {
-                required_shakes: params.shake_count,
-            },
-            expected_answer: ChallengeAnswer::ShakeCount(params.shake_count),
-        }
-    }
-
-    fn generate_step_count(
-        &mut self,
-        params: &DifficultyParams,
-        difficulty: Difficulty,
-    ) -> ChallengeInstance {
-        ChallengeInstance {
-            challenge_type: ChallengeType::StepCount,
-            difficulty,
-            prompt: ChallengePrompt::StepCount {
-                required_steps: params.step_count,
-            },
-            expected_answer: ChallengeAnswer::StepCount(params.step_count),
-        }
-    }
-
-    /// HoldButton is a pure count + duration challenge. The concrete
-    /// values (how many holds, how long each) are supplied per-alarm via
-    /// the challenge config and applied UI-side; this generator only
-    /// supplies sensible fallbacks for the engine path.
-    fn generate_hold_button(&mut self, difficulty: Difficulty) -> ChallengeInstance {
-        const DEFAULT_HOLDS: u32 = 3;
-        const DEFAULT_HOLD_MS: u64 = 3000;
-        ChallengeInstance {
-            challenge_type: ChallengeType::HoldButton,
-            difficulty,
-            prompt: ChallengePrompt::HoldButton {
-                required_holds: DEFAULT_HOLDS,
-                hold_duration: Duration::from_millis(DEFAULT_HOLD_MS),
-            },
-            expected_answer: ChallengeAnswer::HoldCount(DEFAULT_HOLDS),
-        }
-    }
-
-    /// Reaction is a pure count + time + rounds challenge. The concrete values
-    /// are supplied per-alarm via the challenge config and applied UI-side;
-    /// this generator only supplies sensible fallbacks for the engine path.
-    fn generate_reaction(&mut self, difficulty: Difficulty) -> ChallengeInstance {
-        const DEFAULT_TARGETS: u32 = 10;
-        const DEFAULT_TIME_MS: u64 = 3000;
-        const DEFAULT_ROUNDS: u32 = 2;
-        ChallengeInstance {
-            challenge_type: ChallengeType::Reaction,
-            difficulty,
-            prompt: ChallengePrompt::Reaction {
-                targets_per_round: DEFAULT_TARGETS,
-                time_limit: Duration::from_millis(DEFAULT_TIME_MS),
-                rounds: DEFAULT_ROUNDS,
-            },
-            expected_answer: ChallengeAnswer::ReactionTargets(DEFAULT_TARGETS * DEFAULT_ROUNDS),
-        }
-    }
-
-    fn generate_memory(
-        &mut self,
-        params: &DifficultyParams,
-        difficulty: Difficulty,
-    ) -> ChallengeInstance {
-        let len = params.memory_sequence_length as usize;
-        // Grid size: 9 cells (3x3) for Easy/Medium, 12 cells (4x3) for Hard/Extreme.
-        let grid_cells = match difficulty {
-            Difficulty::Easy | Difficulty::Medium => 9u8,
-            Difficulty::Hard | Difficulty::Extreme => 12u8,
-        };
-        // Sequence length cannot exceed grid size since cells must be unique.
-        let len = len.min(grid_cells as usize);
-
-        // Generate a unique-cell sequence by shuffling [0..grid_cells) and taking `len`.
-        let mut pool: Vec<u8> = (0..grid_cells).collect();
+        let mut pool: Vec<u8> = (0..cells).collect();
         for i in (1..pool.len()).rev() {
             let j = self.rng.gen_range(0..=i);
             pool.swap(i, j);
         }
-        let sequence: Vec<u8> = pool.into_iter().take(len).collect();
-
-        // Display duration scales with sequence length.
-        let display_ms = (len as u64) * 1000;
-
-        ChallengeInstance {
-            challenge_type: ChallengeType::MemoryGame,
-            difficulty,
-            prompt: ChallengePrompt::MemoryGame {
-                sequence: sequence.clone(),
-                display_duration: Duration::from_millis(display_ms),
-            },
-            expected_answer: ChallengeAnswer::Sequence(sequence),
-        }
+        pool.truncate(len);
+        (pool, width)
     }
 
-    fn generate_typing(
-        &mut self,
-        params: &DifficultyParams,
-        difficulty: Difficulty,
-    ) -> ChallengeInstance {
-        let (min_words, max_words) = params.typing_word_count;
-        let word_count = self.rng.gen_range(min_words..=max_words) as usize;
-
+    /// A passage to type, and how much of it has to be right.
+    pub fn typing(&mut self, difficulty: Difficulty) -> (String, f32) {
+        let (min_words, max_words, min_accuracy) = match difficulty {
+            Difficulty::Easy => (5, 10, 0.80),
+            Difficulty::Medium => (15, 20, 0.85),
+            Difficulty::Hard => (25, 35, 0.90),
+            Difficulty::Extreme => (40, 60, 0.95),
+        };
+        let word_count = self.rng.gen_range(min_words..=max_words);
         let pool = word_pool(self.locale);
-        let passage: String = (0..word_count)
+        let passage = (0..word_count)
             .map(|_| pool[self.rng.gen_range(0..pool.len())])
             .collect::<Vec<&str>>()
             .join(" ");
-
-        // Minimum accuracy: Easy=80%, Medium=85%, Hard=90%, Extreme=95%.
-        let min_accuracy = match difficulty {
-            Difficulty::Easy => 0.80,
-            Difficulty::Medium => 0.85,
-            Difficulty::Hard => 0.90,
-            Difficulty::Extreme => 0.95,
-        };
-
-        ChallengeInstance {
-            challenge_type: ChallengeType::Typing,
-            difficulty,
-            prompt: ChallengePrompt::Typing {
-                passage: passage.clone(),
-            },
-            expected_answer: ChallengeAnswer::TypedText {
-                expected: passage,
-                min_accuracy,
-            },
-        }
-    }
-}
-
-impl Default for ChallengeEngine {
-    fn default() -> Self {
-        Self::new()
+        (passage, min_accuracy)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn each_difficulty_asks_for_something_doable() {
+        let mut engine = ChallengeEngine::new(crate::models::Locale::English);
+        for (difficulty, cells, width) in [
+            (Difficulty::Easy, 4, 3),
+            (Difficulty::Medium, 6, 3),
+            (Difficulty::Hard, 9, 4),
+            (Difficulty::Extreme, 12, 4),
+        ] {
+            let (sequence, grid) = engine.memory(difficulty);
+            assert_eq!(sequence.len(), cells);
+            assert_eq!(grid, width);
+            let mut unique = sequence.clone();
+            unique.sort_unstable();
+            unique.dedup();
+            assert_eq!(unique.len(), cells, "no cell twice");
+
+            let (sum, answer) = engine.math(difficulty);
+            assert!(!sum.is_empty());
+            assert!(answer >= 0, "{sum} = {answer}");
+
+            let (passage, accuracy) = engine.typing(difficulty);
+            assert!(passage.split(' ').count() >= 5);
+            assert!((0.8..=0.95).contains(&accuracy));
+        }
+    }
 
     #[test]
     fn capitals_do_not_count_when_typing() {

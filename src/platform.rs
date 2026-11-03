@@ -1,18 +1,14 @@
 //! Platform initialisation for AlarmFree.
 //!
-//! All firing behavior (FGS, audio, kiosk, exact-alarm) is owned by
-//! mobile-sentinel's universal SDK + AlarmKit. This file only wires the
-//! runtime: install AlarmKit with the Android `FiringSink`, the Android
-//! sound backend, and the ContextStore that lives next to AlarmFree's
-//! other persistence files.
-
-use std::sync::Arc;
+//! All firing behavior (FGS, audio, kiosk, exact-alarm) is owned by the mobile-sentinel
+//! SDK and its AlarmKit. This file says what AlarmFree wants of it: the policy (lockdown,
+//! texts, limits), and how a saved alarm becomes an [`AlarmSpec`].
 
 use chrono::Local;
 use mobile_sentinel::context::schema::{ChallengeSpec, ScheduleSpec, SnoozePolicy, SoundIdSpec};
 use mobile_sentinel::jobs::RingEnd;
 use mobile_sentinel::recipes::alarm_class::AlarmClassConfig;
-use mobile_sentinel::{AlarmKit, AlarmKitConfig, AlarmSpec, ContextStore, InstanceId};
+use mobile_sentinel::{AlarmKit, AlarmSpec, InstanceId};
 use std::sync::OnceLock;
 
 use crate::app::AlarmData;
@@ -121,11 +117,9 @@ fn record_outcome(
 /// something else that started the app (see [`on_wake`]).
 static SETUP: std::sync::Once = std::sync::Once::new();
 
-/// Platform setup, idempotent and free of UI. Initialises mobile-sentinel
-/// (logger + crash mitigation), installs the Android `FiringSink`, installs
-/// AlarmKit with that sink + the Android sound backend, then re-arms every
-/// persisted alarm via the universal SDK and switches off the one-time alarms
-/// it reports as over.
+/// Platform setup, idempotent and free of UI. Initialises mobile-sentinel (logger +
+/// crash mitigation), installs AlarmKit, then re-arms every persisted alarm through it
+/// and switches off the one-time alarms it reports as over.
 pub fn init_platform() {
     // `force`: a setup that panicked must not take the app down for good.
     SETUP.call_once_force(|_| setup_platform(false));
@@ -133,7 +127,6 @@ pub fn init_platform() {
 
 /// The app was started for something other than the UI, or something happened
 /// while it runs without one: alarms may have to be armed again. Needs no Activity.
-#[cfg(target_os = "android")]
 fn on_wake() {
     let mut first = false;
     SETUP.call_once_force(|_| {
@@ -145,18 +138,7 @@ fn on_wake() {
     }
 }
 
-/// The SDK's hook for [`on_wake`]: a boot, an app update, the clock or time zone
-/// changing, or an alarm going off with the app down.
-#[cfg(target_os = "android")]
-#[no_mangle]
-pub extern "system" fn Java_com_mobilesentinel_SentinelRearm_nativeRearm(
-    _env: *mut std::ffi::c_void,
-    _class: *mut std::ffi::c_void,
-) {
-    if std::panic::catch_unwind(on_wake).is_err() {
-        log::error!("[AlarmFree] re-arming panicked");
-    }
-}
+mobile_sentinel::wake_hook!(on_wake);
 
 /// Bring the notifications before alarms in line with the alarms and the setting. An
 /// alarm that has gone is taken care of by [`forget_alarm`].
@@ -280,10 +262,6 @@ fn setup_platform(woken: bool) {
     // Before arming: an alarm's plan names the file its sound plays from.
     crate::custom_sounds::extract_bundled_sounds();
 
-    let store = Arc::new(ContextStore::new(
-        mobile_sentinel::app_files_dir().join("sentinel/context"),
-    ));
-
     let settings = crate::persistence::load_settings();
     let mut alarm_class_config = AlarmClassConfig {
         channel_id: FOREGROUND_CHANNEL_ID.into(),
@@ -326,52 +304,19 @@ fn setup_platform(woken: bool) {
     };
     apply_ring_texts(&mut alarm_class_config, settings.locale);
 
-    #[cfg(target_os = "android")]
-    let firing_sink: Option<Arc<dyn mobile_sentinel::firing::FiringSink>> = Some(Arc::new(
-        mobile_sentinel::platform::android::AndroidFiringSink::new(),
-    ));
-    #[cfg(not(target_os = "android"))]
-    let firing_sink: Option<Arc<dyn mobile_sentinel::firing::FiringSink>> = None;
-
-    // Install the firing sink as the process-wide singleton so background
-    // tasks (e.g. cross-process reengage) can reach it.
-    if let Some(ref s) = firing_sink {
-        mobile_sentinel::firing::install_firing_sink(s.clone());
-    }
-
-    #[cfg(target_os = "android")]
-    let sound_resolver: Option<Arc<dyn mobile_sentinel::recipes::alarm_class::SoundResolver>> = {
-        let bundled = crate::custom_sounds::default_sounds_dir();
-        let custom = mobile_sentinel::app_files_dir().join("sounds/custom");
-        let lib = mobile_sentinel::SoundLibrary::new(
-            bundled,
-            custom,
-            mobile_sentinel::platform::android::AndroidSoundBackend,
-        );
-        Some(Arc::new(lib))
-    };
-    #[cfg(not(target_os = "android"))]
-    let sound_resolver: Option<Arc<dyn mobile_sentinel::recipes::alarm_class::SoundResolver>> =
-        None;
-
-    let kit = AlarmKit::install(AlarmKitConfig {
-        store,
-        sink: firing_sink,
-        sound_resolver,
+    let kit = AlarmKit::install_on_platform(
+        crate::custom_sounds::default_sounds_dir(),
+        crate::custom_sounds::custom_sounds_dir(),
         alarm_class_config,
-    });
+    );
     kit.on_ring_end(handle_ring_ends);
     let _ = ALARM_KIT.set(kit);
 
     sync_alarms(alarm_kit(), woken);
 
-    // Debug helpers (test harness only)
     #[cfg(debug_assertions)]
-    debug_auto_schedule();
-    #[cfg(debug_assertions)]
-    debug_action_poller();
+    crate::debug_hooks::start();
 
-    #[cfg(target_os = "android")]
     log::info!("[AlarmFree] Platform fully configured");
 }
 
@@ -474,178 +419,6 @@ fn forget_unlisted_alarms(kit: &AlarmKit, listed: &[(String, AlarmSpec)]) {
         if !ringing && !listed.iter().any(|(listed_id, _)| *listed_id == id.0) {
             forget_alarm(&id.0);
         }
-    }
-}
-
-/// Debug-only auto-schedule. If `<files>/debug_alarm_secs.txt` exists,
-/// reads an integer (seconds-from-now) and creates a one-shot AlarmKit
-/// alarm at `now + N seconds`. Used by the integration test harness.
-#[cfg(debug_assertions)]
-fn debug_auto_schedule() {
-    #[cfg(not(target_os = "android"))]
-    return;
-
-    #[cfg(target_os = "android")]
-    {
-        use chrono::Timelike;
-
-        let marker = mobile_sentinel::app_files_dir().join("debug_alarm_secs.txt");
-        let contents = match std::fs::read_to_string(&marker) {
-            Ok(s) => s,
-            Err(_) => return,
-        };
-        let secs: i64 = match contents.trim().parse() {
-            Ok(n) => n,
-            Err(_) => {
-                log::warn!("[AlarmFree] debug_alarm_secs.txt: invalid integer");
-                return;
-            }
-        };
-        let now = chrono::Local::now();
-        // Round up to next full minute so the OneTime schedule has a future
-        // hour:minute (the schedule has minute granularity).
-        let target = (now + chrono::Duration::seconds(secs))
-            .with_second(0)
-            .unwrap_or(now)
-            + chrono::Duration::minutes(1);
-
-        let kit = match alarm_kit_optional() {
-            Some(k) => k,
-            None => return,
-        };
-        let id = InstanceId::new(format!("debug-{}", target.timestamp_millis()));
-        let spec = AlarmSpec {
-            label: format!("Debug +{secs}s"),
-            schedule: ScheduleSpec::Weekdays {
-                days_mask: 0b0111_1111,
-                hour: target.hour() as u8,
-                minute: target.minute() as u8,
-            },
-            time_zone: AlarmKit::detect_timezone(),
-            sound_id: SoundIdSpec::Bundled("alarm".into()),
-            snooze_policy: SnoozePolicy {
-                max_count: 3,
-                interval_minutes: 1,
-                escalation: None,
-            },
-            challenges: Vec::<ChallengeSpec>::new(),
-            vibration_enabled: true,
-            // Inherit alarmfree's app-wide pattern (AlarmClassConfig default).
-            vibration_pattern: None,
-            kiosk_mode: true,
-            bypass_dnd: true,
-            skip_until_unix_ms: None,
-            fade_in_secs: 0,
-            ring_limit_secs: None,
-            min_volume_percent: None,
-            sound_delay_secs: 0,
-        };
-        match kit.create_with_id(id.clone(), spec) {
-            Ok(()) => log::info!(
-                "[AlarmFree] DEBUG auto-scheduled {} for {} ({}s from now)",
-                id.0,
-                target.format("%Y-%m-%d %H:%M:%S"),
-                secs
-            ),
-            Err(e) => log::warn!("[AlarmFree] DEBUG auto-schedule failed: {:?}", e),
-        }
-        // Remove marker so the next launch doesn't re-create it.
-        let _ = std::fs::remove_file(&marker);
-    }
-}
-
-/// Set by the `hang_ui` debug action; consumed by the UI's heartbeat loop.
-#[cfg(debug_assertions)]
-static DEBUG_HANG_UI: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-
-/// JavaScript from the harness, waiting for the UI to run it.
-#[cfg(debug_assertions)]
-static DEBUG_SCRIPT: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
-
-/// Debug-only: run what the harness sent in the page, and leave the result in a file.
-/// It is how the scenarios press buttons and read the screen on any phone size.
-#[cfg(debug_assertions)]
-pub async fn debug_script_loop() {
-    loop {
-        crate::timer::sleep_ms(200).await;
-        let script = DEBUG_SCRIPT
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .take();
-        let Some(script) = script else {
-            continue;
-        };
-        let mut eval = dioxus::document::eval(&format!(
-            "try {{ dioxus.send(String((function () {{ {script} }})())); }} \
-             catch (e) {{ dioxus.send('error: ' + e); }}"
-        ));
-        let result = eval.recv::<String>().await.unwrap_or_default();
-        let path = mobile_sentinel::app_files_dir().join("debug_script_result.txt");
-        let _ = std::fs::write(path, format!("={result}"));
-    }
-}
-
-/// Debug-only: freeze the calling thread (the UI's) for an hour when the
-/// `hang_ui` debug action asked for it, to exercise the `:sentinel` liveness
-/// watchdog.
-#[cfg(debug_assertions)]
-pub fn debug_block_if_requested() {
-    if DEBUG_HANG_UI.swap(false, std::sync::atomic::Ordering::SeqCst) {
-        log::warn!("[AlarmFree] DEBUG blocking the UI thread");
-        std::thread::sleep(std::time::Duration::from_secs(3600));
-    }
-}
-
-/// Background poll for the integration-test debug action file. The
-/// harness writes `<files>/debug_action.txt` with one of:
-///
-///   `snooze:<instance_id>` — triggers `kit.snooze(id)` on the next poll.
-///   `dismiss:<instance_id>` — triggers `kit.dismiss(id)`.
-///
-/// Each successful action removes the file. Used to drive snooze /
-/// dismiss without relying on flaky UI tap automation.
-#[cfg(debug_assertions)]
-fn debug_action_poller() {
-    #[cfg(not(target_os = "android"))]
-    return;
-
-    #[cfg(target_os = "android")]
-    {
-        std::thread::spawn(|| loop {
-            std::thread::sleep(std::time::Duration::from_millis(500));
-            let path = mobile_sentinel::app_files_dir().join("debug_action.txt");
-            let contents = match std::fs::read_to_string(&path) {
-                Ok(s) => s.trim().to_string(),
-                Err(_) => continue,
-            };
-            let kit = match alarm_kit_optional() {
-                Some(k) => k,
-                None => continue,
-            };
-            if let Some(id) = contents.strip_prefix("snooze:") {
-                let inst = InstanceId::new(id.to_owned());
-                if let Err(e) = kit.snooze(&inst) {
-                    log::warn!("[AlarmFree] DEBUG snooze({id}) failed: {e:?}");
-                } else {
-                    log::info!("[AlarmFree] DEBUG snooze({id}) ok");
-                }
-            } else if let Some(script) = contents.strip_prefix("js:") {
-                *DEBUG_SCRIPT
-                    .lock()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(script.to_owned());
-            } else if contents == "hang_ui" {
-                DEBUG_HANG_UI.store(true, std::sync::atomic::Ordering::SeqCst);
-                log::info!("[AlarmFree] DEBUG hang_ui requested");
-            } else if let Some(id) = contents.strip_prefix("dismiss:") {
-                let inst = InstanceId::new(id.to_owned());
-                if let Err(e) = kit.dismiss(&inst) {
-                    log::warn!("[AlarmFree] DEBUG dismiss({id}) failed: {e:?}");
-                } else {
-                    log::info!("[AlarmFree] DEBUG dismiss({id}) ok");
-                }
-            }
-            let _ = std::fs::remove_file(&path);
-        });
     }
 }
 

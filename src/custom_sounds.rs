@@ -30,7 +30,7 @@ pub fn default_sounds_dir() -> PathBuf {
 }
 
 /// Directory where user-imported custom sounds are stored.
-fn custom_sounds_dir() -> PathBuf {
+pub fn custom_sounds_dir() -> PathBuf {
     let dir = app_files_dir().join("sounds/custom");
     let _ = fs::create_dir_all(&dir);
     dir
@@ -43,33 +43,14 @@ fn custom_sounds_dir() -> PathBuf {
 /// Extract bundled sounds from APK assets to internal storage.
 /// Only copies files that don't already exist (safe to call on every launch).
 pub fn extract_bundled_sounds() {
-    let extractor = mobile_sentinel::AssetExtractor::new(app_files_dir());
-
-    #[cfg(target_os = "android")]
-    {
-        let count = extractor.extract("default", "sounds/default");
-        if count > 0 {
-            log::info!("[AlarmFree] Extracted {} bundled sounds", count);
-        }
-        let removed = prune_superseded_defaults(&default_sounds_dir());
-        if removed > 0 {
-            log::info!(
-                "[AlarmFree] Removed {} superseded bundled sound files",
-                removed
-            );
-        }
+    let count =
+        mobile_sentinel::AssetExtractor::new(app_files_dir()).extract("default", "sounds/default");
+    if count > 0 {
+        log::info!("[AlarmFree] Extracted {count} bundled sounds");
     }
-
-    #[cfg(not(target_os = "android"))]
-    {
-        let src = PathBuf::from("apps/alarmfree/assets/sounds/default");
-        if src.exists() {
-            let count = extractor.extract_from_dir(&src, "sounds/default");
-            if count > 0 {
-                log::info!("[AlarmFree] Copied {} bundled sounds from source", count);
-            }
-        }
-        prune_superseded_defaults(&default_sounds_dir());
+    let removed = prune_superseded_defaults(&default_sounds_dir());
+    if removed > 0 {
+        log::info!("[AlarmFree] Removed {removed} superseded bundled sound files");
     }
 }
 

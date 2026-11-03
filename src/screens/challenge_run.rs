@@ -10,8 +10,7 @@ use crate::components::challenges::{
 };
 use crate::components::{Celebration, Sheet, SheetDone, SheetItem};
 use crate::models::{
-    AppSettings, ChallengeAnswer, ChallengeConfig, ChallengeEngine, ChallengePrompt,
-    ChallengeSetup, ChallengeSolve, ChallengeType, Difficulty, Locale, ReferenceData,
+    AppSettings, ChallengeEngine, ChallengeSetup, ChallengeSolve, ChallengeType, Difficulty, Locale,
 };
 
 /// One challenge, ready to be done.
@@ -64,8 +63,7 @@ pub fn prepare(
     random_order: bool,
     locale: Locale,
 ) -> Vec<ChallengeToRun> {
-    let mut engine = ChallengeEngine::new();
-    engine.set_locale(locale);
+    let mut engine = ChallengeEngine::new(locale);
     let mut prepared: Vec<ChallengeToRun> = setups
         .iter()
         .map(|setup| prepare_one(&mut engine, setup))
@@ -118,59 +116,38 @@ fn prepare_one(engine: &mut ChallengeEngine, setup: &ChallengeSetup) -> Challeng
             ChallengeType::Scan,
         ),
         ChallengeSetup::Math { difficulty } => {
-            generated(engine, ChallengeType::Math, *difficulty, None)
+            let (expression, expected) = engine.math(*difficulty);
+            ChallengeToRun {
+                challenge: Challenge::Math {
+                    expression,
+                    expected,
+                },
+                kind: ChallengeType::Math,
+                difficulty: *difficulty,
+            }
         }
         ChallengeSetup::Memory { difficulty } => {
-            generated(engine, ChallengeType::MemoryGame, *difficulty, None)
+            let (sequence, grid_size) = engine.memory(*difficulty);
+            ChallengeToRun {
+                challenge: Challenge::Memory {
+                    sequence,
+                    grid_size,
+                },
+                kind: ChallengeType::MemoryGame,
+                difficulty: *difficulty,
+            }
         }
         ChallengeSetup::Typing { difficulty } => {
-            generated(engine, ChallengeType::Typing, *difficulty, None)
-        }
-    }
-}
-
-fn generated(
-    engine: &mut ChallengeEngine,
-    kind: ChallengeType,
-    difficulty: Difficulty,
-    reference_data: Option<ReferenceData>,
-) -> ChallengeToRun {
-    let instance = engine.generate(&ChallengeConfig {
-        challenge_type: kind,
-        difficulty,
-        reference_data,
-    });
-    let challenge = match (instance.prompt, instance.expected_answer) {
-        (ChallengePrompt::Math { expression }, ChallengeAnswer::Numeric(expected)) => {
-            Challenge::Math {
-                expression,
-                expected,
+            let (passage, min_accuracy) = engine.typing(*difficulty);
+            ChallengeToRun {
+                challenge: Challenge::Typing {
+                    passage,
+                    min_accuracy,
+                },
+                kind: ChallengeType::Typing,
+                difficulty: *difficulty,
             }
         }
-        (ChallengePrompt::MemoryGame { sequence, .. }, _) => Challenge::Memory {
-            sequence,
-            grid_size: match difficulty {
-                Difficulty::Hard | Difficulty::Extreme => 4,
-                _ => 3,
-            },
-        },
-        (ChallengePrompt::Typing { passage }, ChallengeAnswer::TypedText { min_accuracy, .. }) => {
-            Challenge::Typing {
-                passage,
-                min_accuracy,
-            }
-        }
-        // The engine answers each of the three types asked for in its own way; should
-        // that ever change, a touch-only challenge still lets the user out.
-        _ => Challenge::Hold {
-            count: 10,
-            hold_ms: 3000,
-        },
-    };
-    ChallengeToRun {
-        challenge,
-        kind,
-        difficulty,
     }
 }
 

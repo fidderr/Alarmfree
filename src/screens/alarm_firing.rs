@@ -265,7 +265,6 @@ pub fn AlarmFiring(id: String) -> Element {
                             }
                             // With another alarm still ringing, the screen moves on to
                             // that one.
-                            #[cfg(target_os = "android")]
                             if matches!(kit.current_session(), Ok(None)) {
                                 mobile_sentinel::foregrounding::finish_activity();
                             }

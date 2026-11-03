@@ -128,7 +128,7 @@ pub fn Stepper(
 #[component]
 pub fn Row(title: String, #[props(default)] value: String, on_click: EventHandler<()>) -> Element {
     rsx! {
-        li { class: "row",
+        li {
             button { class: "row-btn", onclick: move |_| on_click.call(()),
                 span { class: "row-title", "{title}" }
                 span { class: "row-value", "{value}" }
@@ -142,7 +142,7 @@ pub fn Row(title: String, #[props(default)] value: String, on_click: EventHandle
 #[component]
 pub fn SwitchRow(title: String, on: bool, on_toggle: EventHandler<bool>) -> Element {
     rsx! {
-        li { class: "row",
+        li {
             button {
                 class: "row-btn",
                 role: "switch",

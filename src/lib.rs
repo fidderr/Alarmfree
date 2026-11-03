@@ -6,6 +6,8 @@ pub mod back;
 pub mod components;
 pub mod custom_sounds;
 pub mod db;
+#[cfg(debug_assertions)]
+pub mod debug_hooks;
 pub mod feedback;
 pub mod firing_state;
 pub mod history_persistence;

@@ -9,7 +9,6 @@ use crate::back::{BackStack, BACK_PRESSED};
 use crate::i18n;
 use crate::models::AppSettings;
 use crate::screens::AlarmConfig;
-use crate::screens::AlarmFiring;
 use crate::screens::FirstRun;
 use crate::screens::History;
 use crate::screens::Home;
@@ -37,8 +36,6 @@ pub enum Route {
     Home {},
     #[route("/alarm/:id")]
     AlarmConfig { id: String },
-    #[route("/alarm-firing/:id")]
-    AlarmFiring { id: String },
     #[route("/practice/:id")]
     Practice { id: String },
     #[route("/history")]
@@ -200,9 +197,8 @@ fn default_ring_limit_secs() -> Option<u32> {
     Some(mobile_sentinel::context::schema::DEFAULT_RING_LIMIT_SECS)
 }
 
-/// In the binary, not through the asset pipeline: that does not handle a 32-bit build.
-/// And as a plain element, not `document::Style`: that needs a working `eval`, and a page
-/// that has trouble should at least show what it says properly.
+/// In the binary and as a plain element: no file to load and no `eval` to wait for, so a
+/// page that has trouble still shows what it says properly.
 const STYLESHEET: &str = include_str!("../assets/style.css");
 
 /// History is kept this long.
@@ -332,7 +328,7 @@ pub fn App() -> Element {
                 continue;
             }
             #[cfg(debug_assertions)]
-            crate::platform::debug_block_if_requested();
+            crate::debug_hooks::block_if_requested();
             if ui_round_trip().await {
                 mobile_sentinel::jobs::ui_heartbeat();
             }
@@ -340,7 +336,7 @@ pub fn App() -> Element {
     });
 
     #[cfg(debug_assertions)]
-    use_future(crate::platform::debug_script_loop);
+    use_future(crate::debug_hooks::script_loop);
 
     // System bars. Android 15+ draws the app edge-to-edge (under the status
     // and navigation bars), so the UI needs to know how far the bars overlap

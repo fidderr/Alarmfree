@@ -260,7 +260,7 @@ pub fn History() -> Element {
                 }
             }
 
-            div { class: "scroll scroll-nav",
+            div { class: "scroll",
                 if events.is_empty() {
                     div { class: "empty",
                         div { class: "empty-icon", Icon { name: IconName::ChartBar, size: 40 } }
@@ -275,7 +275,7 @@ pub fn History() -> Element {
                         show_all: show_all(),
                         on_toggle: move |_| show_all.set(!show_all()),
                     }
-                    ul { class: "list history-list",
+                    ul { class: "list",
                         for event in events.iter().cloned() {
                             {
                                 let id = event.id.clone();
@@ -535,7 +535,7 @@ fn EventRow(
     let delete_text = t(&translations, "history.delete_one");
 
     rsx! {
-        li { class: "event",
+        li {
             button {
                 class: "event-main",
                 "aria-expanded": if open { "true" } else { "false" },

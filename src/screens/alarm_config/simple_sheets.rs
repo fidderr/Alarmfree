@@ -1,0 +1,378 @@
+//! The editor's small sheets: one or two settings, or a question.
+
+use chrono::Duration;
+use dioxus::prelude::*;
+
+use super::EditorState;
+use crate::app::{t, AlarmData, Translations};
+use crate::components::time_picker::TimePicker;
+use crate::components::{Chips, GroupTitle, Sheet, SheetDone, SheetItem, Stepper};
+
+const LIMIT_MINUTES: [u32; 4] = [30, 60, 90, 120];
+const CHECK_MINUTES: [u8; 4] = [0, 3, 5, 10];
+
+/// A time typed in by hand: "7", "730", "07:30", "7.30".
+fn parse_typed_time(text: &str) -> Option<(u8, u8)> {
+    let digits: String = text.chars().filter(char::is_ascii_digit).collect();
+    let separated = text.contains([':', '.', ' ', 'h']);
+    let (hour, minute) = match digits.len() {
+        1 | 2 if !separated => (digits.parse().ok()?, 0),
+        3 if !separated => (digits[..1].parse().ok()?, digits[1..].parse().ok()?),
+        3 => (digits[..1].parse().ok()?, digits[1..].parse().ok()?),
+        4 => (digits[..2].parse().ok()?, digits[2..].parse().ok()?),
+        _ => return None,
+    };
+    (hour < 24 && minute < 60).then_some((hour, minute))
+}
+
+/// The time, on wheels or typed in.
+#[component]
+pub(super) fn TimeSheet() -> Element {
+    let EditorState {
+        mut sheet,
+        mut draft,
+        mut typed_time,
+        ..
+    } = use_context();
+    let translations = use_context::<Translations>();
+    let current = draft.read().clone();
+    let done_text = t(&translations, "action.done");
+    rsx! {
+        Sheet {
+            title: t(&translations, "config.time"),
+            note: t(&translations, "config.time_note"),
+            on_close: move |_| sheet.set(None),
+            TimePicker {
+                hour: current.time_hour,
+                minute: current.time_minute,
+                on_change: move |(h, m)| {
+                    let mut alarm = draft.write();
+                    alarm.time_hour = h;
+                    alarm.time_minute = m;
+                },
+            }
+            label { class: "field-label",
+                {t(&translations, "config.time_type")}
+                input {
+                    class: "field",
+                    r#type: "text",
+                    inputmode: "numeric",
+                    placeholder: "07:00",
+                    value: "{typed_time}",
+                    oninput: move |evt| {
+                        let text = evt.value();
+                        if let Some((h, m)) = parse_typed_time(&text) {
+                            let mut alarm = draft.write();
+                            alarm.time_hour = h;
+                            alarm.time_minute = m;
+                        }
+                        typed_time.set(text);
+                    },
+                }
+            }
+            SheetDone { label: done_text.clone(), on_click: move |_| sheet.set(None) }
+        }
+    }
+}
+
+/// The date of an alarm that rings once.
+#[component]
+pub(super) fn DateSheet() -> Element {
+    let EditorState {
+        mut sheet,
+        mut date_value,
+        mut error,
+        ..
+    } = use_context();
+    let translations = use_context::<Translations>();
+    let done_text = t(&translations, "action.done");
+    let today = chrono::Local::now().date_naive();
+    let quick = [
+        ("home.today", today),
+        ("home.tomorrow", today + Duration::days(1)),
+        ("config.next_week", today + Duration::days(7)),
+    ];
+    rsx! {
+        Sheet {
+            title: t(&translations, "config.date_title"),
+            note: t(&translations, "config.date_note"),
+            on_close: move |_| sheet.set(None),
+            label { class: "field-label",
+                {t(&translations, "config.date")}
+                input {
+                    class: "field",
+                    r#type: "date",
+                    value: "{date_value}",
+                    onchange: move |evt| {
+                        date_value.set(evt.value());
+                        error.set(String::new());
+                    },
+                }
+            }
+            GroupTitle { text: t(&translations, "config.quick") }
+            Chips::<chrono::NaiveDate> {
+                grow: true,
+                options: quick.iter().map(|(key, day)| (*day, t(&translations, key))).collect::<Vec<_>>(),
+                selected: chrono::NaiveDate::parse_from_str(&date_value.read(), "%Y-%m-%d").ok(),
+                on_pick: move |day: chrono::NaiveDate| {
+                    date_value.set(day.format("%Y-%m-%d").to_string());
+                    error.set(String::new());
+                },
+            }
+            SheetDone { label: done_text.clone(), on_click: move |_| sheet.set(None) }
+        }
+    }
+}
+
+/// Its name, and the note shown while it rings.
+#[component]
+pub(super) fn LabelSheet() -> Element {
+    let EditorState {
+        mut sheet,
+        mut draft,
+        ..
+    } = use_context();
+    let alarms = use_context::<Signal<Vec<AlarmData>>>();
+    let translations = use_context::<Translations>();
+    let current = draft.read().clone();
+    let done_text = t(&translations, "action.done");
+    let mut used: Vec<String> = alarms
+        .read()
+        .iter()
+        .filter(|a| !a.hidden && !a.label.is_empty())
+        .map(|a| a.label.clone())
+        .collect();
+    used.sort();
+    used.dedup();
+    rsx! {
+        Sheet {
+            title: t(&translations, "config.label"),
+            note: t(&translations, "config.label_note"),
+            on_close: move |_| sheet.set(None),
+            label { class: "field-label",
+                {t(&translations, "config.label_name")}
+                input {
+                    class: "field",
+                    r#type: "text",
+                    maxlength: "100",
+                    placeholder: t(&translations, "config.label_placeholder"),
+                    value: "{current.label}",
+                    oninput: move |evt| draft.write().label = evt.value(),
+                }
+            }
+            label { class: "field-label",
+                {t(&translations, "config.note")}
+                input {
+                    class: "field",
+                    r#type: "text",
+                    maxlength: "100",
+                    placeholder: t(&translations, "config.note_placeholder"),
+                    value: "{current.note}",
+                    oninput: move |evt| draft.write().note = evt.value(),
+                }
+            }
+            if !used.is_empty() {
+                GroupTitle { text: t(&translations, "config.used_before") }
+                Chips::<String> {
+                    options: used.into_iter().map(|l| (l.clone(), l)).collect::<Vec<_>>(),
+                    selected: Some(current.label.clone()),
+                    on_pick: move |label: String| draft.write().label = label,
+                }
+            }
+            SheetDone { label: done_text.clone(), on_click: move |_| sheet.set(None) }
+        }
+    }
+}
+
+/// How long and how often it can be snoozed.
+#[component]
+pub(super) fn SnoozeSheet() -> Element {
+    let EditorState {
+        mut sheet,
+        mut draft,
+        ..
+    } = use_context();
+    let translations = use_context::<Translations>();
+    let current = draft.read().clone();
+    let done_text = t(&translations, "action.done");
+    rsx! {
+        Sheet {
+            title: t(&translations, "config.snooze"),
+            note: t(&translations, "config.snooze_note"),
+            on_close: move |_| sheet.set(None),
+            Stepper {
+                title: t(&translations, "config.snooze_interval"),
+                value: t(&translations, "text.minutes").replace("{minutes}", &current.snooze_interval.to_string()),
+                on_less: move |_| {
+                    let mut alarm = draft.write();
+                    alarm.snooze_interval = alarm.snooze_interval.saturating_sub(1).max(1);
+                },
+                on_more: move |_| {
+                    let mut alarm = draft.write();
+                    alarm.snooze_interval = alarm.snooze_interval.saturating_add(1).min(60);
+                },
+            }
+            Stepper {
+                title: t(&translations, "config.snooze_count"),
+                value: t(&translations, "text.times").replace("{count}", &current.snooze_count.to_string()),
+                on_less: move |_| {
+                    let mut alarm = draft.write();
+                    alarm.snooze_count = alarm.snooze_count.saturating_sub(1);
+                },
+                on_more: move |_| {
+                    let mut alarm = draft.write();
+                    alarm.snooze_count = alarm.snooze_count.saturating_add(1).min(10);
+                },
+            }
+            SheetDone { label: done_text.clone(), on_click: move |_| sheet.set(None) }
+        }
+    }
+}
+
+/// How long it rings with nobody doing anything.
+#[component]
+pub(super) fn LimitSheet() -> Element {
+    let EditorState {
+        mut sheet,
+        mut draft,
+        ..
+    } = use_context();
+    let translations = use_context::<Translations>();
+    let current = draft.read().clone();
+    let done_text = t(&translations, "action.done");
+    let mut options: Vec<(Option<u32>, String)> = LIMIT_MINUTES
+        .iter()
+        .map(|m| {
+            (
+                Some(m * 60),
+                t(&translations, "text.minutes").replace("{minutes}", &m.to_string()),
+            )
+        })
+        .collect();
+    options.push((None, t(&translations, "config.limit_forever")));
+    rsx! {
+        Sheet {
+            title: t(&translations, "config.ring_limit"),
+            note: t(&translations, "config.limit_note"),
+            on_close: move |_| sheet.set(None),
+            Chips::<Option<u32>> {
+                grow: true,
+                options,
+                selected: Some(current.ring_limit_secs),
+                on_pick: move |limit: Option<u32>| draft.write().ring_limit_secs = limit,
+            }
+            SheetDone { label: done_text.clone(), on_click: move |_| sheet.set(None) }
+        }
+    }
+}
+
+/// How long after it is over to check the user is up.
+#[component]
+pub(super) fn WakeCheckSheet() -> Element {
+    let EditorState {
+        mut sheet,
+        mut draft,
+        ..
+    } = use_context();
+    let translations = use_context::<Translations>();
+    let current = draft.read().clone();
+    let done_text = t(&translations, "action.done");
+    rsx! {
+        Sheet {
+            title: t(&translations, "config.wake_check"),
+            note: t(&translations, "config.wake_check_note"),
+            on_close: move |_| sheet.set(None),
+            Chips::<u8> {
+                grow: true,
+                options: CHECK_MINUTES
+                    .iter()
+                    .map(|m| (*m, if *m == 0 {
+                        t(&translations, "config.fade_off")
+                    } else {
+                        t(&translations, "text.minutes").replace("{minutes}", &m.to_string())
+                    }))
+                    .collect::<Vec<_>>(),
+                selected: Some(current.wake_check_minutes),
+                on_pick: move |minutes: u8| draft.write().wake_check_minutes = minutes,
+            }
+            SheetDone { label: done_text.clone(), on_click: move |_| sheet.set(None) }
+        }
+    }
+}
+
+/// Deleting the alarm, after asking.
+#[component]
+pub(super) fn DeleteSheet(id: String) -> Element {
+    let EditorState {
+        mut sheet, preview, ..
+    } = use_context();
+    let mut alarms = use_context::<Signal<Vec<AlarmData>>>();
+    let translations = use_context::<Translations>();
+    let nav = use_navigator();
+    let delete_id = id.clone();
+    rsx! {
+        Sheet {
+            title: t(&translations, "alarm.delete_confirm"),
+            note: t(&translations, "alarm.delete_warning"),
+            on_close: move |_| sheet.set(None),
+            SheetItem {
+                label: t(&translations, "action.delete"),
+                danger: true,
+                on_click: move |_| {
+                    preview.stop();
+                    alarms.write().retain(|a| a.id != delete_id);
+                    crate::persistence::save_alarms(&alarms.peek());
+                    nav.go_back();
+                },
+            }
+            SheetDone { label: t(&translations, "alarm.keep"), on_click: move |_| sheet.set(None) }
+        }
+    }
+}
+
+/// Leaving with changes, after asking.
+#[component]
+pub(super) fn DiscardSheet() -> Element {
+    let EditorState {
+        mut sheet, preview, ..
+    } = use_context();
+    let translations = use_context::<Translations>();
+    let nav = use_navigator();
+    rsx! {
+        Sheet {
+            title: t(&translations, "config.discard_title"),
+            note: t(&translations, "config.discard_note"),
+            on_close: move |_| sheet.set(None),
+            SheetItem {
+                label: t(&translations, "config.discard"),
+                danger: true,
+                on_click: move |_| {
+                    preview.stop();
+                    nav.go_back();
+                },
+            }
+            SheetDone { label: t(&translations, "config.keep_editing"), on_click: move |_| sheet.set(None) }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_typed_time;
+
+    #[test]
+    fn a_time_can_be_typed_in_the_ways_people_type_it() {
+        assert_eq!(parse_typed_time("7"), Some((7, 0)));
+        assert_eq!(parse_typed_time("07"), Some((7, 0)));
+        assert_eq!(parse_typed_time("730"), Some((7, 30)));
+        assert_eq!(parse_typed_time("0730"), Some((7, 30)));
+        assert_eq!(parse_typed_time("07:30"), Some((7, 30)));
+        assert_eq!(parse_typed_time("7:30"), Some((7, 30)));
+        assert_eq!(parse_typed_time("7.30"), Some((7, 30)));
+        assert_eq!(parse_typed_time("23:59"), Some((23, 59)));
+        assert_eq!(parse_typed_time("24:00"), None);
+        assert_eq!(parse_typed_time("7:75"), None);
+        assert_eq!(parse_typed_time(""), None);
+        assert_eq!(parse_typed_time("12345"), None);
+    }
+}

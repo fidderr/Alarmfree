@@ -149,7 +149,7 @@ fn ReliabilityScreen(first_run: bool) -> Element {
                     on_back: move |_| leave(),
                 }
             }
-            div { class: "scroll scroll-save",
+            div { class: "scroll",
                 p { class: "intro",
                     if first_run {
                         {t(&translations, "setup.intro")}
@@ -187,7 +187,6 @@ fn ReliabilityScreen(first_run: bool) -> Element {
                                             onclick: move |_| {
                                                 // Notifications are asked for in place first, which only
                                                 // works while Android has not been told no.
-                                                #[cfg(target_os = "android")]
                                                 if check == Check::Notifications {
                                                     let _ = mobile_sentinel::permissions::request("android.permission.POST_NOTIFICATIONS");
                                                     return;
