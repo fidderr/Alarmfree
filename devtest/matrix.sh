@@ -1390,7 +1390,9 @@ s42() {
     on_screen .run-screen || { fail "no challenge screen"; return; }
     adb_ logcat -c
     click .scan-button 0 0.3
-    scanner_on_top() { dev dumpsys activity activities | grep -m1 ResumedActivity | grep -q SentinelScannerActivity; }
+    # It has the keys, or Back goes nowhere. And the page behind it stays what it was, so what
+    # says it came back is the button being one again, ready for the next scan.
+    scanner_on_top() { dev "dumpsys window | grep -m1 mCurrentFocus | grep -q SentinelScannerActivity" > /dev/null; }
     local crashed
     if wait_for 8 scanner_on_top; then
         crashed=$(adb_ logcat -d 2> /dev/null | grep -E 'FATAL EXCEPTION|ClassNotFoundException|NoClassDefFoundError|Resources\$NotFoundException|InflateException' | head -3)
@@ -1399,10 +1401,23 @@ s42() {
             return
         fi
         press_back
-        if on_screen .run-screen 20; then
-            pass "opened the camera and came back"
+        if ! on_screen button.scan-button 8; then
+            fail "did not come back from the scanner: $(dev dumpsys window | grep -m1 mCurrentFocus)"
         else
-            fail "did not come back from the scanner"
+            # Right away again: the first one must not end this one.
+            click .scan-button 0 0.3
+            if ! wait_for 8 scanner_on_top; then
+                fail "the second time it does not open: $(read_text .scan-button)"
+            elif ! is_there 'div.scan-button.scanning'; then
+                fail "the second scan ended while the camera is up: $(read_text .scan-button)"
+            else
+                press_back
+                if on_screen button.scan-button 8; then
+                    pass "opened the camera twice in a row and came back"
+                else
+                    fail "did not come back the second time"
+                fi
+            fi
         fi
     else
         crashed=$(adb_ logcat -d 2> /dev/null | grep -E 'FATAL EXCEPTION|ClassNotFoundException|NoClassDefFoundError|Resources\$NotFoundException|InflateException' | head -3)
@@ -1438,6 +1453,11 @@ s43() {
     on_screen .sheet-item
     click .sheet-item 2 0.4
     [ "$(history_count)" = 1 ] || problems="$problems; everything went without asking again"
+    # What the delete before it said is still up: it may not cover this question's buttons.
+    is_there .toast || problems="$problems; the message before this went too soon to tell"
+    local under
+    under=$(covered)
+    [ -z "$under" ] || problems="$problems; a message covers: $under"
     screenshot s43_asking
     press_back
     gone .sheet || problems="$problems; Back left the question open"
@@ -2076,23 +2096,24 @@ s53() {
     on_screen .check-title
     local i=0 n
     n=$(js "return document.querySelectorAll('.btn-small').length")
-    away() { ! focus_in_app; }
+    # Another app has the keys. A system screen can take a while to start, and Back goes nowhere
+    # until it has.
+    away() { dev "dumpsys window | grep -m1 mCurrentFocus | grep -v null | grep -qv $PKG/" > /dev/null; }
     while [ "$i" -lt "${n:-0}" ] 2> /dev/null; do
         click .btn-small "$i" 0.3
-        wait_for 5 away || problems="$problems; fix button $i stays in the app"
-        # A system screen can take its time before it listens, and a second Back in the middle
-        # of the change closes the screen it comes back to.
+        wait_for 15 away || problems="$problems; fix button $i stays in the app"
+        # And a second Back in the middle of the change closes the screen it comes back to.
         back_in_app() {
             press_back
             wait_for 4 focus_in_app
         }
-        wait_for 12 back_in_app
+        wait_for 12 back_in_app || problems="$problems; Back from fix button $i leaves the keys with:$(dev dumpsys window | grep -m1 mCurrentFocus)"
         on_screen .check-title 20 || problems="$problems; not back from fix button $i"
         i=$((i + 1))
     done
     click_row "This app in the phone"
-    wait_for 10 away || problems="$problems; the app's settings stay in the app"
-    wait_for 12 back_in_app
+    wait_for 15 away || problems="$problems; the app's settings stay in the app"
+    wait_for 12 back_in_app || problems="$problems; Back from the app's settings leaves the keys with:$(dev dumpsys window | grep -m1 mCurrentFocus)"
     if [ -z "$problems" ]; then
         pass "templates, time, wheels, date, challenge settings, deleting a sound, own days, $n fix buttons"
     else
@@ -2112,14 +2133,14 @@ s54() {
     scenario s54_over_the_lock_screen
     fresh
     dev locksettings set-pin 1234 > /dev/null
-    next_minute
+    next_minute 10
     seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
     arm a
     dead
     screen_off
     locked() { dev "dumpsys trust | grep -q 'deviceLocked=1'" > /dev/null; }
     local problems=""
-    wait_for 3 locked || problems="$problems; not locked before the ring"
+    wait_for 6 locked || problems="$problems; not locked before the ring"
     if ! await_ring a 30; then
         problems="$problems; no ring: state=$(state a)"
     else
@@ -2170,6 +2191,8 @@ RUN_START=$SECONDS
 open_shells
 if on_emulator; then
     dev settings put global auto_time 0
+    # The one time Android 12 explains full screen, over the scanner, it takes the keys.
+    dev settings put secure immersive_mode_confirmations confirmed
     remove_widgets
 fi
 APP_UID=$(dev cmd package list packages -U "$PKG" | sed -E 's/.*uid:([0-9]+).*/\1/')
