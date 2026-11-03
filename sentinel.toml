@@ -21,12 +21,6 @@ assets = ["assets/sounds"]
 # device-encrypted for that, as a system clock's are.
 direct_boot = true
 
-# Older WebViews cannot run the UI: Dioxus needs FinalizationRegistry and flex `gap`, both
-# new in 84. On 83 the page shows but nothing it asks of it gets an answer; on 69 it stays
-# blank. Phones update this through the Play Store. One that did not gets told, and its
-# alarms use the backup screen.
-min_webview = 84
-
 # Capabilities are NOT declared here — every capability is a Cargo FEATURE on
 # the mobile-sentinel dependency in Cargo.toml (the single, compile-enforced
 # source of truth). build_sentinel derives the manifest permissions/components

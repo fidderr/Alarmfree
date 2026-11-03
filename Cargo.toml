@@ -53,8 +53,5 @@ tempfile = "3"
 tokio = { version = "1", features = ["rt", "macros", "time"] }
 
 [patch.crates-io]
-# tao 0.34.8 crashes at launch below Android 11: MonitorHandle::size calls
-# getCurrentWindowMetrics unconditionally. Drop this once upstream handles it.
-tao = { path = "vendor/tao" }
 # manganis 0.7.9 refuses to build for 32-bit Android, over a guard that is not needed.
 manganis = { path = "vendor/manganis" }

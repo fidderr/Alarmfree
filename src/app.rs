@@ -201,8 +201,8 @@ fn default_ring_limit_secs() -> Option<u32> {
 }
 
 /// In the binary, not through the asset pipeline: that does not handle a 32-bit build.
-/// And as a plain element, not `document::Style`: that needs a working `eval`, which a
-/// too-old WebView does not have, and it should at least show what it says properly.
+/// And as a plain element, not `document::Style`: that needs a working `eval`, and a page
+/// that has trouble should at least show what it says properly.
 const STYLESHEET: &str = include_str!("../assets/style.css");
 
 /// History is kept this long.

@@ -1,5 +1,5 @@
-/* AlarmFree. Works from WebView 84 on (see min_webview in sentinel.toml): no color-mix,
-   :has, inset or aspect-ratio. Sizes: 12, 14, 16, 20, 28 px, plus the big clocks.
+/* AlarmFree. Works from WebView 91 on, what Android 12 comes with: no color-mix or :has.
+   Sizes: 12, 14, 16, 20, 28 px, plus the big clocks.
    Spacing in steps of 4. Corners: 8, 12, 16. */
 
 /* ===== Tokens ===== */
