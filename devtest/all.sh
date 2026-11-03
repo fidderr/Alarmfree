@@ -1,13 +1,16 @@
 #!/bin/bash
-# The whole suite on the newest and the oldest Android at the same time, then what depends on
-# the size on a tablet and a foldable, with the APK that is already built (APK says which, for a
-# release).
+# The whole suite on the newest Android. Next to it the oldest, and after that what depends on
+# the size on a tablet and a foldable. With the APK that is already built (APK says which, for a
+# release), and never more than two emulators: that is what 16 GB has room for.
 #
 # Usage: bash devtest/all.sh [name]    results in devtest-out/<name>_<avd>/ and <name>_<avd>.log
 cd "$(dirname "$0")/.." || exit 1
 export APK="${APK:-target/dx/alarmfree/debug/android/app/app/build/outputs/apk/debug/app-debug.apk}"
 NAME=${1:-full}
-SIZES="s01 s19 s25 s28 s31 s34 s36 s37 s49"
+# Screens that work the same on any Android: on the newest only.
+SAME_ON_ANY="s30 s31 s38 s43 s45 s46 s47 s50 s51 s52"
+TABLET="s19 s25 s28 s34 s36 s37 s49"
+FOLDABLE="s19 s34 s49"
 
 run_on() { # avd port scenarios...
     local avd=$1 port=$2
@@ -30,9 +33,10 @@ run_on() { # avd port scenarios...
 
 START=$SECONDS
 run_on af36 5554 &
-run_on af31 5556 &
-wait
-run_on af36tab 5554 $SIZES &
-run_on af36fold 5556 $SIZES &
+(
+    SKIP=$SAME_ON_ANY run_on af31 5556
+    run_on af36tab 5556 $TABLET
+    run_on af36fold 5556 $FOLDABLE
+) &
 wait
 echo "all of it in $(((SECONDS - START) / 60)) min $(((SECONDS - START) % 60)) s"

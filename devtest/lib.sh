@@ -260,6 +260,15 @@ grant_all() {
     adb_ shell "pm grant $PKG android.permission.POST_NOTIFICATIONS; pm grant $PKG android.permission.ACTIVITY_RECOGNITION; pm grant $PKG android.permission.CAMERA; appops set $PKG SYSTEM_ALERT_WINDOW allow" > /dev/null 2>&1
     PERMISSIONS_TOUCHED=""
 }
+# A widget of ours on the launcher can bring the app up right after a force-stop. A clock change
+# then has it read the alarms before a scenario seeded one, and opening it reads them no more.
+remove_widgets() {
+    local host
+    for host in $(dev dumpsys appwidget | grep -B1 "provider=.*$PKG/" | sed -nE 's/.*host=.*pkg:([^}]+)}.*/\1/p' | sort -u); do
+        dev pm clear "$host" > /dev/null
+    done
+}
+
 deny_overlay() {
     PERMISSIONS_TOUCHED=1
     dev appops set "$PKG" SYSTEM_ALERT_WINDOW deny
@@ -463,7 +472,7 @@ solve_backup() {
 top_is_app() { dev "dumpsys activity activities | grep -E 'topResumedActivity|ResumedActivity:' | head -1 | grep -q $PKG" > /dev/null; }
 focus_in_app() { dev "dumpsys window | grep -m1 mCurrentFocus | grep -q $PKG/" > /dev/null; }
 armed_at_ms() { as_app "head -n 1 files/sentinel/armed/$1.armed 2>/dev/null"; }
-os_has_alarm() { dev "dumpsys alarm | grep -q '$PKG.*ALARM_DISPATCH\\|ALARM_DISPATCH.*$PKG\\|walarm\\*:com.mobilesentinel.ALARM_DISPATCH'" > /dev/null; }
+os_has_alarm() { dev "dumpsys alarm | grep -qE '$PKG.*ALARM_DISPATCH|ALARM_DISPATCH.*$PKG|walarm\\*:com.mobilesentinel.ALARM_DISPATCH'" > /dev/null; }
 alarm_volume() {
     dev cmd media_session volume --stream 4 --get 2> /dev/null |
         grep -oE 'volume is [0-9]+' | grep -oE '[0-9]+' | sed -n 1p

@@ -80,7 +80,11 @@ s04() {
     start_app
     on_screen .alarm-card 10
     after=$(next_fire_ms a)
-    card=$(read_text .alarm-when)
+    says_snoozed() {
+        card=$(read_text .alarm-when)
+        [[ "$card" == Snoozed* ]]
+    }
+    wait_for 5 says_snoozed
     if [ "$(state a)" = snoozed ] && [ "$before" = "$after" ] && [[ "$card" == Snoozed* ]]; then
         pass "snooze kept after reopening, the card says '$card'"
     else
@@ -544,15 +548,19 @@ s23b() {
     on_screen .ring-off 10
     sleep 0.7
     as_app "touch -d 2020-01-01T00:00:00 files/sentinel/ringing/activity"
+    # Late enough to tell: it ends at 9 seconds without this touch, and at 13 with it.
+    until_past $((T + 4))
     local size
     size=$(dev wm size | tail -1 | sed 's/.*: //')
     # On the alarm's clock, where a touch does nothing else.
     dev input tap $((${size%x*} / 2)) $((${size#*x} / 5))
     until_past $((T + 11))
-    if sound_on; then
-        pass "still ringing at $(($(now_s) - T))s, past its limit of 9"
-    else
+    if ! sound_on; then
         fail "stopped despite the touch, state=$(state a)"
+    elif await_silence 20 && [ "$STOPPED_AT" -ge 12 ]; then
+        pass "past its limit of 9 at 11s, stopped ${STOPPED_AT}s after its time"
+    else
+        fail "the limit no longer counts after the touch: stopped at ${STOPPED_AT:-never}"
     fi
 }
 
@@ -1193,6 +1201,7 @@ s40() {
         *"No alarm set"*) ;;
         *) problems="$problems; still old: $texts" ;;
     esac
+    remove_widgets
     if [ -z "$problems" ]; then
         pass "placed, shows the next ring, follows a change"
     else
@@ -1220,7 +1229,11 @@ sweep_rows() { # where, for the messages
             ;;
     esac
     while [ "$i" -lt "$n" ]; do
-        IFS='|' read -r kind title <<< "$(js "var e = document.querySelectorAll('.row-btn')[$i], t = e.querySelector('.row-title'), k = e.getAttribute('role') === 'switch' ? e.getAttribute('aria-checked') : 'row'; e.click(); return k + '|' + (t ? t.textContent : '')")"
+        IFS='|' read -r kind title <<< "$(js "var e = document.querySelectorAll('.row-btn')[$i], t = e.querySelector('.row-title'), k = e.getAttribute('role') === 'switch' ? e.getAttribute('aria-checked') : 'row', w = t && t.textContent.includes('widget'); if (w) return 'skip|'; e.click(); return k + '|' + (t ? t.textContent : '')")"
+        if [ "$kind" = skip ]; then
+            i=$((i + 1))
+            continue
+        fi
         if [ "$kind" = row ]; then
             sleep 0.15
             # A sheet, a screen of its own, or something of the system's on top.
@@ -2041,13 +2054,20 @@ s53() {
     while [ "$i" -lt "${n:-0}" ] 2> /dev/null; do
         click .btn-small "$i" 0.3
         wait_for 5 away || problems="$problems; fix button $i stays in the app"
-        press_back
+        # A system screen can take its time before it listens.
+        back_in_app() {
+            focus_in_app && return 0
+            press_back
+            sleep 0.3
+            focus_in_app
+        }
+        wait_for 10 back_in_app
         on_screen .check-title 20 || problems="$problems; not back from fix button $i"
         i=$((i + 1))
     done
     click_row "This app in the phone"
     wait_for 10 away || problems="$problems; the app's settings stay in the app"
-    press_back
+    wait_for 10 back_in_app
     if [ -z "$problems" ]; then
         pass "templates, time, wheels, date, challenge settings, deleting a sound, own days, $n fix buttons"
     else
@@ -2063,7 +2083,10 @@ ON_A_PHONE="s01 s03 s04 s05 s06 s07 s10 s15 s16 s16b s17 s22 s23a s23b s23c s25 
 : > "$RESULTS"
 RUN_START=$SECONDS
 open_shells
-on_emulator && dev settings put global auto_time 0
+if on_emulator; then
+    dev settings put global auto_time 0
+    remove_widgets
+fi
 APP_UID=$(dev cmd package list packages -U "$PKG" | sed -E 's/.*uid:([0-9]+).*/\1/')
 if on_emulator; then
     DEFAULT_LIST=$ALL
@@ -2071,6 +2094,9 @@ else
     DEFAULT_LIST=$ON_A_PHONE
 fi
 for s in ${*:-$DEFAULT_LIST}; do
+    case " ${SKIP:-} " in
+        *" $s "*) continue ;;
+    esac
     "$s"
 done
 dev am force-stop "$PKG"
