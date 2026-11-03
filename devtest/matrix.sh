@@ -327,7 +327,15 @@ s15() {
     next_minute 20
     seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
     arm a
-    adb_ install -r -g "$APK" > /dev/null
+    local said
+    said=$(adb_ install -r -g "$APK" 2>&1)
+    case "$said" in
+        *Success*) ;;
+        *)
+            fail "the update did not install: $said"
+            return
+            ;;
+    esac
     if await_sound 60; then
         pass "rang after the update, ${SOUND_AT}s after its time"
     else
@@ -681,7 +689,7 @@ s28() {
     shorten idle_secs 30
     screenshot s28_ringing
     local clipped
-    clipped=$(js "$NOTHING_CLIPPED")
+    clipped=$(ask_page "$NOTHING_CLIPPED")
     click .ring-off 0 0.3
     on_screen .math-expression
     screenshot s28_challenge
@@ -912,37 +920,39 @@ s33() {
 # Nothing sticks out of the screen in the longest languages, with large text.
 s34() {
     scenario s34_nothing_clipped
-    local check=$NOTHING_CLIPPED problems="" locale result
+    local check=$NOTHING_CLIPPED problems="" locale result locales="Dutch Spanish French German"
+    # On a big screen only the longest words, each language is a restart.
+    [ -z "${VARIANT:-}" ] || locales=German
     fresh
     next_minute 3600
     seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
     dev settings put system font_scale 1.3
-    for locale in Dutch Spanish French German; do
+    for locale in $locales; do
         use_settings '"Dark"' "\"$locale\"" '"setup_done":true,"language_follows_phone":false'
         start_app
         on_screen .alarm-main 10
-        result=$(js "$check")
+        result=$(ask_page "$check")
         [ -z "$result" ] || problems="$problems $locale/home: $result;"
         click .alarm-main
         on_screen .time-big
-        result=$(js "$check")
+        result=$(ask_page "$check")
         [ -z "$result" ] || problems="$problems $locale/editor: $result;"
         press_back
         on_screen .nav-item
         click .nav-item 1
-        result=$(js "$check")
+        result=$(ask_page "$check")
         [ -z "$result" ] || problems="$problems $locale/history: $result;"
         click .nav-item 2
-        result=$(js "$check")
+        result=$(ask_page "$check")
         [ -z "$result" ] || problems="$problems $locale/settings: $result;"
         click .banner
-        result=$(js "$check")
+        result=$(ask_page "$check")
         [ -z "$result" ] || problems="$problems $locale/reliability: $result;"
         dev am force-stop "$PKG"
     done
     dev settings put system font_scale 1.0
     if [ -z "$problems" ]; then
-        pass "4 languages with large text"
+        pass "$locales with large text"
     else
         fail "$problems"
     fi
@@ -2148,7 +2158,7 @@ with_screen() { # size density scenarios...
     dev wm density reset
 }
 big_screens() {
-    with_screen 1600x2560 320 s19 s25 s28 s34 s36 s49
+    with_screen 1600x2560 320 s19 s25 s28 s34 s36
     with_screen 2208x1840 420 s34 s49
 }
 

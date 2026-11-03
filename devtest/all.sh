@@ -8,9 +8,10 @@ export APK="${APK:-target/dx/alarmfree/debug/android/app/app/build/outputs/apk/d
 NAME=${1:-full}
 # What does not depend on Android itself, on the oldest only: its WebView is the hardest on a
 # page. What depends on the size, on the newest only: from Android 16 on an app has no say in
-# how it turns on a big screen.
+# how it turns on a big screen. Also the restart with a PIN, which works the same on all of them
+# and takes a minute.
 OLDEST_ONLY="s29 s30 s31 s32 s38 s43 s44 s45 s46 s47 s50 s51 s52"
-NEWEST_ONLY="big_screens"
+NEWEST_ONLY="s13 big_screens"
 
 run_on() { # avd port scenarios...
     local avd=$1 port=$2
@@ -22,6 +23,7 @@ run_on() { # avd port scenarios...
         adb_ install -r -g "$APK" | tail -1
         # Without a working page nearly everything fails, and slowly: stop the run at once.
         fresh
+        export CLEAN_COPY
         start_app
         on_screen .home-header 30 || { echo "STOP  $avd: the page does not render"; exit 1; }
         bash devtest/matrix.sh "$@"

@@ -249,7 +249,7 @@ reboot_only() {
 # ---- A clean app ----
 # No alarms, normal permissions, an empty database. The first time the real way, with the app
 # making its database; after that from a copy of what it made, in a second instead of ten.
-CLEAN_COPY=""
+CLEAN_COPY="${CLEAN_COPY:-}"
 PERMISSIONS_TOUCHED=""
 fresh() {
     shells_open || open_shells
@@ -416,12 +416,37 @@ click() {
     js "var e = document.querySelectorAll('$1')[${2:-0}]; if (!e) return 'nothing like $1'; e.click(); return 'ok'" > /dev/null
     sleep "${3:-0.1}"
 }
-# Right now, and until it shows or is gone: a screen takes a moment to change.
+# For what only looks, so it can be asked again when the page is too busy to answer.
+ask_page() {
+    local out try
+    for try in 1 2 3; do
+        out=$(js "$1")
+        case "$out" in
+            *"no answer"*) sleep 0.5 ;;
+            *) break ;;
+        esac
+    done
+    echo "$out"
+}
+# Right now, and until it shows or is gone: a screen takes a moment to change. A page that is not
+# up yet does not count, once per scenario: a first load can take most of a minute when Android
+# is busy with something else, which the results then say.
 is_there() { [ "$(js "return document.querySelector('$1') ? 'y' : 'n'")" = y ]; }
 is_not_there() { [ "$(js "return document.querySelector('$1') ? 'y' : 'n'")" = n ]; }
-on_screen() { wait_for "${2:-6}" is_there "$1"; }
+page_is_up() { [ "$(js "return 'y'")" = y ]; }
+PAGE_WAITED=""
+on_screen() {
+    wait_for "${2:-6}" is_there "$1" && return 0
+    [ -z "$PAGE_WAITED" ] || return 1
+    PAGE_WAITED=1
+    page_is_up && return 1
+    local t0=$SECONDS
+    wait_for 60 page_is_up || return 1
+    echo "NOTE  $CURRENT  the page was not up for another $((SECONDS - t0))s" | tee -a "$RESULTS"
+    wait_for "${2:-6}" is_there "$1"
+}
 gone() { wait_for "${2:-6}" is_not_there "$1"; }
-read_text() { js "var e = document.querySelector('$1'); return e ? e.textContent : ''"; }
+read_text() { ask_page "var e = document.querySelector('$1'); return e ? e.textContent : ''"; }
 press_back() {
     dev input keyevent KEYCODE_BACK
     sleep 0.2
@@ -537,6 +562,7 @@ RESULTS="$OUT/results.txt"
 CURRENT=""
 SCENARIO_START=$SECONDS
 scenario() {
+    PAGE_WAITED=""
     CURRENT=$1${VARIANT:-}
     SCENARIO_START=$SECONDS
     echo
