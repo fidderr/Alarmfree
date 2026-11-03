@@ -53,6 +53,18 @@ pub fn new_alarm(defaults: Option<&AlarmData>) -> AlarmData {
     alarm
 }
 
+/// What new alarms start from to be like this one: all but what makes it this alarm.
+pub fn as_defaults(alarm: &AlarmData) -> AlarmData {
+    let mut defaults = alarm.clone();
+    defaults.id = String::new();
+    defaults.label = String::new();
+    defaults.note = String::new();
+    defaults.date = None;
+    defaults.order = 0;
+    defaults.delete_after_ring = false;
+    defaults
+}
+
 /// A one-time alarm at this moment. An alarm rings on whole minutes, so seconds round
 /// up: a nap is at least as long as asked for.
 fn one_time_at(mut alarm: AlarmData, at: NaiveDateTime) -> AlarmData {
@@ -188,6 +200,23 @@ mod tests {
             .unwrap()
             .and_hms_opt(hour, minute, second)
             .unwrap()
+    }
+
+    #[test]
+    fn defaults_from_an_alarm_keep_how_it_rings_and_not_what_it_is() {
+        let mut alarm = quick_alarm(at(7, 0, 0), 5, "Nap".into(), None);
+        alarm.note = "Charger".into();
+        alarm.fade_in_secs = 60;
+        alarm.order = 3;
+        alarm.challenges = vec![("challenge.math".into(), "{}".into())];
+        let new = new_alarm(Some(&as_defaults(&alarm)));
+        assert_eq!(new.fade_in_secs, 60);
+        assert_eq!(new.challenges, alarm.challenges);
+        assert_eq!(new.time_minute, alarm.time_minute);
+        assert!(new.id.is_empty() && new.label.is_empty() && new.note.is_empty());
+        assert_eq!(new.date, None);
+        assert_eq!(new.order, 0);
+        assert!(!new.delete_after_ring);
     }
 
     #[test]

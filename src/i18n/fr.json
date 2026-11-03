@@ -427,5 +427,8 @@
   "home.snoozed_until": "Reportée à {time}",
   "reliability.hide": "Ne plus afficher ici",
   "reliability.app_settings": "Cette appli dans les réglages du téléphone",
-  "reliability.save_record": "Enregistrer la rapidité des alarmes"
+  "reliability.save_record": "Enregistrer la rapidité des alarmes",
+  "home.make_default": "Utiliser pour les nouvelles alarmes",
+  "home.made_default": "Les nouvelles alarmes commencent désormais comme celle-ci",
+  "text.decimal_point": ","
 }

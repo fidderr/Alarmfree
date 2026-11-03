@@ -180,7 +180,7 @@ pub(super) fn AlarmMenuSheet(id: String, next: Option<i64>) -> Element {
         translations,
         ..
     } = state;
-    let settings = use_context::<Signal<AppSettings>>();
+    let mut settings = use_context::<Signal<AppSettings>>();
     let nav = use_navigator();
 
     let found: Option<AlarmData> = alarms.read().iter().find(|a| a.id == id).cloned();
@@ -199,6 +199,7 @@ pub(super) fn AlarmMenuSheet(id: String, next: Option<i64>) -> Element {
         alarm.label
     );
     let name = alarm.label.clone();
+    let defaults = alarm_ops::as_defaults(&alarm);
     let (id_try, id_skip, id_copy, id_pause, id_delete) =
         (id.clone(), id.clone(), id.clone(), id.clone(), id.clone());
     rsx! {
@@ -258,6 +259,15 @@ pub(super) fn AlarmMenuSheet(id: String, next: Option<i64>) -> Element {
                     } else {
                         sheet.set(Some(HomeSheet::PauseDate(Some(id_pause.clone()))));
                     }
+                },
+            }
+            SheetItem {
+                label: t(&translations, "home.make_default"),
+                on_click: move |_| {
+                    settings.write().prefs.alarm_defaults = Some(defaults.clone());
+                    crate::persistence::save_settings(&settings.peek());
+                    toast.set(Some(ToastMessage::info(t(&translations, "home.made_default"))));
+                    sheet.set(None);
                 },
             }
             SheetItem {

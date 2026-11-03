@@ -427,5 +427,8 @@
   "home.snoozed_until": "Schlummert bis {time}",
   "reliability.hide": "Hier nicht mehr anzeigen",
   "reliability.app_settings": "Diese App in den Telefoneinstellungen",
-  "reliability.save_record": "Aufzeichnung der Weckzeiten speichern"
+  "reliability.save_record": "Aufzeichnung der Weckzeiten speichern",
+  "home.make_default": "Für neue Wecker verwenden",
+  "home.made_default": "Neue Wecker starten jetzt wie dieser",
+  "text.decimal_point": ","
 }

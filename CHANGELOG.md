@@ -34,6 +34,7 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 - Presets and random order for challenges. Typed time, 12-hour wheels, a date picker with quick
   choices. What new alarms start from can be set up.
 - Your own sounds can be renamed, and keep the name they came with.
+- From an alarm's menu: use it for new alarms.
 - History: outcomes (missed, stopped at the limit, phone restarted, backup screen), streak, chart,
   delete one, and it starts on the day your week starts on.
 - Themes System and Pure black, five accent colours, language following the phone, 12 or 24
@@ -43,6 +44,10 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ### Fixed
 
+- The keyboard no longer covers what you type in: on Android 15 and newer the window does not
+  shrink for it.
+- The button at the bottom of a panel no longer covers its last line, such as Discard.
+- On a narrow phone the day letters of a card no longer run under its menu.
 - A snoozed alarm rang with the process dead instead of being reported as stopped by a restart.
 - A one-time alarm rang with the process dead instead of being switched off unheard.
 - Reopening the app or saving another alarm no longer cancels a snooze.

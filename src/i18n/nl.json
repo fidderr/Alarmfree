@@ -427,5 +427,8 @@
   "home.snoozed_until": "Sluimert tot {time}",
   "reliability.hide": "Dit hier niet meer tonen",
   "reliability.app_settings": "Deze app in de instellingen van de telefoon",
-  "reliability.save_record": "Opslaan hoe snel wekkers afgingen"
+  "reliability.save_record": "Opslaan hoe snel wekkers afgingen",
+  "home.make_default": "Gebruiken voor nieuwe wekkers",
+  "home.made_default": "Nieuwe wekkers beginnen nu zoals deze",
+  "text.decimal_point": ","
 }

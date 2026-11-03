@@ -155,6 +155,11 @@ pub fn month_short(translations: &Translations, month0: usize) -> String {
 }
 
 /// How long something took: "46 s", "1 min 40".
+/// A number with one decimal, written as this language writes it.
+pub fn one_decimal(translations: &Translations, value: f64) -> String {
+    format!("{value:.1}").replace('.', &t(translations, "text.decimal_point"))
+}
+
 pub fn duration(translations: &Translations, d: std::time::Duration) -> String {
     let secs = d.as_secs();
     if secs >= 3600 {

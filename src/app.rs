@@ -200,6 +200,35 @@ fn default_ring_limit_secs() -> Option<u32> {
 /// page that has trouble still shows what it says properly.
 const STYLESHEET: &str = include_str!("../assets/style.css");
 
+/// Says when the window may have changed. Edge to edge, a keyboard changes nothing the page
+/// can see, so it also looks for as long as something can be typed in, and keeps what is
+/// being typed in out from under the keyboard.
+const WINDOW_WATCH: &str = "\
+    const tell = () => dioxus.send(innerWidth); \
+    addEventListener('resize', tell); \
+    document.addEventListener('visibilitychange', tell); \
+    matchMedia('(prefers-color-scheme: dark)').addEventListener('change', tell); \
+    const typing = () => document.activeElement?.matches('input:not([type=range]):not([type=date]), textarea'); \
+    const showField = () => { \
+        const root = document.querySelector('.app-root'); \
+        if (!root || !typing()) return; \
+        const free = innerHeight - parseFloat(getComputedStyle(root).getPropertyValue('--safe-bottom')); \
+        const box = document.activeElement.getBoundingClientRect(); \
+        if (box.bottom > free || box.top < 0) document.activeElement.scrollIntoView({ block: 'center' }); \
+    }; \
+    let watching = 0; \
+    document.addEventListener('focusin', () => { \
+        if (watching) return; \
+        let quiet = 0; \
+        watching = setInterval(() => { \
+            tell(); \
+            showField(); \
+            quiet = typing() ? 0 : quiet + 1; \
+            if (quiet > 5) { clearInterval(watching); watching = 0; } \
+        }, 200); \
+    }); \
+    tell();";
+
 /// History is kept this long.
 const HISTORY_KEEP_DAYS: u32 = 5 * 365;
 
@@ -370,13 +399,7 @@ pub fn App() -> Element {
         }
     });
     use_future(move || async move {
-        let mut changes = document::eval(
-            "const tell = () => dioxus.send(innerWidth); \
-             addEventListener('resize', tell); \
-             document.addEventListener('visibilitychange', tell); \
-             matchMedia('(prefers-color-scheme: dark)').addEventListener('change', tell); \
-             tell();",
-        );
+        let mut changes = document::eval(WINDOW_WATCH);
         while let Ok(width) = changes.recv::<i32>().await {
             let is_wide = width >= SPLIT_FROM_WIDTH;
             if is_wide != *wide.peek() {
@@ -477,7 +500,7 @@ impl SafeArea {
         mobile_sentinel::display::safe_area_insets()
             .map(|i| Self {
                 top: i.top.round() as u32,
-                bottom: i.bottom.round() as u32,
+                bottom: i.bottom.max(i.keyboard).round() as u32,
                 left: i.left.round() as u32,
                 right: i.right.round() as u32,
             })

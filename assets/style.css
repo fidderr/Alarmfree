@@ -486,11 +486,12 @@ button:disabled { opacity: 0.5; }
   color: var(--text2);
 }
 
-/* Always in reach on a long sheet, above the navigation bar. What scrolls behind it stays
-   out of sight by the sheet's colour around and below it. */
+/* Always in reach on a long sheet. Sticky counts from inside the sheet's padding, which is
+   already above the navigation bar. What scrolls behind it stays out of sight by the sheet's
+   colour around and below it. */
 .sheet-done {
   position: sticky;
-  bottom: calc(8px + var(--safe-bottom));
+  bottom: 0;
   z-index: 1;
   flex: none;
   margin-top: 14px;
@@ -934,8 +935,9 @@ button:disabled { opacity: 0.5; }
 
 .alarm-when {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 1px 8px;
   font-size: 12px;
   white-space: nowrap;
   color: var(--text2);
@@ -1106,9 +1108,12 @@ button:disabled { opacity: 0.5; }
 
 .try-btn {
   flex: none;
-  width: 112px;
+  width: auto;
+  min-width: 112px;
   min-height: 48px;
   margin-top: 0;
+  padding: 0 14px;
+  white-space: nowrap;
 }
 
 .save-btn { flex: 1; width: auto; }
@@ -1501,7 +1506,8 @@ button:disabled { opacity: 0.5; }
 
 /* Typing */
 .typing-passage {
-  flex: none;
+  flex: 0 1 auto;
+  min-height: 72px;
   max-height: 40vh;
   margin-bottom: 12px;
   padding: 14px;

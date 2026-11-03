@@ -278,6 +278,7 @@ pub fn ChallengeRun(
     let time_left_text = t(&translations, "challenge.time_left");
     let confetti = settings.read().prefs.confetti;
     let idle_left = 100 - idle_secs() * 100 / IDLE_LIMIT_SECS;
+    let can_swap = !matches!(current.challenge, Challenge::Hold { .. });
 
     let body = if fallback() {
         rsx! {
@@ -395,7 +396,7 @@ pub fn ChallengeRun(
 
             div { class: "run-body", {body} }
 
-            if !fallback() && !celebrating() {
+            if can_swap && !fallback() && !celebrating() {
                 button {
                     class: "link-btn run-fallback",
                     onclick: move |_| asking_fallback.set(true),

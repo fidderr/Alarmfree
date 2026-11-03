@@ -414,7 +414,7 @@ fn Summary(
             t(&translations, "history.avg_snooze_gap"),
             t(&translations, "text.minutes").replace(
                 "{minutes}",
-                &format!("{:.1}", metrics.avg_snooze_interval_minutes),
+                &crate::text::one_decimal(&translations, metrics.avg_snooze_interval_minutes),
             ),
         ),
         (
@@ -458,7 +458,7 @@ fn Summary(
                     p { class: "stat-name", {t(&translations, "history.time_to_stop")} }
                 }
                 div {
-                    p { class: "stat-value", {format!("{:.1}", metrics.avg_snooze_count)} }
+                    p { class: "stat-value", {crate::text::one_decimal(&translations, metrics.avg_snooze_count)} }
                     p { class: "stat-name", {t(&translations, "history.snoozes")} }
                 }
             }

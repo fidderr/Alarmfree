@@ -100,10 +100,12 @@ s04() {
     start_app
     sleep 15
     after=$(next_fire_ms a)
-    if [ "$(state a)" = snoozed ] && [ "$before" = "$after" ]; then
-        pass "snooze kept after reopening"
+    local card
+    card=$(read_text .alarm-when)
+    if [ "$(state a)" = snoozed ] && [ "$before" = "$after" ] && [[ "$card" == Snoozed* ]]; then
+        pass "snooze kept after reopening, the card says '$card'"
     else
-        fail "state=$(state a) next ring moved by $(((${after:-0} - ${before:-0}) / 60000))min, db_enabled=$(db_enabled a)"
+        fail "state=$(state a) next ring moved by $(((${after:-0} - ${before:-0}) / 60000))min, db_enabled=$(db_enabled a), card '$card'"
     fi
     save_log
 }
@@ -1431,6 +1433,13 @@ s40() {
     save_log
 }
 
+# At the end of a sheet, nothing is left under its Done button.
+done_covers() {
+    js 'var s = document.querySelector(".sheet"); if (s) s.scrollTop = s.scrollHeight; return "ok"' > /dev/null
+    sleep 0.3
+    [ "$(js 'var d = document.querySelector(".sheet .sheet-done"); return d && d.previousElementSibling.getBoundingClientRect().bottom > d.getBoundingClientRect().top + 1 ? "y" : "n"')" = y ]
+}
+
 # Every row and button does something and can be left again, and every kind of challenge
 # can be tried. Not how well: that they are there, since a control nothing uses breaks
 # without anything else noticing.
@@ -1452,6 +1461,7 @@ sweep_rows() { # where, for the messages
             if ! on_screen .sheet && ! on_screen .screen-header; then
                 dev dumpsys window | grep -m1 mCurrentFocus | grep -q "$PKG" && echo "$where: '$title' does nothing"
             fi
+            done_covers && echo "$where: Done covers the end of '$title'"
             press_back
         else
             click .row-btn "$i" 0.6
@@ -1553,7 +1563,7 @@ s42() {
     click '.challenge-row .link-btn' 0 1.5
     on_screen .run-screen || { fail "no challenge screen"; save_log; return; }
     adb_ logcat -c
-    click .progress-ring 0 4
+    click .scan-button 0 4
     screenshot s42_scanner
     local top crashed
     top=$(dev dumpsys activity activities | grep -m1 ResumedActivity)
@@ -1577,7 +1587,330 @@ s42() {
     save_log
 }
 
-ALL="s01 s02 s03 s04 s05 s06 s07a s07b s07c s09 s10 s11a s11b s12 s12b s13 s14 s15 s16 s16b s17 s19 s20 s21 s22 s22b s23a s23b s23c s23d s24 s25 s26x5 s27 s28 s28b s29 s30 s31 s32 s33 s34 s35 s36 s37 s38 s39 s40 s41 s42"
+# One row of history, `$2` days ago.
+history_row() { # id days_ago
+    local at
+    at=$(date -u -d "@$(($(now_s) - $2 * 86400))" +%Y-%m-%dT07:00:00+00:00)
+    printf "INSERT INTO alarm_events (id, alarm_id, alarm_label, fire_timestamp, dismiss_timestamp, total_dismissal_time_ms, outcome, seen) VALUES ('%s', 'a', 'a', '%s', '%s', 0, 'solved', 1);\n" "$1" "$at" "$at" | sql
+}
+history_count() { printf "SELECT count(*) FROM alarm_events;\n" | sql; }
+
+# A period of the history goes at once, all of it only after asking again.
+s43() {
+    scenario s43_delete_history
+    fresh
+    history_row old 200
+    history_row new 1
+    start_app
+    sleep 5
+    local problems=""
+    click .nav-item 1
+    click .icon-btn 0
+    on_screen .sheet || problems="$problems; no sheet"
+    click .sheet-item 0 1.5
+    [ "$(history_count)" = 1 ] || problems="$problems; older than 30 days left $(history_count)"
+    on_screen .toast-text || problems="$problems; nothing said about it"
+    click .icon-btn 0
+    click .sheet-item 2
+    [ "$(history_count)" = 1 ] || problems="$problems; everything went without asking again"
+    screenshot s43_asking
+    press_back
+    on_screen .sheet && problems="$problems; Back left the question open"
+    [ "$(history_count)" = 1 ] || problems="$problems; Back deleted it"
+    click .icon-btn 0
+    click .sheet-item 2
+    click .sheet-item 0 1.5
+    [ "$(history_count)" = 0 ] || problems="$problems; left $(history_count) after confirming"
+    if [ -z "$problems" ]; then
+        pass "by period at once, everything after asking again"
+    else
+        fail "${problems#; }"
+    fi
+    save_log
+}
+
+# Two shake challenges in a row: the second starts its sensor after the first stopped its
+# own. Only on an emulator, which can be told what its accelerometer feels.
+s44() {
+    scenario s44_two_shakes_in_a_row
+    case "$SERIAL" in
+        emulator-*) ;;
+        *)
+            note "needs an emulator"
+            return
+            ;;
+    esac
+    fresh
+    next_minute 45
+    seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null air 0 0 3 1 '[["challenge.shake","{\"count\":3}"],["challenge.shake","{\"count\":3}"]]')"
+    arm a
+    await_sound 90 || { fail "never started"; save_log; return; }
+    sleep 4
+    shake() {
+        local i=0
+        while [ "$i" -lt 5 ]; do
+            adb_ emu sensor set acceleration 40:40:40 > /dev/null
+            sleep 0.45
+            adb_ emu sensor set acceleration 0:0:9.8 > /dev/null
+            sleep 0.45
+            i=$((i + 1))
+        done
+    }
+    click .ring-off 0 2
+    local first second
+    first=$(read_text .progress-ring-text)
+    shake
+    sleep 1.5
+    second=$(read_text .progress-ring-text)
+    screenshot s44_second
+    on_screen .progress-ring || { fail "no second challenge: first said '$first'"; save_log; action dismiss:a; return; }
+    shake
+    sleep 3
+    if [ "$(state a)" = scheduled ] && [ "$(outcomes solved)" = 1 ] && ! sound_on; then
+        pass "both counted: '$first', then '$second'"
+    else
+        fail "after the second: state=$(state a) solved=$(outcomes solved) on screen '$(read_text .progress-ring-text)'"
+    fi
+    save_log
+    action dismiss:a
+}
+
+# A warning that is not a problem for this user can be hidden, and stays on its own screen.
+s45() {
+    scenario s45_hide_a_warning
+    fresh
+    dev appops set "$PKG" SYSTEM_ALERT_WINDOW deny
+    start_app
+    sleep 5
+    local problems="" first
+    first=$(read_text .banner-text)
+    [ -n "$first" ] || problems="$problems; nothing to hide"
+    click '.banner-row .icon-btn' 0 1
+    [ "$(read_text .banner-text)" != "$first" ] || problems="$problems; still there after hiding"
+    dev am force-stop "$PKG"
+    sleep 1
+    start_app
+    sleep 5
+    [ "$(read_text .banner-text)" != "$first" ] || problems="$problems; back after a restart"
+    printf "SELECT prefs FROM settings;\n" | sql | grep -q 'hidden_warnings":\["' || problems="$problems; not saved"
+    grant_all
+    if [ -z "$problems" ]; then
+        pass "hid '$first', and it stays hidden"
+    else
+        fail "${problems#; }"
+    fi
+    save_log
+}
+
+# A 12-hour clock everywhere: the list, the editor, the wheels, and what gets saved.
+s46() {
+    scenario s46_twelve_hours
+    fresh
+    use_settings '"Dark"' '"English"' '"setup_done":true,"language_follows_phone":false,"time_format":"H12"'
+    seed a "$(alarm_json a 14 5 "$EVERY_DAY" null)"
+    arm a
+    sleep 2
+    local problems="" card big wheel
+    card=$(read_text .alarm-time)
+    [ "$card" = "2:05 PM" ] || problems="$problems; card says '$card'"
+    click .alarm-main
+    big=$(read_text .time-big)
+    [ "$big" = "2:05 PM" ] || problems="$problems; editor says '$big'"
+    click .time-big
+    wheel=$(js "return [...document.querySelectorAll('.wheel-cell-center')].map(e => e.textContent).join(' ')")
+    screenshot s46_wheels
+    case "$wheel" in
+        *2*PM*5* | *2*PM*05*) ;;
+        *) problems="$problems; wheels say '$wheel'" ;;
+    esac
+    if [ -z "$problems" ]; then
+        pass "the list, the editor and the wheels say $card"
+    else
+        fail "${problems#; }"
+    fi
+    save_log
+}
+
+# From an alarm's menu: new alarms start like this one, without its name.
+s47() {
+    scenario s47_use_for_new_alarms
+    fresh
+    local extra=',"note":"Keep out"'
+    ALARM_EXTRA=$extra seed a "$(ALARM_EXTRA=$extra alarm_json a 7 0 "$EVERY_DAY" null lofi 0 60 2 9)"
+    arm a
+    sleep 2
+    local problems=""
+    click .alarm-menu
+    js "[...document.querySelectorAll('.sheet-item')].find(e => e.textContent === 'Use for new alarms').click(); return 'ok'" > /dev/null
+    sleep 1
+    on_screen .toast-text || problems="$problems; nothing said about it"
+    click .fab
+    local rows
+    rows=$(js "return [...document.querySelectorAll('.row-btn')].map(e => e.textContent).join('|')")
+    case "$rows" in
+        *Lofi*fade*) ;;
+        *) problems="$problems; sound not taken over: $rows" ;;
+    esac
+    case "$rows" in
+        *"9 min, 2"*) ;;
+        *) problems="$problems; snooze not taken over: $rows" ;;
+    esac
+    case "$rows" in
+        *Keep\ out* | *"Label"a*) problems="$problems; its name came along: $rows" ;;
+    esac
+    if [ -z "$problems" ]; then
+        pass "sound and snooze taken over, its name not"
+    else
+        fail "${problems#; }"
+    fi
+    save_log
+}
+
+# What goes through the phone's own file picker, in the build that R8 went over: a sound of
+# one's own in, and alarms out to a file and back. Emulator only: the picker differs per
+# phone, and this looks for its words.
+picker_tap() { # file name
+    local bounds i=0
+    while [ "$i" -lt 12 ]; do
+        dev uiautomator dump /sdcard/af_ui.xml > /dev/null 2>&1
+        bounds=$(dev cat /sdcard/af_ui.xml | tr '>' '\n' | grep -m1 "text=\"$1\"" | sed -E 's/.*bounds="\[([0-9]+),([0-9]+)\]\[([0-9]+),([0-9]+)\].*/\1 \2 \3 \4/')
+        if [ -n "$bounds" ]; then
+            local x1 y1 x2 y2
+            read -r x1 y1 x2 y2 <<< "$bounds"
+            dev input tap $(((x1 + x2) / 2)) $(((y1 + y2) / 2))
+            return 0
+        fi
+        sleep 1.5
+        i=$((i + 1))
+    done
+    return 1
+}
+s48() {
+    scenario s48_files_in_and_out
+    case "$SERIAL" in
+        emulator-*) ;;
+        *)
+            note "needs an emulator"
+            return
+            ;;
+    esac
+    fresh
+    dev rm -f /sdcard/Download/mytune.ogg '/sdcard/Download/alarmfree-*'
+    adb_ push assets/sounds/default/air.ogg /sdcard/Download/mytune.ogg > /dev/null
+    dev am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file:///sdcard/Download/mytune.ogg > /dev/null
+    seed a "$(alarm_json a 7 0 "$EVERY_DAY" null)"
+    arm a
+    sleep 2
+    local problems=""
+    # A sound.
+    click .alarm-main
+    click_row Sound
+    click '.sheet .btn-quiet' 0 3
+    screenshot s48_picker
+    if picker_tap mytune.ogg; then
+        sleep 4
+        local names
+        names=$(texts_of .radio-text)
+        case "$names" in
+            *mytune*) ;;
+            *) problems="$problems; own sound not listed: $names" ;;
+        esac
+        as_app "ls files/sounds/custom" | grep -q mytune || problems="$problems; not copied"
+    else
+        problems="$problems; the picker never showed the file"
+        press_back
+    fi
+    dev am force-stop "$PKG"
+    sleep 1
+    start_app
+    sleep 5
+    # Alarms to a file: only the one alarm in it, under today's name.
+    click .nav-item 2
+    click_row "Back up"
+    click .sheet-item 0 2
+    local file
+    file=$(dev ls /sdcard/Download/ | grep -m1 '^alarmfree-')
+    [ -n "$file" ] || problems="$problems; no file in Downloads"
+    [ "$(dev cat "/sdcard/Download/$file" | grep -c '"time_hour"')" -ge 1 ] || problems="$problems; no alarm in the file"
+    # And back from it, as a second one.
+    click_row "Back up"
+    click .sheet-item 1 3
+    if picker_tap "$file"; then
+        sleep 4
+        [ "$(printf 'SELECT count(*) FROM alarms;\n' | sql)" = 2 ] || problems="$problems; $(printf 'SELECT count(*) FROM alarms;\n' | sql) alarms after restoring"
+        on_screen .toast-undo || problems="$problems; no undo after restoring"
+    else
+        problems="$problems; the picker never showed the backup"
+        press_back
+    fi
+    screenshot s48_restored
+    dev rm -f /sdcard/Download/mytune.ogg "/sdcard/Download/$file"
+    if [ -z "$problems" ]; then
+        pass "own sound in, alarms out to $file and back"
+    else
+        fail "${problems#; }"
+    fi
+    save_log
+}
+
+# The keyboard stays off what is being typed in, in a panel and in the typing challenge, and
+# what is typed arrives.
+s49() {
+    scenario s49_keyboard
+    fresh
+    seed a "$(alarm_json a 7 0 "$EVERY_DAY" null air 0 0 3 1 '[["challenge.typing","{\"difficulty\":\"easy\"}"]]')"
+    arm a
+    sleep 2
+    local problems="" x y before free
+    # How much of the page is left above whatever covers it.
+    local left='return Math.round(innerHeight - parseFloat(getComputedStyle(document.querySelector(".app-root")).getPropertyValue("--safe-bottom")))'
+    before=$(js "$left")
+    click .alarm-main
+    click_row Label
+    read -r x y <<< "$(screen_point '.sheet .field')"
+    dev input tap "$x" "$y"
+    sleep 2.5
+    screenshot s49_label
+    free=$(js "$left")
+    [ "$free" -lt $((before - 100)) ] 2> /dev/null || problems="$problems; the page did not make room: $before, then $free"
+    [ "$(js "return document.querySelector('.sheet .field').getBoundingClientRect().bottom <= $free && document.querySelector('.sheet .sheet-done').getBoundingClientRect().bottom <= $free ? 'y' : 'n'")" = y ] ||
+        problems="$problems; the field or Done is under the keyboard"
+    dev input text Morning
+    sleep 1.5
+    [ "$(js "return document.querySelector('.sheet .field').value")" = Morning ] || problems="$problems; typed text did not arrive: $(js "return document.querySelector('.sheet .field').value")"
+    press_back
+    press_back
+    sleep 1
+    free=$(js "$left")
+    [ "$free" = "$before" ] || problems="$problems; no room given back: $before, now $free"
+    # The challenge. It has to show the passage and the box together.
+    js "var d = document.querySelector('.sheet-item.danger'); if (d) d.click(); return 'ok'" > /dev/null
+    sleep 1
+    on_screen .home-header || press_back
+    click .alarm-menu
+    click .sheet-item 0 2
+    read -r x y <<< "$(screen_point .typing-input-area)"
+    dev input tap "$x" "$y"
+    sleep 2.5
+    screenshot s49_typing
+    free=$(js "$left")
+    [ "$(js "var a = document.querySelector('.typing-input-area').getBoundingClientRect(), p = document.querySelector('.typing-passage').getBoundingClientRect(); return a.bottom <= $free && p.top >= 0 && p.height >= 60 ? 'y' : 'n'")" = y ] ||
+        problems="$problems; passage and box do not fit above the keyboard"
+    local passage
+    passage=$(js "return document.querySelector('.typing-passage').textContent")
+    dev input text "$(echo "$passage" | sed 's/ /%s/g')"
+    sleep 4
+    screenshot s49_typed
+    on_screen .typing-input-area && problems="$problems; typing it all did not finish: '$(js "return document.querySelector('.typing-input-area').value")'"
+    if [ -z "$problems" ]; then
+        pass "room made and given back, text arrives, challenge done by typing"
+    else
+        fail "${problems#; }"
+    fi
+    save_log
+}
+
+ALL="s01 s02 s03 s04 s05 s06 s07a s07b s07c s09 s10 s11a s11b s12 s12b s13 s14 s15 s16 s16b s17 s19 s20 s21 s22 s22b s23a s23b s23c s23d s24 s25 s26x5 s27 s28 s28b s29 s30 s31 s32 s33 s34 s35 s36 s37 s38 s39 s40 s41 s42 s43 s44 s45 s46 s47 s48 s49"
 : > "$RESULTS"
 for s in ${*:-$ALL}; do
     "$s"
