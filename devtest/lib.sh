@@ -224,15 +224,17 @@ reboot_and_wait() {
     reboot_only || return 1
     open_shells
 }
+# Android writes "no longer stopped" to disk 10-11 s after a force-stopped app starts, measured.
+# A phone saves it when shutting down, but a restart here kills the emulator: any sooner and the
+# app counts as force-stopped after the boot, and gets no boot signal.
+stopped_state_saved() {
+    local since=$((SECONDS - ${STARTED_AT:-0}))
+    [ "$since" -ge 12 ] || sleep $((12 - since))
+}
 reboot_only() {
     case "$SERIAL" in
         emulator-*)
-            # Android writes "no longer stopped" to disk 10-11 s after a force-stopped app
-            # starts, measured. A phone saves it when shutting down, but this kills the
-            # emulator: any sooner and the app counts as force-stopped after the boot, and
-            # gets no boot signal.
-            local since=$((SECONDS - ${STARTED_AT:-0}))
-            [ "$since" -lt 12 ] && sleep $((12 - since))
+            stopped_state_saved
             adb_ shell sync
             emulator_stop
             emulator_start

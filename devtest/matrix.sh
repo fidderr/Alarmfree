@@ -272,6 +272,11 @@ s13() {
     arm a
     dev locksettings set-pin 1234 > /dev/null
     dead
+    # Now and not during the restart's own wait: a clock change that wakes the app up meanwhile
+    # would find it overdue and ring it, and the restart ends a ring as dismissed.
+    stopped_state_saved
+    note "before the restart: main=[$(main_pid)] sentinel=[$(sentinel_pid)] state=$(state a)"
+    dead
     make_overdue a 2
     reboot_and_wait || { fail "reboot hung"; return; }
     local locked
