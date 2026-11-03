@@ -203,7 +203,14 @@ const STYLESHEET: &str = include_str!("../assets/style.css");
 /// Says when the window may have changed. Edge to edge, a keyboard changes nothing the page
 /// can see, so it also looks for as long as something can be typed in, and keeps what is
 /// being typed in out from under the keyboard.
+///
+/// And it switches the page to applying changes at once. It does so in an animation frame
+/// otherwise, and nothing in the UI runs until the last change is applied: a WebView that is
+/// not drawing, as after another screen closed, has no frames until it is touched, and until
+/// then every task of the UI stands still, also what turns an alarm off after a challenge.
+/// Dioxus's mode for a page nobody sees does without them.
 const WINDOW_WATCH: &str = "\
+    window.interpreter.headless = true; \
     const tell = () => dioxus.send(innerWidth); \
     addEventListener('resize', tell); \
     document.addEventListener('visibilitychange', tell); \

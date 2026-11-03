@@ -169,7 +169,7 @@ sound on, what is on screen, what is armed, what is saved.
 ```bash
 SERIAL=emulator-5554 devtest/matrix.sh            # every scenario on one device
 SERIAL=emulator-5554 devtest/matrix.sh s01 s07    # just these
-bash devtest/all.sh                               # Android 16 and 12 at once, then tablet and foldable
+bash devtest/all.sh                               # Android 16, next to it Android 12, tablet and foldable
 ```
 
 All of it should take under 15 minutes on an emulator, and no scenario over a minute: the
@@ -214,6 +214,8 @@ a `Locale` variant, and an arm in `load_translations`.
   and without it the page stays blank. Nothing else uses it, and nothing leaves the phone.
 - WebView 91 is the oldest there is (Android 12): no `color-mix` or `:has` in the CSS.
 - Classes set from JavaScript do not show up in Rust: see `reorder.js` before removing CSS.
+- The page applies changes at once, not in an animation frame (`WINDOW_WATCH` in `app.rs`): the
+  UI's tasks wait for the last change, and a WebView that is not drawing has no frames.
 
 ## Releasing
 

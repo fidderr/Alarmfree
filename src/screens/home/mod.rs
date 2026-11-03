@@ -125,10 +125,13 @@ pub fn Home() -> Element {
         move || crate::screens::reliability::first_problem(&settings.peek().prefs.hidden_warnings);
     let mut problem = use_signal(first_problem);
     use_future(move || async move {
+        // Soon after coming up too: what the startup found may only just be in.
+        let mut wait_ms = 1_500;
         loop {
-            crate::timer::sleep_ms(15_000).await;
+            crate::timer::sleep_ms(wait_ms).await;
             tick += 1;
             problem.set(first_problem());
+            wait_ms = 15_000;
         }
     });
     let _ = tick();
