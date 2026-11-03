@@ -443,8 +443,6 @@ s16b() {
     local missed left
     missed=$(outcomes missed)
     left=$(unseen)
-    # Telling the user takes a UI.
-    [ -n "$NO_UI" ] && left=0
     if ! sound_on && [ "$missed" = 1 ] && [ "$left" = 0 ] && [ "$(state a)" = scheduled ]; then
         pass "recorded as missed and told, next ring armed"
     else
@@ -580,12 +578,6 @@ s21() {
 # out, because the app's own screen cannot come up yet.
 s13() {
     scenario s13_before_first_unlock
-    # With full-disk encryption and a PIN, Android stops before /data is mounted: no app
-    # exists until the PIN is entered, and the PIN cannot even be cleared in that state.
-    if [ "$(dev getprop ro.crypto.type)" = block ]; then
-        skip "full-disk encryption: nothing runs before the PIN"
-        return
-    fi
     fresh
     next_minute 180
     seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
@@ -659,49 +651,9 @@ s22b() {
     sleep 2
 }
 
-# A page that stays blank, on a WebView too old for the UI (NO_UI=1). The backup screen
-# is there at once with the version check, and without it the frozen-UI path has to get
-# there in the end.
-s22c() {
-    scenario s22c_page_stays_blank
-    fresh
-    next_minute 45
-    seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
-    arm a
-    screen_off
-    await_sound 90 || { fail "never started"; save_log; return; }
-    wake
-    local i=0
-    while [ "$i" -lt 150 ]; do
-        top_is_backup && break
-        sleep 1
-        i=$((i + 1))
-    done
-    screenshot s22c_backup
-    if top_is_backup; then
-        note "backup screen after ${i}s"
-        solve_backup 20
-        sleep 8
-        if ! sound_on && [ "$(state a)" = scheduled ] && [ "$(outcomes backup)" = 1 ]; then
-            pass "backup screen after ${i}s, solving it ended the alarm"
-        else
-            fail "after solving: sound=$(sound_on && echo ON || echo off) state=$(state a) backup=$(outcomes backup)"
-        fi
-    else
-        fail "no backup screen in ${i}s: $(dev dumpsys activity activities | grep -m1 ResumedActivity)"
-    fi
-    save_log
-    action dismiss:a
-    sleep 2
-}
-
 # A frozen UI gets restarted by the guardian; the alarm carries on.
 s22() {
     scenario s22_hung_ui
-    if [ -n "$NO_UI" ]; then
-        skip "no UI to hang"
-        return
-    fi
     fresh
     next_minute 45
     seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
@@ -855,10 +807,6 @@ s23d() {
 # Back from the editor stays in the app.
 s25() {
     scenario s25_back_navigation
-    if [ -n "$NO_UI" ]; then
-        skip "no UI to navigate"
-        return
-    fi
     fresh
     next_minute 3600
     seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
@@ -920,10 +868,6 @@ NOTHING_CLIPPED='var w = innerWidth; var bad = [...document.querySelectorAll(".s
 # Turning it off through the screens, solving a sum, and landing on history.
 s28() {
     scenario s28_solve_a_challenge
-    if [ -n "$NO_UI" ]; then
-        skip "no UI"
-        return
-    fi
     fresh
     next_minute 45
     seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null air 0 0 3 1 '[["challenge.math","{\"difficulty\":\"easy\"}"]]')"
@@ -961,10 +905,6 @@ s28() {
 # Doing nothing in a challenge: it goes back to ringing.
 s28b() {
     scenario s28b_idle_challenge_rings_again
-    if [ -n "$NO_UI" ]; then
-        skip "no UI"
-        return
-    fi
     fresh
     next_minute 45
     seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null air 0 0 3 1 '[["challenge.math","{\"difficulty\":\"easy\"}"]]')"
@@ -990,10 +930,6 @@ s28b() {
 # The wake-up check: a little later it asks again, as loud as any alarm.
 s29() {
     scenario s29_wake_up_check
-    if [ -n "$NO_UI" ]; then
-        skip "no UI"
-        return
-    fi
     fresh
     next_minute 45
     ALARM_EXTRA=',"wake_check_minutes":1' seed a "$(ALARM_EXTRA=',"wake_check_minutes":1' alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null air 0 0 0 1)"
@@ -1023,10 +959,6 @@ s29() {
 # A nap in two taps, and Undo.
 s30() {
     scenario s30_quick_alarm_and_undo
-    if [ -n "$NO_UI" ]; then
-        skip "no UI"
-        return
-    fi
     fresh
     start_app
     sleep 5
@@ -1049,10 +981,6 @@ s30() {
 # Pausing everything moves the next ring past the date, and Undo brings it back.
 s31() {
     scenario s31_pause_all
-    if [ -n "$NO_UI" ]; then
-        skip "no UI"
-        return
-    fi
     fresh
     next_minute 3600
     seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
@@ -1079,10 +1007,6 @@ s31() {
 # The test alarm rings for real, and leaves nothing behind.
 s32() {
     scenario s32_test_alarm
-    if [ -n "$NO_UI" ]; then
-        skip "no UI"
-        return
-    fi
     fresh
     start_app
     sleep 5
@@ -1107,10 +1031,6 @@ s32() {
 # The quiet notification before an alarm.
 s33() {
     scenario s33_notification_before_alarm
-    if [ -n "$NO_UI" ]; then
-        skip "no UI"
-        return
-    fi
     fresh
     use_settings '"Dark"' '"English"' '"setup_done":true,"language_follows_phone":false,"notify_before_minutes":5'
     next_minute 340
@@ -1133,10 +1053,6 @@ s33() {
 # Turning the phone and unfolding it mid-ring: it rings on, and the screen fits.
 s35() {
     scenario s35_rotate_and_unfold_mid_ring
-    if [ -n "$NO_UI" ]; then
-        skip "no UI"
-        return
-    fi
     fresh
     next_minute 45
     seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
@@ -1178,10 +1094,6 @@ s35() {
 # Nothing sticks out of the screen in any language, also with large text.
 s34() {
     scenario s34_nothing_clipped
-    if [ -n "$NO_UI" ]; then
-        skip "no UI"
-        return
-    fi
     local check=$NOTHING_CLIPPED
     local problems="" scale locale screen result
     for scale in 1.0 1.3; do
@@ -1265,10 +1177,6 @@ click_row() { # the row of a list with this title
 # Hold an alarm on the list and move it; the same for a challenge, by its handle.
 s36() {
     scenario s36_hold_and_drag
-    if [ -n "$NO_UI" ]; then
-        skip "no UI"
-        return
-    fi
     fresh
     local two='[["challenge.math","{\"difficulty\":\"easy\"}"],["challenge.memory","{\"difficulty\":\"easy\"}"]]'
     seed a "$(alarm_json a 7 0 "$EVERY_DAY" null air 0 0 3 1 "$two")"
@@ -1312,10 +1220,6 @@ s36() {
 # Swiping a card aside shows skip and delete; both have an undo.
 s37() {
     scenario s37_swipe_a_card
-    if [ -n "$NO_UI" ]; then
-        skip "no UI"
-        return
-    fi
     fresh
     next_minute 3600
     seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
@@ -1366,10 +1270,6 @@ s37() {
 # The accent colour, and a name for a sound of one's own.
 s38() {
     scenario s38_accent_and_sound_name
-    if [ -n "$NO_UI" ]; then
-        skip "no UI"
-        return
-    fi
     fresh
     as_app "mkdir -p files/sounds/custom && cp files/sounds/default/air.ogg files/sounds/custom/mytune.ogg"
     seed a "$(alarm_json a 7 0 "$EVERY_DAY" null)"
@@ -1420,10 +1320,6 @@ s38() {
 # An alarm can vibrate first and go to full brightness.
 s39() {
     scenario s39_vibrate_first_and_brightness
-    if [ -n "$NO_UI" ]; then
-        skip "no UI"
-        return
-    fi
     fresh
     next_minute 45
     local extra=',"sound_delay_secs":15,"max_brightness":true'
@@ -1471,10 +1367,6 @@ s39() {
 # The home-screen widget: placed from the settings, says the next ring, follows changes.
 s40() {
     scenario s40_home_widget
-    if [ -n "$NO_UI" ]; then
-        skip "no UI"
-        return
-    fi
     fresh
     next_minute 3600
     seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
@@ -1574,10 +1466,6 @@ sweep_rows() { # where, for the messages
 
 s41() {
     scenario s41_every_control
-    if [ -n "$NO_UI" ]; then
-        skip "no UI"
-        return
-    fi
     fresh
     seed a "$(alarm_json a 7 0 "$EVERY_DAY" null)"
     arm a
@@ -1649,7 +1537,6 @@ s41() {
 }
 
 ALL="s01 s02 s03 s04 s05 s06 s07a s07b s07c s09 s10 s11a s11b s12 s12b s13 s14 s15 s16 s16b s17 s19 s20 s21 s22 s22b s23a s23b s23c s23d s24 s25 s26x5 s27 s28 s28b s29 s30 s31 s32 s33 s34 s35 s36 s37 s38 s39 s40 s41"
-[ -n "$NO_UI" ] && ALL="$ALL s22c"
 : > "$RESULTS"
 for s in ${*:-$ALL}; do
     "$s"

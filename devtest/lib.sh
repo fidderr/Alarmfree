@@ -55,6 +55,12 @@ emulator_stop() {
 reboot_and_wait() {
     case "$SERIAL" in
         emulator-*)
+            # Android writes "no longer stopped" to disk 10-11 s after a force-stopped app
+            # starts, measured. A phone saves it when shutting down, but this kills the
+            # emulator: any sooner and the app counts as force-stopped after the boot, and
+            # gets no boot signal.
+            local since=$((SECONDS - ${STARTED_AT:-0}))
+            [ "$since" -lt 12 ] && sleep $((12 - since))
             adb_ shell sync
             emulator_stop
             emulator_start
@@ -75,8 +81,6 @@ fresh() {
     dev pm clear "$PKG" > /dev/null
     grant_all
     start_app
-    # Opening it is what finds out the WebView is too old, as for any user.
-    [ -n "$NO_UI" ] && dev am start -n "$PKG/$ACTIVITY" > /dev/null
     wait_file files/alarmfree.db 60
     sleep 3
     dev am force-stop "$PKG"
@@ -99,23 +103,9 @@ grant_all() {
     dev appops set "$PKG" SYSTEM_ALERT_WINDOW allow
 }
 
-# NO_UI: for a WebView too old for the UI. Rust only renders once the page's JavaScript
-# runs, so opening the app would set up nothing there.
 start_app() {
-    if [ -n "$NO_UI" ]; then
-        headless
-    else
-        dev am start -n "$PKG/$ACTIVITY" > /dev/null
-    fi
-}
-
-# Start the app's core without a screen, as a reboot or a ring does. Its receiver only
-# takes that from the system, or from root on an emulator.
-headless() {
-    case "$(adb_ root 2>&1)" in
-        *restarting*) sleep 3 ;;
-    esac
-    dev am broadcast -f 32 -n "$PKG/com.mobilesentinel.SentinelRearmReceiver" -a com.mobilesentinel.RING_STARTED > /dev/null
+    dev am start -n "$PKG/$ACTIVITY" > /dev/null
+    STARTED_AT=$SECONDS
 }
 
 wait_file() {
@@ -134,7 +124,6 @@ next_minute() {
     local lead=${1:-45} n off local_s
     n=$(now_s)
     T=$(((n + lead + 59) / 60 * 60))
-    # The device's own `date -d @T` is UTC on Android 8's toybox.
     off=$(dev date +%z | tr -d '\r')
     local_s=$((T + ${off:0:1}(10#${off:1:2} * 3600 + 10#${off:3:2} * 60)))
     T_H=$(date -u -d "@$local_s" +%-H)
@@ -319,23 +308,17 @@ solve_backup() {
 top_is_app() { dev dumpsys activity activities | grep -E "topResumedActivity|ResumedActivity:" | head -1 | grep -q "$PKG"; }
 armed_at_ms() { as_app "head -n 1 files/sentinel/armed/$1.armed 2>/dev/null"; }
 os_has_alarm() { dev dumpsys alarm | grep -q "$PKG.*ALARM_DISPATCH\|ALARM_DISPATCH.*$PKG\|walarm\*:com.mobilesentinel.ALARM_DISPATCH"; }
-# Android 8 only has `media`.
 alarm_volume() {
-    { dev cmd media_session volume --stream 4 --get; dev media volume --stream 4 --get; } 2> /dev/null |
+    dev cmd media_session volume --stream 4 --get 2> /dev/null |
         grep -oE 'volume is [0-9]+' | grep -oE '[0-9]+' | sed -n 1p
 }
-# Android 16 only listens to the first of these, later ones to the second, 8 to the last.
+# Android 16 only listens to the first of these, older ones to the second.
 set_alarm_volume() {
     dev cmd audio set-volume 4 "$1" > /dev/null 2>&1
     dev cmd media_session volume --stream 4 --set "$1" > /dev/null 2>&1
-    dev media volume --stream 4 --set "$1" > /dev/null 2>&1
 }
 
-# Older Android has no `cmd alarm set-timezone`, and `dev` cannot tell: its pipe succeeds.
-set_zone() {
-    dev cmd alarm set-timezone "$1" > /dev/null 2>&1
-    [ "$(dev getprop persist.sys.timezone)" = "$1" ] || dev service call alarm 3 s16 "$1" > /dev/null
-}
+set_zone() { dev cmd alarm set-timezone "$1" > /dev/null 2>&1; }
 
 # Wait until Android has told the app about the boot: on a software-rendered
 # emulator that is well after sys.boot_completed. Opening the app before it can get
@@ -366,6 +349,5 @@ scenario() {
 }
 pass() { echo "PASS  $CURRENT  $1" | tee -a "$RESULTS"; }
 fail() { echo "FAIL  $CURRENT  $1" | tee -a "$RESULTS"; }
-skip() { echo "SKIP  $CURRENT  $1" | tee -a "$RESULTS"; }
 note() { echo "      $1"; }
 save_log() { adb_ logcat -d -v time 2> /dev/null | grep -E "AlarmFree|MobileSentinel|Sentinel|AlarmKit|AlarmClass|alarmfree|ActivityTaskManager.*(fidderr|Background)|BackgroundActivity|AndroidRuntime|FATAL" > "$OUT/$CURRENT.log"; }
