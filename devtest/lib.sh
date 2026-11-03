@@ -108,10 +108,20 @@ wait_for() {
 
 main_pid() { dev pidof "$PKG"; }
 sentinel_pid() { dev pidof "$PKG:sentinel"; }
-kill_main() { local p; p=$(main_pid); [ -n "$p" ] && as_app "kill -9 $p"; true; }
-kill_sentinel() { local p; p=$(sentinel_pid); [ -n "$p" ] && as_app "kill -9 $p"; true; }
+# Android 12 does not let run-as kill the app, and says so only in the log. An emulator can do
+# it as root.
+kill_pids() {
+    if on_emulator; then
+        dev "su 0 kill -9 $*"
+    else
+        as_app "kill -9 $*"
+    fi
+    true
+}
+kill_main() { local p; p=$(main_pid); [ -n "$p" ] && kill_pids "$p"; true; }
+kill_sentinel() { local p; p=$(sentinel_pid); [ -n "$p" ] && kill_pids "$p"; true; }
 # In one go: with a moment in between, what survives can bring back what did not.
-kill_all() { as_app "kill -9 $(main_pid) $(sentinel_pid)"; true; }
+kill_all() { kill_pids "$(main_pid) $(sentinel_pid)"; }
 no_process() { [ -z "$(main_pid)$(sentinel_pid)" ]; }
 
 now_s() { dev date +%s; }
@@ -263,6 +273,8 @@ grant_all() {
 # A widget of ours on the launcher can bring the app up right after a force-stop. A clock change
 # then has it read the alarms before a scenario seeded one, and opening it reads them no more.
 remove_widgets() {
+    # It clears the launcher: never on someone's phone.
+    on_emulator || return 0
     local host
     for host in $(dev dumpsys appwidget | grep -B1 "provider=.*$PKG/" | sed -nE 's/.*host=.*pkg:([^}]+)}.*/\1/p' | sort -u); do
         dev pm clear "$host" > /dev/null
@@ -325,7 +337,10 @@ arm() {
 dead() {
     go_home
     kill_all
-    wait_for 3 no_process
+    wait_for 3 no_process && return 0
+    # Then whatever comes next says nothing about an app that is gone.
+    fail "the app survived being killed: main=$(main_pid) sentinel=$(sentinel_pid)"
+    return 1
 }
 
 state() { # idle / scheduled / firing / snoozed / dismissed / none

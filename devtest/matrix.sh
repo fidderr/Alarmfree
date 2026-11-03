@@ -24,7 +24,7 @@ s01() {
     next_minute
     seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null air 0 30)"
     arm a
-    dead || note "process still alive"
+    dead
     screen_off
     await_sound 30 || { fail "no sound in 30s, state=$(state a) job=$(job_status a)"; return; }
     await_state a firing 15 || { fail "sound but state=$(state a)"; return; }
@@ -120,7 +120,7 @@ s06() {
     seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
     seed b "$(alarm_json b "$T_H" "$T_M" "$NO_DAYS" "\"$T_DATE\"")"
     arm a
-    dead || note "process still alive"
+    dead
     screen_off
     await_sound 30 || { fail "no sound in 30s, a=$(state a) b=$(state b) job=$(job_status b)"; return; }
     wait_for 15 state_is a firing
