@@ -116,8 +116,14 @@ kill_pids() {
     else
         as_app "kill -9 $*"
     fi
+    # Nothing but the log says when this is refused.
+    local p
+    for p in $*; do
+        wait_for 2 pid_gone "$p" || fail "could not kill process $p"
+    done
     true
 }
+pid_gone() { dev "[ ! -e /proc/$1 ]"; }
 kill_main() { local p; p=$(main_pid); [ -n "$p" ] && kill_pids "$p"; true; }
 kill_sentinel() { local p; p=$(sentinel_pid); [ -n "$p" ] && kill_pids "$p"; true; }
 # In one go: with a moment in between, what survives can bring back what did not.
@@ -125,7 +131,18 @@ kill_all() { kill_pids "$(main_pid) $(sentinel_pid)"; }
 no_process() { [ -z "$(main_pid)$(sentinel_pid)" ]; }
 
 now_s() { dev date +%s; }
-wake() { dev input keyevent KEYCODE_WAKEUP; dev wm dismiss-keyguard; }
+wake() {
+    dev input keyevent KEYCODE_WAKEUP
+    dev wm dismiss-keyguard
+    # Right after waking up that can go unheard, and the lock screen then takes every key.
+    on_emulator && wait_for 3 no_keyguard
+    true
+}
+no_keyguard() {
+    dev "dumpsys window | grep -q 'isKeyguardShowing=false'" > /dev/null && return 0
+    dev wm dismiss-keyguard
+    return 1
+}
 # NO_LOCK: a phone with a PIN cannot be unlocked by a script, and nothing here sets or asks
 # for one. It stays awake then, and being locked is tested by hand.
 SCREEN_WENT_OFF=""
@@ -135,7 +152,7 @@ screen_off() {
     SCREEN_WENT_OFF=1
 }
 go_home() { dev input keyevent KEYCODE_HOME; }
-screenshot() { adb_ exec-out screencap -p > "$OUT/$1.png"; }
+screenshot() { adb_ exec-out screencap -p > "$OUT/$1${VARIANT:-}.png"; }
 
 # ---- The clock ----
 on_emulator() { case "$SERIAL" in emulator-*) return 0 ;; *) return 1 ;; esac; }
@@ -267,7 +284,7 @@ use_settings() {
 
 # In one go: each of these starts a program on the device.
 grant_all() {
-    adb_ shell "pm grant $PKG android.permission.POST_NOTIFICATIONS; pm grant $PKG android.permission.ACTIVITY_RECOGNITION; pm grant $PKG android.permission.CAMERA; appops set $PKG SYSTEM_ALERT_WINDOW allow" > /dev/null 2>&1
+    adb_ shell "pm grant $PKG android.permission.POST_NOTIFICATIONS; pm grant $PKG android.permission.ACTIVITY_RECOGNITION; pm grant $PKG android.permission.CAMERA; appops set $PKG SYSTEM_ALERT_WINDOW allow; appops set $PKG POST_NOTIFICATION allow; appops set $PKG RUN_ANY_IN_BACKGROUND allow" > /dev/null 2>&1
     PERMISSIONS_TOUCHED=""
 }
 # A widget of ours on the launcher can bring the app up right after a force-stop. A clock change
@@ -288,6 +305,18 @@ deny_overlay() {
 deny_notifications() {
     PERMISSIONS_TOUCHED=1
     dev pm revoke "$PKG" android.permission.POST_NOTIFICATIONS
+    # Android 12 has no such permission, and this is what its switch comes down to.
+    dev appops set "$PKG" POST_NOTIFICATION ignore
+}
+# Doze, as deep as it goes. Android refuses with an alarm less than an hour away, and only what
+# the command prints says so.
+force_idle() {
+    local said
+    said=$(dev dumpsys deviceidle force-idle)
+    case "$said" in
+        *"Now forced"*) ;;
+        *) fail "the device does not go into Doze: $said" ;;
+    esac
 }
 
 start_app() {
@@ -337,7 +366,10 @@ arm() {
 dead() {
     go_home
     kill_all
-    wait_for 3 no_process && return 0
+    wait_for 2 no_process && return 0
+    # What a clock change left in the queue can bring a process back.
+    kill_all
+    wait_for 2 no_process && return 0
     # Then whatever comes next says nothing about an app that is gone.
     fail "the app survived being killed: main=$(main_pid) sentinel=$(sentinel_pid)"
     return 1
@@ -505,7 +537,7 @@ RESULTS="$OUT/results.txt"
 CURRENT=""
 SCENARIO_START=$SECONDS
 scenario() {
-    CURRENT=$1
+    CURRENT=$1${VARIANT:-}
     SCENARIO_START=$SECONDS
     echo
     echo "=== $CURRENT"

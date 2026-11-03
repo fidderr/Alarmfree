@@ -169,7 +169,7 @@ sound on, what is on screen, what is armed, what is saved.
 ```bash
 SERIAL=emulator-5554 devtest/matrix.sh            # every scenario on one device
 SERIAL=emulator-5554 devtest/matrix.sh s01 s07    # just these
-bash devtest/all.sh                               # Android 16, next to it Android 12, tablet and foldable
+bash devtest/all.sh                               # Android 16 and 12 at once, 16 also on big screens
 ```
 
 All of it should take under 15 minutes on an emulator, and no scenario over a minute: the

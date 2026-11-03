@@ -277,7 +277,9 @@ s13() {
     local locked
     locked=$(dev dumpsys user | grep -c 'RUNNING_LOCKED')
     T=$(now_s)
-    if ! await_sound 60; then
+    if [ "$locked" = 0 ]; then
+        fail "the phone is not locked after the restart"
+    elif ! await_sound 60; then
         fail "no sound in 60s, locked users: $locked, state=$(state a) job=$(job_status a) main=$(main_pid) $(dev dumpsys package "$PKG" | grep -m1 -oE 'stopped=[a-z]+')"
     elif ! wait_for 15 top_is_backup; then
         screenshot s13_backup_screen
@@ -396,8 +398,11 @@ s17() {
 s19() {
     scenario s21_dark_mode_mid_ring
     fresh
-    local old_timeout before p0 v0 v1 v2 problems=""
+    local old_timeout old_stay before p0 v0 v1 v2 problems=""
     old_timeout=$(dev settings get system screen_off_timeout)
+    # An emulator stays awake for being plugged in, ringing or not.
+    old_stay=$(dev settings get global stay_on_while_plugged_in)
+    dev settings put global stay_on_while_plugged_in 0
     dev settings put system screen_off_timeout 10000
     before=$(alarm_volume)
     set_alarm_volume 1
@@ -408,6 +413,7 @@ s19() {
         fail "never started"
         set_alarm_volume "$before"
         dev settings put system screen_off_timeout "$old_timeout"
+        dev settings put global stay_on_while_plugged_in "$old_stay"
         return
     fi
     on_screen .ring-off 10
@@ -441,7 +447,7 @@ s19() {
     [ "$(main_pid)" = "$p0" ] || problems="$problems; resizing ended the process"
     sound_on || problems="$problems; silent after resizing"
     on_screen .ring-off || problems="$problems; no alarm screen after resizing"
-    dev wm size reset
+    dev wm size "$size"
     dev settings put system accelerometer_rotation 1
     sleep 0.5
     if [ -z "$problems" ]; then
@@ -454,8 +460,9 @@ s19() {
     until_past $((T + 13))
     local w
     w=$(dev dumpsys power | grep -m1 -E 'mWakefulness=' | sed 's/.*=//')
-    [ "$w" = Awake ] && pass "screen awake $(($(now_s) - T))s in, off after 10s otherwise" || fail "wakefulness=$w"
+    [ "$w" = Awake ] && pass "screen awake $(($(now_s) - T))s in, with the screen set to go off after 10s" || fail "wakefulness=$w"
     dev settings put system screen_off_timeout "$old_timeout"
+    dev settings put global stay_on_while_plugged_in "$old_stay"
 
     scenario s23d_limit_forever
     sound_on && pass "no limit: still ringing $(($(now_s) - T))s in" || fail "stopped, state=$(state a)"
@@ -606,26 +613,35 @@ s23c() {
     fi
 }
 
-# Everything against it: no process, screen off, overlay denied, forced idle.
-# The time from delivery to sound is what the plan promises to keep under 1 s.
+# Everything against it: no process, screen off, overlay denied, deep in Doze, and the second
+# time also the phone's Restricted battery setting. The time from delivery to sound is what the
+# plan promises to keep under 1 s. Doze needs the alarm over an hour away, so on an emulator the
+# clock moves after: the app wakes up for that, and goes again. A phone's clock stays as it is.
 s26() {
-    local run=${1:-1}
+    local run=${1:-1} dozing=""
     scenario "s26_cold_ring_$run"
     fresh
-    next_minute
+    on_emulator && next_minute 7200 || next_minute
     seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
     arm a
     deny_overlay
+    on_emulator && [ "$run" = 2 ] && dev appops set "$PKG" RUN_ANY_IN_BACKGROUND ignore
     dead
     screen_off
-    dev dumpsys deviceidle force-idle > /dev/null
+    if on_emulator; then
+        force_idle
+        jump_to $((T - LEAD))
+        sleep 1.5
+        dead
+        dozing=", $(dev dumpsys deviceidle get deep | tr -d '\r') until then"
+    fi
     if await_sound 30; then
         local ms delivery
         ms=$(sound_after_t_ms)
         delivery=$(ring_ms)
         # How late Android delivers it is not ours, and an emulator is busy: the sound is.
         if [ -n "$ms" ] && [ "$ms" -lt 3000 ] && [ "${delivery:-9999}" -lt 1000 ]; then
-            pass "sound ${ms}ms after its time, ${delivery}ms after delivery"
+            pass "sound ${ms}ms after its time, ${delivery}ms after delivery$dozing"
         else
             fail "sound ${ms:-?}ms after its time, ${delivery:-?}ms after delivery"
         fi
@@ -2054,20 +2070,19 @@ s53() {
     while [ "$i" -lt "${n:-0}" ] 2> /dev/null; do
         click .btn-small "$i" 0.3
         wait_for 5 away || problems="$problems; fix button $i stays in the app"
-        # A system screen can take its time before it listens.
+        # A system screen can take its time before it listens, and a second Back in the middle
+        # of the change closes the screen it comes back to.
         back_in_app() {
-            focus_in_app && return 0
             press_back
-            sleep 0.3
-            focus_in_app
+            wait_for 4 focus_in_app
         }
-        wait_for 10 back_in_app
+        wait_for 12 back_in_app
         on_screen .check-title 20 || problems="$problems; not back from fix button $i"
         i=$((i + 1))
     done
     click_row "This app in the phone"
     wait_for 10 away || problems="$problems; the app's settings stay in the app"
-    wait_for 10 back_in_app
+    wait_for 12 back_in_app
     if [ -z "$problems" ]; then
         pass "templates, time, wheels, date, challenge settings, deleting a sound, own days, $n fix buttons"
     else
@@ -2077,7 +2092,67 @@ s53() {
 
 # Every scenario. On a phone not what needs a restart with somebody there, what changes the
 # phone's settings, or what only an emulator can do: name those to run them anyway.
-ALL="s01 s03 s04 s05 s06 s07 s10 s11 s13 s14 s15 s16 s16b s17 s19 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s34 s36 s37 s38 s39 s40 s41 s42 s43 s44 s45 s46 s47 s48 s49 s50 s51 s52 s53"
+# Over the lock screen, with a PIN: it rings, its screen comes up on top, and ending the alarm
+# leaves the phone locked.
+s54() {
+    if ! on_emulator; then
+        note "s54 sets a PIN: not here"
+        return
+    fi
+    scenario s54_over_the_lock_screen
+    fresh
+    dev locksettings set-pin 1234 > /dev/null
+    next_minute
+    seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
+    arm a
+    dead
+    screen_off
+    locked() { dev "dumpsys trust | grep -q 'deviceLocked=1'" > /dev/null; }
+    local problems=""
+    wait_for 3 locked || problems="$problems; not locked before the ring"
+    if ! await_ring a 30; then
+        problems="$problems; no ring: state=$(state a)"
+    else
+        wait_for 15 focus_in_app || problems="$problems; its screen is not on top: $(dev dumpsys window | grep -m1 mCurrentFocus)"
+        on_screen .ring-off 15 || problems="$problems; no alarm screen"
+        screenshot s54_over_the_lock_screen
+        locked || problems="$problems; ringing unlocked the phone"
+        click .ring-off
+        wait_for 10 sound_off || problems="$problems; still ringing after turning it off"
+        await_state a scheduled 5 || problems="$problems; state=$(state a) after turning it off"
+        sleep 1
+        locked || problems="$problems; ending the alarm unlocked the phone"
+    fi
+    dev locksettings clear --old 1234 > /dev/null
+    wake
+    if [ -z "$problems" ]; then
+        pass "rang ${SOUND_AT}s after its time, on top of the lock screen, and the phone stayed locked"
+    else
+        fail "${problems#; }"
+    fi
+}
+
+# What depends on the size. Another screen on this Android is all the app can tell of a tablet
+# or an open foldable, and it is what a new AVD would cost a minute to start for.
+with_screen() { # size density scenarios...
+    local size=$1 density=$2 s
+    shift 2
+    dev wm size "$size"
+    dev wm density "$density"
+    VARIANT="@$size"
+    for s in "$@"; do
+        "$s"
+    done
+    VARIANT=""
+    dev wm size reset
+    dev wm density reset
+}
+big_screens() {
+    with_screen 1600x2560 320 s19 s25 s28 s34 s36 s49
+    with_screen 2208x1840 420 s34 s49
+}
+
+ALL="s01 s03 s04 s05 s06 s07 s10 s11 s13 s14 s15 s16 s16b s17 s19 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s34 s36 s37 s38 s39 s40 s41 s42 s43 s44 s45 s46 s47 s48 s49 s50 s51 s52 s53 s54 big_screens"
 ON_A_PHONE="s01 s03 s04 s05 s06 s07 s10 s15 s16 s16b s17 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s36 s37 s38 s39 s41 s42 s43 s45 s46 s47 s49 s50 s51 s52 s53"
 
 : > "$RESULTS"
