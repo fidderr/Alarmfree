@@ -10,6 +10,8 @@ use crate::models::{
 };
 
 /// How far back a streak is looked for.
+/// For "all of it": a period is a number of days.
+const EVER_DAYS: u32 = 36_500;
 const STREAK_LOOKBACK_DAYS: u32 = 400;
 
 /// The periods, as their translation keys.
@@ -212,9 +214,12 @@ pub fn History() -> Element {
             &crate::history_persistence::query_history(&lookback),
             chrono::Local::now().date_naive(),
         );
-        (filter, events, metrics, streak_days)
+        let nothing_at_all = events.is_empty()
+            && crate::history_persistence::query_history(&HistoryFilter::LastDays(EVER_DAYS))
+                .is_empty();
+        (filter, events, metrics, streak_days, nothing_at_all)
     });
-    let (filter, events, metrics, streak_days) = loaded();
+    let (filter, events, metrics, streak_days, nothing_at_all) = loaded();
     let today = chrono::Local::now().date_naive();
     let week_start = settings.read().prefs.week_start;
     let bars = chart(&translations, &filter, &events, week_start, today);
@@ -267,8 +272,12 @@ pub fn History() -> Element {
                 if events.is_empty() {
                     div { class: "empty",
                         div { class: "empty-icon", Icon { name: IconName::ChartBar, size: 40 } }
-                        p { class: "empty-title", {t(&translations, "history.no_events")} }
-                        p { class: "empty-sub", {t(&translations, "history.events_subtitle")} }
+                        if nothing_at_all {
+                            p { class: "empty-title", {t(&translations, "history.no_events")} }
+                            p { class: "empty-sub", {t(&translations, "history.events_subtitle")} }
+                        } else {
+                            p { class: "empty-title", {t(&translations, "history.none_in_period")} }
+                        }
                     }
                 } else {
                     Summary {
@@ -411,10 +420,9 @@ fn Summary(
         ),
         (
             t(&translations, "history.avg_snooze_gap"),
-            t(&translations, "text.minutes").replace(
-                "{minutes}",
-                &crate::text::one_decimal(&translations, metrics.avg_snooze_interval_minutes),
-            ),
+            duration(std::time::Duration::from_secs_f64(
+                metrics.avg_snooze_interval_minutes.max(0.0) * 60.0,
+            )),
         ),
         (
             t(&translations, "history.avg_challenge"),

@@ -81,7 +81,7 @@
   "settings.title": "Einstellungen",
   "settings.theme": "Design",
   "settings.language": "Sprache",
-  "settings.about": "Ueber",
+  "settings.about": "Über",
   "theme.dark": "Dunkel",
   "theme.light": "Hell",
   "theme.colorblind": "Farbenblind",
@@ -437,5 +437,6 @@
   "history.streak_days_one": "1 Tag",
   "settings.backup_restored_one": "1 Wecker hinzugefügt",
   "challenge.summary.hold_one": "1-mal {secs} s halten",
-  "challenge.summary.reaction_one": "{count} Ziele, {secs} s, 1 Runde"
+  "challenge.summary.reaction_one": "{count} Ziele, {secs} s, 1 Runde",
+  "history.none_in_period": "Nichts in diesem Zeitraum"
 }

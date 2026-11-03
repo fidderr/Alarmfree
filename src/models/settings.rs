@@ -29,6 +29,16 @@ impl ThemeMode {
         }
     }
 
+    /// This theme's background, for the system bars: `--bg` in the style sheet.
+    pub fn background(self, system_dark: bool) -> u32 {
+        match self.css_class(system_dark) {
+            "theme-light" => 0xFFF5_F6F9,
+            "theme-black" => 0xFF00_0000,
+            "theme-colorblind" => 0xFF14_151C,
+            _ => 0xFF10_1218,
+        }
+    }
+
     /// Whether this theme has a light background, for the system bar icons.
     pub fn is_light(self, system_dark: bool) -> bool {
         self.css_class(system_dark) == "theme-light"

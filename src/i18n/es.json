@@ -437,5 +437,6 @@
   "history.streak_days_one": "1 día",
   "settings.backup_restored_one": "1 alarma añadida",
   "challenge.summary.hold_one": "1 pulsación de {secs} s",
-  "challenge.summary.reaction_one": "{count} objetivos, {secs} s, 1 ronda"
+  "challenge.summary.reaction_one": "{count} objetivos, {secs} s, 1 ronda",
+  "history.none_in_period": "Nada en este periodo"
 }

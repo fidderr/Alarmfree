@@ -54,6 +54,12 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 - An alarm no longer waits behind what else the phone is doing, as just after it started.
 - No banner over the alarm's screen when it rings while you use the phone: it hid the date for some
   seconds.
+- Recents got you out of a ringing alarm on Android 16: it comes straight back now.
+- The big clock no longer runs into the edge of the screen with large text, and a long name in "Used
+  before" no longer runs off it.
+- Up to Android 14 the bars at the top and bottom of the screen take the colour of the app.
+- History says "Nothing in this period" instead of "No alarm events yet" for a period without any.
+- A scan challenge on a locked phone no longer asks for your PIN before the camera shows.
 - Opening the camera for a scan silenced an alarm for as long as it stayed open, which was a way
   out. After 3 minutes it rings again, with the camera still up to scan.
 - A code scanned after the camera had been open for a minute was ignored, and so was a file picked

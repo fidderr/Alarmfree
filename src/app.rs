@@ -209,9 +209,22 @@ const STYLESHEET: &str = include_str!("../assets/style.css");
 /// not drawing, as after another screen closed, has no frames until it is touched, and until
 /// then every task of the UI stands still, also what turns an alarm off after a challenge.
 /// Dioxus's mode for a page nobody sees does without them.
+fn set_system_bars(theme: crate::models::ThemeMode, system_dark: bool) {
+    mobile_sentinel::display::set_light_system_bars(theme.is_light(system_dark));
+    mobile_sentinel::display::set_system_bar_color(theme.background(system_dark));
+}
+
 const WINDOW_WATCH: &str = "\
     window.interpreter.headless = true; \
-    const tell = () => dioxus.send(innerWidth); \
+    const measureText = () => { \
+        const probe = document.createElement('div'); \
+        probe.style.cssText = 'position:absolute;visibility:hidden;font-size:100px;line-height:1'; \
+        probe.textContent = '0'; \
+        document.body.append(probe); \
+        document.documentElement.style.setProperty('--text-zoom', probe.getBoundingClientRect().height / 100); \
+        probe.remove(); \
+    }; \
+    const tell = () => { measureText(); dioxus.send(innerWidth); }; \
     addEventListener('resize', tell); \
     document.addEventListener('visibilitychange', tell); \
     matchMedia('(prefers-color-scheme: dark)').addEventListener('change', tell); \
@@ -384,16 +397,14 @@ pub fn App() -> Element {
     let mut safe_area = use_signal(SafeArea::default);
     let mut system_dark = use_signal(mobile_sentinel::display::system_dark);
     use_effect(move || {
-        let light = settings.read().theme.is_light(system_dark());
-        mobile_sentinel::display::set_light_system_bars(light);
+        set_system_bars(settings.read().theme, system_dark());
     });
     let mut read_window = move || {
         let current = SafeArea::query();
         if current != *safe_area.peek() {
             safe_area.set(current);
-            // A recreated window can reset the icon colour.
-            let light = settings.peek().theme.is_light(*system_dark.peek());
-            mobile_sentinel::display::set_light_system_bars(light);
+            // A recreated window can reset their colours.
+            set_system_bars(settings.peek().theme, *system_dark.peek());
         }
         let dark = mobile_sentinel::display::system_dark();
         if dark != *system_dark.peek() {

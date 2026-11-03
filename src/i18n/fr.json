@@ -437,5 +437,6 @@
   "history.streak_days_one": "1 jour",
   "settings.backup_restored_one": "1 alarme ajoutée",
   "challenge.summary.hold_one": "1 maintien de {secs} s",
-  "challenge.summary.reaction_one": "{count} cibles, {secs} s, 1 manche"
+  "challenge.summary.reaction_one": "{count} cibles, {secs} s, 1 manche",
+  "history.none_in_period": "Rien sur cette période"
 }

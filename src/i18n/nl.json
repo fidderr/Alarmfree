@@ -437,5 +437,6 @@
   "history.streak_days_one": "1 dag",
   "settings.backup_restored_one": "1 wekker toegevoegd",
   "challenge.summary.hold_one": "1 keer {secs} s vasthouden",
-  "challenge.summary.reaction_one": "{count} doelen, {secs} s, 1 ronde"
+  "challenge.summary.reaction_one": "{count} doelen, {secs} s, 1 ronde",
+  "history.none_in_period": "Niets in deze periode"
 }

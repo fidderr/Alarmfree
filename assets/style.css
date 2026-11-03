@@ -536,6 +536,14 @@ button:disabled { opacity: 0.5; }
 
 .chips-grow .chip { flex: 1 1 auto; min-width: 44px; padding: 0 6px; }
 
+/* What someone typed can be as long as they like. */
+.chips:not(.chips-grow) .chip {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .chip.selected { background: var(--accent); color: var(--on-accent); }
 
 /* These look smaller than they are: the see-through border is only a bigger place to
@@ -626,6 +634,9 @@ button:disabled { opacity: 0.5; }
   user-select: text;
   -webkit-user-select: text;
 }
+
+/* An older WebView puts the date at the top of what is only a minimum height. */
+.field[type="date"] { height: 48px; line-height: 46px; }
 
 .field-short { display: inline-block; width: 88px; margin: 0 8px; }
 
@@ -728,6 +739,7 @@ button:disabled { opacity: 0.5; }
 
 .toast-undo {
   flex: none;
+  max-width: 7.5em;
   min-height: 44px;
   padding: 0 10px;
   font-size: 14px;
@@ -945,9 +957,9 @@ button:disabled { opacity: 0.5; }
   color: var(--text2);
 }
 
-.alarm-days { display: flex; gap: 2px; }
+.alarm-days { display: flex; gap: 1px; }
 
-.alarm-day { width: 10px; font-size: 11px; text-align: center; }
+.alarm-day { width: 1.15em; font-size: 11px; text-align: center; }
 
 .alarm-day.on { font-weight: 700; color: var(--accent); }
 
@@ -1065,14 +1077,14 @@ button:disabled { opacity: 0.5; }
 }
 
 .time-big {
-  font-size: 64px;
+  font-size: calc(64px / var(--text-zoom, 1));
   font-weight: 500;
-  line-height: 76px;
+  line-height: calc(76px / var(--text-zoom, 1));
   letter-spacing: -1px;
   white-space: nowrap;
 }
 
-.time-big.h12 { font-size: 44px; }
+.time-big.h12 { font-size: calc(44px / var(--text-zoom, 1)); }
 
 .rings-in { text-align: center; color: var(--text2); }
 
@@ -1263,17 +1275,19 @@ button:disabled { opacity: 0.5; }
 
 .ring-date { font-size: 16px; text-align: center; color: var(--text2); }
 
+/* The big clocks stay this size when the phone asks for larger text: they are large already, and
+   there is no room for more. --text-zoom is measured in WINDOW_WATCH. */
 .ring-clock {
   margin-top: 4px;
-  font-size: 96px;
+  font-size: calc(96px / var(--text-zoom, 1));
   font-weight: 500;
-  line-height: 110px;
+  line-height: calc(110px / var(--text-zoom, 1));
   letter-spacing: -2px;
   text-align: center;
   white-space: nowrap;
 }
 
-.ring-clock.h12 { font-size: 64px; }
+.ring-clock.h12 { font-size: calc(64px / var(--text-zoom, 1)); }
 
 .ring-label {
   margin-top: 16px;
@@ -1944,9 +1958,9 @@ button:disabled { opacity: 0.5; }
   background: var(--surface);
 }
 
-.summary-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.summary-stats { display: grid; grid-template-columns: repeat(3, minmax(min-content, 1fr)); gap: 8px; }
 
-.stat-value { font-size: 20px; font-weight: 500; }
+.stat-value { font-size: 20px; font-weight: 500; white-space: nowrap; }
 
 .stat-name { margin-top: 2px; font-size: 12px; color: var(--text2); }
 
