@@ -108,7 +108,7 @@ fresh() {
 # The app's settings: theme, language, and more preferences as JSON fields. Past the
 # first-run screen and in one language, unless a scenario wants otherwise.
 use_settings() {
-    printf "INSERT OR REPLACE INTO settings (id, theme, locale, default_snooze_count, default_snooze_interval_minutes, min_volume_percent, prefs) VALUES (1, '%s', '%s', 3, 5, 50, '{%s}');\n" "$1" "$2" "$3" | sql
+    printf "INSERT OR REPLACE INTO settings (id, theme, locale, min_volume_percent, prefs) VALUES (1, '%s', '%s', 50, '{%s}');\n" "$1" "$2" "$3" | sql
 }
 
 grant_all() {

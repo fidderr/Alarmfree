@@ -1,5 +1,4 @@
 use dioxus::prelude::*;
-use std::time::Duration;
 
 use crate::app::{t, Translations};
 
@@ -80,12 +79,10 @@ pub fn ReactionChallenge(
     time_limit_ms: u32,
     rounds: u32,
     on_complete: EventHandler<()>,
-    #[props(default)] on_cancel: Option<EventHandler<()>>,
 ) -> Element {
     let translations = use_context::<Translations>();
     let instruction = t(&translations, "challenge.reaction.instruction");
     let get_ready = t(&translations, "challenge.reaction.get_ready");
-    let back_label = t(&translations, "action.back");
 
     let targets_per_round = targets_per_round.max(1);
     let rounds = rounds.max(1);
@@ -142,7 +139,7 @@ pub fn ReactionChallenge(
             countdown_secs.set(remaining.div_ceil(1000) as u32);
             while remaining > 0 {
                 let step = remaining.min(1000);
-                sleep_ms(step).await;
+                crate::timer::sleep_ms(step).await;
                 remaining -= step;
                 countdown_secs.set(remaining.div_ceil(1000) as u32);
             }
@@ -169,7 +166,7 @@ pub fn ReactionChallenge(
                     failed = true;
                     break;
                 }
-                sleep_ms(POLL_MS).await;
+                crate::timer::sleep_ms(POLL_MS).await;
                 elapsed += POLL_MS;
             }
 
@@ -189,6 +186,7 @@ pub fn ReactionChallenge(
             if current_round >= rounds {
                 crate::feedback::tick(130);
                 solved.set(true);
+                on_complete.call(());
                 break;
             }
             crate::feedback::tick(80);
@@ -235,13 +233,6 @@ pub fn ReactionChallenge(
         }
     };
 
-    // Fire on_complete exactly once when solved.
-    let mut completed_fired = use_signal(|| false);
-    if *solved.read() && !*completed_fired.read() {
-        completed_fired.set(true);
-        on_complete.call(());
-    }
-
     let is_counting = *counting_down.read();
     let secs = *countdown_secs.read();
     let cur_round = round();
@@ -263,15 +254,6 @@ pub fn ReactionChallenge(
 
     rsx! {
         div { class: "challenge-wrapper hold-wrapper",
-            if let Some(cancel) = on_cancel {
-                button {
-                    class: "hold-back-btn",
-                    "aria-label": "{back_label}",
-                    onpointerdown: move |evt| { evt.stop_propagation(); },
-                    onclick: move |_| cancel.call(()),
-                    "\u{2039}"
-                }
-            }
             div { class: "hold-header",
                 p { class: "challenge-instruction hold-instruction", "{instruction}" }
             }
@@ -333,10 +315,4 @@ pub fn ReactionChallenge(
             }
         }
     }
-}
-
-/// Async sleep via a background thread + oneshot — keeps the UI layer free of
-/// a tokio dependency (same pattern the other challenges use).
-async fn sleep_ms(ms: u64) {
-    crate::timer::sleep(Duration::from_millis(ms)).await;
 }

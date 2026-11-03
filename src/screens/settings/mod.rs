@@ -5,13 +5,14 @@ mod sheets;
 use dioxus::prelude::*;
 
 use sheets::{
-    AboutSheet, BackupSheet, DeleteHistorySheet, LanguageSheet, NotifySheet, ThemeSheet,
-    TimeFormatSheet, VolumeSheet, WeekStartSheet,
+    AboutSheet, BackupSheet, LanguageSheet, NotifySheet, ThemeSheet, TimeFormatSheet, VolumeSheet,
+    WeekStartSheet,
 };
 
 use crate::app::{t, Route, Translations};
 use crate::components::{BottomNav, Icon, IconName, Row, SwitchRow};
 use crate::models::{AppSettings, ThemeMode, TimeFormat, WeekStart};
+use crate::screens::history::DeleteHistorySheet;
 
 /// The panel open over the settings.
 #[derive(Clone, Copy, PartialEq)]
@@ -39,7 +40,7 @@ impl SettingsState {
         change(&mut self.settings.write());
         crate::persistence::save_settings(&self.settings.peek());
         // The widget speaks the language and writes the time as set here.
-        crate::platform::refresh_reminders();
+        crate::platform::refresh_outside_app();
     }
 }
 
@@ -128,7 +129,9 @@ pub fn Settings() -> Element {
         Some(SettingsSheet::NotifyBefore) => rsx! { NotifySheet {} },
         Some(SettingsSheet::Volume) => rsx! { VolumeSheet {} },
         Some(SettingsSheet::Backup) => rsx! { BackupSheet {} },
-        Some(SettingsSheet::DeleteHistory) => rsx! { DeleteHistorySheet {} },
+        Some(SettingsSheet::DeleteHistory) => {
+            rsx! { DeleteHistorySheet { on_close: move |_| sheet.set(None) } }
+        }
         Some(SettingsSheet::About) => rsx! { AboutSheet {} },
     };
 

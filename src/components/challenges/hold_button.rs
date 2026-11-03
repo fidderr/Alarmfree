@@ -1,5 +1,4 @@
 use dioxus::prelude::*;
-use std::time::Duration;
 
 use crate::app::{t, Translations};
 
@@ -62,7 +61,7 @@ pub fn HoldButtonChallenge(
         // this bubble is done. A release bumps `hold_token`, invalidating
         // this exact timer.
         spawn(async move {
-            sleep_ms(hold_ms as u64).await;
+            crate::timer::sleep_ms(u64::from(hold_ms)).await;
             if hold_token() != token || *popping.read() {
                 return;
             }
@@ -72,7 +71,7 @@ pub fn HoldButtonChallenge(
             popping.set(true);
             crate::feedback::tick(if done >= required { 130 } else { 45 });
 
-            sleep_ms(POP_MS).await;
+            crate::timer::sleep_ms(POP_MS).await;
             if done >= required {
                 on_complete.call(());
             } else {
@@ -165,10 +164,4 @@ pub fn HoldButtonChallenge(
 /// the bubble + glow never touch the clipped edge.
 fn random_pos() -> (f32, f32) {
     (rand::random::<f32>(), rand::random::<f32>())
-}
-
-/// Async sleep via a background thread + oneshot — keeps the UI layer
-/// free of a tokio dependency (same pattern the other challenges use).
-async fn sleep_ms(ms: u64) {
-    crate::timer::sleep(Duration::from_millis(ms)).await;
 }

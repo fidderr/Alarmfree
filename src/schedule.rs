@@ -25,6 +25,13 @@ pub fn next_occurrence_date(hour: u8, minute: u8, now: NaiveDateTime) -> NaiveDa
     }
 }
 
+/// [`next_occurrence_date`], the way a one-time alarm stores it.
+pub fn next_occurrence(hour: u8, minute: u8, now: NaiveDateTime) -> String {
+    next_occurrence_date(hour, minute, now)
+        .format(DATE_FORMAT)
+        .to_string()
+}
+
 /// The moment a one-time alarm is set for, from its stored date.
 pub fn one_time_moment(alarm: &AlarmData) -> Option<NaiveDateTime> {
     let date = NaiveDate::parse_from_str(alarm.date.as_deref()?, DATE_FORMAT).ok()?;
@@ -38,11 +45,10 @@ pub fn resolve_one_time_date(alarm: &AlarmData, now: NaiveDateTime) -> Option<St
     if !is_one_time(alarm) {
         return None;
     }
-    let date = match one_time_moment(alarm) {
-        Some(at) if at > now => at.date(),
-        _ => next_occurrence_date(alarm.time_hour, alarm.time_minute, now),
-    };
-    Some(date.format(DATE_FORMAT).to_string())
+    Some(match one_time_moment(alarm) {
+        Some(at) if at > now => at.date().format(DATE_FORMAT).to_string(),
+        _ => next_occurrence(alarm.time_hour, alarm.time_minute, now),
+    })
 }
 
 /// A one-time alarm is over once dealt with: it switches off, or goes altogether if

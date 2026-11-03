@@ -184,7 +184,6 @@ pub fn ChallengeRun(
     let mut celebrating = use_signal(|| false);
     let mut solves: Signal<Vec<ChallengeSolve>> = use_signal(Vec::new);
     let mut started_at = use_signal(chrono::Utc::now);
-    let mut wrong = use_signal(|| false);
     // This challenge was swapped for the touch-only one.
     let mut fallback = use_signal(|| false);
     let mut asking_fallback = use_signal(|| false);
@@ -248,7 +247,6 @@ pub fn ChallengeRun(
         });
         crate::feedback::pattern(&[0, 45, 60, 90]);
         celebrating.set(true);
-        wrong.set(false);
         spawn(async move {
             crate::timer::sleep_ms(CELEBRATION_MS).await;
             celebrating.set(false);
@@ -272,7 +270,6 @@ pub fn ChallengeRun(
     .replace("{current}", &(idx + 1).to_string())
     .replace("{total}", &total.to_string());
     let exit_text = t(&translations, "practice.exit");
-    let incorrect_text = t(&translations, "challenge.incorrect");
     let fallback_link = t(&translations, "challenge.fallback.link");
     let fallback_title = t(&translations, "challenge.fallback.title");
     let fallback_note = t(&translations, "challenge.fallback.explain");
@@ -302,13 +299,7 @@ pub fn ChallengeRun(
                     key: "math-{idx}",
                     expression,
                     expected,
-                    on_answer: move |answer: i64| {
-                        if answer == expected {
-                            solved();
-                        } else {
-                            wrong.set(true);
-                        }
-                    },
+                    on_solved: move |_| solved(),
                 }
             },
             Challenge::Memory {
@@ -319,7 +310,7 @@ pub fn ChallengeRun(
                     key: "memory-{idx}",
                     sequence,
                     grid_size,
-                    on_complete: move |_: Vec<u8>| solved(),
+                    on_complete: move |_| solved(),
                 }
             },
             Challenge::Typing {
@@ -328,15 +319,9 @@ pub fn ChallengeRun(
             } => rsx! {
                 TypingChallenge {
                     key: "typing-{idx}",
-                    passage: passage.clone(),
+                    passage,
                     min_accuracy,
-                    on_complete: move |typed: String| {
-                        if crate::models::typing_accuracy(&passage, &typed) >= min_accuracy {
-                            solved();
-                        } else {
-                            wrong.set(true);
-                        }
-                    },
+                    on_complete: move |_| solved(),
                 }
             },
             Challenge::Shake { count } => rsx! {
@@ -410,10 +395,6 @@ pub fn ChallengeRun(
 
             div { class: "run-body", {body} }
 
-            if wrong() {
-                div { class: "run-wrong", role: "status", "{incorrect_text}" }
-            }
-
             if !fallback() && !celebrating() {
                 button {
                     class: "link-btn run-fallback",
@@ -442,7 +423,6 @@ pub fn ChallengeRun(
                         label: fallback_confirm,
                         on_click: move |_| {
                             asking_fallback.set(false);
-                            wrong.set(false);
                             fallback.set(true);
                         },
                     }

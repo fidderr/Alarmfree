@@ -151,15 +151,22 @@ pub fn get_playback_path(sound: &str) -> Option<PathBuf> {
 // Custom sound import and management
 // ---------------------------------------------------------------------------
 
-/// Launch the native file picker for audio files and import the selected file.
-/// Returns the unique filename on success.
+/// A sound the user added: its file, and what it was called where it came from.
+pub struct ImportedSound {
+    pub file: String,
+    pub name: String,
+}
+
+/// Launch the native file picker for audio files and import the selected file. `None`
+/// when the user changed their mind.
 /// MUST be called from a background thread (blocks until user picks or cancels).
-pub fn pick_audio_file_native() -> Result<String, String> {
-    // Launch the native file picker via the gated media_picker capability
-    // (blocks until user selects or cancels).
-    let imported = mobile_sentinel::media_picker::pick_file(&["audio/*"])
+pub fn pick_audio_file_native() -> Result<Option<ImportedSound>, String> {
+    let picked = mobile_sentinel::media_picker::pick_files(&["audio/*"], false)
         .map_err(|e| format!("File pick failed: {}", e))?;
-    let imported_path = std::path::PathBuf::from(imported);
+    let Some(picked) = picked.into_iter().next() else {
+        return Ok(None);
+    };
+    let imported_path = std::path::PathBuf::from(&picked.path);
 
     // Move from sentinel's generic import directory to our custom sounds directory
     if !imported_path.exists() {
@@ -186,7 +193,15 @@ pub fn pick_audio_file_native() -> Result<String, String> {
             .map_err(|e| format!("Failed to copy imported file: {}", e))?;
         let _ = fs::remove_file(&imported_path);
     }
-    Ok(filename)
+    let name = Path::new(&picked.name)
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .unwrap_or(&picked.name)
+        .to_owned();
+    Ok(Some(ImportedSound {
+        file: filename,
+        name,
+    }))
 }
 
 /// Why [`pick_audio_file_native`] refused a file that is no sound.
@@ -277,6 +292,7 @@ pub fn display_name(sound: &str, names: &std::collections::BTreeMap<String, Stri
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::TempDir;
 
     #[test]
     fn a_file_is_only_taken_for_a_sound_if_it_starts_like_one() {
@@ -300,7 +316,6 @@ mod tests {
             assert!(!is_audio_header(bad), "{bad:?}");
         }
     }
-    use tempfile::TempDir;
 
     #[test]
     fn prune_removes_old_format_only_when_new_format_exists() {

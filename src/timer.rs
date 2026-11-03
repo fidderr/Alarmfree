@@ -1,7 +1,4 @@
 //! Shared async timer.
-//!
-//! One tokio timer instead of spawning an OS thread per sleep (the previous
-//! pattern created ~10 threads/second on the scan screen alone).
 
 use std::time::Duration;
 

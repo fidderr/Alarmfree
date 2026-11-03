@@ -1,6 +1,6 @@
 //! One alarm on the list.
 
-use chrono::TimeZone;
+use chrono::{TimeZone, Timelike};
 use dioxus::prelude::*;
 
 use super::{local_date, HomeSheet, HomeState};
@@ -15,9 +15,17 @@ fn when_text(
     alarm: &AlarmData,
     next_fire: Option<i64>,
     now_ms: i64,
+    twenty_four: bool,
 ) -> String {
     if !alarm.enabled {
         return t(translations, "home.off");
+    }
+    let snoozed_until = crate::platform::alarm_kit_optional()
+        .and_then(|kit| kit.snoozed_until(&mobile_sentinel::InstanceId::new(alarm.id.clone())))
+        .and_then(|at| chrono::Local.timestamp_millis_opt(at).single());
+    if let Some(at) = snoozed_until {
+        let time = crate::text::clock(at.hour() as u8, at.minute() as u8, twenty_four);
+        return t(translations, "home.snoozed_until").replace("{time}", &time);
     }
     if let Some(until) = alarm.pause_until_ms.filter(|until| *until > now_ms) {
         return local_date(until)
@@ -47,33 +55,6 @@ fn when_text(
     }
 }
 
-/// "Rings in 7 h 12 min", for an alarm switched on just now.
-fn rings_in(translations: &Translations, alarm: &AlarmData) -> String {
-    let now = chrono::Local::now();
-    let date = alarm
-        .date
-        .as_deref()
-        .and_then(|d| chrono::NaiveDate::parse_from_str(d, "%Y-%m-%d").ok());
-    schedule::next_ring_moment(
-        alarm.time_hour,
-        alarm.time_minute,
-        alarm.days,
-        date,
-        now.naive_local(),
-    )
-    .and_then(|moment| chrono::Local.from_local_datetime(&moment).earliest())
-    .map(|at| {
-        let time = schedule::format_countdown(
-            schedule::countdown(now.timestamp_millis(), at.timestamp_millis()),
-            &t(translations, "home.next_in_dhm"),
-            &t(translations, "home.next_in_hm"),
-            &t(translations, "home.next_in_m"),
-        );
-        t(translations, "config.rings_in").replace("{time}", &time)
-    })
-    .unwrap_or_default()
-}
-
 /// An alarm: its time, when it rings, its menu and switch, and behind it what swiping it
 /// aside shows.
 #[component]
@@ -97,7 +78,7 @@ pub(super) fn AlarmCard(alarm: AlarmData, next: Option<i64>, now_ms: i64) -> Ele
     let delete_id = alarm.id.clone();
     let delete_name = alarm.label.clone();
     let time = crate::text::clock(alarm.time_hour, alarm.time_minute, twenty_four);
-    let when = when_text(&translations, &alarm, next, now_ms);
+    let when = when_text(&translations, &alarm, next, now_ms, twenty_four);
     let on = alarm.enabled;
     let one_time = schedule::is_one_time(&alarm);
     let skip_active = alarm.skip_until_ms.is_some_and(|skip| skip > now_ms);
@@ -156,7 +137,7 @@ pub(super) fn AlarmCard(alarm: AlarmData, next: Option<i64>, now_ms: i64) -> Ele
                                 alarm.enabled = !alarm.enabled;
                                 if alarm.enabled {
                                     schedule::refresh_one_time_date(alarm, now);
-                                    message = rings_in(&translations, alarm);
+                                    message = crate::text::rings_in(&translations, alarm);
                                 } else {
                                     message = t(&translations, "home.switched_off");
                                 }

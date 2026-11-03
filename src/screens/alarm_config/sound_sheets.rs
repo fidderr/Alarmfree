@@ -42,6 +42,10 @@ pub(super) fn SoundSheet() -> Element {
     let volume = current.volume_percent.unwrap_or(general_volume);
     let selected_sound = current.sound.clone();
     let vibrate_only = current.sound_mode == 2;
+    // The user's own sound about to be deleted: alarms may use it, and it is gone for good.
+    let mut deleting: Signal<Option<String>> = use_signal(|| None);
+    let delete_text = t(&translations, "action.delete");
+    let keep_text = t(&translations, "alarm.keep");
     rsx! {
         Sheet {
             title: t(&translations, "config.sound"),
@@ -70,6 +74,10 @@ pub(super) fn SoundSheet() -> Element {
                     let delete_aria = t(&translations, "sound.delete");
                     let rename_aria = t(&translations, "sound.rename");
                     let done_aria = done_text.clone();
+                    let keep_aria = keep_text.clone();
+                    let confirm_text = delete_text.clone();
+                    let asked = deleting.read().as_deref() == Some(sound.as_str());
+                    let to_ask = sound.clone();
                     let new_name = renaming
                         .read()
                         .as_ref()
@@ -128,21 +136,12 @@ pub(super) fn SoundSheet() -> Element {
                                     span { class: "radio-mark" }
                                     span { class: "radio-text", "{name}" }
                                 }
-                                if is_custom {
+                                if asked {
                                     button {
-                                        class: "icon-btn",
-                                        "aria-label": "{rename_aria}",
+                                        class: "link-btn danger",
                                         onclick: move |_| {
                                             preview.stop();
-                                            renaming.set(Some((to_rename.clone(), shown_name.clone())));
-                                        },
-                                        Icon { name: IconName::Pencil, size: 16 }
-                                    }
-                                    button {
-                                        class: "icon-btn",
-                                        "aria-label": "{delete_aria}",
-                                        onclick: move |_| {
-                                            preview.stop();
+                                            deleting.set(None);
                                             // An alarm that uses it falls back to the first sound
                                             // when it is saved or edited, and always rings: the
                                             // ring has its own fallbacks.
@@ -163,10 +162,45 @@ pub(super) fn SoundSheet() -> Element {
                                             if changed {
                                                 crate::persistence::save_alarms(&alarms.peek());
                                             }
-                                            if settings.write().prefs.sound_names.remove(&to_delete).is_some() {
-                                                crate::persistence::save_settings(&settings.peek());
+                                            {
+                                                let mut now = settings.write();
+                                                now.prefs.sound_names.remove(&to_delete);
+                                                if let Some(defaults) = now
+                                                    .prefs
+                                                    .alarm_defaults
+                                                    .as_mut()
+                                                    .filter(|defaults| defaults.sound == to_delete)
+                                                {
+                                                    defaults.sound = replacement.clone();
+                                                }
                                             }
+                                            crate::persistence::save_settings(&settings.peek());
                                             crate::custom_sounds::delete_sound(&to_delete);
+                                        },
+                                        "{confirm_text}"
+                                    }
+                                    button {
+                                        class: "icon-btn",
+                                        "aria-label": "{keep_aria}",
+                                        onclick: move |_| deleting.set(None),
+                                        Icon { name: IconName::Xmark, size: 16 }
+                                    }
+                                } else if is_custom {
+                                    button {
+                                        class: "icon-btn",
+                                        "aria-label": "{rename_aria}",
+                                        onclick: move |_| {
+                                            preview.stop();
+                                            renaming.set(Some((to_rename.clone(), shown_name.clone())));
+                                        },
+                                        Icon { name: IconName::Pencil, size: 16 }
+                                    }
+                                    button {
+                                        class: "icon-btn",
+                                        "aria-label": "{delete_aria}",
+                                        onclick: move |_| {
+                                            preview.stop();
+                                            deleting.set(Some(to_ask.clone()));
                                         },
                                         Icon { name: IconName::Xmark, size: 16 }
                                     }
@@ -187,19 +221,31 @@ pub(super) fn SoundSheet() -> Element {
                             let _ = tx.send(crate::custom_sounds::pick_audio_file_native());
                         });
                         match rx.await {
-                            Ok(Ok(filename)) => {
-                                let mut alarm = draft.write();
-                                alarm.sound = filename;
-                                if alarm.sound_mode == 2 {
-                                    alarm.sound_mode = 0;
+                            Ok(Ok(Some(imported))) => {
+                                {
+                                    let mut alarm = draft.write();
+                                    alarm.sound = imported.file.clone();
+                                    if alarm.sound_mode == 2 {
+                                        alarm.sound_mode = 0;
+                                    }
                                 }
+                                settings
+                                    .write()
+                                    .prefs
+                                    .sound_names
+                                    .insert(imported.file.clone(), imported.name);
+                                crate::persistence::save_settings(&settings.peek());
+                                preview.play_for(imported.file, SOUND_PREVIEW_MS);
                             }
                             Ok(Err(reason)) if reason == crate::custom_sounds::NOT_A_SOUND => {
                                 toast.set(Some(ToastMessage::error(t(&translations, "sound.not_a_sound"))));
                             }
-                            // Cancelled, mostly.
-                            Ok(Err(reason)) => log::info!("[AlarmFree] No sound imported: {reason}"),
-                            Err(_) => {}
+                            Ok(Err(reason)) => {
+                                log::warn!("[AlarmFree] No sound imported: {reason}");
+                                toast.set(Some(ToastMessage::error(t(&translations, "db.save_failed"))));
+                            }
+                            // The user changed their mind.
+                            Ok(Ok(None)) | Err(_) => {}
                         }
                     });
                 },

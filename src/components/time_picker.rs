@@ -19,14 +19,21 @@ const ROW_PITCH: f64 = 40.0;
 ///   `+2` (and the rows above are `-1` / `-2`), so a user can step quickly
 ///   without precise dragging.
 ///
-/// Hours wrap 0–23, minutes wrap 0–59.
+/// Hours wrap 0–23, minutes wrap 0–59. On a 12-hour clock the hours say which half of the
+/// day they are in, so there is one wheel to turn for it.
 #[component]
-pub fn TimePicker(hour: u8, minute: u8, on_change: EventHandler<(u8, u8)>) -> Element {
+pub fn TimePicker(
+    hour: u8,
+    minute: u8,
+    twenty_four: bool,
+    on_change: EventHandler<(u8, u8)>,
+) -> Element {
     rsx! {
         div { class: "time-picker",
             WheelColumn {
                 value: hour as i32,
                 modulus: 24,
+                hours_12: !twenty_four,
                 on_change: move |h: i32| on_change.call((h as u8, minute)),
             }
             span { class: "time-separator", ":" }
@@ -46,7 +53,12 @@ fn wrap(value: i32, modulus: i32) -> i32 {
 
 /// A single spinner wheel for one numeric field.
 #[component]
-fn WheelColumn(value: i32, modulus: i32, on_change: EventHandler<i32>) -> Element {
+fn WheelColumn(
+    value: i32,
+    modulus: i32,
+    #[props(default)] hours_12: bool,
+    on_change: EventHandler<i32>,
+) -> Element {
     // Drag gesture state (persisted across the re-renders a drag triggers).
     let mut dragging = use_signal(|| false);
     let mut start_y = use_signal(|| 0.0f64);
@@ -136,7 +148,12 @@ fn WheelColumn(value: i32, modulus: i32, on_change: EventHandler<i32>) -> Elemen
 
                 for off in offsets {
                     {
-                        let display = wrap(value + off, modulus);
+                        let cell_value = wrap(value + off, modulus);
+                        let display = if hours_12 {
+                            crate::text::hour_label(cell_value as u8, false)
+                        } else {
+                            format!("{cell_value:02}")
+                        };
                         let cls = match off.abs() {
                             0 => "wheel-cell wheel-cell-center",
                             1 => "wheel-cell wheel-cell-near",
@@ -165,7 +182,7 @@ fn WheelColumn(value: i32, modulus: i32, on_change: EventHandler<i32>) -> Elemen
                                         on_change.call(wrap(value + off, modulus));
                                     }
                                 },
-                                "{display:02}"
+                                "{display}"
                             }
                         }
                     }

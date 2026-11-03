@@ -18,7 +18,7 @@ use sound_sheets::{SoundSheet, VibrationSheet, VIBRATION_KEYS};
 use crate::alarm_ops;
 use crate::app::{t, AlarmData, Translations};
 use crate::back::use_back_handler;
-use crate::components::{Icon, IconName, Row, ScreenHeader, SwitchRow};
+use crate::components::{Icon, IconName, Row, ScreenHeader, SwitchRow, ToastMessage};
 use crate::models::{AppSettings, ChallengeSetup};
 use crate::screens::practice::ChallengeRunner;
 
@@ -106,7 +106,8 @@ fn play_preview(sound: &str) -> u64 {
         log::warn!("[AlarmFree] No playback path found for: {sound}");
         return 0;
     };
-    match mobile_sentinel::audio::play(&path.to_string_lossy(), false) {
+    // As the alarm will sound, and also with the media volume at zero.
+    match mobile_sentinel::audio::play_as_alarm(&path.to_string_lossy(), false) {
         Ok(handle) => handle.id(),
         Err(e) => {
             log::warn!("[AlarmFree] Preview play failed: {e}");
@@ -186,6 +187,7 @@ fn Editor(id: String) -> Element {
     let mut alarms = use_context::<Signal<Vec<AlarmData>>>();
     let translations = use_context::<Translations>();
     let mut settings = use_context::<Signal<AppSettings>>();
+    let mut toast = use_context::<Signal<Option<ToastMessage>>>();
     let nav = use_navigator();
 
     // "copy-<id>" opens a new alarm prefilled from the alarm <id>.
@@ -210,14 +212,14 @@ fn Editor(id: String) -> Element {
 
     let mut draft = use_signal(|| original.clone());
     let one_time = use_signal(|| crate::schedule::is_one_time(&original));
-    let date_value = use_signal(|| {
-        original.date.clone().unwrap_or_else(|| {
-            chrono::Local::now()
-                .date_naive()
-                .format("%Y-%m-%d")
-                .to_string()
+    // Its date if it rings once. Only today while its time is still ahead.
+    let start_date = use_hook(|| {
+        let now = chrono::Local::now().naive_local();
+        crate::schedule::resolve_one_time_date(&original, now).unwrap_or_else(|| {
+            crate::schedule::next_occurrence(original.time_hour, original.time_minute, now)
         })
     });
+    let date_value = use_signal(|| start_date.clone());
     let mut setups = use_signal(|| ChallengeSetup::list_from_stored(&original.challenges));
     let mut sheet: Signal<Option<EditorSheet>> = use_signal(|| None);
     let mut error = use_signal(String::new);
@@ -303,8 +305,9 @@ fn Editor(id: String) -> Element {
             now.order = then.order;
             now.enabled = then.enabled;
             now.skip_until_ms = then.skip_until_ms;
-            if then.days == [false; 7] && then.date.is_none() {
-                then.date = now.date.clone();
+            // The date it starts out with is not a change.
+            if crate::schedule::is_one_time(&then) {
+                then.date = Some(start_date.clone());
             }
             now != then
         }
@@ -345,12 +348,17 @@ fn Editor(id: String) -> Element {
     let sound_summary = if current.sound_mode == 2 {
         t(&translations, "config.vibration_only")
     } else {
-        format!(
-            "{}, {} {}",
-            crate::custom_sounds::display_name(&current.sound, &settings.read().prefs.sound_names),
-            t(&translations, "config.fade_in_lower"),
-            seconds_label(&translations, current.fade_in_secs),
-        )
+        let name =
+            crate::custom_sounds::display_name(&current.sound, &settings.read().prefs.sound_names);
+        if current.fade_in_secs == 0 {
+            name
+        } else {
+            format!(
+                "{name}, {} {}",
+                t(&translations, "config.fade_in_lower"),
+                seconds_label(&translations, current.fade_in_secs),
+            )
+        }
     };
     let vibration_summary = if current.sound_mode == 1 {
         t(&translations, "vibration.off")
@@ -453,6 +461,7 @@ fn Editor(id: String) -> Element {
             }
             error.set(String::new());
             let saved_id = if is_new { alarm.id.clone() } else { id.clone() };
+            let rings = crate::text::rings_in(&translations, &alarm);
             {
                 let mut list = alarms.write();
                 if let Some(existing) = list.iter_mut().find(|a| a.id == saved_id) {
@@ -462,6 +471,9 @@ fn Editor(id: String) -> Element {
                 }
             }
             crate::persistence::save_alarms(&alarms.peek());
+            if !rings.is_empty() {
+                toast.set(Some(ToastMessage::info(rings)));
+            }
             nav.go_back();
         }
     };
@@ -600,7 +612,7 @@ fn RepeatSection() -> Element {
     let EditorState {
         mut draft,
         mut one_time,
-        date_value,
+        mut date_value,
         mut sheet,
         mut error,
         ..
@@ -663,6 +675,18 @@ fn RepeatSection() -> Element {
                 button {
                     class: "chip-small",
                     onclick: move |_| {
+                        let now = chrono::Local::now().naive_local();
+                        let (hour, minute) = {
+                            let alarm = draft.peek();
+                            (alarm.time_hour, alarm.time_minute)
+                        };
+                        let ahead = chrono::NaiveDate::parse_from_str(&date_value.peek(), "%Y-%m-%d")
+                            .ok()
+                            .and_then(|d| d.and_hms_opt(u32::from(hour), u32::from(minute), 0))
+                            .is_some_and(|at| at > now);
+                        if !ahead {
+                            date_value.set(crate::schedule::next_occurrence(hour, minute, now));
+                        }
                         one_time.set(true);
                         error.set(String::new());
                         sheet.set(Some(EditorSheet::Date));

@@ -420,5 +420,12 @@
   "home.pause_one": "Pause until a date",
   "reminder.title": "Alarm at {time}",
   "reminder.channel": "Before an alarm",
-  "home.pick": "Pick an alarm to change it, or make a new one."
+  "home.pick": "Pick an alarm to change it, or make a new one.",
+  "history.deleted": "History deleted",
+  "history.delete_all_title": "Delete all history?",
+  "history.delete_all_note": "Nothing brings it back. Your alarms stay.",
+  "home.snoozed_until": "Snoozed until {time}",
+  "reliability.hide": "Do not show this here",
+  "reliability.app_settings": "This app in the phone's settings",
+  "reliability.save_record": "Save the record of how fast alarms rang"
 }

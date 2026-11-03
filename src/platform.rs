@@ -14,9 +14,8 @@ use std::sync::OnceLock;
 use crate::app::AlarmData;
 use crate::models::{AlarmOutcome, Locale};
 
-/// Fully-qualified name of the Dioxus mobile entry activity. The same
-/// value is injected into the Android manifest by `prepare_android` and
-/// referenced by the AlarmClass runtime config below.
+/// Fully-qualified name of the Dioxus mobile entry activity. The same value is in
+/// `sentinel.toml`, for the Android manifest.
 const ALARMFREE_ACTIVITY_FQCN: &str = "dev.dioxus.main.MainActivity";
 
 /// Notification channel id for the firing FGS notification.
@@ -44,14 +43,14 @@ const UI_FAILURES_BEFORE_BACKUP: u32 = 2;
 /// this late; later than that it is reported as missed.
 const LATE_RING_WINDOW_MS: i64 = 15 * 60 * 1000;
 
-/// Global AlarmKit handle; populated during `init_sentinel`.
+/// Global AlarmKit handle; set by [`init_platform`] or [`on_wake`].
 static ALARM_KIT: OnceLock<AlarmKit> = OnceLock::new();
 
-/// Borrow the global AlarmKit handle. Panics if called before `init_sentinel`.
+/// Borrow the global AlarmKit handle. Panics if called before [`init_platform`].
 pub fn alarm_kit() -> &'static AlarmKit {
     ALARM_KIT
         .get()
-        .expect("AlarmKit not initialised — call init_sentinel() first")
+        .expect("AlarmKit not initialised: call init_platform() first")
 }
 
 /// Borrow the global AlarmKit handle if initialised.
@@ -140,9 +139,10 @@ fn on_wake() {
 
 mobile_sentinel::wake_hook!(on_wake);
 
-/// Bring the notifications before alarms in line with the alarms and the setting. An
-/// alarm that has gone is taken care of by [`forget_alarm`].
-pub fn refresh_reminders() {
+/// Bring what shows outside the app in line with the alarms and the settings: the
+/// notifications before alarms and the home-screen widget. An alarm that has gone is taken
+/// care of by [`forget_alarm`].
+pub fn refresh_outside_app() {
     let Some(kit) = alarm_kit_optional() else {
         return;
     };
@@ -198,13 +198,12 @@ fn widget_text(
     now_ms: i64,
 ) -> (String, String) {
     use chrono::{Datelike, TimeZone, Timelike};
-    let Some(at) = next.and_then(|(at, label)| {
+    let Some((at, label)) = next.and_then(|(at, label)| {
         let at = chrono::Local.timestamp_millis_opt(at).single();
         at.map(|at| (at, label))
     }) else {
         return ("--:--".to_owned(), text("widget.none"));
     };
-    let (at, label) = at;
     let title = crate::text::clock(at.hour() as u8, at.minute() as u8, twenty_four);
     let mut day = text(crate::text::FULL_DAY_KEYS[at.weekday().num_days_from_monday() as usize]);
     // A weekday alone is only clear for the coming week.
@@ -287,9 +286,8 @@ fn setup_platform(woken: bool) {
         // but the platform suppresses the on-screen heads-up banner when
         // the firing UI is already in the foreground (no redundant popup).
         firing_full_screen: true,
-        // Alarm-style buzz for vibration-enabled alarms: pause, long buzz,
-        // short gap, long buzz — looped by the firing sink while ringing.
-        vibration_pattern: vec![0, 500, 300, 500],
+        // Every alarm names its own; this is for the SDK's sake.
+        vibration_pattern: VIBRATION_PATTERNS[0].to_vec(),
         // The user's minimum alarm volume (Settings); updated live by
         // `set_min_volume` when it changes.
         min_volume_percent: settings.min_volume_percent,
@@ -394,13 +392,25 @@ fn sync_alarms(kit: &'static AlarmKit, woken: bool) {
         crate::persistence::save_alarms(&list);
         RING_END_NEWS.store(true, std::sync::atomic::Ordering::Relaxed);
     }
-    refresh_reminders();
+    refresh_outside_app();
+}
+
+/// Write `text` to a file in the phone's Downloads. Returns where it went.
+pub fn save_to_downloads(text: &str, name: &str, mime_type: &str) -> Result<String, String> {
+    let path = mobile_sentinel::app_files_dir().join(name);
+    std::fs::write(&path, text).map_err(|e| e.to_string())?;
+    let result =
+        mobile_sentinel::share::save_to_downloads(&path.to_string_lossy(), name, mime_type)
+            .map_err(|e| e.to_string());
+    let _ = std::fs::remove_file(&path);
+    result
 }
 
 /// The name to tell the user an alarm by: its label, else its time.
 fn display_name(alarm: &AlarmData) -> String {
     if alarm.label.is_empty() {
-        format!("{:02}:{:02}", alarm.time_hour, alarm.time_minute)
+        let twenty_four = crate::text::uses_24_hours(&crate::persistence::load_settings());
+        crate::text::clock(alarm.time_hour, alarm.time_minute, twenty_four)
     } else {
         alarm.label.clone()
     }
@@ -527,9 +537,7 @@ pub fn alarm_data_to_spec(alarm: &AlarmData) -> AlarmSpec {
         // alarm is saved or switched on, and at startup for ones that have none.
         let date = alarm.date.clone().unwrap_or_else(|| {
             let now = Local::now().naive_local();
-            crate::schedule::next_occurrence_date(alarm.time_hour, alarm.time_minute, now)
-                .format("%Y-%m-%d")
-                .to_string()
+            crate::schedule::next_occurrence(alarm.time_hour, alarm.time_minute, now)
         });
         ScheduleSpec::OneTime {
             date,
@@ -563,7 +571,7 @@ pub fn alarm_data_to_spec(alarm: &AlarmData) -> AlarmSpec {
         challenges: alarm
             .challenges
             .iter()
-            .map(|(challenge_type, _difficulty)| ChallengeSpec {
+            .map(|(challenge_type, _settings)| ChallengeSpec {
                 challenge_type: challenge_type.clone(),
                 difficulty: 0,
                 config: serde_json::json!({}),
@@ -588,9 +596,6 @@ pub fn alarm_data_to_spec(alarm: &AlarmData) -> AlarmSpec {
         },
     }
 }
-
-// ---------------------------------------------------------------------------
-// ---------------------------------------------------------------------------
 
 #[cfg(test)]
 mod tests {

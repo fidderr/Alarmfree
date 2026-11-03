@@ -114,19 +114,21 @@ fn sorted_for_list(
 pub fn Home() -> Element {
     let mut alarms = use_context::<Signal<Vec<AlarmData>>>();
     let translations = use_context::<Translations>();
-    let settings = use_context::<Signal<AppSettings>>();
+    let mut settings = use_context::<Signal<AppSettings>>();
     let mut toast = use_context::<Signal<Option<ToastMessage>>>();
     let nav = use_navigator();
 
     // The countdown and the "Today / Tomorrow" labels follow the clock, so
     // re-render on a timer. What the phone allows can change meanwhile too.
     let mut tick = use_signal(|| 0u32);
-    let mut problem = use_signal(crate::screens::reliability::first_problem);
+    let first_problem =
+        move || crate::screens::reliability::first_problem(&settings.peek().prefs.hidden_warnings);
+    let mut problem = use_signal(first_problem);
     use_future(move || async move {
         loop {
             crate::timer::sleep_ms(15_000).await;
             tick += 1;
-            problem.set(crate::screens::reliability::first_problem());
+            problem.set(first_problem());
         }
     });
     let _ = tick();
@@ -271,13 +273,32 @@ pub fn Home() -> Element {
                     let (name, _) = crate::screens::reliability::check_text(&translations, check);
                     let title = t(&translations, "reliability.banner").replace("{check}", &name);
                     let fix = t(&translations, "reliability.fix");
+                    let hide = t(&translations, "reliability.hide");
                     rsx! {
-                        button {
-                            class: "banner",
-                            onclick: move |_| { nav.push(Route::Reliability {}); },
-                            Icon { name: IconName::Warning, size: 18 }
-                            span { class: "banner-text", "{title}" }
-                            span { class: "banner-action", "{fix}" }
+                        div { class: "banner-row",
+                            button {
+                                class: "banner",
+                                onclick: move |_| { nav.push(Route::Reliability {}); },
+                                Icon { name: IconName::Warning, size: 18 }
+                                span { class: "banner-text", "{title}" }
+                                span { class: "banner-action", "{fix}" }
+                            }
+                            if crate::screens::reliability::can_hide(check) {
+                                button {
+                                    class: "icon-btn",
+                                    "aria-label": "{hide}",
+                                    onclick: move |_| {
+                                        settings
+                                            .write()
+                                            .prefs
+                                            .hidden_warnings
+                                            .push(crate::screens::reliability::check_name(check).to_owned());
+                                        crate::persistence::save_settings(&settings.peek());
+                                        problem.set(first_problem());
+                                    },
+                                    Icon { name: IconName::Xmark, size: 16 }
+                                }
+                            }
                         }
                     }
                 }

@@ -9,12 +9,14 @@ use crate::app::{t, Translations};
 pub fn TypingChallenge(
     passage: String,
     min_accuracy: f32,
-    on_complete: EventHandler<String>,
+    on_complete: EventHandler<()>,
 ) -> Element {
     let translations = use_context::<Translations>();
     let instruction = t(&translations, "challenge.instruction.typing");
     let placeholder = t(&translations, "challenge.typing.placeholder");
+    let incorrect_text = t(&translations, "challenge.incorrect");
     let mut typed_text = use_signal(String::new);
+    let mut wrong = use_signal(|| false);
 
     let typed_chars: Vec<char> = typed_text.read().chars().collect();
     let typed_len = typed_chars.len();
@@ -134,16 +136,16 @@ pub fn TypingChallenge(
                 value: "{typed_text}",
                 oninput: move |evt| {
                     let val = evt.value();
-                    typed_text.set(val.clone());
-
-                    // Done once the end of the passage is reached, or close
-                    // enough to it with enough right.
                     let typed = val.chars().count();
                     let total = passage_for_handler.chars().count();
                     let accurate = crate::models::typing_accuracy(&passage_for_handler, &val)
                         >= min_accuracy;
-                    if typed >= total || (typed + letters_to_spare >= total && accurate) {
-                        on_complete.call(val);
+                    typed_text.set(val);
+                    // All of it typed, with too much of it wrong.
+                    wrong.set(typed >= total && !accurate);
+                    // Done once close enough to the end, with enough right.
+                    if accurate && typed + letters_to_spare >= total {
+                        on_complete.call(());
                     }
                 },
             }
@@ -154,6 +156,10 @@ pub fn TypingChallenge(
                     "{accuracy_text}"
                 }
                 span { "{min_accuracy_text}" }
+            }
+
+            if wrong() {
+                p { class: "run-wrong", role: "status", "{incorrect_text}" }
             }
 
             // Progress

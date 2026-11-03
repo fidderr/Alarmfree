@@ -24,7 +24,7 @@ const MAX_WRONG_ATTEMPTS: usize = 3;
 pub fn MemoryGameChallenge(
     sequence: Vec<u8>,
     grid_size: u8,
-    on_complete: EventHandler<Vec<u8>>,
+    on_complete: EventHandler<()>,
 ) -> Element {
     let translations = use_context::<Translations>();
     let instruction_watch = t(&translations, "challenge.instruction.memory_watch");
@@ -51,15 +51,15 @@ pub fn MemoryGameChallenge(
             display_index.set(0);
 
             // Wait briefly before starting (gives prior animation time to settle)
-            sleep(300).await;
+            crate::timer::sleep_ms(300).await;
 
             for i in 0..seq.len() {
                 display_index.set(i);
-                sleep(1000).await;
+                crate::timer::sleep_ms(1000).await;
             }
             // Brief pause after showing all cells
             display_index.set(seq.len()); // past end = nothing highlighted
-            sleep(500).await;
+            crate::timer::sleep_ms(500).await;
             phase.set(MemoryPhase::Input);
         }
     });
@@ -157,8 +157,7 @@ pub fn MemoryGameChallenge(
 
                                         // Sequence complete?
                                         if user_sequence.read().len() == sequence_for_click.len() {
-                                            let result = user_sequence.read().clone();
-                                            on_complete.call(result);
+                                            on_complete.call(());
                                         }
                                     } else {
                                         // Wrong cell — add to wrong list
@@ -189,9 +188,4 @@ pub fn MemoryGameChallenge(
             }
         }
     }
-}
-
-/// Async sleep helper using oneshot channel
-async fn sleep(ms: u64) {
-    crate::timer::sleep(std::time::Duration::from_millis(ms)).await;
 }

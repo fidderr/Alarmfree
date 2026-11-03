@@ -140,20 +140,37 @@ pub fn all_paused_until(alarms: &[AlarmData], now_ms: i64) -> Option<i64> {
         .min()
 }
 
-/// The alarms to put in a backup file: what the user has made, without what rings on
-/// its own schedule right now.
+/// The alarms to put in a backup file: what the user has made and keeps, so no wake-up
+/// checks, test alarms or naps.
 pub fn export_json(alarms: &[AlarmData]) -> String {
-    let listed: Vec<&AlarmData> = alarms.iter().filter(|a| !a.hidden).collect();
-    serde_json::to_string_pretty(&listed).unwrap_or_else(|_| "[]".to_owned())
+    let kept: Vec<&AlarmData> = alarms
+        .iter()
+        .filter(|a| !a.hidden && !a.delete_after_ring)
+        .collect();
+    serde_json::to_string_pretty(&kept).unwrap_or_else(|_| "[]".to_owned())
 }
 
 /// Alarms from a backup file, each with a fresh id so it never collides with an alarm
-/// already there. Sounds that are not on this phone fall back to the first bundled one.
-pub fn import_json(json: &str, known_sound: impl Fn(&str) -> bool) -> Option<Vec<AlarmData>> {
+/// already there. A skip or a pause was about then, not now, and an alarm whose one date
+/// has passed comes back switched off. Sounds that are not on this phone fall back to the
+/// first bundled one.
+pub fn import_json(
+    json: &str,
+    known_sound: impl Fn(&str) -> bool,
+    now: NaiveDateTime,
+) -> Option<Vec<AlarmData>> {
     let mut alarms: Vec<AlarmData> = serde_json::from_str(json).ok()?;
+    alarms.retain(|a| !a.delete_after_ring);
     for alarm in &mut alarms {
         alarm.id = uuid::Uuid::new_v4().to_string();
         alarm.hidden = false;
+        alarm.skip_until_ms = None;
+        alarm.pause_until_ms = None;
+        if crate::schedule::is_one_time(alarm)
+            && !crate::schedule::one_time_moment(alarm).is_some_and(|at| at > now)
+        {
+            alarm.enabled = false;
+        }
         if !known_sound(&alarm.sound) {
             alarm.sound = factory_alarm().sound;
         }
@@ -225,14 +242,34 @@ mod tests {
         alarm.id = "a".into();
         alarm.label = "Work".into();
         alarm.sound = "gone.mp3".into();
+        alarm.pause_until_ms = Some(5_000);
         let mut hidden = factory_alarm();
         hidden.hidden = true;
-        let json = export_json(&[alarm, hidden]);
-        let back = import_json(&json, |sound| sound != "gone.mp3").unwrap();
-        assert_eq!(back.len(), 1, "a wake-up check is not part of a backup");
+        let nap = quick_alarm(at(7, 0, 0), 5, "Nap".into(), None);
+        let json = export_json(&[alarm, hidden, nap]);
+        let back = import_json(&json, |sound| sound != "gone.mp3", at(7, 0, 0)).unwrap();
+        assert_eq!(
+            back.len(),
+            1,
+            "a wake-up check or a nap is not part of a backup"
+        );
         assert_eq!(back[0].label, "Work");
         assert_ne!(back[0].id, "a");
         assert_ne!(back[0].sound, "gone.mp3");
-        assert!(import_json("not json", |_| true).is_none());
+        assert_eq!(back[0].pause_until_ms, None);
+        assert!(back[0].enabled);
+        assert!(import_json("not json", |_| true, at(7, 0, 0)).is_none());
+    }
+
+    #[test]
+    fn an_alarm_for_a_date_that_has_passed_comes_back_switched_off() {
+        let mut once = factory_alarm();
+        once.days = [false; 7];
+        once.date = Some("2026-11-03".into());
+        let json = export_json(&[once]);
+        let earlier = import_json(&json, |_| true, at(6, 0, 0)).unwrap();
+        assert!(earlier[0].enabled, "still ahead");
+        let later = import_json(&json, |_| true, at(8, 0, 0)).unwrap();
+        assert!(!later[0].enabled);
     }
 }

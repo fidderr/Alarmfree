@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::models::alarm::AlarmId;
 use crate::models::challenge::{ChallengeType, Difficulty};
+use crate::models::settings::WeekStart;
 
 /// A single challenge solve recorded during an alarm firing.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -100,8 +101,8 @@ impl AlarmEvent {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum HistoryFilter {
-    ThisWeek,
-    LastWeek,
+    ThisWeek(WeekStart),
+    LastWeek(WeekStart),
     ThisMonth,
     LastMonth,
     ThisYear,

@@ -79,8 +79,7 @@ fn NavWatcher() -> Element {
             nav.replace(Route::FirstRun {});
         }
     });
-    let current = use_signal(|| route.clone());
-    let mut current = current;
+    let mut current = use_signal(|| route.clone());
     if *current.peek() != route {
         current.set(route);
     }
@@ -222,7 +221,6 @@ pub fn App() -> Element {
 
     use_hook(|| {
         crate::feedback::set_enabled(settings.peek().prefs.touch_feedback);
-        // What the history screen promises.
         crate::history_persistence::delete_history(Some(HISTORY_KEEP_DAYS));
     });
 
@@ -290,6 +288,12 @@ pub fn App() -> Element {
         let mut watch = crate::firing_state::FiringWatch::default();
         loop {
             crate::timer::sleep_ms(crate::firing_state::POLL_MS).await;
+            if crate::persistence::take_save_failure() {
+                toast_signal.set(Some(crate::components::ToastMessage::error(t(
+                    &translations,
+                    "db.save_failed",
+                ))));
+            }
             if crate::platform::take_ring_end_news() {
                 let mut list = alarms;
                 list.set(crate::persistence::load_alarms());
@@ -308,12 +312,6 @@ pub fn App() -> Element {
             let current = crate::firing_state::peek_firing_alarm();
             if current != *firing_id.peek() {
                 firing_id.set(current);
-            }
-            if crate::persistence::take_save_failure() {
-                toast_signal.set(Some(crate::components::ToastMessage::error(t(
-                    &translations,
-                    "db.save_failed",
-                ))));
             }
         }
     });
@@ -402,30 +400,30 @@ pub fn App() -> Element {
     let safe_style = safe_area.read().css_vars();
 
     rsx! {
-           style { "{STYLESHEET}" }
-           div { class: "app-root {theme_class} {accent_class} {motion_class}", style: "{safe_style}",
-               if let Some(alarm_id) = firing_id_val {
-    // Show alarm firing screen directly, bypassing router
-                   crate::screens::AlarmFiring { key: "{alarm_id}", id: alarm_id }
-               } else {
-                   Router::<Route> {}
-               }
+        style { "{STYLESHEET}" }
+        div { class: "app-root {theme_class} {accent_class} {motion_class}", style: "{safe_style}",
+            if let Some(alarm_id) = firing_id_val {
+                // Show alarm firing screen directly, bypassing router
+                crate::screens::AlarmFiring { key: "{alarm_id}", id: alarm_id }
+            } else {
+                Router::<Route> {}
+            }
 
-    // Toast notification overlay
-               if let Some(msg) = toast_signal.read().clone() {
-                   crate::components::Toast {
-                       key: "{msg.message}",
-                       msg: msg,
-                       on_dismiss: move |_| { toast_signal.set(None); },
-                       on_undo: move |before: Vec<AlarmData>| {
-                           alarms.set(before);
-                           crate::persistence::save_alarms(&alarms.peek());
-                           toast_signal.set(None);
-                       },
-                   }
-               }
-           }
-       }
+            // Toast notification overlay
+            if let Some(msg) = toast_signal.read().clone() {
+                crate::components::Toast {
+                    key: "{msg.message}",
+                    msg: msg,
+                    on_dismiss: move |_| { toast_signal.set(None); },
+                    on_undo: move |before: Vec<AlarmData>| {
+                        alarms.set(before);
+                        crate::persistence::save_alarms(&alarms.peek());
+                        toast_signal.set(None);
+                    },
+                }
+            }
+        }
+    }
 }
 
 /// What to tell the user about alarms that ended without them, since the last time

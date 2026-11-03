@@ -1,9 +1,7 @@
 //! Schema versioning and migrations.
 //! Uses SQLite's `PRAGMA user_version` to track which schema version is on disk.
-//! On first launch, creates all tables at the current version.
-//!
-//! No legacy data is kept — this is a single-user dev app. When the schema
-//! changes incompatibly, we drop the affected tables and recreate.
+//! On first launch, creates all tables at the current version. An existing database
+//! is brought up to date and keeps what is in it.
 //!
 //! To add a future migration:
 //! 1. Increment `CURRENT_VERSION`
@@ -15,7 +13,7 @@ use rusqlite::Connection;
 use crate::db::schema;
 
 /// Current schema version.
-const CURRENT_VERSION: u32 = 4;
+const CURRENT_VERSION: u32 = 5;
 
 /// Run all pending migrations to bring the database up to `CURRENT_VERSION`.
 /// Safe to call on every app launch — it's a no-op if already at the latest version.
@@ -41,6 +39,9 @@ pub fn run_migrations(conn: &Connection) -> Result<(), rusqlite::Error> {
         if version < 4 {
             migrate_v3_to_v4(&tx)?;
         }
+        if version < 5 {
+            migrate_v4_to_v5(&tx)?;
+        }
     }
     set_user_version(&tx, CURRENT_VERSION)?;
     tx.commit()
@@ -65,6 +66,14 @@ fn migrate_v2_to_v3(conn: &Connection) -> Result<(), rusqlite::Error> {
 /// v3 → v4: everything the settings got since, as one JSON column.
 fn migrate_v3_to_v4(conn: &Connection) -> Result<(), rusqlite::Error> {
     conn.execute_batch("ALTER TABLE settings ADD COLUMN prefs TEXT NOT NULL DEFAULT '{}'")
+}
+
+/// v4 → v5: what a new alarm starts from moved to the prefs long ago.
+fn migrate_v4_to_v5(conn: &Connection) -> Result<(), rusqlite::Error> {
+    conn.execute_batch(
+        "ALTER TABLE settings DROP COLUMN default_snooze_count;
+         ALTER TABLE settings DROP COLUMN default_snooze_interval_minutes;",
+    )
 }
 
 fn get_user_version(conn: &Connection) -> Result<u32, rusqlite::Error> {
@@ -132,12 +141,10 @@ mod tests {
         run_migrations(&conn).unwrap();
 
         assert_eq!(min_volume(&conn), 50);
-        let snooze: u32 = conn
-            .query_row("SELECT default_snooze_count FROM settings", [], |r| {
-                r.get(0)
-            })
+        let theme: String = conn
+            .query_row("SELECT theme FROM settings", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(snooze, 7, "existing settings survive");
+        assert_eq!(theme, "\"Light\"", "existing settings survive");
         let (outcome, seen): (String, u32) = conn
             .query_row("SELECT outcome, seen FROM alarm_events", [], |r| {
                 Ok((r.get(0)?, r.get(1)?))

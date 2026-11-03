@@ -1,69 +1,40 @@
 use dioxus::prelude::*;
 
+use super::ProgressRing;
 use crate::app::{t, Translations};
 
-/// Shake challenge: shake the device to count shakes.
-/// Uses the accelerometer via mobile-sentinel's sensor API.
-/// Auto-completes when target reached.
+/// Shake the phone a number of times.
 #[component]
 pub fn ShakeChallenge(required: u32, on_complete: EventHandler<()>) -> Element {
     let translations = use_context::<Translations>();
     let instruction = t(&translations, "challenge.shake.instruction");
     let unit = t(&translations, "challenge.shake.unit");
-    let mut current_count = use_signal(|| 0u32);
-    let mut started = use_signal(|| false);
+    let mut count = use_signal(|| 0u32);
 
-    // Start accelerometer on first render
-    if !*started.read() {
-        started.set(true);
+    // An effect, so after the previous challenge is gone: one that also counts shakes
+    // switches the sensor off when it goes.
+    use_effect(|| {
         mobile_sentinel::sensors::reset_shake_count();
         mobile_sentinel::sensors::start_accelerometer();
-    }
+    });
+    use_drop(mobile_sentinel::sensors::stop_accelerometer);
 
-    // Poll shake count from mobile-sentinel every 200ms
-    let _poll = use_future(move || async move {
+    use_future(move || async move {
         loop {
-            crate::timer::sleep(std::time::Duration::from_millis(200)).await;
-
-            let count = mobile_sentinel::sensors::shake_count() as u32;
-            current_count.set(count);
-
-            if count >= required {
-                mobile_sentinel::sensors::stop_accelerometer();
+            crate::timer::sleep_ms(200).await;
+            let now = mobile_sentinel::sensors::shake_count() as u32;
+            count.set(now);
+            if now >= required {
                 on_complete.call(());
                 break;
             }
         }
     });
 
-    // Stop accelerometer on unmount
-    use_drop(|| {
-        mobile_sentinel::sensors::stop_accelerometer();
-    });
-
-    let count = *current_count.read();
-    let progress = if required > 0 {
-        ((count as f64 / required as f64) * 360.0) as u32
-    } else {
-        360
-    };
-    let rotation = progress.min(360);
-
     rsx! {
         div { class: "challenge-wrapper",
             p { class: "challenge-instruction", "{instruction}" }
-
-            div { class: "progress-ring-container",
-                div {
-                    class: "progress-ring",
-                    div {
-                        class: "progress-ring-fill",
-                        style: "transform: rotate({rotation}deg);",
-                    }
-                    div { class: "progress-ring-text", "{count} / {required}" }
-                }
-                p { class: "progress-ring-label", "{unit}" }
-            }
+            ProgressRing { count: count(), required, unit }
         }
     }
 }

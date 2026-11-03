@@ -32,6 +32,6 @@ direct_boot = true
 # policy-sensitive on Google Play and AlarmFree does not need them.
 
 # Default screen orientation for the main activity (injected at build time by
-# mobile-sentinel). Most screens are locked to portrait; only Settings opts out
-# at runtime via display::set_requested_orientation(Unspecified).
+# mobile-sentinel). From 600dp wide on, Android 16 goes its own way, and the layout is
+# made for that.
 screen_orientation = "portrait"

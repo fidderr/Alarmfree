@@ -7,7 +7,7 @@ use mobile_sentinel::health::{self, Check, HealthReport};
 
 use crate::app::{t, AlarmData, Route, Translations};
 use crate::back::use_back_handler;
-use crate::components::{Icon, IconName, ScreenHeader, ToastMessage};
+use crate::components::{Icon, IconName, Row, ScreenHeader, ToastMessage};
 use crate::models::AppSettings;
 
 /// A test alarm rings about this long from now.
@@ -31,14 +31,27 @@ fn report() -> HealthReport {
     health::report(crate::platform::FOREGROUND_CHANNEL_ID)
 }
 
-/// The most serious thing standing in an alarm's way, for the banner on Home.
-pub fn first_problem() -> Option<Check> {
-    report().problems().first().copied()
+/// The most serious thing standing in an alarm's way, for the banner on Home, leaving out
+/// what the user hid there.
+pub fn first_problem(hidden: &[String]) -> Option<Check> {
+    report()
+        .problems()
+        .into_iter()
+        .find(|check| !can_hide(*check) || !hidden.iter().any(|name| name == check_name(*check)))
 }
 
-/// What a check is called, and what it means when it is not fine.
-pub fn check_text(translations: &Translations, check: Check) -> (String, String) {
-    let name = match check {
+/// Whether the user may stop seeing a warning on Home. Not the ones that keep an alarm from
+/// ringing or from being seen.
+pub fn can_hide(check: Check) -> bool {
+    matches!(
+        check,
+        Check::Overlay | Check::BatteryUnrestricted | Check::KeptWhenUnused | Check::BootSignal
+    )
+}
+
+/// What a check goes by, in the translations and the settings.
+pub fn check_name(check: Check) -> &'static str {
+    match check {
         Check::ExactAlarms => "exact_alarms",
         Check::Notifications => "notifications",
         Check::FullScreen => "full_screen",
@@ -49,7 +62,12 @@ pub fn check_text(translations: &Translations, check: Check) -> (String, String)
         Check::ChannelImportance => "channel",
         Check::NotTotalSilence => "silence",
         Check::BootSignal => "boot_signal",
-    };
+    }
+}
+
+/// What a check is called, and what it means when it is not fine.
+pub fn check_text(translations: &Translations, check: Check) -> (String, String) {
+    let name = check_name(check);
     (
         t(translations, &format!("reliability.{name}")),
         t(translations, &format!("reliability.{name}_note")),
@@ -137,6 +155,8 @@ fn ReliabilityScreen(first_run: bool) -> Element {
                 .replace("{seconds}", &format!("{:.1}", took_ms as f64 / 1000.0))
         })
         .unwrap_or_default();
+    let has_ring_record =
+        crate::platform::alarm_kit_optional().is_some_and(|kit| !kit.timing_log().is_empty());
 
     rsx! {
         div { class: "screen",
@@ -206,6 +226,36 @@ fn ReliabilityScreen(first_run: bool) -> Element {
                                     }
                                 }
                             }
+                        }
+                    }
+                }
+                ul { class: "list",
+                    Row {
+                        title: t(&translations, "reliability.app_settings"),
+                        on_click: move |_| mobile_sentinel::permissions::open_app_settings(),
+                    }
+                    if has_ring_record {
+                        Row {
+                            title: t(&translations, "reliability.save_record"),
+                            on_click: move |_| {
+                                let record = crate::platform::alarm_kit_optional()
+                                    .map(|kit| kit.timing_log())
+                                    .unwrap_or_default();
+                                let saved = crate::platform::save_to_downloads(
+                                    &record,
+                                    "alarmfree-rings.txt",
+                                    "text/plain",
+                                );
+                                toast.set(Some(match saved {
+                                    Ok(place) => ToastMessage::info(
+                                        t(&translations, "settings.backup_saved").replace("{place}", &place),
+                                    ),
+                                    Err(e) => {
+                                        log::warn!("[AlarmFree] The ring record was not saved: {e}");
+                                        ToastMessage::error(t(&translations, "settings.backup_failed"))
+                                    }
+                                }));
+                            },
                         }
                     }
                 }

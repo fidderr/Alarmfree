@@ -6,7 +6,7 @@ use dioxus::prelude::*;
 use super::{local_date, HomeSheet, HomeState};
 use crate::alarm_ops;
 use crate::app::{t, AlarmData, Route, Translations};
-use crate::components::{Sheet, SheetDone, SheetItem};
+use crate::components::{Sheet, SheetDone, SheetItem, ToastMessage};
 use crate::models::{AppSettings, SortMode};
 use crate::schedule;
 
@@ -127,7 +127,9 @@ pub(super) fn PauseDateSheet(only: Option<String>) -> Element {
     } = state;
     let now = chrono::Local::now();
     let now_ms = now.timestamp_millis();
-    let min = now.date_naive().format("%Y-%m-%d").to_string();
+    let min = (now.date_naive() + Duration::days(1))
+        .format("%Y-%m-%d")
+        .to_string();
     rsx! {
         Sheet {
             title: t(&translations, "home.pause_date"),
@@ -173,6 +175,7 @@ pub(super) fn AlarmMenuSheet(id: String, next: Option<i64>) -> Element {
     let state = use_context::<HomeState>();
     let HomeState {
         alarms,
+        mut toast,
         mut sheet,
         translations,
         ..
@@ -229,6 +232,10 @@ pub(super) fn AlarmMenuSheet(id: String, next: Option<i64>) -> Element {
                 label: t(&translations, "action.duplicate"),
                 on_click: move |_| {
                     sheet.set(None);
+                    if alarms.peek().len() >= alarm_ops::MAX_ALARMS {
+                        toast.set(Some(ToastMessage::error(t(&translations, "alarm.limit_reached"))));
+                        return;
+                    }
                     nav.push(Route::AlarmConfig { id: format!("copy-{id_copy}") });
                 },
             }

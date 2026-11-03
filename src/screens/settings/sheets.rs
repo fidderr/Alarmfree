@@ -276,40 +276,6 @@ pub(super) fn BackupSheet() -> Element {
 }
 
 #[component]
-pub(super) fn DeleteHistorySheet() -> Element {
-    let SettingsState { mut sheet, .. } = use_context();
-    let translations = use_context::<Translations>();
-    rsx! {
-        Sheet {
-            title: t(&translations, "history.delete_history"),
-            on_close: move |_| sheet.set(None),
-            SheetItem {
-                label: t(&translations, "history.delete_30"),
-                on_click: move |_| {
-                    crate::history_persistence::delete_history(Some(30));
-                    sheet.set(None);
-                },
-            }
-            SheetItem {
-                label: t(&translations, "history.delete_90"),
-                on_click: move |_| {
-                    crate::history_persistence::delete_history(Some(90));
-                    sheet.set(None);
-                },
-            }
-            SheetItem {
-                label: t(&translations, "history.delete_all"),
-                danger: true,
-                on_click: move |_| {
-                    crate::history_persistence::delete_history(None);
-                    sheet.set(None);
-                },
-            }
-        }
-    }
-}
-
-#[component]
 pub(super) fn AboutSheet() -> Element {
     let SettingsState { mut sheet, .. } = use_context();
     let translations = use_context::<Translations>();
@@ -326,28 +292,27 @@ pub(super) fn AboutSheet() -> Element {
 
 /// Write the alarms to a file in Downloads. Returns where it went.
 fn save_backup(alarms: &[AlarmData]) -> Result<String, String> {
-    let json = alarm_ops::export_json(alarms);
-    let path = mobile_sentinel::app_files_dir().join("alarmfree-backup.json");
-    std::fs::write(&path, json).map_err(|e| e.to_string())?;
     let name = format!("alarmfree-{}.json", chrono::Local::now().format("%Y-%m-%d"));
-    let result = mobile_sentinel::share::save_to_downloads(
-        &path.to_string_lossy(),
-        &name,
-        "application/json",
-    )
-    .map_err(|e| e.to_string());
-    let _ = std::fs::remove_file(&path);
-    result
+    crate::platform::save_to_downloads(&alarm_ops::export_json(alarms), &name, "application/json")
 }
 
 /// Let the user pick a backup and read the alarms from it. Blocks, so off the UI
 /// thread. An empty error is the user changing their mind.
 fn read_backup() -> Result<Vec<AlarmData>, String> {
-    let picked =
-        mobile_sentinel::media_picker::pick_file(&["application/json", "text/plain", "*/*"])
-            .map_err(|_| String::new())?;
-    let json = std::fs::read_to_string(&picked).map_err(|e| e.to_string());
-    let _ = std::fs::remove_file(&picked);
-    alarm_ops::import_json(&json?, crate::custom_sounds::sound_exists)
-        .ok_or_else(|| "not a backup".to_owned())
+    let picked = mobile_sentinel::media_picker::pick_files(
+        &["application/json", "text/plain", "application/octet-stream"],
+        false,
+    )
+    .map_err(|_| String::new())?;
+    let Some(picked) = picked.into_iter().next() else {
+        return Err(String::new());
+    };
+    let json = std::fs::read_to_string(&picked.path).map_err(|e| e.to_string());
+    let _ = std::fs::remove_file(&picked.path);
+    alarm_ops::import_json(
+        &json?,
+        crate::custom_sounds::sound_exists,
+        chrono::Local::now().naive_local(),
+    )
+    .ok_or_else(|| "not a backup".to_owned())
 }

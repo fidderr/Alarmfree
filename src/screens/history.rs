@@ -2,7 +2,7 @@ use chrono::{Datelike, NaiveDate};
 use dioxus::prelude::*;
 
 use crate::app::{t, Route, Translations};
-use crate::components::{BottomNav, Icon, IconName, Sheet, SheetItem};
+use crate::components::{BottomNav, Icon, IconName, Sheet, SheetDone, SheetItem, ToastMessage};
 use crate::models::setup::difficulty_name;
 use crate::models::{
     AggregateMetrics, AlarmEvent, AlarmOutcome, AppSettings, ChallengeType, HistoryFilter,
@@ -23,21 +23,20 @@ const PERIODS: [&str; 7] = [
     "filter.custom_days",
 ];
 
-fn period_filter(key: &str, custom_days: u16) -> HistoryFilter {
+fn period_filter(key: &str, custom_days: u16, week_start: WeekStart) -> HistoryFilter {
     match key {
-        "filter.last_week" => HistoryFilter::LastWeek,
+        "filter.last_week" => HistoryFilter::LastWeek(week_start),
         "filter.this_month" => HistoryFilter::ThisMonth,
         "filter.last_month" => HistoryFilter::LastMonth,
         "filter.this_year" => HistoryFilter::ThisYear,
         "filter.last_year" => HistoryFilter::LastYear,
         "filter.custom_days" => HistoryFilter::LastDays(u32::from(custom_days)),
-        _ => HistoryFilter::ThisWeek,
+        _ => HistoryFilter::ThisWeek(week_start),
     }
 }
 
-/// How many days in a row, up to and including today or yesterday, every alarm was dealt
-/// with: at least one solved, nothing missed or left ringing. A day without alarms is no
-/// break, and does not count either.
+/// How many days in a row every alarm was dealt with: at least one solved, nothing missed
+/// or left ringing. A day without alarms is no break, and does not count either.
 fn streak(events: &[AlarmEvent], today: NaiveDate) -> u32 {
     use std::collections::BTreeMap;
     let mut days: BTreeMap<NaiveDate, bool> = BTreeMap::new();
@@ -82,11 +81,11 @@ fn chart(
     today: NaiveDate,
 ) -> Option<Vec<Bar>> {
     let mut groups: Vec<(String, Vec<u64>, bool)> = match filter {
-        HistoryFilter::ThisWeek | HistoryFilter::LastWeek => week_start
+        HistoryFilter::ThisWeek(_) | HistoryFilter::LastWeek(_) => week_start
             .day_order()
             .iter()
             .map(|day| {
-                let is_today = *filter == HistoryFilter::ThisWeek
+                let is_today = matches!(filter, HistoryFilter::ThisWeek(_))
                     && today.weekday().num_days_from_monday() as usize == *day;
                 (
                     crate::text::day_letter(translations, *day),
@@ -118,16 +117,14 @@ fn chart(
         HistoryFilter::LastDays(_) => return None,
     };
 
-    for event in events
-        .iter()
-        .filter(|e| matches!(e.outcome, AlarmOutcome::Solved | AlarmOutcome::Backup))
-    {
+    // Only what was timed, as in the figures next to it.
+    for event in events.iter().filter(|e| e.outcome == AlarmOutcome::Solved) {
         let day = event
             .fire_timestamp
             .with_timezone(&chrono::Local)
             .date_naive();
         let group = match filter {
-            HistoryFilter::ThisWeek | HistoryFilter::LastWeek => {
+            HistoryFilter::ThisWeek(_) | HistoryFilter::LastWeek(_) => {
                 let monday_based = day.weekday().num_days_from_monday() as usize;
                 week_start
                     .day_order()
@@ -203,16 +200,22 @@ pub fn History() -> Element {
     let mut show_all = use_signal(|| false);
     let mut open_event: Signal<Option<String>> = use_signal(|| None);
     let mut refresh = use_signal(|| 0u32);
-    let _ = refresh();
 
-    let filter = period_filter(period(), custom_days());
-    let events = crate::history_persistence::query_history(&filter);
-    let metrics = crate::history_persistence::aggregate_history(&filter);
+    // Not read again for opening a row.
+    let loaded = use_memo(move || {
+        let _ = refresh();
+        let filter = period_filter(period(), custom_days(), settings.read().prefs.week_start);
+        let events = crate::history_persistence::query_history(&filter);
+        let metrics = crate::history_persistence::aggregate_history(&filter);
+        let lookback = HistoryFilter::LastDays(STREAK_LOOKBACK_DAYS);
+        let streak_days = streak(
+            &crate::history_persistence::query_history(&lookback),
+            chrono::Local::now().date_naive(),
+        );
+        (filter, events, metrics, streak_days)
+    });
+    let (filter, events, metrics, streak_days) = loaded();
     let today = chrono::Local::now().date_naive();
-    let streak_days = streak(
-        &crate::history_persistence::query_history(&HistoryFilter::LastDays(STREAK_LOOKBACK_DAYS)),
-        today,
-    );
     let week_start = settings.read().prefs.week_start;
     let bars = chart(&translations, &filter, &events, week_start, today);
     let twenty_four = crate::text::uses_24_hours(&settings.read());
@@ -305,34 +308,72 @@ pub fn History() -> Element {
             BottomNav { current: Route::History {} }
 
             if deleting() {
-                Sheet {
-                    title: t(&translations, "history.delete_history"),
+                DeleteHistorySheet {
                     on_close: move |_| deleting.set(false),
-                    SheetItem {
-                        label: t(&translations, "history.delete_30"),
-                        on_click: move |_| {
-                            crate::history_persistence::delete_history(Some(30));
-                            refresh += 1;
-                            deleting.set(false);
-                        },
-                    }
-                    SheetItem {
-                        label: t(&translations, "history.delete_90"),
-                        on_click: move |_| {
-                            crate::history_persistence::delete_history(Some(90));
-                            refresh += 1;
-                            deleting.set(false);
-                        },
-                    }
-                    SheetItem {
-                        label: t(&translations, "history.delete_all"),
-                        danger: true,
-                        on_click: move |_| {
-                            crate::history_persistence::delete_history(None);
-                            refresh += 1;
-                            deleting.set(false);
-                        },
-                    }
+                    on_deleted: move |_| refresh += 1,
+                }
+            }
+        }
+    }
+}
+
+/// How much of the history to delete. All of it is asked about once more: nothing brings
+/// it back.
+#[component]
+pub fn DeleteHistorySheet(
+    on_close: EventHandler<()>,
+    #[props(default)] on_deleted: Option<EventHandler<()>>,
+) -> Element {
+    let translations = use_context::<Translations>();
+    let mut toast = use_context::<Signal<Option<ToastMessage>>>();
+    let mut asking = use_signal(|| false);
+    let mut delete = move |older_than_days: Option<u32>| {
+        crate::history_persistence::delete_history(older_than_days);
+        toast.set(Some(ToastMessage::info(t(
+            &translations,
+            "history.deleted",
+        ))));
+        if let Some(on_deleted) = on_deleted {
+            on_deleted.call(());
+        }
+        on_close.call(());
+    };
+    rsx! {
+        Sheet {
+            title: if asking() {
+                t(&translations, "history.delete_all_title")
+            } else {
+                t(&translations, "history.delete_history")
+            },
+            note: if asking() {
+                t(&translations, "history.delete_all_note")
+            } else {
+                String::new()
+            },
+            on_close,
+            if asking() {
+                SheetItem {
+                    label: t(&translations, "action.delete"),
+                    danger: true,
+                    on_click: move |_| delete(None),
+                }
+                SheetDone {
+                    label: t(&translations, "action.cancel"),
+                    on_click: move |_| on_close.call(()),
+                }
+            } else {
+                SheetItem {
+                    label: t(&translations, "history.delete_30"),
+                    on_click: move |_| delete(Some(30)),
+                }
+                SheetItem {
+                    label: t(&translations, "history.delete_90"),
+                    on_click: move |_| delete(Some(90)),
+                }
+                SheetItem {
+                    label: t(&translations, "history.delete_all"),
+                    danger: true,
+                    on_click: move |_| asking.set(true),
                 }
             }
         }

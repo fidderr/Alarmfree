@@ -17,7 +17,6 @@ pub enum IconName {
     Pause,
     Sort,
     Warning,
-    Play,
     Pencil,
     Skip,
 }
@@ -42,7 +41,6 @@ pub fn Icon(name: IconName, #[props(default = 16)] size: u32) -> Element {
         IconName::Pause => "M9 5v14M15 5v14",
         IconName::Sort => "M4 7h16M7 12h10M10 17h4",
         IconName::Warning => "M12 9v4M12 17h.01M10.3 3.9 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z",
-        IconName::Play => "M8 5v14l11-7z",
     };
     // The dots only show with a wider line.
     let weight = if name == IconName::EllipsisVertical {

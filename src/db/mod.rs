@@ -206,19 +206,16 @@ impl Database {
     pub fn load_settings(&self) -> Result<Option<AppSettings>, rusqlite::Error> {
         let conn = self.conn.lock().unwrap_or_else(|p| p.into_inner());
         let result = conn.query_row(
-            "SELECT theme, locale, default_snooze_count, default_snooze_interval_minutes, \
-             min_volume_percent, prefs FROM settings WHERE id = 1",
+            "SELECT theme, locale, min_volume_percent, prefs FROM settings WHERE id = 1",
             [],
             |row| {
                 let theme_json: String = row.get(0)?;
                 let locale_json: String = row.get(1)?;
-                let prefs_json: String = row.get(5)?;
+                let prefs_json: String = row.get(3)?;
                 Ok(AppSettings {
                     theme: serde_json::from_str(&theme_json).unwrap_or_default(),
                     locale: serde_json::from_str(&locale_json).unwrap_or_default(),
-                    default_snooze_count: row.get(2)?,
-                    default_snooze_interval_minutes: row.get(3)?,
-                    min_volume_percent: row.get(4)?,
+                    min_volume_percent: row.get(2)?,
                     prefs: serde_json::from_str(&prefs_json).unwrap_or_default(),
                 })
             },
@@ -240,14 +237,11 @@ impl Database {
         let prefs_json = serde_json::to_string(&settings.prefs)
             .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?;
         conn.execute(
-            "INSERT OR REPLACE INTO settings (id, theme, locale, default_snooze_count, \
-             default_snooze_interval_minutes, min_volume_percent, prefs) \
-             VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6)",
+            "INSERT OR REPLACE INTO settings (id, theme, locale, min_volume_percent, prefs) \
+             VALUES (1, ?1, ?2, ?3, ?4)",
             params![
                 theme_json,
                 locale_json,
-                settings.default_snooze_count,
-                settings.default_snooze_interval_minutes,
                 settings.min_volume_percent,
                 prefs_json,
             ],
@@ -319,14 +313,14 @@ fn filter_to_date_range(filter: &HistoryFilter) -> (DateTime<Utc>, DateTime<Utc>
             .map_or(now_utc, |dt| dt.with_timezone(&Utc))
     };
     match filter {
-        HistoryFilter::ThisWeek => {
-            let weekday_num = now.weekday().num_days_from_monday();
-            let start = (now - chrono::Duration::days(weekday_num as i64)).date_naive();
+        HistoryFilter::ThisWeek(week_start) => {
+            let days_in = week_start.days_into_week(now.weekday());
+            let start = (now - chrono::Duration::days(i64::from(days_in))).date_naive();
             (safe_midnight(start), now_utc)
         }
-        HistoryFilter::LastWeek => {
-            let weekday_num = now.weekday().num_days_from_monday();
-            let this_week_start = (now - chrono::Duration::days(weekday_num as i64)).date_naive();
+        HistoryFilter::LastWeek(week_start) => {
+            let days_in = week_start.days_into_week(now.weekday());
+            let this_week_start = (now - chrono::Duration::days(i64::from(days_in))).date_naive();
             let this_week_start = safe_midnight(this_week_start);
             let last_week_start = this_week_start - chrono::Duration::days(7);
             (last_week_start, this_week_start)

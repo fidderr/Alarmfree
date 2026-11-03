@@ -7,6 +7,7 @@ use super::EditorState;
 use crate::app::{t, AlarmData, Translations};
 use crate::components::time_picker::TimePicker;
 use crate::components::{Chips, GroupTitle, Sheet, SheetDone, SheetItem, Stepper};
+use crate::models::AppSettings;
 
 const LIMIT_MINUTES: [u32; 4] = [30, 60, 90, 120];
 const CHECK_MINUTES: [u8; 4] = [0, 3, 5, 10];
@@ -25,6 +26,18 @@ fn parse_typed_time(text: &str) -> Option<(u8, u8)> {
     (hour < 24 && minute < 60).then_some((hour, minute))
 }
 
+/// The next length of a snooze: by the minute up to ten, by five after that, so an hour
+/// is not sixty taps away.
+fn longer_or_shorter(minutes: u8, longer: bool) -> u8 {
+    let next = match (longer, minutes) {
+        (true, 0..=9) => minutes + 1,
+        (true, _) => minutes.saturating_add(5),
+        (false, 0..=10) => minutes.saturating_sub(1),
+        (false, _) => minutes - 5,
+    };
+    next.clamp(1, 60)
+}
+
 /// The time, on wheels or typed in.
 #[component]
 pub(super) fn TimeSheet() -> Element {
@@ -35,6 +48,7 @@ pub(super) fn TimeSheet() -> Element {
         ..
     } = use_context();
     let translations = use_context::<Translations>();
+    let settings = use_context::<Signal<AppSettings>>();
     let current = draft.read().clone();
     let done_text = t(&translations, "action.done");
     rsx! {
@@ -45,6 +59,7 @@ pub(super) fn TimeSheet() -> Element {
             TimePicker {
                 hour: current.time_hour,
                 minute: current.time_minute,
+                twenty_four: crate::text::uses_24_hours(&settings.read()),
                 on_change: move |(h, m)| {
                     let mut alarm = draft.write();
                     alarm.time_hour = h;
@@ -102,6 +117,7 @@ pub(super) fn DateSheet() -> Element {
                 input {
                     class: "field",
                     r#type: "date",
+                    min: "{today}",
                     value: "{date_value}",
                     onchange: move |evt| {
                         date_value.set(evt.value());
@@ -205,11 +221,11 @@ pub(super) fn SnoozeSheet() -> Element {
                 value: t(&translations, "text.minutes").replace("{minutes}", &current.snooze_interval.to_string()),
                 on_less: move |_| {
                     let mut alarm = draft.write();
-                    alarm.snooze_interval = alarm.snooze_interval.saturating_sub(1).max(1);
+                    alarm.snooze_interval = longer_or_shorter(alarm.snooze_interval, false);
                 },
                 on_more: move |_| {
                     let mut alarm = draft.write();
-                    alarm.snooze_interval = alarm.snooze_interval.saturating_add(1).min(60);
+                    alarm.snooze_interval = longer_or_shorter(alarm.snooze_interval, true);
                 },
             }
             Stepper {
@@ -358,7 +374,19 @@ pub(super) fn DiscardSheet() -> Element {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_typed_time;
+    use super::{longer_or_shorter, parse_typed_time};
+
+    #[test]
+    fn a_snooze_grows_by_the_minute_then_by_five() {
+        assert_eq!(longer_or_shorter(1, false), 1);
+        assert_eq!(longer_or_shorter(1, true), 2);
+        assert_eq!(longer_or_shorter(9, true), 10);
+        assert_eq!(longer_or_shorter(10, true), 15);
+        assert_eq!(longer_or_shorter(15, false), 10);
+        assert_eq!(longer_or_shorter(10, false), 9);
+        assert_eq!(longer_or_shorter(60, true), 60);
+        assert_eq!(longer_or_shorter(12, true), 17);
+    }
 
     #[test]
     fn a_time_can_be_typed_in_the_ways_people_type_it() {

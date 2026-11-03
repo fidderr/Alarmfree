@@ -6,7 +6,6 @@ use crate::app::{t, AlarmData, Translations};
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum ToastLevel {
     Info,
-    Warning,
     Error,
 }
 
@@ -57,14 +56,12 @@ pub fn Toast(
     let translations = use_context::<Translations>();
     let level_class = match msg.level {
         ToastLevel::Info => "toast-info",
-        ToastLevel::Warning => "toast-warning",
         ToastLevel::Error => "toast-error",
     };
 
     let timeout_ms = match (&msg.undo, msg.level) {
         (Some(_), _) => 6000u64,
         (None, ToastLevel::Info) => 3000,
-        (None, ToastLevel::Warning) => 5000,
         (None, ToastLevel::Error) => 10000,
     };
 

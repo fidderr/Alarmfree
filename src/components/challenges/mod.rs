@@ -1,6 +1,7 @@
 pub mod hold_button;
 pub mod math;
 pub mod memory_game;
+pub mod progress_ring;
 pub mod reaction;
 pub mod scan;
 pub mod shake;
@@ -10,6 +11,7 @@ pub mod typing;
 pub use hold_button::HoldButtonChallenge;
 pub use math::MathChallenge;
 pub use memory_game::MemoryGameChallenge;
+pub use progress_ring::ProgressRing;
 pub use reaction::ReactionChallenge;
 pub use scan::{scanner_open, ScanChallenge};
 pub use shake::ShakeChallenge;

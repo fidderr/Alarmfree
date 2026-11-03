@@ -11,139 +11,83 @@ pub fn scanner_open() -> bool {
     SCANNER_OPEN.load(Ordering::Relaxed)
 }
 
-/// Unified scanner challenge (barcode or QR — the camera backend handles
-/// both identically).
-///
-/// On Android: launches the native scanner via the gated `camera`
-/// capability. On non-Android: tap simulates a successful scan.
-///
-/// If `expected_value` is empty, any scanned code dismisses; otherwise the
-/// scanned value must match exactly.
+#[derive(Clone, Copy, PartialEq)]
+enum ScanState {
+    Ready,
+    Scanning,
+    WrongCode,
+    Done,
+}
+
+/// Scan a barcode or QR code: any code if `expected_value` is empty, otherwise that one.
 #[component]
 pub fn ScanChallenge(
     #[props(default = String::new())] expected_value: String,
     on_complete: EventHandler<()>,
 ) -> Element {
     let translations = use_context::<Translations>();
-    let instruction_any = t(&translations, "challenge.scan.instruction_any");
-    let instruction_specific = t(&translations, "challenge.scan.instruction_specific");
+    let instruction = if expected_value.is_empty() {
+        t(&translations, "challenge.scan.instruction_any")
+    } else {
+        t(&translations, "challenge.scan.instruction_specific")
+    };
     let scan_label = t(&translations, "challenge.scan.scan_button");
-    let mismatch_msg = t(&translations, "challenge.scan.mismatch");
+    let mismatch_text = t(&translations, "challenge.scan.mismatch");
     let tap_retry = t(&translations, "challenge.scan.tap_retry");
     let tap_to_scan = t(&translations, "challenge.scan.tap_to_scan");
     let scanning_text = t(&translations, "challenge.scan.scanning");
     let point_camera = t(&translations, "challenge.scan.point_camera");
     let success_text = t(&translations, "challenge.scan.success");
-    let mut status = use_signal(|| "ready"); // "ready", "scanning", "success", "error"
-    let mut error_msg = use_signal(String::new);
-    let mut scan_requested = use_signal(|| false);
-    let expected = expected_value.clone();
-    let mismatch_msg_for_handler = mismatch_msg.clone();
+    let mut state = use_signal(|| ScanState::Ready);
 
-    // Background task for scanning (same pattern as alarm_config).
-    let _scan_task = use_future(move || {
-        let expected_clone = expected.clone();
-        let mismatch_msg_for_handler = mismatch_msg_for_handler.clone();
-        async move {
-            loop {
-                // Poll for scan request.
-                loop {
-                    crate::timer::sleep(std::time::Duration::from_millis(100)).await;
-                    if *scan_requested.read() {
-                        break;
-                    }
-                }
-                scan_requested.set(false);
-
-                let (tx, rx) = futures_channel::oneshot::channel::<Result<String, String>>();
-
-                std::thread::spawn(move || {
-                    SCANNER_OPEN.store(true, Ordering::Relaxed);
-                    // Sole sanctioned scanning entry point (feature-gated).
-                    let result = mobile_sentinel::scanner::scan().map_err(|e| format!("{}", e));
-                    SCANNER_OPEN.store(false, Ordering::Relaxed);
-                    let _ = tx.send(result);
-                });
-
-                match rx.await {
-                    Ok(Ok(value)) => {
-                        let scanned = value.trim().to_string();
-                        let expected = expected_clone.trim().to_string();
-                        if scanned.is_empty() {
-                            // User cancelled scan — go back to ready state.
-                            status.set("ready");
-                        } else if expected.is_empty() || scanned == expected {
-                            status.set("success");
-                            on_complete.call(());
-                        } else {
-                            log::warn!("[AlarmFree] Scanned something else than the expected code");
-                            error_msg.set(mismatch_msg_for_handler.clone());
-                            status.set("error");
-                        }
-                    }
-                    Ok(Err(_)) => {
-                        // Scanner returned error (cancelled/timeout) — back to ready.
-                        status.set("ready");
-                    }
-                    Err(_) => {
-                        status.set("ready");
-                    }
-                }
+    let scan = move |_| {
+        let expected = expected_value.trim().to_owned();
+        state.set(ScanState::Scanning);
+        spawn(async move {
+            let (tx, rx) = futures_channel::oneshot::channel();
+            // Blocks until the scanner is done.
+            std::thread::spawn(move || {
+                SCANNER_OPEN.store(true, Ordering::Relaxed);
+                let result = mobile_sentinel::scanner::scan();
+                SCANNER_OPEN.store(false, Ordering::Relaxed);
+                let _ = tx.send(result);
+            });
+            // Nothing scanned: the user went back, or it took too long.
+            let scanned = rx.await.ok().and_then(Result::ok).unwrap_or_default();
+            let scanned = scanned.trim();
+            if scanned.is_empty() {
+                state.set(ScanState::Ready);
+            } else if expected.is_empty() || scanned == expected {
+                state.set(ScanState::Done);
+                on_complete.call(());
+            } else {
+                log::warn!("[AlarmFree] Scanned something else than the expected code");
+                state.set(ScanState::WrongCode);
             }
-        }
-    });
+        });
+    };
 
     rsx! {
         div { class: "challenge-wrapper",
-            p { class: "challenge-instruction",
-                if expected_value.is_empty() {
-                    "{instruction_any}"
-                } else {
-                    "{instruction_specific}"
-                }
-            }
-
+            p { class: "challenge-instruction", "{instruction}" }
             div { class: "progress-ring-container",
-                match &**status.read() {
-                    "ready" | "error" => rsx! {
-                        div {
-                            class: "progress-ring",
-                            onclick: move |_| {
-                                status.set("scanning");
-                                scan_requested.set(true);
-                            },
-                            div { class: "progress-ring-text", "{scan_label}" }
-                        }
-                        if *status.read() == "error" {
-                            p { style: "color: var(--error); font-size: 13px; text-align: center; margin-top: 8px;",
-                                "{error_msg}"
-                            }
+                match state() {
+                    ScanState::Ready | ScanState::WrongCode => rsx! {
+                        button { class: "scan-button", onclick: scan, "{scan_label}" }
+                        if state() == ScanState::WrongCode {
+                            p { class: "run-wrong", role: "status", "{mismatch_text}" }
                             p { class: "progress-ring-label", "{tap_retry}" }
                         } else {
                             p { class: "progress-ring-label", "{tap_to_scan}" }
                         }
                     },
-                    "scanning" => rsx! {
-                        div { class: "progress-ring",
-                            div { class: "progress-ring-text",
-                                style: "font-size: 14px;",
-                                "{scanning_text}"
-                            }
-                        }
+                    ScanState::Scanning => rsx! {
+                        div { class: "scan-button scanning", "{scanning_text}" }
                         p { class: "progress-ring-label", "{point_camera}" }
                     },
-                    _ => rsx! {
-                        div { class: "progress-ring",
-                            style: "border-color: var(--success);",
-                            div { class: "progress-ring-text",
-                                style: "color: var(--success); font-size: 40px;",
-                                "\u{2713}"
-                            }
-                        }
-                        p { class: "progress-ring-label",
-                            style: "color: var(--success);",
-                            "{success_text}"
-                        }
+                    ScanState::Done => rsx! {
+                        div { class: "scan-button done", "\u{2713}" }
+                        p { class: "progress-ring-label", "{success_text}" }
                     },
                 }
             }

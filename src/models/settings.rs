@@ -114,6 +114,11 @@ impl WeekStart {
             WeekStart::Saturday => [5, 6, 0, 1, 2, 3, 4],
         }
     }
+
+    /// How many days of this week have gone by on `day`.
+    pub fn days_into_week(self, day: chrono::Weekday) -> u32 {
+        (day.num_days_from_monday() + 7 - self.day_order()[0] as u32) % 7
+    }
 }
 
 /// The order of the home list.
@@ -148,6 +153,9 @@ pub struct Prefs {
     pub setup_done: bool,
     /// What a new alarm starts from, when the user set that up.
     pub alarm_defaults: Option<AlarmData>,
+    /// Warnings the user does not want on the home screen. The reliability screen still
+    /// has them.
+    pub hidden_warnings: Vec<String>,
 }
 
 impl Default for Prefs {
@@ -165,6 +173,7 @@ impl Default for Prefs {
             notify_before_minutes: 0,
             setup_done: false,
             alarm_defaults: None,
+            hidden_warnings: Vec::new(),
         }
     }
 }
@@ -173,8 +182,6 @@ impl Default for Prefs {
 pub struct AppSettings {
     pub theme: ThemeMode,
     pub locale: Locale,
-    pub default_snooze_count: u8,
-    pub default_snooze_interval_minutes: u8,
     /// While an alarm rings, the alarm volume is raised to at least this
     /// percentage (and restored afterwards), so a muted phone still wakes
     /// the user. 0 leaves the volume alone.
@@ -220,8 +227,6 @@ impl Default for AppSettings {
         Self {
             theme: ThemeMode::default(),
             locale: Locale::default(),
-            default_snooze_count: 3,
-            default_snooze_interval_minutes: 5,
             min_volume_percent: 50,
             prefs: Prefs::default(),
         }
@@ -259,5 +264,16 @@ mod tests {
             assert_eq!(days, [0, 1, 2, 3, 4, 5, 6]);
         }
         assert_eq!(WeekStart::Sunday.day_order()[0], 6);
+    }
+
+    #[test]
+    fn a_week_starts_on_the_day_the_user_says() {
+        use chrono::Weekday::{Mon, Sat, Sun};
+        assert_eq!(WeekStart::Monday.days_into_week(Mon), 0);
+        assert_eq!(WeekStart::Monday.days_into_week(Sun), 6);
+        assert_eq!(WeekStart::Sunday.days_into_week(Sun), 0);
+        assert_eq!(WeekStart::Sunday.days_into_week(Mon), 1);
+        assert_eq!(WeekStart::Saturday.days_into_week(Sat), 0);
+        assert_eq!(WeekStart::Saturday.days_into_week(Mon), 2);
     }
 }

@@ -1,5 +1,6 @@
 /* AlarmFree. Works from WebView 91 on, what Android 12 comes with: no color-mix or :has.
-   Sizes: 12, 14, 16, 20, 28 px, plus the big clocks.
+   Text: 12, 14, 16, 20, 28 px, plus 11 for day letters, 24 for the times in the list, and
+   the big clocks.
    Spacing in steps of 4. Corners: 8, 12, 16. */
 
 /* ===== Tokens ===== */
@@ -718,8 +719,7 @@ button:disabled { opacity: 0.5; }
   animation: toast-in 0.18s ease-out;
 }
 
-.toast-error,
-.toast-warning { right: 16px; padding: 8px 14px; }
+.toast-error { right: 16px; padding: 8px 14px; }
 
 .toast-text { flex: 1; font-size: 14px; line-height: 20px; }
 
@@ -745,6 +745,18 @@ button:disabled { opacity: 0.5; }
 }
 
 .banner .icon { color: var(--warn); }
+
+/* With room to hide the warning next to it. */
+.banner-row {
+  flex: none;
+  display: flex;
+  align-items: center;
+  margin: 0 16px 8px;
+  border-radius: var(--radius-m);
+  background: var(--warn-soft);
+}
+
+.banner-row .banner { flex: 1; width: auto; min-width: 0; margin: 0; background: none; }
 
 .banner-text { flex: 1; min-width: 0; font-size: 14px; }
 
@@ -1558,23 +1570,43 @@ button:disabled { opacity: 0.5; }
   justify-content: center;
   width: 180px;
   height: 180px;
-  border: 8px solid var(--surface2);
-  border-radius: 50%;
-  cursor: pointer;
 }
 
-.progress-ring-fill {
+.progress-svg {
   position: absolute;
-  top: -8px;
-  left: -8px;
-  width: calc(100% + 16px);
-  height: calc(100% + 16px);
-  border: 8px solid transparent;
-  border-top-color: var(--accent);
-  border-right-color: var(--accent);
-  border-radius: 50%;
-  transition: transform 0.3s ease;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
 }
+
+.progress-track { fill: none; stroke: var(--surface2); stroke-width: 6; }
+
+.progress-fill {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 6;
+  stroke-linecap: round;
+  stroke-dasharray: 282.74;
+  transition: stroke-dashoffset 0.3s ease;
+}
+
+.scan-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 180px;
+  height: 180px;
+  border: 8px solid var(--surface2);
+  border-radius: 50%;
+  font-size: 28px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.scan-button.scanning { font-size: 14px; }
+.scan-button.done { border-color: var(--ok); font-size: 40px; color: var(--ok); }
 
 .progress-ring-text { font-size: 28px; font-weight: 700; }
 

@@ -164,7 +164,7 @@ pub fn save_alarms(alarms: &[AlarmData]) {
         }
         crate::platform::apply_alarm(alarm);
     }
-    crate::platform::refresh_reminders();
+    crate::platform::refresh_outside_app();
 }
 
 /// Load all alarms from the database.
@@ -175,6 +175,7 @@ pub fn load_alarms() -> Vec<AlarmData> {
 pub fn save_settings(settings: &AppSettings) {
     if let Err(e) = DB.db.save_settings(settings) {
         log::error!("[AlarmFree] Failed to save settings: {e}");
+        note_save_failure();
     }
 }
 
