@@ -7,6 +7,14 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-11-04
+
+### Fixed
+
+- The release built from the published SDK: its build tool now takes the modules from the
+  release build's own record (mobile-sentinel 0.3.1), and the build script installs the tool
+  version the lock file names instead of a pinned old one. 0.3.0 never reached the store.
+
 ## [0.3.0] - 2026-11-04
 
 ### Changed

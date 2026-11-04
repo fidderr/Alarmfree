@@ -185,9 +185,10 @@ if $USE_WORKSPACE; then
 else
   # Default: the real published-crate flow that end users of mobile-sentinel will experience.
   # build_sentinel ships as a binary in the published mobile-sentinel crate.
-  # Ensure a sufficiently recent version is installed for release/aab support.
-  # NOTE: release/aab, stale-asset cleanup and extractNativeLibs=false need >= 0.2.0.
-  SENTINEL_VERSION="0.2.1"
+  # The tool has to be the version the app is built with: an older one wires an older
+  # Kotlin side to this Rust side. The lock file says which that is.
+  SENTINEL_VERSION=$(awk '/^name = "mobile-sentinel"$/ { getline; sub(/^version = "/, ""); sub(/"$/, ""); print; exit }' Cargo.lock)
+  [ -n "$SENTINEL_VERSION" ] || { echo "ERROR: mobile-sentinel is not in Cargo.lock"; exit 1; }
   if ! cargo install --list | grep -q "mobile-sentinel v${SENTINEL_VERSION}"; then
       echo "Installing build_sentinel ${SENTINEL_VERSION} from crates.io (required for release/aab)..."
       if ! cargo install mobile-sentinel --version "$SENTINEL_VERSION" --force; then
