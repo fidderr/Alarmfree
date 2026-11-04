@@ -190,6 +190,8 @@ next_minute() {
         try=$((try + 1))
     done
     off=$(dev date +%z | tr -d '\r')
+    # A device that does not answer must not end the run on a number that is not there.
+    case "$off" in [+-][0-9][0-9][0-9][0-9]) ;; *) off=+0000 ;; esac
     ZONE_S=$((${off:0:1}(10#${off:1:2} * 3600 + 10#${off:3:2} * 60)))
     local_s=$((T + ZONE_S))
     T_H=$(date -u -d "@$local_s" +%-H)
@@ -205,6 +207,7 @@ ARM_AT=""
 local_date_in() {
     local off
     off=$(dev date +%z | tr -d '\r')
+    case "$off" in [+-][0-9][0-9][0-9][0-9]) ;; *) off=+0000 ;; esac
     date -u -d "@$(($(now_s) + $1 * 86400 + ${off:0:1}(10#${off:1:2} * 3600 + 10#${off:3:2} * 60)))" +%Y-%m-%d
 }
 # Hour and minute of a moment, on the device's clock. After next_minute.
@@ -387,8 +390,9 @@ arm() {
     # A slow start (Android optimising the app after an install, a starved emulator) can take
     # the whole lead: the minute is past by then, and the alarm armed for tomorrow. The clock
     # goes back under it, and the app, told of the change, arms it for today again.
-    if on_emulator && [ -n "$ARM_AT" ] && [ "$(armed_at_ms "$1")" != "$((ARM_AT * 1000))" ]; then
-        note "armed late, for $(armed_at_ms "$1") instead of $((ARM_AT * 1000)): the clock goes back"
+    # Armed for the same minute tomorrow is the sign of it; anything else is another alarm.
+    if on_emulator && [ -n "$ARM_AT" ] && [ "$(armed_at_ms "$1")" = "$((ARM_AT * 1000 + 86400000))" ]; then
+        note "armed late, for tomorrow instead of $((ARM_AT * 1000)): the clock goes back"
         set_clock $((ARM_AT - LEAD))
         armed_for() { [ "$(armed_at_ms "$1")" = "$((ARM_AT * 1000))" ]; }
         wait_for 15 armed_for "$1" || note "still armed for $(armed_at_ms "$1")"
@@ -601,6 +605,7 @@ CURRENT=""
 SCENARIO_START=$SECONDS
 scenario() {
     PAGE_WAITED=""
+    ARM_AT=""
     CURRENT=$1${VARIANT:-}
     SCENARIO_START=$SECONDS
     echo

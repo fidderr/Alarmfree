@@ -1033,6 +1033,12 @@ s36() {
     local before after again gap problems=""
     before=$(texts_of .alarm-label)
     gap=$(gap_between .alarm-card 0 2)
+    case "$gap" in
+        '' | *[!0-9]*)
+            fail "no two cards to measure: $gap"
+            return
+            ;;
+    esac
     hold_and_drag .alarm-main 0 $((gap + 30))
     after=$(texts_of .alarm-label)
     dev am force-stop "$PKG"
