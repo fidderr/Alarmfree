@@ -264,6 +264,14 @@ reboot_only() {
     timeout 240 "$ADB" -s "$SERIAL" wait-for-device || { note "device did not come back"; return 1; }
     timeout 240 "$ADB" -s "$SERIAL" shell 'while [ -z "$(getprop sys.boot_completed)" ]; do sleep 0.5; done' ||
         { note "boot did not complete"; return 1; }
+    # A tap from the page is no activity to Android: left to itself, an emulator's screen went
+    # dark ten minutes into a run, and every picture after that was black. A phone keeps its own.
+    case "$SERIAL" in
+        emulator-*)
+            note "screen_off_timeout was $(timeout 20 "$ADB" -s "$SERIAL" shell settings get system screen_off_timeout | tr -d '')"
+            timeout 20 "$ADB" -s "$SERIAL" shell settings put system screen_off_timeout 86400000
+            ;;
+    esac
 }
 
 # ---- A clean app ----
@@ -614,6 +622,11 @@ scenario() {
         echo "device not responding, stopping the run"
         echo "STOP  $CURRENT  device not responding" >> "$RESULTS"
         exit 2
+    fi
+    # A dark screen fails everything after it, and says nothing about the app.
+    if on_emulator && shells_open && [ "$(wakefulness)" != Awake ]; then
+        note "the screen was off between scenarios: woken"
+        wake
     fi
     adb_ logcat -c
 }
