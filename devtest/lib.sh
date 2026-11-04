@@ -270,6 +270,9 @@ reboot_only() {
         emulator-*)
             note "screen_off_timeout was $(timeout 20 "$ADB" -s "$SERIAL" shell settings get system screen_off_timeout | tr -d '')"
             timeout 20 "$ADB" -s "$SERIAL" shell settings put system screen_off_timeout 86400000
+            # It boots to its lock screen. The app shows over it, so a run can go a long way
+            # before a system page, which does not, stays hidden behind it.
+            timeout 20 "$ADB" -s "$SERIAL" shell wm dismiss-keyguard
             ;;
     esac
 }

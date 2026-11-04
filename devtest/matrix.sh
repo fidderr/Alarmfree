@@ -1720,8 +1720,9 @@ s50() {
     local problems="" row rows
     click .fab
     on_screen .time-shift
-    click .time-shift 1
-    click .time-shift 1
+    # Either side of the time: -1, -5, then +1, +5.
+    click .time-shift 3
+    click .time-shift 3
     click_text .chip-small Weekend
     open_row Label
     set_field '.sheet .field' 0 Morning
@@ -1741,7 +1742,15 @@ s50() {
     click '.sheet .round-btn' 3
     done_sheet
     open_row Challenges
-    click_text '.sheet .chip' Normal
+    # Math and Steps, each through Add and its own sheet.
+    for option in 0 5; do
+        click '.sheet .btn-quiet' 0 0.3
+        on_screen .add-option || problems="$problems; no way to add a challenge"
+        click .add-option "$option" 0.3
+        on_screen '.sheet .sheet-done'
+        click '.sheet .sheet-done' 0 0.3
+        on_screen .challenge-row || problems="$problems; not back on the list after adding"
+    done
     click_text '.sheet .chip' Random
     done_sheet
     open_row 'Ring limit'
@@ -1922,9 +1931,11 @@ s52() {
     click .event-main 0
     on_screen '.event-details .link-btn'
     click_text '.event-details .link-btn' 'Delete this one' 0.5
+    on_screen '.sheet .sheet-item.danger' || problems="$problems; deleting one row does not ask"
+    click '.sheet-item.danger' 0 0.5
     [ "$(history_count)" = $((before - 1)) ] || problems="$problems; history went from $before to $(history_count)"
     if [ -z "$problems" ]; then
-        pass "sort, pause, skip, duplicate, switch and one row of history"
+        pass "sort, pause, skip, duplicate, switch and one row of history after asking"
     else
         fail "${problems#; }"
     fi
