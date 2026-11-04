@@ -383,15 +383,18 @@ fn Editor(id: String) -> Element {
         )
         .replace("{minutes}", &current.snooze_interval.to_string())
     };
-    let challenge_summary_text = if setups.read().is_empty() {
-        t(&translations, "config.none")
-    } else {
-        setups
+    let challenge_summary_text = {
+        let names: Vec<String> = setups
             .read()
             .iter()
             .map(|s| t(&translations, s.type_key()))
-            .collect::<Vec<_>>()
-            .join(", ")
+            .collect();
+        match names.len() {
+            0 => t(&translations, "config.none"),
+            // The row has room for about three names; more than that was cut off mid-word.
+            1..=3 => names.join(", "),
+            n => format!("{} +{}", names[..2].join(", "), n - 2),
+        }
     };
     let limit_summary = match current.ring_limit_secs {
         None => t(&translations, "config.limit_forever"),

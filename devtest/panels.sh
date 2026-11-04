@@ -441,6 +441,17 @@ s57() {
     look_through history
     click .icon-btn 0 0.05
     panel_open history_delete
+    # A period asks first too, and Back is no.
+    click .icon-btn 0 0.05
+    on_screen .sheet 3
+    click '.sheet .sheet-item' 0 0.05
+    if on_screen '.sheet .sheet-item.danger' 3; then
+        look_through history_delete_period
+        press_back
+        gone .sheet 3 || panel_problem "history_delete_period: Back leaves it open"
+    else
+        panel_problem "deleting a period does not ask"
+    fi
     click .summary-toggle 0 0.05
     look_through history_all_stats
     click .summary-toggle 0 0.05

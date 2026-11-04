@@ -1345,7 +1345,7 @@ history_row() { # id days_ago
 }
 history_count() { printf "SELECT count(*) FROM alarm_events;\n" | sql; }
 
-# A period of the history goes at once, all of it only after asking again.
+# A period of the history and all of it each go only after asking again.
 s43() {
     scenario s43_delete_history
     fresh
@@ -1356,9 +1356,18 @@ s43() {
     local problems=""
     click .nav-item 1
     on_screen .icon-btn
+    # A period asks first: Back is no, and the answer takes only that period.
     click .icon-btn 0
     on_screen .sheet || problems="$problems; no sheet"
     click .sheet-item 0 0.4
+    is_there '.sheet-item.danger' || problems="$problems; older than 30 days went without asking"
+    press_back
+    gone .sheet || problems="$problems; Back left the period question open"
+    [ "$(history_count)" = 2 ] || problems="$problems; Back on the period question deleted"
+    click .icon-btn 0
+    on_screen .sheet-item
+    click .sheet-item 0 0.4
+    click '.sheet-item.danger' 0 0.4
     [ "$(history_count)" = 1 ] || problems="$problems; older than 30 days left $(history_count)"
     on_screen .toast-text || problems="$problems; nothing said about it"
     click .icon-btn 0
@@ -1377,10 +1386,10 @@ s43() {
     click .icon-btn 0
     on_screen .sheet-item
     click .sheet-item 2 0.3
-    click .sheet-item 0 0.4
+    click '.sheet-item.danger' 0 0.4
     [ "$(history_count)" = 0 ] || problems="$problems; left $(history_count) after confirming"
     if [ -z "$problems" ]; then
-        pass "by period at once, everything after asking again"
+        pass "a period and everything, each after asking, and Back is no"
     else
         fail "${problems#; }"
     fi
