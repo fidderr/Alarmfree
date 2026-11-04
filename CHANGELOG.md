@@ -44,6 +44,8 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ### Fixed
 
+- The app no longer starts on a white page: the window, the splash screen and the page are
+  the theme's colour from the first frame.
 - The screen could stand still until touched after coming back from another one, such as the
   camera, with everything behind it waiting too, also what ends an alarm after a challenge.
 - The keyboard no longer covers what you type in: on Android 15 and newer the window does not

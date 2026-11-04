@@ -15,6 +15,11 @@ activity = "dev.dioxus.main.MainActivity"
 icon = "assets/icon.webp"
 # The picture's own background, so launchers can give it any shape without a box in it.
 icon_background = "F7F7F7"
+# Until the page has painted, the window and the splash screen: the light and dark `--bg` of
+# style.css, following the phone's dark mode as the default theme does. Without them Android
+# shows white, and a dark app flashed.
+window_background = "F5F6F9"
+window_background_dark = "101218"
 assets = ["assets/sounds"]
 
 # An alarm has to ring after a reboot, also before the first unlock. Its files are

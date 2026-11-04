@@ -116,10 +116,11 @@ kill_pids() {
     else
         as_app "kill -9 $*"
     fi
-    # Nothing but the log says when this is refused.
+    # Nothing but the log says when this is refused. A starved emulator can take seconds to
+    # take a process down.
     local p
     for p in $*; do
-        wait_for 2 pid_gone "$p" || fail "could not kill process $p"
+        wait_for 6 pid_gone "$p" || fail "could not kill process $p"
     done
     true
 }
@@ -194,6 +195,17 @@ next_minute() {
     T_H=$(date -u -d "@$local_s" +%-H)
     T_M=$(date -u -d "@$local_s" +%-M)
     T_DATE=$(date -u -d "@$local_s" +%Y-%m-%d)
+    # For `arm`: the alarm seeded next is for this moment.
+    ARM_AT=$T
+}
+ARM_AT=""
+
+# The device's own date `$1` days from now, as the app writes it: around midnight it is not the
+# host's, and not UTC's.
+local_date_in() {
+    local off
+    off=$(dev date +%z | tr -d '\r')
+    date -u -d "@$(($(now_s) + $1 * 86400 + ${off:0:1}(10#${off:1:2} * 3600 + 10#${off:3:2} * 60)))" +%Y-%m-%d
 }
 # Hour and minute of a moment, on the device's clock. After next_minute.
 at_hm() { date -u -d "@$(($1 + ZONE_S))" "+%-H %-M"; }
@@ -372,6 +384,16 @@ arm() {
     wait_file "files/sentinel/armed/$1.armed" 30
     # Whatever else was seeded comes right after.
     sleep 0.3
+    # A slow start (Android optimising the app after an install, a starved emulator) can take
+    # the whole lead: the minute is past by then, and the alarm armed for tomorrow. The clock
+    # goes back under it, and the app, told of the change, arms it for today again.
+    if on_emulator && [ -n "$ARM_AT" ] && [ "$(armed_at_ms "$1")" != "$((ARM_AT * 1000))" ]; then
+        note "armed late, for $(armed_at_ms "$1") instead of $((ARM_AT * 1000)): the clock goes back"
+        set_clock $((ARM_AT - LEAD))
+        armed_for() { [ "$(armed_at_ms "$1")" = "$((ARM_AT * 1000))" ]; }
+        wait_for 15 armed_for "$1" || note "still armed for $(armed_at_ms "$1")"
+    fi
+    ARM_AT=""
 }
 
 # Leave no app process running, the way the system leaves it overnight.
@@ -533,9 +555,10 @@ await_sound() {
     done
 }
 
-# The sound is on and the app has taken it up.
+# The sound is on and the app has taken it up. The app hears of the ring by a broadcast, which
+# a starved emulator can hold for a while: the sound does not wait for it.
 await_ring() { # id [seconds past T]
-    await_sound "${2:-30}" && await_state "$1" firing 15
+    await_sound "${2:-30}" && await_state "$1" firing 30
 }
 
 top_is_backup() { dev "dumpsys activity activities | grep -E 'topResumedActivity|ResumedActivity:' | head -1 | grep -q SentinelBackupActivity" > /dev/null; }

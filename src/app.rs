@@ -252,6 +252,17 @@ const WINDOW_WATCH: &str = "\
 /// History is kept this long.
 const HISTORY_KEEP_DAYS: u32 = 5 * 365;
 
+/// The colour the page comes up on, before it has painted anything: the saved theme's
+/// background, so the start does not flash. Read before the UI starts.
+pub fn start_background() -> (u8, u8, u8, u8) {
+    let settings = crate::persistence::load_settings();
+    let argb = settings
+        .theme
+        .background(mobile_sentinel::display::system_dark());
+    let [_, r, g, b] = argb.to_be_bytes();
+    (r, g, b, 255)
+}
+
 /// Root App component with global state context providers.
 #[component]
 pub fn App() -> Element {

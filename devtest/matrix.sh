@@ -1967,7 +1967,7 @@ s53() {
     row=$(printf 'SELECT data FROM alarms;\n' | sql)
     has "$row" '"time_hour":8'
     has "$row" '"time_minute":36'
-    has "$row" "\"date\":\"$(date -u -d "@$(($(now_s) + 86400))" +%Y-%m-%d)"
+    has "$row" "\"date\":\"$(local_date_in 1)"
     has "$row" '"days":[false,false,false,false,false,false,false]'
     has "$row" 'hard'
     case "$row" in
@@ -2306,10 +2306,16 @@ if on_emulator; then
 else
     DEFAULT_LIST=$ON_A_PHONE
 fi
+# FIRST names scenarios to run before the rest: the heavy ones, while another emulator next to
+# this one is still on its light ones.
+RUN_LIST="${FIRST:-}"
 for s in ${*:-$DEFAULT_LIST}; do
-    case " ${SKIP:-} " in
+    case " ${SKIP:-} ${FIRST:-} " in
         *" $s "*) continue ;;
     esac
+    RUN_LIST="$RUN_LIST $s"
+done
+for s in $RUN_LIST; do
     "$s"
 done
 dev am force-stop "$PKG"

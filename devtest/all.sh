@@ -51,7 +51,9 @@ run_on() { # avd port scenarios...
 }
 
 START=$SECONDS
-SKIP=$OLDEST_ONLY run_on af36 5554 &
+# The big screens first: next to the other emulator's tour of every panel, late in its run, Android
+# 16 starved to the point of its own system UI freezing.
+FIRST=big_screens SKIP=$OLDEST_ONLY run_on af36 5554 &
 SKIP=$NEWEST_ONLY run_on af31 5556 &
 wait
 echo "all of it in $(((SECONDS - START) / 60)) min $(((SECONDS - START) % 60)) s"
