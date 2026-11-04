@@ -40,6 +40,7 @@ pub fn factory_alarm() -> AlarmData {
         pause_until_ms: None,
         delete_after_ring: false,
         hidden: false,
+        test: false,
     }
 }
 
@@ -125,6 +126,7 @@ pub fn test_alarm(now: NaiveDateTime, seconds: i64, label: String) -> AlarmData 
     alarm.snooze_count = 0;
     alarm.delete_after_ring = true;
     alarm.hidden = true;
+    alarm.test = true;
     one_time_at(alarm, now + Duration::seconds(seconds))
 }
 

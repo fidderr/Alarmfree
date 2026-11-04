@@ -18,7 +18,7 @@ pub fn StepCountChallenge(required: u32, on_complete: EventHandler<()>) -> Eleme
 
     use_future(move || async move {
         loop {
-            crate::timer::sleep_ms(500).await;
+            crate::timer::sleep_ms(250).await;
             let now = mobile_sentinel::sensors::step_count() as u32;
             count.set(now);
             if now >= required {

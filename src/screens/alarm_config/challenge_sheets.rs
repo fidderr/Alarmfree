@@ -107,11 +107,6 @@ pub(super) fn ChallengesSheet() -> Element {
         (false, t(&translations, "config.order_fixed")),
         (true, t(&translations, "config.order_random")),
     ];
-    let preset_options = vec![
-        ("gentle", t(&translations, "preset.gentle")),
-        ("normal", t(&translations, "preset.normal")),
-        ("hard", t(&translations, "preset.hard")),
-    ];
     rsx! {
         Sheet {
             title: t(&translations, "config.challenges"),
@@ -183,18 +178,10 @@ pub(super) fn ChallengesSheet() -> Element {
                 selected: Some(current.random_order),
                 on_pick: move |random: bool| draft.write().random_order = random,
             }
-            GroupTitle { text: t(&translations, "config.presets") }
-            Chips::<&'static str> {
-                grow: true,
-                options: preset_options,
-                selected: None,
-                on_pick: move |name: &'static str| {
-                    let list = preset(name);
-                    for setup in &list {
-                        request_challenge_permission(setup);
-                    }
-                    setups.set(list);
-                },
+            // A ready-made set is a way to start; with challenges in place it only crowds
+            // the sheet, and stays one tap away under Add.
+            if count == 0 {
+                PresetChips {}
             }
             SheetDone { label: done_text.clone(), on_click: move |_| sheet.set(None) }
         }
@@ -232,10 +219,43 @@ pub(super) fn AddChallengeSheet() -> Element {
                     span { class: "add-desc", {t(&translations, &key.replace("challenge.", "challenge.desc."))} }
                 }
             }
+            PresetChips {}
             SheetDone {
                 label: t(&translations, "challenge.config.back"),
                 on_click: move |_| sheet.set(Some(EditorSheet::Challenges)),
             }
+        }
+    }
+}
+
+/// The three ready-made sets. Picking one replaces the list and shows it.
+#[component]
+fn PresetChips() -> Element {
+    let EditorState {
+        mut sheet,
+        mut setups,
+        ..
+    } = use_context();
+    let translations = use_context::<Translations>();
+    let preset_options = vec![
+        ("gentle", t(&translations, "preset.gentle")),
+        ("normal", t(&translations, "preset.normal")),
+        ("hard", t(&translations, "preset.hard")),
+    ];
+    rsx! {
+        GroupTitle { text: t(&translations, "config.presets") }
+        Chips::<&'static str> {
+            grow: true,
+            options: preset_options,
+            selected: None,
+            on_pick: move |name: &'static str| {
+                let list = preset(name);
+                for setup in &list {
+                    request_challenge_permission(setup);
+                }
+                setups.set(list);
+                sheet.set(Some(EditorSheet::Challenges));
+            },
         }
     }
 }

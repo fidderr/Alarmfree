@@ -542,6 +542,7 @@ mod tests {
             pause_until_ms: None,
             delete_after_ring: false,
             hidden: false,
+            test: false,
         };
         db.upsert_alarm(&good).unwrap();
 

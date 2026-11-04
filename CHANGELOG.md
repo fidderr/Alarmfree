@@ -23,6 +23,9 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 ### Added
 
 - Ring limit per alarm: 30 to 120 minutes or forever, which starts over when you do something.
+- One-minute buttons beside the time, next to the five-minute ones. History rows show they
+  open, and deleting history, one entry or a period, asks first. A test alarm can be called
+  off. Steps count as you take them.
 - Native backup screen for when the alarm's own screen cannot come up.
 - Reliability screen with what the phone allows and a way to each setting, a first-run version
   of it, and a test alarm through the real ring path. The record of how fast rings were can be

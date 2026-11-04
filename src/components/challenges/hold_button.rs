@@ -1,6 +1,7 @@
 use dioxus::prelude::*;
 
 use crate::app::{t, Translations};
+use crate::components::icon::{Icon, IconName};
 
 /// Pop animation duration (ms) shown when a bubble fills. Must match the
 /// `bubble-pop` / ripple animation durations in style.css.
@@ -29,7 +30,6 @@ pub fn HoldButtonChallenge(
     let translations = use_context::<Translations>();
     let instruction = t(&translations, "challenge.hold.instruction");
     let unit = t(&translations, "challenge.hold.unit");
-    let hold_label = t(&translations, "challenge.hold.hold");
     let back_label = t(&translations, "action.back");
 
     let hold_ms = hold_ms.max(300); // guard against too-fast configs
@@ -103,7 +103,6 @@ pub fn HoldButtonChallenge(
     } else {
         "hold-bubble"
     };
-    let inner_label = if is_popping { "\u{2713}" } else { &hold_label };
     // Position the slot centre with a fixed-px safe margin (--hold-safe in
     // the CSS) so the bubble + its glow can never reach the clipped edge of
     // the play area, regardless of the area's pixel size. `--fx`/`--fy` are
@@ -148,7 +147,11 @@ pub fn HoldButtonChallenge(
                             circle { class: "hold-ring-fill", cx: "50", cy: "50", r: "45" }
                         }
                         div { class: "hold-bubble-core",
-                            span { class: "hold-bubble-label", "{inner_label}" }
+                            // A sign to press, not words: text wrapped and sat off-centre in
+                            // some languages.
+                            span { class: "hold-bubble-label",
+                                Icon { name: if is_popping { IconName::Check } else { IconName::Touch }, size: 30 }
+                            }
                         }
                     }
                 }

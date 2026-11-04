@@ -157,6 +157,7 @@ fn ReliabilityScreen(first_run: bool) -> Element {
         .unwrap_or_default();
     let has_ring_record =
         crate::platform::alarm_kit_optional().is_some_and(|kit| !kit.timing_log().is_empty());
+    let test_pending = alarms.read().iter().any(|alarm| alarm.test);
 
     rsx! {
         div { class: "screen",
@@ -261,7 +262,24 @@ fn ReliabilityScreen(first_run: bool) -> Element {
                 }
             }
             div { class: "save-bar save-bar-column",
-                if !first_run {
+                if first_run {
+                    button {
+                        class: "btn btn-primary",
+                        onclick: move |_| leave(),
+                        {t(&translations, "setup.done")}
+                    }
+                } else if test_pending {
+                    p { class: "test-note", {t(&translations, "reliability.test_set")} }
+                    button {
+                        class: "btn btn-quiet",
+                        onclick: move |_| {
+                            alarms.write().retain(|alarm| !alarm.test);
+                            crate::persistence::save_alarms(&alarms.peek());
+                            toast.set(Some(ToastMessage::info(t(&translations, "reliability.test_cancelled"))));
+                        },
+                        {t(&translations, "reliability.test_cancel")}
+                    }
+                } else {
                     p { class: "test-note",
                         {t(&translations, "reliability.test_note")}
                         " {last_test}"
@@ -277,12 +295,6 @@ fn ReliabilityScreen(first_run: bool) -> Element {
                             toast.set(Some(ToastMessage::info(t(&translations, "reliability.test_set"))));
                         },
                         {t(&translations, "reliability.test")}
-                    }
-                } else {
-                    button {
-                        class: "btn btn-primary",
-                        onclick: move |_| leave(),
-                        {t(&translations, "setup.done")}
                     }
                 }
             }

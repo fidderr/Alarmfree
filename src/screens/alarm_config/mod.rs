@@ -577,11 +577,19 @@ fn TimeSection() -> Element {
     rsx! {
         section { class: "editor-time",
             div { class: "time-row",
-                button {
-                    class: "time-shift",
-                    "aria-label": t(&translations, "config.earlier"),
-                    onclick: move |_| shift(-5),
-                    "\u{2212}5"
+                div { class: "time-shifts",
+                    button {
+                        class: "time-shift",
+                        "aria-label": t(&translations, "config.earlier_one"),
+                        onclick: move |_| shift(-1),
+                        "\u{2212}1"
+                    }
+                    button {
+                        class: "time-shift",
+                        "aria-label": t(&translations, "config.earlier"),
+                        onclick: move |_| shift(-5),
+                        "\u{2212}5"
+                    }
                 }
                 button {
                     class: if twenty_four { "time-big" } else { "time-big h12" },
@@ -592,11 +600,19 @@ fn TimeSection() -> Element {
                     },
                     "{time_text}"
                 }
-                button {
-                    class: "time-shift",
-                    "aria-label": t(&translations, "config.later"),
-                    onclick: move |_| shift(5),
-                    "+5"
+                div { class: "time-shifts",
+                    button {
+                        class: "time-shift",
+                        "aria-label": t(&translations, "config.later_one"),
+                        onclick: move |_| shift(1),
+                        "+1"
+                    }
+                    button {
+                        class: "time-shift",
+                        "aria-label": t(&translations, "config.later"),
+                        onclick: move |_| shift(5),
+                        "+5"
+                    }
                 }
             }
             p { class: "rings-in", "{rings}" }

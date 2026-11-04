@@ -19,6 +19,7 @@ pub enum IconName {
     Warning,
     Pencil,
     Skip,
+    Touch,
 }
 
 /// One outline icon set, as inline SVG. No external fonts or CDN needed.
@@ -40,6 +41,7 @@ pub fn Icon(name: IconName, #[props(default = 16)] size: u32) -> Element {
         IconName::EllipsisVertical => "M12 5h.01M12 12h.01M12 19h.01",
         IconName::Pause => "M9 5v14M15 5v14",
         IconName::Sort => "M4 7h16M7 12h10M10 17h4",
+        IconName::Touch => "M9 21v-9a3 3 0 0 1 6 0v9M7 10a5 5 0 0 1 10 0M4 10a8 8 0 0 1 16 0",
         IconName::Warning => "M12 9v4M12 17h.01M10.3 3.9 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z",
     };
     // The dots only show with a wider line.

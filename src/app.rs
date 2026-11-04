@@ -187,6 +187,9 @@ pub struct AlarmData {
     /// Gone instead of switched off when over: quick alarms, wake-up checks.
     #[serde(default)]
     pub delete_after_ring: bool,
+    /// The ring from the reliability screen's test button, which can be called off.
+    #[serde(default)]
+    pub test: bool,
     /// Not in the list: wake-up checks and test alarms.
     #[serde(default)]
     pub hidden: bool,

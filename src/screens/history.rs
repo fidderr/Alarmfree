@@ -201,6 +201,8 @@ pub fn History() -> Element {
     let mut deleting = use_signal(|| false);
     let mut show_all = use_signal(|| false);
     let mut open_event: Signal<Option<String>> = use_signal(|| None);
+    // The entry whose deletion is being asked about.
+    let mut confirm_delete: Signal<Option<String>> = use_signal(|| None);
     let mut refresh = use_signal(|| 0u32);
 
     // Not read again for opening a row.
@@ -302,10 +304,7 @@ pub fn History() -> Element {
                                         on_toggle: move |_| {
                                             open_event.set(if open { None } else { Some(id.clone()) });
                                         },
-                                        on_delete: move |_| {
-                                            crate::history_persistence::delete_event(&on_delete_id);
-                                            refresh += 1;
-                                        },
+                                        on_delete: move |_| confirm_delete.set(Some(on_delete_id.clone())),
                                     }
                                 }
                             }
@@ -322,12 +321,23 @@ pub fn History() -> Element {
                     on_deleted: move |_| refresh += 1,
                 }
             }
+            if let Some(id) = confirm_delete() {
+                AskDeleteSheet {
+                    title: t(&translations, "history.delete_one_title"),
+                    on_confirm: move |_| {
+                        crate::history_persistence::delete_event(&id);
+                        confirm_delete.set(None);
+                        refresh += 1;
+                    },
+                    on_close: move |_| confirm_delete.set(None),
+                }
+            }
         }
     }
 }
 
-/// How much of the history to delete. All of it is asked about once more: nothing brings
-/// it back.
+/// How much of the history to delete. Every choice is asked about once more: nothing
+/// brings it back.
 #[component]
 pub fn DeleteHistorySheet(
     on_close: EventHandler<()>,
@@ -335,7 +345,8 @@ pub fn DeleteHistorySheet(
 ) -> Element {
     let translations = use_context::<Translations>();
     let mut toast = use_context::<Signal<Option<ToastMessage>>>();
-    let mut asking = use_signal(|| false);
+    // The choice being asked about: everything, or what is older than so many days.
+    let mut asking: Signal<Option<Option<u32>>> = use_signal(|| None);
     let mut delete = move |older_than_days: Option<u32>| {
         crate::history_persistence::delete_history(older_than_days);
         toast.set(Some(ToastMessage::info(t(
@@ -347,43 +358,59 @@ pub fn DeleteHistorySheet(
         }
         on_close.call(());
     };
+    if let Some(choice) = asking() {
+        let title = match choice {
+            None => t(&translations, "history.delete_all_title"),
+            Some(days) => {
+                t(&translations, "history.delete_older_title").replace("{days}", &days.to_string())
+            }
+        };
+        return rsx! {
+            AskDeleteSheet { title, on_confirm: move |_| delete(choice), on_close }
+        };
+    }
     rsx! {
         Sheet {
-            title: if asking() {
-                t(&translations, "history.delete_all_title")
-            } else {
-                t(&translations, "history.delete_history")
-            },
-            note: if asking() {
-                t(&translations, "history.delete_all_note")
-            } else {
-                String::new()
-            },
+            title: t(&translations, "history.delete_history"),
             on_close,
-            if asking() {
-                SheetItem {
-                    label: t(&translations, "action.delete"),
-                    danger: true,
-                    on_click: move |_| delete(None),
-                }
-                SheetDone {
-                    label: t(&translations, "action.cancel"),
-                    on_click: move |_| on_close.call(()),
-                }
-            } else {
-                SheetItem {
-                    label: t(&translations, "history.delete_30"),
-                    on_click: move |_| delete(Some(30)),
-                }
-                SheetItem {
-                    label: t(&translations, "history.delete_90"),
-                    on_click: move |_| delete(Some(90)),
-                }
-                SheetItem {
-                    label: t(&translations, "history.delete_all"),
-                    danger: true,
-                    on_click: move |_| asking.set(true),
-                }
+            SheetItem {
+                label: t(&translations, "history.delete_30"),
+                on_click: move |_| asking.set(Some(Some(30))),
+            }
+            SheetItem {
+                label: t(&translations, "history.delete_90"),
+                on_click: move |_| asking.set(Some(Some(90))),
+            }
+            SheetItem {
+                label: t(&translations, "history.delete_all"),
+                danger: true,
+                on_click: move |_| asking.set(Some(None)),
+            }
+        }
+    }
+}
+
+/// "Really?" before history goes: a mis-tap must not take a record with it.
+#[component]
+fn AskDeleteSheet(
+    title: String,
+    on_confirm: EventHandler<()>,
+    on_close: EventHandler<()>,
+) -> Element {
+    let translations = use_context::<Translations>();
+    rsx! {
+        Sheet {
+            title,
+            note: t(&translations, "history.delete_all_note"),
+            on_close,
+            SheetItem {
+                label: t(&translations, "action.delete"),
+                danger: true,
+                on_click: move |_| on_confirm.call(()),
+            }
+            SheetDone {
+                label: t(&translations, "action.cancel"),
+                on_click: move |_| on_close.call(()),
             }
         }
     }
@@ -595,6 +622,10 @@ fn EventRow(
                     }
                 }
                 span { class: "event-value", "{value}" }
+                // Says the row opens: nobody guessed it.
+                span { class: if open { "event-chevron open" } else { "event-chevron" },
+                    Icon { name: IconName::ChevronRight, size: 16 }
+                }
             }
             if open {
                 div { class: "event-details",

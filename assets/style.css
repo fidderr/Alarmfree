@@ -1065,11 +1065,13 @@ button:disabled { opacity: 0.5; }
 
 .time-row { display: flex; align-items: center; justify-content: space-between; }
 
+.time-shifts { display: flex; flex: none; flex-direction: column; gap: 6px; }
+
 .time-shift {
   flex: none;
   width: 56px;
-  height: 44px;
-  border-radius: 22px;
+  height: 36px;
+  border-radius: 18px;
   font-size: 14px;
   font-weight: 500;
   text-align: center;
@@ -1753,16 +1755,14 @@ button:disabled { opacity: 0.5; }
 .hold-bubble.popping .hold-bubble-core { background: var(--ok); box-shadow: 0 0 42px var(--ok-glow); }
 
 .hold-bubble-label {
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: 1.5px;
+  display: flex;
   color: var(--text2);
   transition: color 0.25s ease;
 }
 
 .hold-bubble.filling .hold-bubble-label { color: var(--text); }
 
-.hold-bubble.popping .hold-bubble-label { font-size: 28px; color: var(--on-accent); }
+.hold-bubble.popping .hold-bubble-label { color: var(--on-accent); }
 
 .hold-bubble.popping::after {
   content: "";
@@ -2037,6 +2037,15 @@ button:disabled { opacity: 0.5; }
 .event-sub.warn { color: var(--warn); }
 
 .event-value { flex: none; font-weight: 500; }
+
+.event-chevron {
+  display: flex;
+  flex: none;
+  color: var(--text2);
+  transition: transform 0.2s ease;
+}
+
+.event-chevron.open { transform: rotate(90deg); }
 
 .event-details { padding: 0 14px 4px; }
 .event-details .link-btn { padding: 0; }
