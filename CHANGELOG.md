@@ -34,7 +34,7 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
   by time or next ring, swipe to skip or delete, Undo, templates when the list is empty.
 - Wake-up check, note while ringing, full brightness, vibrate first, three vibration patterns,
   minimum volume per alarm, fade in up to 5 minutes, try the alarm for 10 seconds.
-- Presets and random order for challenges. Typed time, 12-hour wheels, a date picker with quick
+- Random order for challenges. Typed time, 12-hour wheels, a date picker with quick
   choices. What new alarms start from can be set up.
 - Your own sounds can be renamed, and keep the name they came with.
 - From an alarm's menu: use it for new alarms.

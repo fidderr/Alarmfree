@@ -885,7 +885,7 @@ s31() {
     fi
 }
 
-# The test alarm rings for real, leaves nothing behind, and its record can be saved.
+# The test alarm can be called off, rings for real, leaves nothing behind, and its record can be saved.
 s32() {
     scenario s32_test_alarm
     fresh
@@ -898,6 +898,14 @@ s32() {
     click '.save-bar .btn-primary' 0 0.5
     test_waiting() { [ "$(db_count '"hidden":true')" = 1 ]; }
     wait_for 5 test_waiting || { fail "no test alarm"; return; }
+    # It can be called off, and then nothing is armed. Set again for the ring.
+    on_screen '.save-bar .btn-quiet' 3 || { fail "no way to call the test alarm off"; return; }
+    click '.save-bar .btn-quiet' 0 0.5
+    test_off() { [ "$(db_count '"hidden":true')" = 0 ] && [ -z "$(as_app 'ls files/sentinel/armed 2>/dev/null')" ]; }
+    wait_for 5 test_off || { fail "the test alarm was not called off: hidden=$(db_count '"hidden":true') armed=$(as_app 'ls files/sentinel/armed 2>/dev/null' | tr '\n' ' ')"; return; }
+    on_screen '.save-bar .btn-primary' 3 || { fail "no test button after calling one off"; return; }
+    click '.save-bar .btn-primary' 0 0.5
+    wait_for 5 test_waiting || { fail "no second test alarm"; return; }
     local id record=no
     id=$(printf "SELECT id FROM alarms WHERE data LIKE '%%\"hidden\":true%%';\n" | sql)
     wait_file "files/sentinel/context/$id.json" 5

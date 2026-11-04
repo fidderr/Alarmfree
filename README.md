@@ -35,8 +35,8 @@ all until a date, duplicate, drag into your own order, or sort by time or next r
 the alarm will. Fade in up to 5 minutes, a minimum volume per alarm or for all, three vibration
 patterns, vibrate first with the sound after a delay, or vibration only.
 
-**Ringing.** Up to 10 challenges per alarm, in your order or at random, with Gentle, Normal and
-Hard presets, each one to try out first. 0 to 10 snoozes of 1 to 60 minutes. A ring limit of 30
+**Ringing.** Up to 10 challenges per alarm, in your order or at random, each one to try
+out first. 0 to 10 snoozes of 1 to 60 minutes. A ring limit of 30
 minutes to forever. An optional wake-up check a few minutes later. Optional full brightness.
 
 **Telling the truth.** A reliability screen with what the phone allows, a way to each setting,

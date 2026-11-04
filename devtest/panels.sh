@@ -136,8 +136,7 @@ try_items() { # name row chosen
 }
 
 # A panel that opened: all of it, and what closes it closes it and nothing else: Done from a row,
-# Back from anywhere else and for a list. The list of challenges has presets that replace it and
-# has its own part. The names used before fill in a field, and are no choice between them.
+# Back from anywhere else and for a list. The list of challenges has its own part. The names used before fill in a field, and are no choice between them.
 panel_open() { # name [row]
     local name=$1 row=${2:-} chosen
     if ! on_screen .sheet 4; then
@@ -404,6 +403,13 @@ s57() {
     click .alarm-main "$n" 0.05
     on_screen .time-big 5 || panel_problem "no editor"
     look_through editor
+    # The small steps either side of the time: a minute later, and back.
+    TB_BEFORE=$(js "return document.querySelector('.time-big').textContent;")
+    click .time-shift 2 0.05
+    TB_AFTER=$(js "return document.querySelector('.time-big').textContent;")
+    click .time-shift 0 0.05
+    [ "$TB_BEFORE" != "$TB_AFTER" ] && [ "$(js "return document.querySelector('.time-big').textContent;")" = "$TB_BEFORE" ] ||
+        panel_problem "the minute buttons do not move the time a minute and back"
     click .time-big 0 0.05
     panel_open editor_time
     click '.screen-header .icon-btn' 1 0.05
@@ -412,6 +418,9 @@ s57() {
     # The fifth row.
     click .row-btn 4 0.05
     if on_screen .challenge-row 4; then
+        # The list, Add, Try all and the order: nothing else to choose from.
+        [ "$(js "return document.querySelectorAll('.sheet .chip').length;")" = 2 ] ||
+            panel_problem "the challenges sheet has more to choose than the order"
         panel_challenges
         press_back
         gone .sheet 3 || panel_problem "Back leaves the challenges open"
@@ -437,6 +446,23 @@ s57() {
     click .summary-toggle 0 0.05
     click .event-main 0 0.05
     look_through history_event
+    # Deleting one entry asks first; Back is no, and the answer takes exactly one away.
+    HIST_N=$(js "return document.querySelectorAll('.event-main').length;")
+    click '.event-details .link-btn' 0 0.05
+    if on_screen '.sheet .sheet-item.danger' 3; then
+        look_through history_delete_one
+        press_back
+        gone .sheet 3 || panel_problem "history_delete_one: Back leaves it open"
+        [ "$(js "return document.querySelectorAll('.event-main').length;")" = "$HIST_N" ] ||
+            panel_problem "Back on the question deleted the entry"
+        click '.event-details .link-btn' 0 0.05
+        on_screen '.sheet .sheet-item.danger' 3
+        click '.sheet-item.danger' 0 0.1
+        [ "$(js "return document.querySelectorAll('.event-main').length;")" = "$((HIST_N - 1))" ] ||
+            panel_problem "deleting one entry did not take exactly one away"
+    else
+        panel_problem "deleting one entry does not ask"
+    fi
     n=$(js "return document.querySelectorAll('.chip-pill').length;")
     i=0
     while [ "$i" -lt "${n:-0}" ] 2> /dev/null; do

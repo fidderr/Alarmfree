@@ -187,23 +187,6 @@ pub fn difficulty_name(difficulty: Difficulty) -> &'static str {
     }
 }
 
-/// The three ready-made sets of the challenges sheet.
-pub fn preset(name: &str) -> Vec<ChallengeSetup> {
-    use ChallengeSetup as C;
-    use Difficulty::{Hard, Medium};
-    match name {
-        "gentle" => vec![C::Hold { count: 3, secs: 3 }],
-        "normal" => vec![C::Math { difficulty: Medium }, C::Steps { count: 20 }],
-        "hard" => vec![
-            C::Math { difficulty: Hard },
-            C::Typing { difficulty: Hard },
-            C::Memory { difficulty: Hard },
-            C::Steps { count: 50 },
-        ],
-        _ => Vec::new(),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -278,13 +261,5 @@ mod tests {
             })
         );
         assert_eq!(ChallengeSetup::from_stored("challenge.gone", "{}"), None);
-    }
-
-    #[test]
-    fn the_presets_exist_and_get_harder() {
-        assert_eq!(preset("gentle").len(), 1);
-        assert_eq!(preset("normal").len(), 2);
-        assert_eq!(preset("hard").len(), 4);
-        assert!(preset("other").is_empty());
     }
 }
