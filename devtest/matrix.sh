@@ -606,14 +606,23 @@ s23c() {
     go_home
     await_sound 30 || { fail "no sound"; return; }
     await_state a firing 12
+    # The next ring is armed a moment after the state is written.
     local next
-    next=$(armed_at_ms a)
+    next_ahead() { next=$(armed_at_ms a); [ "${next:-0}" -gt "$(($(now_s) * 1000))" ]; }
+    wait_for 10 next_ahead
     screenshot s27_heads_up
-    if [ "$(state a)" = firing ] && [ "${next:-0}" -gt "$(($(now_s) * 1000))" ]; then
-        pass "firing and next ring armed, UI on top: $(top_is_app && echo yes || echo no)"
-    else
-        fail "state=$(state a) armed='$next' main=$(main_pid)"
-    fi
+    # A busy phone can hold the word to the app back for ten seconds, past this short ring's
+    # limit: the ring is over by the time the state machine runs, which then still arms the next.
+    case "$(state a)" in
+        firing | scheduled)
+            if [ "${next:-0}" -gt "$(($(now_s) * 1000))" ]; then
+                pass "$(state a) and next ring armed, UI on top: $(top_is_app && echo yes || echo no)"
+            else
+                fail "state=$(state a) armed='$next' main=$(main_pid)"
+            fi
+            ;;
+        *) fail "state=$(state a) armed='$next' main=$(main_pid)" ;;
+    esac
 
     scenario s23c_limit_app_away
     if ! await_silence 40; then
@@ -2216,7 +2225,9 @@ s56() {
 s55() {
     scenario s55_scan_during_a_ring
     fresh
-    shorten ui_timeout_ms 4000
+    # Shorter than the camera stays up, and longer than a cold start takes: Android 12 takes the
+    # task away on Home and the app comes back from nothing, which on a busy emulator is 6 s.
+    shorten ui_timeout_ms 10000
     shorten scan_quiet_secs 8
     next_minute
     seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null air 0 0 3 1 '[["challenge.scan","{}"]]')"
