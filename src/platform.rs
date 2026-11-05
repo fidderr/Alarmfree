@@ -320,10 +320,11 @@ fn setup_platform(woken: bool) {
         // visible (status bar with clock/battery, and the nav bar).
         kiosk_hide_status_bar: false,
         kiosk_hide_nav_bar: false,
-        // Use a full-screen intent so the alarm can wake a locked screen,
-        // but the platform suppresses the on-screen heads-up banner when
-        // the firing UI is already in the foreground (no redundant popup).
+        // A full-screen intent, so the alarm can wake a locked screen.
         firing_full_screen: true,
+        // And no banner over the alarm's own screen once that is up: on ColorOS it covered the
+        // date for some seconds.
+        firing_banner_over_ui: false,
         // Every alarm names its own; this is for the SDK's sake.
         vibration_pattern: VIBRATION_PATTERNS[0].to_vec(),
         // The user's minimum alarm volume (Settings); updated live by

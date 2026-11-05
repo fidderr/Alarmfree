@@ -2795,6 +2795,45 @@ s62() {
     fi
 }
 
+# A ring that starts while the phone is in use: once the alarm's own screen is up, no banner of its
+# notification covers it. Some phones keep the loud one's banner up for its whole time, over the date.
+# Only this app's own words are looked for, and the screen's dump is gone again at once.
+s63() {
+    scenario s63_no_banner_over_the_ring
+    fresh
+    next_minute
+    seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
+    arm a
+    dev input keyevent KEYCODE_HOME
+    local problems="" seen="" t0
+    banner_up() {
+        dev uiautomator dump --windows /sdcard/af_ui.xml > /dev/null 2>&1
+        local found=1
+        dev cat /sdcard/af_ui.xml | grep -q 'text="Tap to open"' && found=0
+        dev rm -f /sdcard/af_ui.xml
+        return $found
+    }
+    if await_ring a 40 && on_screen .ring-off 15; then
+        t0=$SECONDS
+        sleep 1
+        banner_up && seen="$seen $((SECONDS - t0))s"
+        sleep 1
+        banner_up && seen="$seen $((SECONDS - t0))s"
+        screenshot s63_ring
+        [ -z "$seen" ] || problems="$problems; its banner is over the alarm's screen at$seen after it came up"
+        own_notifications | grep -q 'id=900[12]' || problems="$problems; no notification while it rings"
+        click .ring-off 0 0.3
+        wait_for 8 sound_off || problems="$problems; still ringing after turning it off"
+    else
+        problems="$problems; did not ring: state=$(state a)"
+    fi
+    if [ -z "$problems" ]; then
+        pass "no banner over the alarm's screen, the notification stays in the list"
+    else
+        fail "${problems#; }"
+    fi
+}
+
 # The notice before an alarm on a real phone, in real time, with the app really swiped away from
 # recents: an emulator cannot show what the phone's maker does to that. Round one: closed before the
 # notice comes, Skip on the pop-up, Undo, and it must ring. Round two: closed with the notice up, Skip
@@ -3016,8 +3055,8 @@ s62p() {
 
 . "$(dirname "$0")/panels.sh"
 
-ALL="s01 s03 s04 s05 s06 s07 s10 s11 s13 s14 s15 s16 s16b s17 s19 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s34 s36 s37 s38 s39 s40 s42 s43 s44 s45 s46 s47 s48 s49 s50 s51 s52 s53 s55 s56 s57 s58 s59 s60 s61 s62 big_screens s54"
-ON_A_PHONE="s01 s03 s04 s05 s06 s07 s10 s15 s16 s16b s17 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s36 s37 s38 s39 s42 s43 s45 s46 s47 s49 s50 s51 s52 s53 s55 s56 s57 s58 s59 s61 s62 s60p_a s60p_b s62p"
+ALL="s01 s03 s04 s05 s06 s07 s10 s11 s13 s14 s15 s16 s16b s17 s19 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s34 s36 s37 s38 s39 s40 s42 s43 s44 s45 s46 s47 s48 s49 s50 s51 s52 s53 s55 s56 s57 s58 s59 s60 s61 s62 s63 big_screens s54"
+ON_A_PHONE="s01 s03 s04 s05 s06 s07 s10 s15 s16 s16b s17 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s36 s37 s38 s39 s42 s43 s45 s46 s47 s49 s50 s51 s52 s53 s55 s56 s57 s58 s59 s61 s62 s63 s60p_a s60p_b s62p"
 
 : > "$RESULTS"
 RUN_START=$SECONDS
