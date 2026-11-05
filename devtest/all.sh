@@ -54,6 +54,7 @@ START=$SECONDS
 # The big screens first: next to the other emulator's tour of every panel, late in its run, Android
 # 16 starved to the point of its own system UI freezing.
 FIRST=big_screens SKIP=$OLDEST_ONLY run_on af36 5554 &
-SKIP=$NEWEST_ONLY run_on af31 5556 &
+# Android 12's graphics on the host's GPU crashed the emulator now and then, in the middle of a run.
+EMULATOR_GPU=swiftshader_indirect SKIP=$NEWEST_ONLY run_on af31 5556 &
 wait
 echo "all of it in $(((SECONDS - START) / 60)) min $(((SECONDS - START) % 60)) s"
