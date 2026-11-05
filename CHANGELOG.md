@@ -7,6 +7,34 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-05
+
+### Added
+
+- **Themes**: their own screen with nine themes, soft accent colours and a colour wheel for the
+  accent on any theme, and a theme of your own with its background, cards and text. Text and
+  accent always keep 3:1 contrast, so an alarm cannot become unreadable.
+- **A ring screen of your own** per alarm: a moving background (aurora, sunrise, waves, stars,
+  rings, bubbles) or your own photo, its colour, and a style for the clock, with a full screen
+  preview. It stands still with Less motion on.
+- **A notice before an alarm, per alarm**: a silent pop-up 5 to 60 minutes before, with Skip to
+  skip that ring, and Undo until its time. It works with the app closed.
+- A `?` next to each panel's title explains it, instead of notes everywhere.
+
+### Changed
+
+- More room everywhere: rows, cards, buttons and panels, and smaller day bubbles further apart.
+- Trying a sound: a tap only picks it, Start plays it for 15 s. A tap on a vibration tries it
+  for 15 s, whatever the touch feedback is set to, and Heartbeat now plays whole.
+- Try all is at the top of the challenges panel. "Ben je wakker?" says what the wake-up check
+  does. Settings are grouped by what they are about.
+- The notification no longer shows as a banner over the alarm's screen once that is up.
+
+### Removed
+
+- Try for 10 s, the random order of challenges (alarms keep their set order) and the
+  Colorblind theme (it falls back to following the phone).
+
 ## [0.3.1] - 2026-11-04
 
 ### Fixed

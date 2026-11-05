@@ -1,6 +1,6 @@
 [package]
 name = "alarmfree"
-version = "0.3.1"
+version = "0.4.0"
 edition = "2021"
 rust-version = "1.80.0"
 description = "Free, ad-free mobile alarm clock with challenge-based dismissal"
@@ -17,7 +17,7 @@ name = "alarmfree"
 path = "src/main.rs"
 
 [dependencies]
-mobile-sentinel = { version = "0.3.1", features = ["alarm-kit", "scanner", "haptics", "home_widget", "battery", "audio", "overlay", "permissions", "sensors", "foregrounding", "media_picker", "display", "share"]}
+mobile-sentinel = { version = "0.4.0", features = ["alarm-kit", "scanner", "haptics", "home_widget", "battery", "audio", "overlay", "permissions", "sensors", "foregrounding", "media_picker", "display", "share"]}
 dioxus = { version = "0.7", features = ["router"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
