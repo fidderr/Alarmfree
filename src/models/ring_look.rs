@@ -121,6 +121,9 @@ impl RingClock {
 /// Warm by itself: a sunrise in the accent colour of the day is a strange sunrise.
 const SUNRISE: Rgb = Rgb::new(0xff, 0x8a, 0x4c);
 
+/// How far apart on the wheel the colours of a background are.
+const STEP: f32 = 35.0;
+
 /// The look of one alarm's ring screen.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct RingLook {
@@ -149,19 +152,26 @@ where
 }
 
 impl RingLook {
-    /// The colour it moves in, and its two neighbours on the wheel: more alive than one colour,
-    /// and they stay together whatever is picked.
+    /// The colour it moves in, and two neighbours on the wheel: more alive than one colour, and
+    /// they stay together whatever is picked. Yellow and yellow-green turn to olive when they are
+    /// faint on a dark screen, so a neighbour that lands there goes the other way round. A sunrise
+    /// is the exception: its yellow is the bright middle of the sun.
     pub fn colours(&self, accent: Rgb) -> [Rgb; 3] {
+        let sunrise = self.backdrop == RingBackdrop::Sunrise;
         let base = self
             .colour
-            .unwrap_or(if self.backdrop == RingBackdrop::Sunrise {
-                SUNRISE
-            } else {
-                accent
-            });
+            .unwrap_or(if sunrise { SUNRISE } else { accent });
         let (hue, saturation, value) = base.to_hsv();
+        let olive = |by: f32| !sunrise && (50.0..=100.0).contains(&(hue + by).rem_euclid(360.0));
+        let (one, two) = if olive(STEP) {
+            (-STEP, -2.0 * STEP)
+        } else if olive(-STEP) {
+            (STEP, 2.0 * STEP)
+        } else {
+            (STEP, -STEP)
+        };
         let turned = |by: f32| Rgb::from_hsv((hue + by).rem_euclid(360.0), saturation, value);
-        [base, turned(35.0), turned(-35.0)]
+        [base, turned(one), turned(two)]
     }
 
     /// For the `style` of the background.
@@ -233,6 +243,32 @@ mod tests {
             ..RingLook::default()
         };
         assert_eq!(look.colours(Rgb::new(0, 0, 0xff))[0], SUNRISE);
+    }
+
+    #[test]
+    fn a_warm_colour_gets_warm_neighbours_and_no_olive() {
+        let look = RingLook {
+            backdrop: RingBackdrop::Waves,
+            ..RingLook::default()
+        };
+        for accent in [
+            Rgb::new(0xff, 0xc4, 0x5c),
+            Rgb::new(0x8a, 0x5a, 0x00),
+            Rgb::new(0x9b, 0xd1, 0x9b),
+            Rgb::new(0x7c, 0xb0, 0xff),
+            Rgb::new(0xff, 0x94, 0xc8),
+        ] {
+            let [_, one, two] = look.colours(accent);
+            for neighbour in [one, two] {
+                let (hue, _, _) = neighbour.to_hsv();
+                assert!(
+                    !(50.0..=100.0).contains(&hue),
+                    "{} gives {}",
+                    accent.to_css(),
+                    neighbour.to_css()
+                );
+            }
+        }
     }
 
     #[test]

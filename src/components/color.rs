@@ -53,7 +53,9 @@ pub fn ColorControls(
     };
     let (hue, saturation, value) = hsv();
     let (thumb_x, thumb_y) = wheel_position(hue, saturation);
-    let dim = 1.0 - value;
+    // Never all the way: on black a wheel of nothing does not look like something to touch. The
+    // thumb and the code say what the colour really is.
+    let dim = (1.0 - value).min(0.65);
     let shown_on_wheel = Rgb::from_hsv(hue, saturation, value).to_css();
     let brightness = (value * 100.0).round() as u32;
 

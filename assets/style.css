@@ -644,9 +644,9 @@ button:disabled { opacity: 0.5; }
 }
 
 /* An older WebView puts the date at the top of what is only a minimum height. */
-.field[type="date"] { height: 48px; line-height: 46px; }
+.field[type="date"] { display: flex; align-items: center; height: 48px; }
 
-.field[type="date"]::-webkit-date-and-time-value { min-height: 46px; line-height: 46px; text-align: left; }
+.field[type="date"]::-webkit-date-and-time-value { text-align: left; }
 
 .field-short { display: inline-block; width: 88px; margin: 0 8px; }
 
@@ -1420,6 +1420,12 @@ button:disabled { opacity: 0.5; }
     radial-gradient(circle at 69% 90%, var(--ring-3) 0, var(--ring-3) max(1px, calc(var(--u) * 0.48)), transparent max(1.5px, calc(var(--u) * 0.64)));
   opacity: 0.9;
   animation: stars-twinkle 11s ease-in-out 2s infinite alternate;
+}
+
+/* Not behind the words: a star next to a digit reads as a dot in the time. */
+.ring-screen > .backdrop-stars {
+  -webkit-mask-image: linear-gradient(to bottom, #000 7%, transparent 10%, transparent 44%, #000 49%);
+  mask-image: linear-gradient(to bottom, #000 7%, transparent 10%, transparent 44%, #000 49%);
 }
 
 @keyframes stars-twinkle { to { opacity: 0.2; transform: translateY(calc(var(--u) * -3)); } }
