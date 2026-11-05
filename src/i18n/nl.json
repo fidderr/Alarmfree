@@ -265,7 +265,7 @@
   "home.deleted": "{alarm} verwijderd",
   "home.deleted_plain": "Wekker verwijderd",
   "home.quick_alarm": "Snelle wekker",
-  "home.quick_set": "Gaat over {minutes} min af en verwijdert zichzelf",
+  "home.quick_set": "Gaat één keer af over {minutes} min",
   "home.switch_aria": "Aan of uit:",
   "home.switched_off": "Uitgezet",
   "home.template_weekdays": "Doordeweeks om {time}",

@@ -265,7 +265,7 @@
   "home.deleted": "{alarm} supprimée",
   "home.deleted_plain": "Alarme supprimée",
   "home.quick_alarm": "Alarme rapide",
-  "home.quick_set": "Sonne dans {minutes} min puis se supprime",
+  "home.quick_set": "Sonne une fois dans {minutes} min",
   "home.switch_aria": "Activer ou désactiver :",
   "home.switched_off": "Désactivée",
   "home.template_weekdays": "En semaine à {time}",

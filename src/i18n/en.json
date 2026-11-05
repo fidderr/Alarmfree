@@ -265,7 +265,7 @@
   "home.deleted": "{alarm} deleted",
   "home.deleted_plain": "Alarm deleted",
   "home.quick_alarm": "Quick alarm",
-  "home.quick_set": "Rings in {minutes} min, then deletes itself",
+  "home.quick_set": "Rings once in {minutes} min",
   "home.switch_aria": "On or off:",
   "home.switched_off": "Switched off",
   "home.template_weekdays": "Weekdays at {time}",

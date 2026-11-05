@@ -265,7 +265,7 @@
   "home.deleted": "{alarm} gelöscht",
   "home.deleted_plain": "Wecker gelöscht",
   "home.quick_alarm": "Schneller Wecker",
-  "home.quick_set": "Klingelt in {minutes} Min, löscht sich dann selbst",
+  "home.quick_set": "Klingelt einmal in {minutes} Min",
   "home.switch_aria": "An oder aus:",
   "home.switched_off": "Ausgeschaltet",
   "home.template_weekdays": "Werktags um {time}",
