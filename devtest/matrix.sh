@@ -2530,7 +2530,7 @@ s60() {
     # Taken back.
     done_notice() { dev dumpsys notification --noredact | grep -q '"Undo"'; }
     wait_for 8 done_notice || problems="$problems; nothing to take it back with"
-    tap_in_shade Undo || { problems="$problems; no Undo to tap"; screenshot s60_no_undo; }
+    tap_in_shade Undo || problems="$problems; no Undo to tap"
     dev cmd statusbar collapse
     not_skipped() { printf "SELECT data FROM alarms WHERE id='a';\n" | sql | grep -q '"skip_until_ms":null'; }
     wait_for 15 not_skipped || problems="$problems; undo did nothing"
@@ -2785,10 +2785,228 @@ s62() {
     fi
 }
 
+# The notice before an alarm on a real phone, in real time, with the app really swiped away from
+# recents: an emulator cannot show what the phone's maker does to that. Round one: closed before the
+# notice comes, Skip on the pop-up, Undo, and it must ring. Round two: closed with the notice up, Skip
+# by way of the chevron in the shade, and it must not ring. The shade holds other apps' messages and
+# the picker the user's own files: only this app's own lines are read, and there are no pictures of
+# either. PHOTO names a large JPEG for s62p, taken sideways: 4000x3000 with EXIF orientation 6.
+swipe_away() {
+    local x y
+    dev input keyevent KEYCODE_RECENT_APPS
+    sleep 1.5
+    read -r x y <<< "$(dev wm size | grep -oE '[0-9]+x[0-9]+' | tail -1 | tr x ' ')"
+    dev input swipe $((x / 2)) $((y / 2)) $((x / 2)) $((y / 12)) 220
+    sleep 1.2
+    dev input keyevent KEYCODE_HOME
+    sleep 0.6
+}
+own_nodes() {
+    dev uiautomator dump --windows /sdcard/af_ui.xml > /dev/null 2>&1
+    dev cat /sdcard/af_ui.xml | tr '>' '\n' | grep -E 'text="(Alarm at [^"]*|Skip|SKIP|Undo|UNDO)"'
+    dev rm -f /sdcard/af_ui.xml
+}
+tap_node() { # lines, what
+    local bounds x1 y1 x2 y2
+    bounds=$(printf '%s\n' "$1" | grep -m1 -E "$2" | sed -E 's/.*bounds="\[([0-9]+),([0-9]+)\]\[([0-9]+),([0-9]+)\].*/\1 \2 \3 \4/')
+    [ -n "$bounds" ] || return 1
+    read -r x1 y1 x2 y2 <<< "$bounds"
+    dev input tap $(((x1 + x2) / 2)) $(((y1 + y2) / 2))
+}
+# In the shade: the button, after the chevron if it is folded away.
+shade_tap() { # Skip or Undo
+    local i=0 nodes t0=$SECONDS y
+    while [ "$i" -lt 3 ]; do
+        dev cmd statusbar expand-notifications
+        sleep 1.2
+        nodes=$(own_nodes)
+        tap_node "$nodes" "text=\"($1|${1^^})\"" && { echo "$1 in the shade after $((SECONDS - t0))s"; return 0; }
+        y=$(printf '%s\n' "$nodes" | grep -m1 'text="Alarm at' | sed -E 's/.*bounds="\[[0-9]+,([0-9]+)\]\[[0-9]+,([0-9]+)\].*/\1 \2/')
+        if [ -n "$y" ]; then
+            set -- "$1" $y
+            dev input tap 965 $((($2 + $3) / 2))
+            sleep 1
+            nodes=$(own_nodes)
+            tap_node "$nodes" "text=\"($1|${1^^})\"" && { echo "$1 under the chevron after $((SECONDS - t0))s"; return 0; }
+        fi
+        i=$((i + 1))
+    done
+    echo "$1 not found: $(printf '%s\n' "$nodes" | grep -oE 'text="[^"]*"' | tr '\n' ' ')"
+    return 1
+}
+sql_alarm() { printf "SELECT data FROM alarms WHERE id='a';\n" | sql; }
+reminded() { dev dumpsys notification --noredact | grep -q '"Skip"'; }
+done_notice() { dev dumpsys notification --noredact | grep -q '"Undo"'; }
+skipped() { sql_alarm | grep -q "\"skip_until_ms\":$((T * 1000))"; }
+not_skipped() { sql_alarm | grep -q '"skip_until_ms":null'; }
+start_round() {
+    fresh
+    # A notice two minutes before, which the panel does not offer but the app reads the same.
+    next_minute 165
+    ALARM_EXTRA=',"notify_before_minutes":2'
+    seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
+    ALARM_EXTRA=
+    arm a
+    ARMED=$(armed_at_ms a)
+    echo "ring at $T_H:$T_M, $((T - $(now_s))) s from now"
+    dev input keyevent KEYCODE_HOME
+    sleep 0.6
+}
+s60p_a() {
+    scenario s60p_closed_first_popup_skip_undo_rings
+    local problems="" early t0
+    start_round
+    swipe_away
+    wait_for 6 no_process || problems="$problems; still running after the swipe: main=$(main_pid) sentinel=$(sentinel_pid)"
+    echo "swiped away, running: main=[$(main_pid)] sentinel=[$(sentinel_pid)]"
+    wait_for 120 reminded || { fail "no notice with the app closed; $problems"; return; }
+    early=$((T - $(now_s)))
+    echo "notice came $early s before the ring, with the app closed"
+    # It takes a moment to slide in, and a tap on it before that is a tap on the notification.
+    sleep 1.5
+    screenshot s60p_a_popup
+    # On the pop-up itself, as a person does it, where it is right now: with or without the status
+    # bar it sits at another height. In the time it lasts, about 6 s.
+    local shown
+    shown=$(own_nodes)
+    tap_node "$shown" 'text="(Skip|SKIP)"' || problems="$problems; no Skip on the pop-up"
+    t0=$SECONDS
+    wait_for 20 skipped || problems="$problems; a tap on the pop-up did not skip: $(sql_alarm | grep -o '"skip_until_ms":[^,]*')"
+    echo "skipped $((SECONDS - t0))s after the tap"
+    echo "the phone's log says: $(dev logcat -d -b all -t 4000 | grep -oE 'notification_(action_)?clicked.{0,30}alarmfree' | tail -1 | cut -c1-40)"
+    moved() { [ "$(armed_at_ms a)" = "$((ARMED + 86400000))" ]; }
+    wait_for 10 moved || problems="$problems; armed for $(armed_at_ms a), was $ARMED"
+    wait_for 8 done_notice || problems="$problems; nothing to take it back with"
+    screenshot s60p_a_done_popup
+    sleep 7
+    # Back through the shade.
+    shade_tap Undo || problems="$problems; no Undo to tap"
+    dev cmd statusbar collapse
+    wait_for 20 not_skipped || problems="$problems; undo did nothing"
+    back_armed() { [ "$(armed_at_ms a)" = "$ARMED" ]; }
+    wait_for 10 back_armed || problems="$problems; undo left it armed for $(armed_at_ms a)"
+    wait_for 10 reminded || problems="$problems; the notice does not come back after undo"
+    echo "taken back, $((T - $(now_s))) s to go, running: main=[$(main_pid)] sentinel=[$(sentinel_pid)]"
+    # And it rings: a mis-tap cannot make you oversleep.
+    if await_ring a 40 && on_screen .ring-off 20; then
+        echo "rang $(($(now_s) - T)) s after its time"
+        wait_for 8 sound_on || problems="$problems; the ring is silent"
+        screenshot s60p_a_ring
+        click .ring-off 0 0.3
+        wait_for 8 sound_off || problems="$problems; still ringing after turning it off"
+    else
+        problems="$problems; did not ring after undo: state=$(state a) now=$(now_s) T=$T"
+    fi
+    if [ -z "$problems" ]; then
+        pass "closed first: notice $early s before, skipped on the pop-up, taken back, and it rang"
+    else
+        fail "${problems#; }"
+    fi
+}
+s60p_b() {
+    scenario s60p_closed_with_notice_up_stays_silent
+    local problems="" early t0
+    start_round
+    wait_for 120 reminded || { fail "no notice"; return; }
+    early=$((T - $(now_s)))
+    echo "notice came $early s before the ring"
+    sleep 6.5
+    swipe_away
+    wait_for 6 no_process || problems="$problems; still running after the swipe: main=$(main_pid) sentinel=$(sentinel_pid)"
+    echo "after the swipe: running main=[$(main_pid)] sentinel=[$(sentinel_pid)], Skip in the dump: $(dev dumpsys notification --noredact | grep -c '"Skip"'), ours: $(dev dumpsys notification --noredact | grep -c 'pkg=com.fidderr.alarmfree')"
+    wait_for 8 reminded || problems="$problems; the swipe took the notice away"
+    shade_tap Skip || problems="$problems; no Skip to tap"
+    dev cmd statusbar collapse
+    t0=$SECONDS
+    wait_for 20 skipped || problems="$problems; not skipped: $(sql_alarm | grep -o '"skip_until_ms":[^,]*')"
+    echo "skipped $((SECONDS - t0))s after the tap, $((T - $(now_s))) s to go"
+    moved() { [ "$(armed_at_ms a)" = "$((ARMED + 86400000))" ]; }
+    wait_for 10 moved || problems="$problems; armed for $(armed_at_ms a), was $ARMED"
+    wait_for 8 done_notice || problems="$problems; nothing to take it back with"
+    # No ring at its time, also with the app dead.
+    local left=$((T - $(now_s) + 25))
+    [ "$left" -gt 0 ] && sleep "$left"
+    sound_on && problems="$problems; rang although skipped"
+    state_is a firing && problems="$problems; firing although skipped"
+    done_notice && problems="$problems; still offering Undo after the ring's time"
+    [ "$(armed_at_ms a)" = "$((ARMED + 86400000))" ] || problems="$problems; the next ring is at $(armed_at_ms a), expected $((ARMED + 86400000))"
+    start_app
+    on_screen .alarm-main 20
+    echo "the list says: $(read_text .alarm-when)"
+    screenshot s60p_b_home
+    if [ -z "$problems" ]; then
+        pass "closed with it up: notice $early s before, skipped by the chevron, silent at its time, next one armed"
+    else
+        fail "${problems#; }"
+    fi
+}
+# A photo as a camera makes one, through the phone's own picker. Nothing of the picker goes in the
+# log or in a picture: it shows the user's own files.
+s62p() {
+    if on_emulator || [ -z "${PHOTO:-}" ]; then
+        note "s62p needs a phone and PHOTO"
+        return
+    fi
+    scenario s62p_photo_from_the_phone
+    fresh
+    seed a "$(alarm_json a 7 0 "$EVERY_DAY" null)"
+    arm a
+    on_screen .alarm-main 15
+    local problems="" i=0 picked="" box
+    dev rm -f /sdcard/Download/af_photo.jpg
+    adb_ push "$PHOTO" /sdcard/Download/af_photo.jpg > /dev/null
+    dev content call --uri content://media --method scan_volume --arg external_primary > /dev/null 2>&1
+    click .alarm-main
+    on_screen .row-btn
+    open_row 'Alarm screen'
+    click_text '.look-tile-name' Photo 2.5
+    echo "picker: $(focused_window | grep -oE '[a-z.]+/[A-Za-z.]+' | head -1)"
+    while [ "$i" -lt 6 ]; do
+        dev uiautomator dump /sdcard/af_ui.xml > /dev/null 2>&1
+        box=$(dev cat /sdcard/af_ui.xml | tr '>' '\n' | grep -m1 -E '(text|content-desc)="af_photo' | sed -E 's/.*bounds="\[([0-9]+),([0-9]+)\]\[([0-9]+),([0-9]+)\].*/\1 \2 \3 \4/')
+        dev rm -f /sdcard/af_ui.xml
+        if [ -n "$box" ]; then
+            set -- $box
+            dev input tap $((($1 + $3) / 2)) $((($2 + $4) / 2))
+            picked=1
+            break
+        fi
+        sleep 1.5
+        i=$((i + 1))
+    done
+    if [ -n "$picked" ]; then
+        kept() { [ -n "$(as_app "ls files/ring_photos 2> /dev/null")" ]; }
+        wait_for 25 kept || problems="$problems; the photo was not kept"
+        on_screen .look-grid 15 || problems="$problems; not back on the panel"
+        sleep 1
+        echo "kept: $(as_app "ls -l files/ring_photos 2> /dev/null | tail -1" | awk '{print $5}') bytes"
+        click .look-preview-link 0 0.8
+        on_screen .ring-on-photo 8 || problems="$problems; the photo does not show"
+        size=$(js "var p = document.querySelector('.ring-photo'); return p ? p.naturalWidth + 'x' + p.naturalHeight : 'none'")
+        echo "shown at $size"
+        [ "$size" = 1200x1600 ] || problems="$problems; the photo came in as $size, not upright at 1200x1600"
+        screenshot s62p_photo
+        press_back
+        on_screen .look-grid 5
+        done_sheet
+    else
+        problems="$problems; the picker did not show the photo"
+        press_back
+        sleep 1
+    fi
+    dev rm -f /sdcard/Download/af_photo.jpg
+    dev content call --uri content://media --method scan_volume --arg external_primary > /dev/null 2>&1
+    if [ -z "$problems" ]; then
+        pass "a 12 MP photo taken sideways comes in small and upright, and shows behind the time"
+    else
+        fail "${problems#; }"
+    fi
+}
+
 . "$(dirname "$0")/panels.sh"
 
 ALL="s01 s03 s04 s05 s06 s07 s10 s11 s13 s14 s15 s16 s16b s17 s19 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s34 s36 s37 s38 s39 s40 s42 s43 s44 s45 s46 s47 s48 s49 s50 s51 s52 s53 s55 s56 s57 s58 s59 s60 s61 s62 big_screens s54"
-ON_A_PHONE="s01 s03 s04 s05 s06 s07 s10 s15 s16 s16b s17 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s36 s37 s38 s39 s42 s43 s45 s46 s47 s49 s50 s51 s52 s53 s55 s56 s57 s58 s59 s61 s62"
+ON_A_PHONE="s01 s03 s04 s05 s06 s07 s10 s15 s16 s16b s17 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s36 s37 s38 s39 s42 s43 s45 s46 s47 s49 s50 s51 s52 s53 s55 s56 s57 s58 s59 s61 s62 s60p_a s60p_b s62p"
 
 : > "$RESULTS"
 RUN_START=$SECONDS
