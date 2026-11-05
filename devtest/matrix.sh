@@ -2575,7 +2575,8 @@ s61() {
     arm a
     on_screen .nav-item 10
     local problems="" token
-    token() { js "return getComputedStyle(document.querySelector('.app-root')).getPropertyValue('--$1').trim()"; }
+    # Asked again when a page that has just come up is too busy to answer.
+    token() { ask_page "return getComputedStyle(document.querySelector('.app-root')).getPropertyValue('--$1').trim()"; }
     click .nav-item 2
     on_screen .row-btn
     click_row Theme
