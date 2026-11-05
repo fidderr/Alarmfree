@@ -340,6 +340,11 @@ deny_overlay() {
     echo "NOTE  $CURRENT  this device does not let the overlay be denied, it stays allowed" | tee -a "$RESULTS"
     return 1
 }
+# Turned off by a person, in the phone's settings: a phone's shell may not do it itself.
+notifications_off() {
+    dev dumpsys package "$PKG" | grep -q 'POST_NOTIFICATIONS: granted=false' && return 0
+    dev dumpsys notification | grep -q "AppSettings: $PKG .*importance=NONE"
+}
 deny_notifications() {
     PERMISSIONS_TOUCHED=1
     local denied=""

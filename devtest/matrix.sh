@@ -171,8 +171,8 @@ s10() {
     fresh
     next_minute
     seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
-    if ! deny_notifications; then
-        skip "this device does not let the shell deny notifications"
+    if ! notifications_off && ! deny_notifications; then
+        skip "turn this app's notifications off by hand for this one: the shell may not here"
         return
     fi
     arm a
@@ -1456,12 +1456,19 @@ s44() {
 s45() {
     scenario s45_hide_a_warning
     fresh
-    if ! deny_overlay; then
-        skip "needs a warning to hide"
-        return
-    fi
+    # Any warning that can be hidden: the ones that keep an alarm from ringing cannot. Without one, a
+    # warning is made where the shell may. A phone's shell often may not touch the overlay, but does
+    # let the battery exemption go, which the caller of this then puts back.
     start_app
-    on_screen .banner-text 10
+    if ! on_screen '.banner-row .icon-btn' 8; then
+        dev am force-stop "$PKG"
+        if ! deny_overlay; then
+            skip "needs a warning that can be hidden: this app without its battery exemption has one"
+            return
+        fi
+        start_app
+        on_screen '.banner-row .icon-btn' 10
+    fi
     local problems="" first
     first=$(read_text .banner-text)
     [ -n "$first" ] || problems="$problems; nothing to hide"
