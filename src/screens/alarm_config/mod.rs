@@ -2,6 +2,7 @@
 //! else is one summary row that opens a sheet.
 
 mod challenge_sheets;
+mod look_sheets;
 mod simple_sheets;
 mod sound_sheets;
 
@@ -9,6 +10,7 @@ use chrono::TimeZone;
 use dioxus::prelude::*;
 
 use challenge_sheets::{AddChallengeSheet, ChallengeDetailSheet, ChallengesSheet};
+use look_sheets::{RingColourSheet, RingLookSheet, RingPreview};
 use simple_sheets::{
     DateSheet, DeleteSheet, DiscardSheet, LabelSheet, LimitSheet, NoticeSheet, SnoozeSheet,
     TimeSheet, WakeCheckSheet,
@@ -40,6 +42,8 @@ enum EditorSheet {
     Limit,
     WakeCheck,
     Notice,
+    RingLook,
+    RingColour,
     Delete,
     Discard,
 }
@@ -115,6 +119,8 @@ struct EditorState {
     /// Challenges being tried; shown instead of the editor, which keeps its state.
     trying: Signal<Option<Vec<ChallengeSetup>>>,
     preview: Preview,
+    /// The ring screen shown full screen, instead of the editor, which keeps its state.
+    previewing_look: Signal<bool>,
 }
 
 /// Stops whatever a sound preview started, also when the editor goes away.
@@ -247,6 +253,7 @@ fn Editor(id: String) -> Element {
     let typed_time = use_signal(String::new);
     let renaming = use_signal(|| None);
     let mut trying: Signal<Option<Vec<ChallengeSetup>>> = use_signal(|| None);
+    let previewing_look = use_signal(|| false);
     let handle = use_signal(|| 0u64);
     let token = use_signal(|| 0u64);
     let sounding = use_signal(|| false);
@@ -268,6 +275,7 @@ fn Editor(id: String) -> Element {
         renaming,
         trying,
         preview,
+        previewing_look,
     });
     use_drop(move || {
         stop_preview(*handle.peek());
@@ -362,6 +370,9 @@ fn Editor(id: String) -> Element {
             }
         };
     }
+    if previewing_look() {
+        return rsx! { RingPreview {} };
+    }
 
     let current = draft.read().clone();
     let title = if for_defaults {
@@ -446,6 +457,8 @@ fn Editor(id: String) -> Element {
         Some(EditorSheet::Limit) => rsx! { LimitSheet {} },
         Some(EditorSheet::WakeCheck) => rsx! { WakeCheckSheet {} },
         Some(EditorSheet::Notice) => rsx! { NoticeSheet {} },
+        Some(EditorSheet::RingLook) => rsx! { RingLookSheet {} },
+        Some(EditorSheet::RingColour) => rsx! { RingColourSheet {} },
         Some(EditorSheet::Delete) => rsx! { DeleteSheet { id: id.clone() } },
         Some(EditorSheet::Discard) => rsx! { DiscardSheet {} },
     };
@@ -526,6 +539,7 @@ fn Editor(id: String) -> Element {
                     Row { title: t(&translations, "config.challenges"), value: challenge_summary_text, on_click: move |_| sheet.set(Some(EditorSheet::Challenges)) }
                 }
                 ul { class: "list",
+                    Row { title: t(&translations, "config.ring_look"), value: t(&translations, current.ring_look.backdrop.name_key()), on_click: move |_| sheet.set(Some(EditorSheet::RingLook)) }
                     Row { title: t(&translations, "config.ring_limit"), value: limit_summary, on_click: move |_| sheet.set(Some(EditorSheet::Limit)) }
                     Row { title: t(&translations, "config.wake_check"), value: check_summary, on_click: move |_| sheet.set(Some(EditorSheet::WakeCheck)) }
                     Row { title: t(&translations, "config.notice"), value: notice_summary, on_click: move |_| sheet.set(Some(EditorSheet::Notice)) }

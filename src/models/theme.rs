@@ -509,7 +509,9 @@ mod tests {
         let vars = Palette::from_base(DARK, BLUE).css_vars();
         let sheet = include_str!("../../assets/style.css");
         // Set on the element they are for, by the challenges and the confetti.
-        const SET_IN_PLACE: [&str; 7] = ["fx", "fy", "size", "hue", "dx", "dy", "delay"];
+        const SET_IN_PLACE: [&str; 10] = [
+            "fx", "fy", "size", "hue", "dx", "dy", "delay", "ring-1", "ring-2", "ring-3",
+        ];
         // A colour the sheet uses and nothing sets would be invisible.
         for used in sheet.split("var(--").skip(1) {
             let reference = used.split(')').next().unwrap_or_default();

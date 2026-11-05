@@ -18,6 +18,7 @@ pub mod ordering;
 pub mod persistence;
 pub mod platform;
 pub mod reorder;
+pub mod ring_photos;
 pub mod sanitize;
 pub mod schedule;
 pub mod screens;

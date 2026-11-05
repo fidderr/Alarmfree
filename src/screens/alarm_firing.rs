@@ -1,9 +1,10 @@
-use chrono::{Datelike, Timelike};
+use chrono::Timelike;
 use dioxus::prelude::*;
 
 use crate::app::{t, AlarmData, Route, Translations};
 use crate::models::{AppSettings, ChallengeSetup, ChallengeSolve};
 use crate::screens::challenge_run::{prepare, ChallengeRun, ChallengeToRun};
+use crate::screens::ring_face::{ring_date, RingFace};
 
 /// How the ring on screen stands.
 #[derive(Clone, Copy)]
@@ -113,6 +114,10 @@ pub fn AlarmFiring(id: String) -> Element {
         .filter(|label| !label.is_empty())
         .unwrap_or_else(|| t(&translations, "alarm.fallback_label"));
     let note = alarm.as_ref().map(|a| a.note.clone()).unwrap_or_default();
+    let look = alarm
+        .as_ref()
+        .map(|a| a.ring_look.clone())
+        .unwrap_or_default();
     let hidden = alarm.as_ref().is_some_and(|a| a.hidden);
     let max_snoozes = alarm.as_ref().map_or(0u8, |a| a.snooze_count);
     let snooze_minutes = alarm.as_ref().map_or(1u8, |a| a.snooze_interval);
@@ -223,15 +228,7 @@ pub fn AlarmFiring(id: String) -> Element {
     let moment = now();
     let twenty_four = crate::text::uses_24_hours(&settings.read());
     let clock = crate::text::clock(moment.hour() as u8, moment.minute() as u8, twenty_four);
-    let date_text = format!(
-        "{} {} {}",
-        t(
-            &translations,
-            crate::text::FULL_DAY_KEYS[moment.weekday().num_days_from_monday() as usize]
-        ),
-        moment.day(),
-        crate::text::month_short(&translations, moment.month0() as usize),
-    );
+    let date_text = ring_date(&translations, moment);
     let snooze_text = t(&translations, "ring.snooze")
         .replace("{minutes}", &snooze_minutes.to_string())
         .replace("{left}", &snoozes_left().to_string());
@@ -244,13 +241,13 @@ pub fn AlarmFiring(id: String) -> Element {
     };
 
     rsx! {
-        div { class: "screen ring-screen",
-            p { class: "ring-date", "{date_text}" }
-            p { class: if twenty_four { "ring-clock" } else { "ring-clock h12" }, "{clock}" }
-            h1 { class: "ring-label", "{label}" }
-            if !note.is_empty() {
-                p { class: "ring-note", "{note}" }
-            }
+        RingFace {
+            look,
+            date: date_text,
+            clock,
+            twenty_four,
+            label,
+            note,
             div { class: "grow" }
 
             if snoozes_left() > 0 {

@@ -5,6 +5,7 @@ pub mod history;
 pub mod home;
 pub mod practice;
 pub mod reliability;
+pub mod ring_face;
 pub mod settings;
 pub mod theme;
 

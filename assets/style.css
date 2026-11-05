@@ -1252,6 +1252,346 @@ button:disabled { opacity: 0.5; }
 
 .dots { flex: none; display: flex; gap: 6px; }
 
+/* ===== The look of the ring screen =====
+   Decoration behind what matters: no touches, and only what the phone draws without effort, so
+   it can run for as long as the alarm does. Nothing moves with less motion on, and what shows then
+   is the rule without its animation, so each of these looks right standing still too.
+   It stays under half strength: light text on the brightest colour, or dark on the darkest, stays
+   readable, with a halo in the background's colour for the rest. */
+.ring-screen > * { position: relative; z-index: 1; }
+
+/* The whole window, also where a large screen keeps the rest to a column. */
+.ring-screen > .ring-backdrop { position: fixed; z-index: 0; }
+
+.ring-backdrop {
+  /* The size of things in it, and how far things travel: smaller on a tile. */
+  --u: 1vmin;
+  --h: 100vh;
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.ring-backdrop span { position: absolute; display: block; }
+
+.ring-dressed .ring-date,
+.ring-dressed .ring-clock,
+.ring-dressed .ring-label,
+.ring-dressed .ring-note,
+.ring-dressed .ring-challenges {
+  text-shadow: 0 0 14px var(--bg), 0 0 4px var(--bg);
+}
+
+/* Small, and where the backgrounds are at their brightest. */
+.ring-dressed .ring-challenges { color: var(--text); text-shadow: 0 0 10px var(--bg), 0 0 3px var(--bg), 0 0 1px var(--bg); }
+
+.backdrop-aurora span {
+  width: calc(var(--u) * 130);
+  height: calc(var(--u) * 130);
+  border-radius: 50%;
+}
+
+.backdrop-aurora span:nth-child(1) {
+  top: -20%;
+  left: -40%;
+  background: radial-gradient(circle, var(--ring-1), transparent 66%);
+  opacity: 0.5;
+  animation: aurora-one 19s ease-in-out infinite alternate;
+}
+
+.backdrop-aurora span:nth-child(2) {
+  top: 16%;
+  right: -55%;
+  background: radial-gradient(circle, var(--ring-2), transparent 66%);
+  opacity: 0.42;
+  animation: aurora-two 25s ease-in-out infinite alternate;
+}
+
+.backdrop-aurora span:nth-child(3) {
+  bottom: -28%;
+  left: -18%;
+  background: radial-gradient(circle, var(--ring-3), transparent 66%);
+  opacity: 0.38;
+  animation: aurora-three 31s ease-in-out infinite alternate;
+}
+
+@keyframes aurora-one { to { transform: translate(calc(var(--u) * 36), calc(var(--u) * 26)) scale(1.2); } }
+@keyframes aurora-two { to { transform: translate(calc(var(--u) * -40), calc(var(--u) * 34)) scale(0.85); } }
+@keyframes aurora-three { to { transform: translate(calc(var(--u) * 28), calc(var(--u) * -44)) scale(1.15); } }
+
+/* It comes up as long as the alarm takes, and then stays up. */
+.backdrop-sunrise span:nth-child(1) {
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  background: linear-gradient(to top, var(--ring-1), var(--ring-3) 36%, transparent 76%);
+  opacity: 0.55;
+  animation: sunrise-sky 45s ease-out;
+}
+
+.backdrop-sunrise span:nth-child(2) {
+  left: 50%;
+  bottom: 2%;
+  width: calc(var(--u) * 120);
+  height: calc(var(--u) * 120);
+  margin-left: calc(var(--u) * -60);
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--ring-2), var(--ring-1) 30%, transparent 68%);
+  opacity: 0.85;
+  animation: sunrise-sun 45s ease-out;
+}
+
+@keyframes sunrise-sky { from { opacity: 0.08; } }
+@keyframes sunrise-sun { from { transform: translateY(calc(var(--h) * 0.34)); opacity: 0.2; } }
+
+/* A turning square with very round corners has a top edge that rolls like a wave. */
+.backdrop-waves span {
+  left: 50%;
+  width: calc(var(--u) * 280);
+  height: calc(var(--u) * 280);
+  margin-left: calc(var(--u) * -140);
+}
+
+.backdrop-waves span:nth-child(1) {
+  top: calc(var(--h) * 0.56);
+  border-radius: 44%;
+  background: var(--ring-1);
+  opacity: 0.22;
+  animation: wave-turn 23s linear infinite;
+}
+
+.backdrop-waves span:nth-child(2) {
+  top: calc(var(--h) * 0.62);
+  border-radius: 42%;
+  background: var(--ring-2);
+  opacity: 0.2;
+  animation: wave-turn 31s linear infinite reverse;
+}
+
+.backdrop-waves span:nth-child(3) {
+  top: calc(var(--h) * 0.68);
+  border-radius: 46%;
+  background: var(--ring-3);
+  opacity: 0.18;
+  animation: wave-turn 41s linear infinite;
+}
+
+@keyframes wave-turn { to { transform: rotate(360deg); } }
+
+.backdrop-stars span { top: 0; right: 0; bottom: 0; left: 0; background-size: 100% 50%; }
+
+.backdrop-stars span:nth-child(1) {
+  background-image:
+    radial-gradient(circle at 12% 9%, var(--ring-1) 0, var(--ring-1) max(1px, calc(var(--u) * 0.64)), transparent max(1.5px, calc(var(--u) * 0.80))),
+    radial-gradient(circle at 78% 6%, var(--ring-1) 0, var(--ring-1) max(1px, calc(var(--u) * 0.48)), transparent max(1.5px, calc(var(--u) * 0.64))),
+    radial-gradient(circle at 44% 31%, var(--ring-1) 0, var(--ring-1) max(1px, calc(var(--u) * 0.72)), transparent max(1.5px, calc(var(--u) * 0.88))),
+    radial-gradient(circle at 91% 38%, var(--ring-1) 0, var(--ring-1) max(1px, calc(var(--u) * 0.48)), transparent max(1.5px, calc(var(--u) * 0.64))),
+    radial-gradient(circle at 7% 56%, var(--ring-1) 0, var(--ring-1) max(1px, calc(var(--u) * 0.64)), transparent max(1.5px, calc(var(--u) * 0.80))),
+    radial-gradient(circle at 63% 71%, var(--ring-1) 0, var(--ring-1) max(1px, calc(var(--u) * 0.48)), transparent max(1.5px, calc(var(--u) * 0.64))),
+    radial-gradient(circle at 28% 88%, var(--ring-1) 0, var(--ring-1) max(1px, calc(var(--u) * 0.72)), transparent max(1.5px, calc(var(--u) * 0.88)));
+  opacity: 1;
+  animation: stars-twinkle 5s ease-in-out infinite alternate;
+}
+
+.backdrop-stars span:nth-child(2) {
+  background-image:
+    radial-gradient(circle at 31% 4%, var(--ring-2) 0, var(--ring-2) max(1px, calc(var(--u) * 0.48)), transparent max(1.5px, calc(var(--u) * 0.64))),
+    radial-gradient(circle at 58% 17%, var(--ring-2) 0, var(--ring-2) max(1px, calc(var(--u) * 0.64)), transparent max(1.5px, calc(var(--u) * 0.80))),
+    radial-gradient(circle at 18% 36%, var(--ring-2) 0, var(--ring-2) max(1px, calc(var(--u) * 0.48)), transparent max(1.5px, calc(var(--u) * 0.64))),
+    radial-gradient(circle at 73% 52%, var(--ring-2) 0, var(--ring-2) max(1px, calc(var(--u) * 0.80)), transparent max(1.5px, calc(var(--u) * 0.96))),
+    radial-gradient(circle at 39% 64%, var(--ring-2) 0, var(--ring-2) max(1px, calc(var(--u) * 0.48)), transparent max(1.5px, calc(var(--u) * 0.64))),
+    radial-gradient(circle at 86% 79%, var(--ring-2) 0, var(--ring-2) max(1px, calc(var(--u) * 0.64)), transparent max(1.5px, calc(var(--u) * 0.80))),
+    radial-gradient(circle at 11% 93%, var(--ring-2) 0, var(--ring-2) max(1px, calc(var(--u) * 0.48)), transparent max(1.5px, calc(var(--u) * 0.64)));
+  opacity: 0.85;
+  animation: stars-twinkle 7s ease-in-out 1s infinite alternate-reverse;
+}
+
+.backdrop-stars span:nth-child(3) {
+  background-image:
+    radial-gradient(circle at 92% 14%, var(--ring-3) 0, var(--ring-3) max(1px, calc(var(--u) * 0.64)), transparent max(1.5px, calc(var(--u) * 0.80))),
+    radial-gradient(circle at 5% 24%, var(--ring-3) 0, var(--ring-3) max(1px, calc(var(--u) * 0.48)), transparent max(1.5px, calc(var(--u) * 0.64))),
+    radial-gradient(circle at 53% 45%, var(--ring-3) 0, var(--ring-3) max(1px, calc(var(--u) * 0.48)), transparent max(1.5px, calc(var(--u) * 0.64))),
+    radial-gradient(circle at 24% 73%, var(--ring-3) 0, var(--ring-3) max(1px, calc(var(--u) * 0.64)), transparent max(1.5px, calc(var(--u) * 0.80))),
+    radial-gradient(circle at 69% 90%, var(--ring-3) 0, var(--ring-3) max(1px, calc(var(--u) * 0.48)), transparent max(1.5px, calc(var(--u) * 0.64)));
+  opacity: 0.9;
+  animation: stars-twinkle 11s ease-in-out 2s infinite alternate;
+}
+
+@keyframes stars-twinkle { to { opacity: 0.2; transform: translateY(calc(var(--u) * -3)); } }
+
+/* From around the time. */
+.backdrop-rings span {
+  left: 50%;
+  top: 22%;
+  width: calc(var(--u) * 46);
+  height: calc(var(--u) * 46);
+  margin: calc(var(--u) * -23) 0 0 calc(var(--u) * -23);
+  border: 2px solid var(--ring-1);
+  border-radius: 50%;
+  animation: ring-out 9s ease-out infinite;
+}
+
+.backdrop-rings span:nth-child(1) { transform: scale(1); opacity: 0.36; }
+.backdrop-rings span:nth-child(2) { transform: scale(1.7); opacity: 0.26; border-color: var(--ring-2); animation-delay: -2.25s; }
+.backdrop-rings span:nth-child(3) { transform: scale(2.4); opacity: 0.16; animation-delay: -4.5s; }
+.backdrop-rings span:nth-child(4) { transform: scale(3.1); opacity: 0.08; border-color: var(--ring-3); animation-delay: -6.75s; }
+
+@keyframes ring-out {
+  from { transform: scale(0.6); opacity: 0.6; }
+  to { transform: scale(4); opacity: 0; }
+}
+
+.backdrop-bubbles span {
+  border-radius: 50%;
+  background: radial-gradient(circle, transparent 52%, var(--ring-1) 100%);
+  opacity: 0.6;
+  animation: bubble-up 26s linear infinite;
+}
+
+.backdrop-bubbles span:nth-child(3n + 2) { background: radial-gradient(circle, transparent 52%, var(--ring-2) 100%); }
+.backdrop-bubbles span:nth-child(3n) { background: radial-gradient(circle, transparent 52%, var(--ring-3) 100%); }
+
+.backdrop-bubbles span:nth-child(1) { left: 6%; top: 14%; width: calc(var(--u) * 14); height: calc(var(--u) * 14); animation-duration: 24s; animation-delay: -3s; }
+.backdrop-bubbles span:nth-child(2) { left: 24%; top: 66%; width: calc(var(--u) * 26); height: calc(var(--u) * 26); animation-duration: 33s; animation-delay: -19s; }
+.backdrop-bubbles span:nth-child(3) { left: 42%; top: 30%; width: calc(var(--u) * 9); height: calc(var(--u) * 9); animation-duration: 21s; animation-delay: -8s; }
+.backdrop-bubbles span:nth-child(4) { left: 55%; top: 82%; width: calc(var(--u) * 18); height: calc(var(--u) * 18); animation-duration: 28s; animation-delay: -14s; }
+.backdrop-bubbles span:nth-child(5) { left: 74%; top: 18%; width: calc(var(--u) * 30); height: calc(var(--u) * 30); animation-duration: 37s; animation-delay: -27s; }
+.backdrop-bubbles span:nth-child(6) { left: 88%; top: 56%; width: calc(var(--u) * 11); height: calc(var(--u) * 11); animation-duration: 23s; animation-delay: -11s; }
+.backdrop-bubbles span:nth-child(7) { left: 12%; top: 44%; width: calc(var(--u) * 20); height: calc(var(--u) * 20); animation-duration: 30s; animation-delay: -23s; }
+.backdrop-bubbles span:nth-child(8) { left: 63%; top: 50%; width: calc(var(--u) * 7); height: calc(var(--u) * 7); animation-duration: 19s; animation-delay: -6s; }
+.backdrop-bubbles span:nth-child(9) { left: 34%; top: 92%; width: calc(var(--u) * 12); height: calc(var(--u) * 12); animation-duration: 26s; animation-delay: -17s; }
+
+@keyframes bubble-up {
+  from { transform: translate(0, var(--h)); }
+  50% { transform: translate(calc(var(--u) * 4), 0); }
+  to { transform: translate(0, calc(var(--h) * -1)); }
+}
+
+.ring-photo {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  animation: photo-drift 40s ease-in-out infinite alternate;
+}
+
+@keyframes photo-drift { to { transform: scale(1.09); } }
+
+.ring-backdrop .ring-photo-scrim {
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+/* A photo can be anything: the same words on it whatever the theme. */
+.ring-on-photo {
+  --text: #ffffff;
+  --text2: rgba(255, 255, 255, 0.88);
+  --bg: #000000;
+  color: #ffffff;
+}
+
+.ring-on-photo .ring-snooze { background: rgba(0, 0, 0, 0.5); color: #ffffff; }
+
+.clock-thin { font-weight: 200; letter-spacing: -1px; }
+.clock-bold { font-weight: 800; letter-spacing: -3px; }
+.clock-classic { font-family: serif; font-weight: 400; letter-spacing: -1px; }
+.clock-mono { font-family: monospace; font-weight: 500; letter-spacing: -6px; }
+.clock-mono.h12 { letter-spacing: -4px; }
+
+.ring-preview { width: 100%; height: 100%; }
+
+.ring-preview .btn { display: flex; align-items: center; justify-content: center; }
+
+.look-grid {
+  flex: none;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px 10px;
+  margin-top: 8px;
+}
+
+.look-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 16px;
+  text-align: center;
+  color: var(--text2);
+}
+
+.look-tile.selected { font-weight: 500; color: var(--text); }
+
+.look-tile-face {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 76px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  background: var(--bg);
+}
+
+.look-tile.selected .look-tile-face { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent); }
+
+.look-tile-face .ring-backdrop,
+.look-live .ring-backdrop {
+  --u: 0.3vmin;
+  --h: 76px;
+}
+
+.look-tile-add {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text2);
+}
+
+.look-other-photo { align-self: center; margin-top: 8px; }
+
+.look-row {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 52px;
+  margin-top: 12px;
+  text-align: left;
+}
+
+.look-row-value { color: var(--text2); }
+
+.look-live {
+  position: relative;
+  flex: none;
+  height: 56px;
+  margin-top: 4px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  background: var(--bg);
+}
+
 .dot {
   width: 8px;
   height: 8px;

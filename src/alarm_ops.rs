@@ -34,6 +34,7 @@ pub fn factory_alarm() -> AlarmData {
         vibration: 0,
         volume_percent: None,
         notify_before_minutes: 0,
+        ring_look: Default::default(),
         wake_check_minutes: 0,
         max_brightness: false,
         sound_delay_secs: 0,

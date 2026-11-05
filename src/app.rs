@@ -180,6 +180,9 @@ pub struct AlarmData {
     /// A silent notice this long before it rings, from which the ring can be skipped (0 = off).
     #[serde(default)]
     pub notify_before_minutes: u8,
+    /// How the screen looks while it rings.
+    #[serde(default)]
+    pub ring_look: crate::models::RingLook,
     /// Only vibrate this long before the sound starts. Needs both on (`sound_mode` 0).
     #[serde(default)]
     pub sound_delay_secs: u16,
@@ -287,6 +290,10 @@ pub fn App() -> Element {
     use_hook(|| {
         crate::feedback::set_enabled(settings.peek().prefs.touch_feedback);
         crate::history_persistence::delete_history(Some(HISTORY_KEEP_DAYS));
+        crate::ring_photos::prune(
+            &alarms.peek(),
+            settings.peek().prefs.alarm_defaults.as_ref(),
+        );
     });
 
     // Back: whatever is on top takes it, else the screen is left. While an alarm rings
