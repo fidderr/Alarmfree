@@ -955,10 +955,15 @@ s33() {
     ALARM_EXTRA=
     arm a
     jump_to $((T - 303))
-    reminded() { dev dumpsys notification --noredact | grep -q 'sentinel_reminders'; }
-    # Not an exact alarm, on purpose. On a phone its time has to come first, too.
+    # This app's own notice, not its channel: that stays listed once one has been shown. On a phone
+    # its time has to come first, too.
     if wait_for 180 reminded; then
-        pass "shown $((T - $(now_s)))s before the ring"
+        local left=$((T - $(now_s)))
+        if [ "$left" -ge 240 ] && [ "$left" -le 305 ]; then
+            pass "shown ${left}s before the ring"
+        else
+            fail "shown ${left}s before the ring, it should be 300"
+        fi
     else
         fail "not shown, $((T - $(now_s)))s before the ring: $(dev dumpsys alarm | grep -m1 -A3 'reminder:a' | tr -s ' ' | cut -c1-160)"
     fi
@@ -1040,7 +1045,7 @@ hold_and_drag() { # selector index pixels
 gap_between() { # selector from to
     js "var c = document.querySelectorAll('$1'); return Math.round((c[$3].getBoundingClientRect().top - c[$2].getBoundingClientRect().top) * devicePixelRatio);"
 }
-texts_of() { js "return [...document.querySelectorAll('$1')].map(e => e.textContent).join(' ')"; }
+texts_of() { ask_page "return [...document.querySelectorAll('$1')].map(e => e.textContent).join(' ')"; }
 click_row() { # the row of a list with this title
     js "var e = [...document.querySelectorAll('.row-btn')].find(e => e.textContent.includes('$1')); if (!e) return 'no row $1'; e.click(); return 'ok'" > /dev/null
     sleep 0.25
@@ -2500,7 +2505,6 @@ s60() {
     armed=$(armed_at_ms a)
     dev input keyevent KEYCODE_HOME
     jump_to $((T - 303))
-    reminded() { dev dumpsys notification --noredact | grep -q '"Skip"'; }
     wait_for 180 reminded || { fail "no notice with a Skip"; return; }
     kill_all
     wait_for 3 no_process
@@ -2528,7 +2532,6 @@ s60() {
     moved() { [ "$(armed_at_ms a)" = "$((armed + 86400000))" ]; }
     wait_for 8 moved || problems="$problems; armed for $(armed_at_ms a), was $armed"
     # Taken back.
-    done_notice() { dev dumpsys notification --noredact | grep -q '"Undo"'; }
     wait_for 8 done_notice || problems="$problems; nothing to take it back with"
     tap_in_shade Undo || problems="$problems; no Undo to tap"
     dev cmd statusbar collapse
@@ -2835,8 +2838,9 @@ shade_tap() { # Skip or Undo
     return 1
 }
 sql_alarm() { printf "SELECT data FROM alarms WHERE id='a';\n" | sql; }
-reminded() { dev dumpsys notification --noredact | grep -q '"Skip"'; }
-done_notice() { dev dumpsys notification --noredact | grep -q '"Undo"'; }
+own_notifications() { dev dumpsys notification --noredact | awk '/NotificationRecord\(/ { ours = /pkg=com\.fidderr\.alarmfree/ } ours'; }
+reminded() { own_notifications | grep -q '"Skip"'; }
+done_notice() { own_notifications | grep -q '"Undo"'; }
 skipped() { sql_alarm | grep -q "\"skip_until_ms\":$((T * 1000))"; }
 not_skipped() { sql_alarm | grep -q '"skip_until_ms":null'; }
 start_round() {
@@ -2913,7 +2917,7 @@ s60p_b() {
     sleep 6.5
     swipe_away
     wait_for 6 no_process || problems="$problems; still running after the swipe: main=$(main_pid) sentinel=$(sentinel_pid)"
-    echo "after the swipe: running main=[$(main_pid)] sentinel=[$(sentinel_pid)], Skip in the dump: $(dev dumpsys notification --noredact | grep -c '"Skip"'), ours: $(dev dumpsys notification --noredact | grep -c 'pkg=com.fidderr.alarmfree')"
+    echo "after the swipe: running main=[$(main_pid)] sentinel=[$(sentinel_pid)], Skip in our notice: $(own_notifications | grep -c '"Skip"')"
     wait_for 8 reminded || problems="$problems; the swipe took the notice away"
     shade_tap Skip || problems="$problems; no Skip to tap"
     dev cmd statusbar collapse
