@@ -43,5 +43,6 @@ jobs:
           test -x "$BIN/aarch64-linux-android31-clang"
           echo "CC_aarch64_linux_android=$BIN/aarch64-linux-android31-clang" >> "$GITHUB_ENV"
           echo "AR_aarch64_linux_android=$BIN/llvm-ar" >> "$GITHUB_ENV"
-      - run: cargo check --target aarch64-linux-android
-      - run: cargo clippy --target aarch64-linux-android -- -D warnings
+      # dx switches on the mobile renderer for an Android build; plain cargo has to be told.
+      - run: cargo check --target aarch64-linux-android --features dioxus/mobile
+      - run: cargo clippy --target aarch64-linux-android --features dioxus/mobile -- -D warnings
