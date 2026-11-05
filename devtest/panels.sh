@@ -19,7 +19,7 @@ panel_check() { # end?
         top.querySelectorAll('*').forEach(e => {
             var r = e.getBoundingClientRect();
             if (r.width < 1 || r.height < 1) return;
-            if ((r.right > w + 1 || r.left < -1) && !e.closest('.chip-scroll, .alarm-swipe, .quick-row, .wheel-column')) bad.push('sticks out: ' + name(e));
+            if ((r.right > w + 1 || r.left < -1) && !e.closest('.chip-scroll, .alarm-swipe, .quick-row, .wheel-column, .ring-backdrop')) bad.push('sticks out: ' + name(e));
             if (e.children.length || !e.textContent.trim()) return;
             if (e.clientWidth && e.scrollWidth > e.clientWidth + 1 && !e.closest('.alarm-label, .chip-scroll, .row-value, .event-title, .chips:not(.chips-grow)')) bad.push('cut off: ' + name(e));
             if (!$1) return;
@@ -486,6 +486,51 @@ s57() {
         gone .sheet 3
     else
         panel_problem "no vibration panel"
+    fi
+    # Every look of the ring screen as big as it will be. A moment first: what moves has to get going.
+    click_row_of_editor 5
+    if on_screen .look-grid 3; then
+        look_preview() { # picture
+            click .look-preview-link 0 0.05
+            if on_screen .ring-preview 3; then
+                sleep 1.5
+                found=$(panel_check true)
+                [ -z "$found" ] || panel_problem "$1: $found"
+                picture "$1"
+                click .ring-preview 0 0.05
+                on_screen .look-grid 3 || panel_problem "$1: not back from the preview"
+            else
+                panel_problem "$1: no preview"
+            fi
+        }
+        i=1
+        while [ "$i" -le 6 ]; do
+            click .look-tile "$i" 0.05
+            look_preview "ring_look_$i"
+            i=$((i + 1))
+        done
+        click .look-row 0 0.05
+        if on_screen .color-wheel 3; then
+            click .swatch 3 0.3
+            picture ring_look_colour
+            click '.sheet .sheet-done' 0 0.05
+            on_screen .look-grid 3
+            look_preview ring_look_own_colour
+        else
+            panel_problem "no colour for the ring screen"
+        fi
+        i=1
+        while [ "$i" -le 4 ]; do
+            click '.sheet .chip' "$i" 0.05
+            look_preview "ring_clock_$i"
+            i=$((i + 1))
+        done
+        click .look-tile 0 0.05
+        click '.sheet .chip' 0 0.05
+        press_back
+        gone .sheet 3
+    else
+        panel_problem "no panel for the ring screen"
     fi
     # The fifth row.
     click .row-btn 4 0.05

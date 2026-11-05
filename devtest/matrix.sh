@@ -1548,7 +1548,9 @@ s47() {
 # phone, and this looks for its words.
 ui_tap() { # the middle of the first element with this in its description
     local bounds x1 y1 x2 y2
-    dev uiautomator dump /sdcard/af_ui.xml > /dev/null 2>&1
+    # UI_WINDOWS=--windows looks in every window: Android can go on calling the home screen the
+    # active one with the shade open over it.
+    dev uiautomator dump ${UI_WINDOWS:-} /sdcard/af_ui.xml > /dev/null 2>&1
     bounds=$(dev cat /sdcard/af_ui.xml | tr '>' '\n' | grep -m1 "$1" | sed -E 's/.*bounds="\[([0-9]+),([0-9]+)\]\[([0-9]+),([0-9]+)\].*/\1 \2 \3 \4/')
     [ -n "$bounds" ] || return 1
     read -r x1 y1 x2 y2 <<< "$bounds"
@@ -2504,15 +2506,17 @@ s60() {
     wait_for 3 no_process
     # Each time again: Android 16 ignores opening the shade while it is still closing. Some
     # Androids write a button in capitals. A locked screen shows a notice without its buttons, and
-    # an emulator can have gone to sleep after what ran before this.
+    # an emulator can have gone to sleep after what ran before this. Waking closes the shade, so
+    # only once.
     tap_in_shade() {
         local i=0
-        while [ "$i" -lt 10 ]; do
-            wake
+        wake
+        while [ "$i" -lt 8 ]; do
             dev cmd statusbar expand-notifications
-            sleep 0.5
-            ui_tap "text=\"$1\"" && return 0
-            ui_tap "text=\"${1^^}\"" && return 0
+            # Only once it has finished opening is the shade what counts as on screen.
+            sleep 1.5
+            UI_WINDOWS=--windows ui_tap "text=\"$1\"" && return 0
+            UI_WINDOWS=--windows ui_tap "text=\"${1^^}\"" && return 0
             i=$((i + 1))
         done
         return 1
@@ -2526,7 +2530,7 @@ s60() {
     # Taken back.
     done_notice() { dev dumpsys notification --noredact | grep -q '"Undo"'; }
     wait_for 8 done_notice || problems="$problems; nothing to take it back with"
-    tap_in_shade Undo || { problems="$problems; no Undo to tap"; screenshot s60_no_undo; dev cat /sdcard/af_ui.xml | tr '>' '\n' | grep -E 'text="[^"]+"' | sed -E 's/.*(text="[^"]*").*(bounds="[^"]*").*/\1 \2/' | cut -c1-100 | head -30; }
+    tap_in_shade Undo || { problems="$problems; no Undo to tap"; screenshot s60_no_undo; }
     dev cmd statusbar collapse
     not_skipped() { printf "SELECT data FROM alarms WHERE id='a';\n" | sql | grep -q '"skip_until_ms":null'; }
     wait_for 15 not_skipped || problems="$problems; undo did nothing"
@@ -2638,10 +2642,152 @@ s61() {
     fi
 }
 
+# The ring screen of one's own: chosen in the editor, seen in a preview that does nothing, and there
+# on the real ring with every button where it was. With less motion it stands still, a photo comes
+# in small, and a photo that is gone is the plain screen.
+s62() {
+    scenario s62_ring_screen_of_ones_own
+    fresh
+    next_minute 50
+    seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
+    arm a
+    on_screen .alarm-main 10
+    local problems=""
+    ring_colour() { js "return getComputedStyle(document.querySelector('.ring-backdrop')).getPropertyValue('--ring-1').trim()"; }
+    parts_moving() { js "return document.querySelector('.ring-backdrop').getAnimations({subtree: true}).filter(a => a.playState === 'running').length"; }
+    # Not under anything: a touch there reaches what is there to touch.
+    on_top() { [ "$(js "var e = document.querySelector('$1'), r = e.getBoundingClientRect(), o = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return e.contains(o) ? 'y' : 'n'")" = y ]; }
+    open_look() {
+        click .alarm-main
+        on_screen .row-btn
+        open_row 'Alarm screen'
+    }
+    open_look
+    [ "$(js "return document.querySelectorAll('.look-tile').length")" = 8 ] || problems="$problems; not all backgrounds"
+    screenshot s62_panel
+    click_text '.look-tile-name' Waves 0.3
+    click .look-row 0 0.3
+    on_screen .color-wheel
+    set_field '.sheet .color-hex' 0 '#c06020'
+    click '.sheet .sheet-done' 0 0.3
+    on_screen .look-grid
+    click_text '.sheet .chip' Mono 0.2
+    # A preview: as it will look, without a sound, and it closes by a tap and by Back.
+    click .look-preview-link 0 0.3
+    on_screen .ring-preview || problems="$problems; no preview"
+    is_there '.ring-preview .backdrop-waves' || problems="$problems; the preview has not got the background"
+    is_there '.ring-preview .clock-mono' || problems="$problems; the preview has not got the clock"
+    [ "$(ring_colour)" = "#c06020" ] || problems="$problems; the preview's colour is $(ring_colour)"
+    [ "$(parts_moving)" -gt 0 ] 2> /dev/null || problems="$problems; nothing moves in the preview"
+    sound_on && problems="$problems; the preview makes a sound"
+    screenshot s62_preview
+    click .ring-preview 0 0.3
+    on_screen .look-grid || problems="$problems; a tap does not close the preview"
+    click .look-preview-link 0 0.3
+    on_screen .ring-preview
+    press_back
+    on_screen .look-grid || problems="$problems; Back does more than close the preview"
+    done_sheet
+    click .save-btn 0 0.3
+    # The real thing.
+    if await_ring a 70 && on_screen .ring-off 15; then
+        is_there .backdrop-waves || problems="$problems; the ring has not got the background"
+        is_there .clock-mono || problems="$problems; the ring has not got the clock"
+        [ "$(ring_colour)" = "#c06020" ] || problems="$problems; the ring's colour is $(ring_colour)"
+        [ "$(parts_moving)" -gt 0 ] 2> /dev/null || problems="$problems; nothing moves on the ring"
+        on_top .ring-off || problems="$problems; Turn off is under something"
+        on_top .ring-snooze || problems="$problems; Snooze is under something"
+        sound_on || problems="$problems; the ring is silent"
+        screenshot s62_ring
+        click .ring-off 0 0.3
+        wait_for 5 sound_off || problems="$problems; still ringing after turning it off"
+    else
+        problems="$problems; did not ring: state=$(state a)"
+    fi
+    # With less motion it stands still.
+    dev am force-stop "$PKG"
+    use_settings '"Dark"' '"English"' '"setup_done":true,"language_follows_phone":false,"less_motion":true'
+    start_app
+    on_screen .alarm-main 10
+    open_look
+    click .look-preview-link 0 0.5
+    on_screen .ring-preview
+    [ "$(parts_moving)" = 0 ] || problems="$problems; $(parts_moving) things move with less motion on"
+    screenshot s62_still
+    press_back
+    # A photo that is gone: the plain screen, nothing else changes.
+    dev am force-stop "$PKG"
+    fresh
+    ALARM_EXTRA=',"ring_look":{"backdrop":"Photo","photo":"gone.jpg"}'
+    seed b "$(alarm_json b 7 0 "$EVERY_DAY" null)"
+    ALARM_EXTRA=
+    start_app
+    on_screen .alarm-main 10
+    open_look
+    click .look-preview-link 0 0.3
+    on_screen .ring-preview || problems="$problems; no preview for a photo that is gone"
+    is_there .ring-on-photo && problems="$problems; dressed for a photo that is gone"
+    is_there .ring-off || problems="$problems; a photo that is gone takes the screen with it"
+    press_back
+    on_screen .look-grid
+    # A photo of one's own, through the phone's picker: it differs per phone, and this looks for its
+    # words. Larger than a screen needs: it comes in small.
+    if on_emulator && [ -f "$OUT/s62_ring.png" ]; then
+        # A ring can leave the screen off and locked, and a picker does not show over that.
+        wake
+        dev rm -f /sdcard/Download/af_photo.png
+        adb_ push "$OUT/s62_ring.png" /sdcard/Download/af_photo.png > /dev/null
+        dev content call --uri content://media --method scan_volume --arg external_primary > /dev/null 2>&1
+        # It still has that gone photo: another one, from the link.
+        click .look-other-photo 0 1
+        photo_tap() {
+            local i=0
+            while [ "$i" -lt 8 ]; do
+                ui_tap 'content-desc="af_photo.png' && return 0
+                ui_tap 'text="af_photo.png"' && return 0
+                if ui_tap 'content-desc="Show roots"'; then
+                    sleep 1
+                    ui_tap 'text="Downloads"'
+                fi
+                sleep 1.5
+                i=$((i + 1))
+            done
+            return 1
+        }
+        if photo_tap; then
+            chosen() { [ -n "$(as_app "ls files/ring_photos 2> /dev/null")" ]; }
+            wait_for 20 chosen || problems="$problems; the photo was not kept"
+            sleep 0.5
+            click .look-preview-link 0 0.5
+            on_screen .ring-on-photo 5 || problems="$problems; the photo does not show"
+            case "$(js "return document.querySelector('.ring-photo').src.slice(0, 15)")" in
+                data:image/jpeg) ;;
+                *) problems="$problems; not the small copy" ;;
+            esac
+            [ "$(js "return Math.max(document.querySelector('.ring-photo').naturalWidth, document.querySelector('.ring-photo').naturalHeight)")" = 1600 ] ||
+                problems="$problems; a photo of the wrong size"
+            on_top .ring-off || problems="$problems; Turn off is under the photo"
+            screenshot s62_photo
+            press_back
+        else
+            problems="$problems; the picker did not offer the photo"
+            screenshot s62_picker
+            dev cat /sdcard/af_ui.xml | tr '>' '
+' | grep -oE '(text|content-desc)="[^"]+"' | cut -c1-60 | head -24
+            press_back
+        fi
+    fi
+    if [ -z "$problems" ]; then
+        pass "chosen, previewed, on the ring with its buttons free, still with less motion, and a lost photo is plain"
+    else
+        fail "${problems#; }"
+    fi
+}
+
 . "$(dirname "$0")/panels.sh"
 
-ALL="s01 s03 s04 s05 s06 s07 s10 s11 s13 s14 s15 s16 s16b s17 s19 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s34 s36 s37 s38 s39 s40 s42 s43 s44 s45 s46 s47 s48 s49 s50 s51 s52 s53 s55 s56 s57 s58 s59 s60 s61 big_screens s54"
-ON_A_PHONE="s01 s03 s04 s05 s06 s07 s10 s15 s16 s16b s17 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s36 s37 s38 s39 s42 s43 s45 s46 s47 s49 s50 s51 s52 s53 s55 s56 s57 s58 s59 s61"
+ALL="s01 s03 s04 s05 s06 s07 s10 s11 s13 s14 s15 s16 s16b s17 s19 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s34 s36 s37 s38 s39 s40 s42 s43 s44 s45 s46 s47 s48 s49 s50 s51 s52 s53 s55 s56 s57 s58 s59 s60 s61 s62 big_screens s54"
+ON_A_PHONE="s01 s03 s04 s05 s06 s07 s10 s15 s16 s16b s17 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s36 s37 s38 s39 s42 s43 s45 s46 s47 s49 s50 s51 s52 s53 s55 s56 s57 s58 s59 s61 s62"
 
 : > "$RESULTS"
 RUN_START=$SECONDS
