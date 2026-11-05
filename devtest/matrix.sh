@@ -502,15 +502,24 @@ s19() {
 # failures the backup screen takes over.
 s22() {
     scenario s22_hung_ui
-    fresh
-    shorten ui_timeout_ms 4000
-    shorten backup_holds 1
-    next_minute
-    seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
-    arm a
-    await_ring a 30 || { fail "never started"; return; }
-    on_screen .ring-off 10
-    local p0 t0
+    local p0 t0 armed_pid try=0
+    while :; do
+        fresh
+        shorten ui_timeout_ms 4000
+        shorten backup_holds 1
+        next_minute
+        seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
+        arm a
+        armed_pid=$(main_pid)
+        await_ring a 30 || { fail "never started"; return; }
+        on_screen .ring-off 10
+        # With a limit this short, a busy machine can run it out while the ring screen still
+        # loads. The guardian restarts it before anything here froze, and the freeze below then
+        # counts as its second failure, which rightly goes to the backup screen.
+        [ "$(main_pid)" = "$armed_pid" ] && break
+        try=$((try + 1))
+        [ "$try" -lt 3 ] || { fail "the ring screen took longer than its limit, three times"; return; }
+    done
     new_main() { local p; p=$(main_pid); [ -n "$p" ] && [ "$p" != "$p0" ]; }
     p0=$(main_pid)
     t0=$SECONDS
@@ -940,9 +949,10 @@ s32() {
 s33() {
     scenario s33_notification_before_alarm
     fresh
-    use_settings '"Dark"' '"English"' '"setup_done":true,"language_follows_phone":false,"notify_before_minutes":5'
     next_minute 320
+    ALARM_EXTRA=',"notify_before_minutes":5'
     seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
+    ALARM_EXTRA=
     arm a
     jump_to $((T - 303))
     reminded() { dev dumpsys notification --noredact | grep -q 'sentinel_reminders'; }
@@ -1147,7 +1157,7 @@ s38() {
     click_row Theme
     on_screen .swatch
     screenshot s38_swatches
-    [ "$(js "return document.querySelectorAll('.swatch').length")" = 5 ] || problems="$problems; no swatches"
+    [ "$(js "return document.querySelectorAll('.swatch').length")" = 10 ] || problems="$problems; no swatches"
     click .swatch 2
     accent="getComputedStyle(document.querySelector('.app-root')).getPropertyValue('--accent').trim()"
     [ "$(js "return $accent")" = "#b9a0ff" ] || problems="$problems; colour is $(js "return $accent")"
@@ -1511,7 +1521,7 @@ s47() {
     on_screen .row-btn
     rows=$(js "return [...document.querySelectorAll('.row-btn')].map(e => e.textContent).join('|')")
     case "$rows" in
-        *Lofi*fade*) ;;
+        *SoundLofi*) ;;
         *) problems="$problems; sound not taken over: $rows" ;;
     esac
     case "$rows" in
@@ -1521,8 +1531,13 @@ s47() {
     case "$rows" in
         *Keep\ out* | *"Label"a*) problems="$problems; its name came along: $rows" ;;
     esac
+    open_row Sound
+    case "$(js "return [...document.querySelectorAll('.sheet .chip.selected')].map(e => e.textContent).join('|')")" in
+        *"1 min"*) ;;
+        *) problems="$problems; fade not taken over" ;;
+    esac
     if [ -z "$problems" ]; then
-        pass "sound and snooze taken over, its name not"
+        pass "sound, fade and snooze taken over, its name not"
     else
         fail "${problems#; }"
     fi
@@ -1751,13 +1766,15 @@ s50() {
         click '.sheet .sheet-done' 0 0.3
         on_screen .challenge-row || problems="$problems; not back on the list after adding"
     done
-    click_text '.sheet .chip' Random
     done_sheet
     open_row 'Ring limit'
     click_text '.sheet .chip' '60 min'
     done_sheet
-    open_row 'Wake-up check'
+    open_row 'Are you up?'
     click_text '.sheet .chip' '3 min'
+    done_sheet
+    open_row 'Notice before'
+    click_text '.sheet .chip' '10 min'
     done_sheet
     click_row 'Full brightness'
     screenshot s50_set
@@ -1768,7 +1785,7 @@ s50() {
     for field in '"time_hour":7' '"time_minute":10' '"label":"Morning"' '"note":"Take pills"' \
         '"days":[false,false,false,false,false,true,true]' '"sound":"funk' '"fade_in_secs":120' \
         '"volume_percent":75' '"vibration":1' '"sound_delay_secs":15' '"snooze_interval":6' \
-        '"snooze_count":4' 'challenge.math' 'challenge.steps' '"random_order":true' \
+        '"snooze_count":4' 'challenge.math' 'challenge.steps' '"notify_before_minutes":10' \
         '"ring_limit_secs":3600' '"wake_check_minutes":3' '"max_brightness":true'; do
         has "$row" "$field"
     done
@@ -1779,7 +1796,7 @@ s50() {
     click .alarm-main
     on_screen .row-btn
     rows=$(js "return [...document.querySelectorAll('.row-btn')].map(e => e.textContent).join('|')")
-    for shown in Morning Funk '6 min, 4' Math '60 min' '3 min'; do
+    for shown in Morning Funk Steady '6 min, 4' Math '60 min' 'After 3 min' '10 min'; do
         has "$rows" "$shown"
     done
     has "$(read_text .time-big)" ':10'
@@ -1812,13 +1829,14 @@ s51() {
         is_there .sheet && press_back
         gone .sheet
     }
-    pick Theme .sheet-item Light
+    click_row Theme
+    on_screen .theme-tile
+    click_text '.theme-tile-name' Light 0.3
+    press_back
+    on_screen .row-btn
     pick 'Time format' .sheet-item '12 hours'
     pick 'Week starts on' .sheet-item Sunday
-    open_row 'Before an alarm'
-    click_text '.sheet .chip' '10 min'
-    done_sheet
-    open_row 'Minimum alarm volume'
+    open_row 'Minimum volume'
     click_text '.sheet .chip' '75%'
     done_sheet
     click_row 'Touch feedback'
@@ -1835,7 +1853,7 @@ s51() {
     has "$columns" Light
     has "$columns" Dutch
     has "$columns" 75
-    for field in '"time_format":"H12"' '"week_start":"Sunday"' '"notify_before_minutes":10' \
+    for field in '"time_format":"H12"' '"week_start":"Sunday"' \
         '"touch_feedback":false' '"less_motion":true' '"confetti":false' \
         '"language_follows_phone":false'; do
         has "$row" "$field"
@@ -1847,7 +1865,7 @@ s51() {
     # A week that starts on Sunday: Z for zondag first.
     has "$(js "return document.querySelector('.alarm-day').textContent")" Z
     if [ -z "$problems" ]; then
-        pass "theme, language, 12 hours, week, notification, volume and switches all stick"
+        pass "theme, language, 12 hours, week, volume and switches all stick"
     else
         fail "${problems#; }"
     fi
@@ -2327,10 +2345,303 @@ big_screens() {
     with_screen 2208x1840 420 s34 s49
 }
 
+
+# Is something vibrating right now? Under that heading it says null when nothing is, on every
+# Android. Filtered on the device, in one go: a pipe with a `dev` on both sides has two readers on
+# the one open shell, and hangs.
+vibrating_now() {
+    dev "dumpsys vibrator_manager | grep -A1 'CurrentVibration:' | grep -v 'CurrentVibration:' | grep -vE '^ *null *\$' | grep -q ."
+}
+not_vibrating() { ! vibrating_now; }
+start_stop_says() { js "var e = document.querySelector('.start-stop'); return e ? e.getAttribute('aria-pressed') : 'none'"; }
+
+# Trying a sound and a vibration: a tap only picks a sound, Start plays it, and Stop, closing and
+# time all end it. A tap on a pattern vibrates, for just as long.
+s58() {
+    scenario s58_trying_sound_and_vibration
+    fresh
+    seed a "$(alarm_json a 7 0 "$EVERY_DAY" null)"
+    arm a
+    on_screen .alarm-main 10
+    local problems="" started took
+    click .alarm-main
+    on_screen .row-btn
+    open_row Sound
+    click_text '.sheet .radio-text' Funk 0.6
+    sound_on && problems="$problems; a tap on a sound plays it"
+    [ "$(start_stop_says)" = false ] || problems="$problems; says it runs: $(start_stop_says)"
+    click .start-stop 0
+    wait_for 4 sound_on || problems="$problems; Start is silent"
+    [ "$(start_stop_says)" = true ] || problems="$problems; Start does not turn to Stop"
+    screenshot s58_playing
+    # While it plays, another sound takes over.
+    click_text '.sheet .radio-text' Happy 0.6
+    sound_on || problems="$problems; another sound stopped it"
+    [ "$(start_stop_says)" = true ] || problems="$problems; another sound ended it"
+    click .start-stop 0
+    wait_for 4 sound_off || problems="$problems; Stop does not stop it"
+    # By itself after a while, also with a sound shorter than that.
+    click .start-stop 0
+    wait_for 4 sound_on
+    started=$SECONDS
+    wait_for 22 sound_off || problems="$problems; does not end by itself"
+    took=$((SECONDS - started))
+    [ "$took" -ge 12 ] && [ "$took" -le 19 ] || problems="$problems; lasted ${took}s"
+    [ "$(start_stop_says)" = false ] || problems="$problems; still says Stop after it ended"
+    # Closing the panel ends it, by Done and by Back.
+    click .start-stop 0
+    wait_for 4 sound_on
+    done_sheet
+    wait_for 4 sound_off || problems="$problems; Done does not stop it"
+    open_row Sound
+    click .start-stop 0
+    wait_for 4 sound_on
+    press_back
+    gone .sheet
+    wait_for 4 sound_off || problems="$problems; Back does not stop it"
+
+    open_row Vibration
+    click_text '.sheet .chip' Heartbeat 0.6
+    vibrating_now || problems="$problems; a tap on a pattern does not vibrate"
+    [ "$(start_stop_says)" = true ] || problems="$problems; no way to stop the vibration"
+    screenshot s58_vibrating
+    started=$SECONDS
+    sleep 8
+    vibrating_now || problems="$problems; stopped after one beat"
+    wait_for 12 not_vibrating || problems="$problems; vibration does not end by itself"
+    took=$((SECONDS - started))
+    [ "$took" -ge 12 ] && [ "$took" -le 19 ] || problems="$problems; vibrated ${took}s"
+    click_text '.sheet .chip' Pulse 0.6
+    vibrating_now || problems="$problems; the next pattern does not vibrate"
+    click .start-stop 0
+    wait_for 3 not_vibrating || problems="$problems; Stop does not stop the vibration"
+    click_text '.sheet .chip' Steady 0.6
+    click_text '.sheet .chip' Off 0.6
+    wait_for 3 not_vibrating || problems="$problems; Off does not stop the vibration"
+    [ "$(start_stop_says)" = none ] || problems="$problems; a button to try nothing"
+    click_text '.sheet .chip' Pulse 0.6
+    done_sheet
+    wait_for 3 not_vibrating || problems="$problems; closing does not stop the vibration"
+    # Turning the touch feedback off has nothing to do with this.
+    press_back
+    on_screen '.sheet, .alarm-card' 4
+    is_there .sheet && click '.sheet-item.danger' 0 0.3
+    on_screen .nav-item 5
+    click .nav-item 2
+    on_screen .row-btn
+    click_row 'Touch feedback'
+    click .nav-item 0
+    on_screen .alarm-main
+    click .alarm-main
+    on_screen .row-btn
+    open_row Vibration
+    click_text '.sheet .chip' Steady 0.6
+    vibrating_now || problems="$problems; touch feedback off silences the preview"
+    done_sheet
+    if [ -z "$problems" ]; then
+        pass "a tap is silent, Start and Stop work, 15 s, closing ends it, vibration too (${took}s)"
+    else
+        fail "${problems#; }"
+    fi
+}
+
+# An alarm going off during a preview: its sound and vibration are its own, and stay.
+s59() {
+    scenario s59_alarm_during_a_preview
+    fresh
+    next_minute 45
+    seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null air 0 0 3 1)"
+    arm a
+    on_screen .alarm-main 10
+    local problems=""
+    click .alarm-main
+    on_screen .row-btn
+    open_row Sound
+    click .start-stop 0
+    wait_for 4 sound_on || problems="$problems; no preview"
+    done_sheet
+    open_row Vibration
+    click_text '.sheet .chip' Pulse 0.3
+    if await_ring a 70 && on_screen .ring-off 15; then
+        # Past when the preview would have stopped things.
+        sleep 16
+        sound_on || problems="$problems; the ring went silent"
+        vibrating_now || problems="$problems; the ring stopped vibrating"
+        state_is a firing || problems="$problems; state $(state a)"
+        click .ring-off 0 0.3
+        wait_for 5 sound_off || problems="$problems; still ringing after turning it off"
+    else
+        problems="$problems; did not ring: state=$(state a)"
+    fi
+    if [ -z "$problems" ]; then
+        pass "the ring keeps its sound and vibration after the preview is gone"
+    else
+        fail "${problems#; }"
+    fi
+}
+
+# The notice before an alarm: from there the next ring can be skipped with the app dead, and that
+# can be taken back. The ring after that one stays.
+s60() {
+    if ! on_emulator; then
+        note "s60 needs an emulator's clock"
+        return
+    fi
+    scenario s60_skip_from_the_notice
+    fresh
+    next_minute 320
+    ALARM_EXTRA=',"notify_before_minutes":5'
+    seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
+    ALARM_EXTRA=
+    arm a
+    local problems="" armed
+    armed=$(armed_at_ms a)
+    dev input keyevent KEYCODE_HOME
+    jump_to $((T - 303))
+    reminded() { dev dumpsys notification --noredact | grep -q '"Skip"'; }
+    wait_for 180 reminded || { fail "no notice with a Skip"; return; }
+    kill_all
+    wait_for 3 no_process
+    # Each time again: Android 16 ignores opening the shade while it is still closing. Some
+    # Androids write a button in capitals. A locked screen shows a notice without its buttons, and
+    # an emulator can have gone to sleep after what ran before this.
+    tap_in_shade() {
+        local i=0
+        while [ "$i" -lt 10 ]; do
+            wake
+            dev cmd statusbar expand-notifications
+            sleep 0.5
+            ui_tap "text=\"$1\"" && return 0
+            ui_tap "text=\"${1^^}\"" && return 0
+            i=$((i + 1))
+        done
+        return 1
+    }
+    tap_in_shade Skip || problems="$problems; no Skip to tap"
+    dev cmd statusbar collapse
+    skipped() { printf "SELECT data FROM alarms WHERE id='a';\n" | sql | grep -q "\"skip_until_ms\":$((T * 1000))"; }
+    wait_for 15 skipped || problems="$problems; not skipped: $(printf "SELECT data FROM alarms WHERE id='a';\n" | sql | grep -o '"skip_until_ms":[^,]*')"
+    moved() { [ "$(armed_at_ms a)" = "$((armed + 86400000))" ]; }
+    wait_for 8 moved || problems="$problems; armed for $(armed_at_ms a), was $armed"
+    # Taken back.
+    done_notice() { dev dumpsys notification --noredact | grep -q '"Undo"'; }
+    wait_for 8 done_notice || problems="$problems; nothing to take it back with"
+    tap_in_shade Undo || { problems="$problems; no Undo to tap"; screenshot s60_no_undo; dev cat /sdcard/af_ui.xml | tr '>' '\n' | grep -E 'text="[^"]+"' | sed -E 's/.*(text="[^"]*").*(bounds="[^"]*").*/\1 \2/' | cut -c1-100 | head -30; }
+    dev cmd statusbar collapse
+    not_skipped() { printf "SELECT data FROM alarms WHERE id='a';\n" | sql | grep -q '"skip_until_ms":null'; }
+    wait_for 15 not_skipped || problems="$problems; undo did nothing"
+    back_armed() { [ "$(armed_at_ms a)" = "$armed" ]; }
+    wait_for 8 back_armed || problems="$problems; undo left it armed for $(armed_at_ms a)"
+    wait_for 8 reminded || problems="$problems; the notice does not come back after undo"
+    # Skipped for good this time, from a list that is open: the list says so.
+    start_app
+    on_screen .alarm-main 10
+    tap_in_shade Skip || problems="$problems; no second Skip to tap"
+    dev cmd statusbar collapse
+    wait_for 15 skipped || problems="$problems; not skipped the second time"
+    says_it() { has_text=$(read_text .alarm-when); case "$has_text" in Skips*) return 0 ;; esac; return 1; }
+    wait_for 8 says_it || problems="$problems; the list says '$has_text'"
+    # No ring at its time.
+    dev am force-stop "$PKG"
+    jump_to $((T - 5))
+    start_app
+    on_screen .alarm-main 10
+    sleep 15
+    sound_on && problems="$problems; rang although skipped"
+    state_is a firing && problems="$problems; firing although skipped"
+    # And the next one does ring.
+    T=$((T + 86400))
+    jump_to $((T - 20))
+    if ! await_ring a 90; then
+        problems="$problems; the ring after the skipped one did not come: state=$(state a)"
+    fi
+    if [ -z "$problems" ]; then
+        pass "skipped with the app dead, taken back, skipped again, that ring silent, the next one rings"
+    else
+        fail "${problems#; }"
+    fi
+}
+
+# Colours of one's own: on the wheel, in a code, and never unreadable. They stay, also on the ring.
+s61() {
+    scenario s61_colours_of_ones_own
+    fresh
+    next_minute 3000
+    seed a "$(alarm_json a 7 0 "$EVERY_DAY" null)"
+    arm a
+    on_screen .nav-item 10
+    local problems="" token
+    token() { js "return getComputedStyle(document.querySelector('.app-root')).getPropertyValue('--$1').trim()"; }
+    click .nav-item 2
+    on_screen .row-btn
+    click_row Theme
+    on_screen .theme-tile
+    [ "$(js "return document.querySelectorAll('.theme-tile').length")" = 9 ] || problems="$problems; not all themes"
+    [ "$(js "return document.querySelectorAll('.swatch').length")" = 10 ] || problems="$problems; not all accents"
+    screenshot s61_theme
+    # A theme that comes with the app, and an accent for it.
+    click_text '.theme-tile-name' Sand 0.3
+    [ "$(token bg)" = "#f3ede2" ] || problems="$problems; Sand is $(token bg)"
+    is_there .theme-light || problems="$problems; Sand is not a light theme"
+    # On the wheel: a finger, as a person does it.
+    click .swatch-wheel 0
+    on_screen .color-wheel
+    local before x y
+    before=$(token accent)
+    read -r x y <<< "$(page "var r = document.querySelector('.color-wheel').getBoundingClientRect(), f = devicePixelRatio; return Math.round((r.left + r.width * 0.15) * f) + ' ' + Math.round((r.top + r.height * 0.5) * f);")"
+    dev input swipe "$x" "$y" "$((x + 20))" "$((y + 20))" 300
+    sleep 0.4
+    [ "$(token accent)" != "$before" ] || problems="$problems; the wheel does nothing"
+    screenshot s61_wheel
+    # In a code.
+    set_field '.sheet .color-hex' 0 '#c06020'
+    [ "$(token accent)" = "#c06020" ] || problems="$problems; the code gives $(token accent)"
+    done_sheet
+    # A theme of one's own, from what is on screen.
+    click '.theme-own .row-btn' 0 0.3
+    [ "$(token bg)" = "#f3ede2" ] || problems="$problems; does not start from the theme on screen"
+    screenshot s61_own
+    # Rows: the own theme itself, then its three colours.
+    click '.row-btn' 1 0.3
+    on_screen .color-wheel
+    set_field '.sheet .color-hex' 0 '#102030'
+    [ "$(token bg)" = "#102030" ] || problems="$problems; background is $(token bg)"
+    is_there .theme-dark || problems="$problems; a dark background is not a dark theme"
+    [ "$(token text)" != "$(token bg)" ] || problems="$problems; text like the background"
+    done_sheet
+    # Unreadable on purpose.
+    click '.row-btn' 3 0.3
+    on_screen .color-wheel
+    set_field '.sheet .color-hex' 0 '#102030'
+    [ "$(token text)" != "#102030" ] || problems="$problems; text as dark as the page can be chosen"
+    is_there .color-adjusted || problems="$problems; does not say it changed the colour"
+    screenshot s61_adjusted
+    click_text '.sheet .chip' Automatic 0.3
+    is_there .color-adjusted && problems="$problems; still says it changed the colour"
+    done_sheet
+    # It stays, after a restart.
+    dev am force-stop "$PKG"
+    start_app
+    on_screen .alarm-main 10
+    [ "$(token bg)" = "#102030" ] || problems="$problems; background not kept: $(token bg)"
+    [ "$(token accent)" = "#c06020" ] || problems="$problems; accent not kept, or changed: $(token accent)"
+    # What a saved Colorblind theme comes up as: not an empty screen.
+    dev am force-stop "$PKG"
+    use_settings '"Colorblind"' '"English"' '"setup_done":true,"language_follows_phone":false'
+    start_app
+    on_screen .alarm-main 10 || problems="$problems; a saved Colorblind theme stops the app"
+    [ -n "$(token bg)" ] || problems="$problems; no colours for a saved Colorblind theme"
+    if [ -z "$problems" ]; then
+        pass "wheel, code and own theme work, stay after a restart, and text stays readable"
+    else
+        fail "${problems#; }"
+    fi
+}
+
 . "$(dirname "$0")/panels.sh"
 
-ALL="s01 s03 s04 s05 s06 s07 s10 s11 s13 s14 s15 s16 s16b s17 s19 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s34 s36 s37 s38 s39 s40 s42 s43 s44 s45 s46 s47 s48 s49 s50 s51 s52 s53 s55 s56 s57 big_screens s54"
-ON_A_PHONE="s01 s03 s04 s05 s06 s07 s10 s15 s16 s16b s17 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s36 s37 s38 s39 s42 s43 s45 s46 s47 s49 s50 s51 s52 s53 s55 s56 s57"
+ALL="s01 s03 s04 s05 s06 s07 s10 s11 s13 s14 s15 s16 s16b s17 s19 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s34 s36 s37 s38 s39 s40 s42 s43 s44 s45 s46 s47 s48 s49 s50 s51 s52 s53 s55 s56 s57 s58 s59 s60 s61 big_screens s54"
+ON_A_PHONE="s01 s03 s04 s05 s06 s07 s10 s15 s16 s16b s17 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s36 s37 s38 s39 s42 s43 s45 s46 s47 s49 s50 s51 s52 s53 s55 s56 s57 s58 s59 s61"
 
 : > "$RESULTS"
 RUN_START=$SECONDS

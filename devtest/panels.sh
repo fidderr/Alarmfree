@@ -28,7 +28,7 @@ panel_check() { # end?
             var box = e.closest('.sheet, .scroll');
             if (box) { var b = box.getBoundingClientRect(); if (y < b.top || y > b.bottom) return; }
             var on = document.elementFromPoint(x, y);
-            if (on && on !== e && !e.contains(on) && !on.contains(e) && !on.closest('svg, .reaction-countdown-num')) bad.push(name(e) + ' under ' + (on.className || on.tagName));
+            if (on && on !== e && !e.contains(on) && !on.contains(e) && !on.closest('svg, .reaction-countdown-num, .sheet-head')) bad.push(name(e) + ' under ' + (on.className || on.tagName));
         });
         return [...new Set(bad)].slice(0, 4).join(', ');"
     ask_page "${script//$'\n'/ }"
@@ -52,7 +52,7 @@ look_through() { # name
     local name=$1 stop=0 top height x end found before after
     sleep 0.05
     read -r top height x <<< "$(page "$SCROLLER if (!s) return '0 0 0'; s.scrollTop = 0; var r = s.getBoundingClientRect(), f = devicePixelRatio;
-        var left = document.querySelector('.sheet .wheel-column') ? r.width * 0.1 : r.width / 2;
+        var left = document.querySelector('.sheet .wheel-column, .sheet .color-wheel') ? r.width * 0.1 : r.width / 2;
         return Math.round(r.top * f) + ' ' + Math.round(r.height * f) + ' ' + Math.round((r.left + left) * f);")"
     while [ "$stop" -lt 8 ]; do
         stop=$((stop + 1))
@@ -135,6 +135,21 @@ try_items() { # name row chosen
     [ "$now" = "$was" ] || panel_problem "$name: does not go back to what it said: $now"
 }
 
+# The ? on top, if there is one: it opens the explanation in place, and closes it again.
+panel_help() { # name
+    local name=$1 where='.sheet .help-btn'
+    is_there .sheet || where='.screen-header .help-btn'
+    is_there "$where" || return 0
+    click "$where" 0 0.05
+    if on_screen .help-text 2; then
+        look_through "${name}_help"
+    else
+        panel_problem "$name: the ? opens nothing"
+    fi
+    click "$where" 0 0.05
+    gone .help-text 2 || panel_problem "$name: the ? does not close"
+}
+
 # A panel that opened: all of it, and what closes it closes it and nothing else: Done from a row,
 # Back from anywhere else and for a list. The list of challenges has its own part. The names used before fill in a field, and are no choice between them.
 panel_open() { # name [row]
@@ -144,6 +159,7 @@ panel_open() { # name [row]
         return 1
     fi
     look_through "$name"
+    panel_help "$name"
     if ! is_there '.challenge-list, .sheet input[type=text]'; then
         try_chips "$name"
         try_switches "$name"
@@ -245,15 +261,17 @@ panel_alarms() {
 panel_look() {
     local look
     case "$AVD" in
-        af31) look="Light German H12 1.3" ;;
-        phone) look="Dark Dutch H24 1.0" ;;
-        *) look="Dark English H24 1.0" ;;
+        af31) look="Light German H12 1.3 Blue" ;;
+        phone) look="Dark Dutch H24 1.0 Blue" ;;
+        *) look="Dark English H24 1.0 Blue" ;;
     esac
-    [ -z "${VARIANT:-}" ] || look="Black English H12 1.0"
-    read -r PANEL_THEME PANEL_LANGUAGE PANEL_HOURS PANEL_FONT <<< "$look"
+    [ -z "${VARIANT:-}" ] || look="Black English H12 1.0 Blue"
+    # TOUR_LOOK="Black Dutch H24 1.0 Amber": how someone has it, instead of the device's own.
+    look=${TOUR_LOOK:-$look}
+    read -r PANEL_THEME PANEL_LANGUAGE PANEL_HOURS PANEL_FONT PANEL_ACCENT <<< "$look"
 }
 # Without animations: there is nothing to wait for, and no picture of something half way.
-panel_settings() { use_settings "\"$PANEL_THEME\"" "\"$PANEL_LANGUAGE\"" "\"setup_done\":$1,\"language_follows_phone\":false,\"less_motion\":true,\"time_format\":\"$PANEL_HOURS\""; }
+panel_settings() { use_settings "\"$PANEL_THEME\"" "\"$PANEL_LANGUAGE\"" "\"setup_done\":$1,\"language_follows_phone\":false,\"less_motion\":true,\"time_format\":\"$PANEL_HOURS\",\"accent\":\"$PANEL_ACCENT\""; }
 
 # The challenge sheet of the editor on screen: each challenge's settings, adding one, and each as
 # it is when it has to be done.
@@ -265,6 +283,7 @@ panel_challenges() {
         click .challenge-open "$i" 0.05
         on_screen .sheet-done 3
         look_through "challenge_settings$i"
+        panel_help "challenge_settings$i"
         try_chips "challenge_settings$i"
         press_back
         on_screen .challenge-row 4 || panel_problem "not back from the settings of challenge $i"
@@ -274,6 +293,7 @@ panel_challenges() {
     if on_screen .add-option 4; then
         [ "$(js "return document.querySelectorAll('.add-option').length;")" = 8 ] || panel_problem "not all challenges can be added"
         look_through challenge_add
+        panel_help challenge_add
         press_back
     else
         panel_problem "no way to add a challenge"
@@ -306,6 +326,36 @@ panel_challenges() {
         on_screen .challenge-row 5 || panel_problem "not back from trying challenge $i"
         i=$((i + 1))
     done
+}
+
+# The theme screen: what each theme looks like, the wheel, and a theme of one's own. Then back to
+# how the tour has it.
+panel_theme_stops() {
+    local n i was_theme
+    n=$(js "return document.querySelectorAll('.theme-tile').length;")
+    was_theme=$(js "return [...document.querySelectorAll('.theme-tile')].findIndex(e => e.classList.contains('selected'));")
+    i=0
+    while [ "$i" -lt "${n:-0}" ] 2> /dev/null; do
+        click .theme-tile "$i" 0.1
+        [ "$(js "return document.querySelectorAll('.theme-tile')[$i].getAttribute('aria-pressed');")" = true ] ||
+            panel_problem "theme $i does not take"
+        picture "theme_tile$i"
+        i=$((i + 1))
+    done
+    click .theme-tile "${was_theme:-0}" 0.1
+    click .swatch-wheel 0 0.05
+    panel_open theme_accent_wheel
+    click '.theme-own .row-btn' 0 0.1
+    on_screen '.theme-own.selected' 3 || panel_problem "your own theme does not take"
+    look_through theme_own
+    # Its three colours.
+    i=1
+    while [ "$i" -le 3 ]; do
+        click .row-btn "$i" 0.05
+        panel_open "theme_own_colour$i"
+        i=$((i + 1))
+    done
+    click .theme-tile "${was_theme:-0}" 0.1
 }
 
 s57() {
@@ -415,12 +465,35 @@ s57() {
     click '.screen-header .icon-btn' 1 0.05
     panel_open editor_delete
     panel_rows editor
+    # Trying them is what the panels of sound and vibration are about: what it looks like then.
+    click_row_of_editor() { js "var e = [...document.querySelectorAll('.row-btn')][$1]; e.click(); return 'ok';" > /dev/null; }
+    click_row_of_editor 1
+    if on_screen '.sheet .start-stop' 3; then
+        click '.sheet .start-stop' 0 0.1
+        picture editor_sound_playing
+        click '.sheet .start-stop' 0 0.05
+        press_back
+        gone .sheet 3
+    else
+        panel_problem "no way to try a sound"
+    fi
+    click_row_of_editor 2
+    if on_screen '.sheet .chip' 3; then
+        click '.sheet .chip' 1 0.1
+        is_there '.sheet .start-stop.running' || panel_problem "a tap on a pattern shows no way to stop it"
+        picture editor_vibration_running
+        press_back
+        gone .sheet 3
+    else
+        panel_problem "no vibration panel"
+    fi
     # The fifth row.
     click .row-btn 4 0.05
     if on_screen .challenge-row 4; then
-        # The list, Add, Try all and the order: nothing else to choose from.
-        [ "$(js "return document.querySelectorAll('.sheet .chip').length;")" = 2 ] ||
-            panel_problem "the challenges sheet has more to choose than the order"
+        # The list and Add: nothing else to choose from, and Try all where it can be seen.
+        [ "$(js "return document.querySelectorAll('.sheet .chip').length;")" = 0 ] ||
+            panel_problem "the challenges sheet has something to choose"
+        is_there '.sheet-title-row .link-btn' || panel_problem "no way to try them all"
         panel_challenges
         press_back
         gone .sheet 3 || panel_problem "Back leaves the challenges open"
@@ -491,9 +564,23 @@ s57() {
     on_screen .row-btn 5
     look_through settings
     panel_rows settings
+
+    # Colours, on a screen of their own. Every theme, and what is behind choosing your own.
+    click_row_settings_theme() { js "document.querySelectorAll('.row-btn')[0].click(); return 'ok';" > /dev/null; }
+    click_row_settings_theme
+    if on_screen .theme-tile 5; then
+        look_through theme
+        panel_theme_stops
+        press_back
+        on_screen .row-btn 5 || panel_problem "not back from the theme screen"
+    else
+        panel_problem "no theme screen"
+    fi
+
     click .banner 0 0.05
     if on_screen .check-title 5; then
         look_through reliability
+        panel_help reliability
         press_back
         on_screen .row-btn 5 || panel_problem "not back from reliability"
     else

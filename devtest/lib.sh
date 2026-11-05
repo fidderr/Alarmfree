@@ -72,6 +72,7 @@ dev() {
                 ask "$DEV_PID" 5 6 "$*"
             else
                 adb_ shell "$@" | tr -d '\r'
+                return "${PIPESTATUS[0]}"
             fi
             ;;
     esac
@@ -82,6 +83,7 @@ as_app() {
         ask "$APP_PID" 7 8 "( cd $DATA && $* )"
     else
         adb_ shell "run-as $PKG sh -c 'cd $DATA && $*'" | tr -d '\r'
+        return "${PIPESTATUS[0]}"
     fi
 }
 # A phone has no sqlite3: PHONE_SQLITE names a tool pushed to it for this. It has to run
