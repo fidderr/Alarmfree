@@ -11,6 +11,7 @@ use crate::models::AppSettings;
 
 const LIMIT_MINUTES: [u32; 4] = [30, 60, 90, 120];
 const CHECK_MINUTES: [u8; 4] = [0, 3, 5, 10];
+const NOTICE_MINUTES: [u8; 5] = [0, 5, 10, 30, 60];
 
 /// A time typed in by hand: "7", "730", "07:30", "7.30".
 fn parse_typed_time(text: &str) -> Option<(u8, u8)> {
@@ -53,7 +54,6 @@ pub(super) fn TimeSheet() -> Element {
     rsx! {
         Sheet {
             title: t(&translations, "config.time"),
-            note: t(&translations, "config.time_note"),
             on_close: move |_| sheet.set(None),
             TimePicker {
                 hour: current.time_hour,
@@ -109,7 +109,7 @@ pub(super) fn DateSheet() -> Element {
     rsx! {
         Sheet {
             title: t(&translations, "config.date_title"),
-            note: t(&translations, "config.date_note"),
+            help: t(&translations, "config.date_note"),
             on_close: move |_| sheet.set(None),
             label { class: "field-label",
                 {t(&translations, "config.date")}
@@ -162,7 +162,7 @@ pub(super) fn LabelSheet() -> Element {
     rsx! {
         Sheet {
             title: t(&translations, "config.label"),
-            note: t(&translations, "config.label_note"),
+            help: t(&translations, "config.label_note"),
             on_close: move |_| sheet.set(None),
             label { class: "field-label",
                 {t(&translations, "config.label_name")}
@@ -213,7 +213,7 @@ pub(super) fn SnoozeSheet() -> Element {
     rsx! {
         Sheet {
             title: t(&translations, "config.snooze"),
-            note: t(&translations, "config.snooze_note"),
+            help: t(&translations, "config.snooze_note"),
             on_close: move |_| sheet.set(None),
             Stepper {
                 title: t(&translations, "config.snooze_interval"),
@@ -268,7 +268,7 @@ pub(super) fn LimitSheet() -> Element {
     rsx! {
         Sheet {
             title: t(&translations, "config.ring_limit"),
-            note: t(&translations, "config.limit_note"),
+            help: t(&translations, "config.limit_note"),
             on_close: move |_| sheet.set(None),
             Chips::<Option<u32>> {
                 grow: true,
@@ -295,7 +295,7 @@ pub(super) fn WakeCheckSheet() -> Element {
     rsx! {
         Sheet {
             title: t(&translations, "config.wake_check"),
-            note: t(&translations, "config.wake_check_note"),
+            help: t(&translations, "config.wake_check_note"),
             on_close: move |_| sheet.set(None),
             Chips::<u8> {
                 grow: true,
@@ -309,6 +309,40 @@ pub(super) fn WakeCheckSheet() -> Element {
                     .collect::<Vec<_>>(),
                 selected: Some(current.wake_check_minutes),
                 on_pick: move |minutes: u8| draft.write().wake_check_minutes = minutes,
+            }
+            SheetDone { label: done_text.clone(), on_click: move |_| sheet.set(None) }
+        }
+    }
+}
+
+/// How long before it rings a silent notice comes, from which the ring can be skipped.
+#[component]
+pub(super) fn NoticeSheet() -> Element {
+    let EditorState {
+        mut sheet,
+        mut draft,
+        ..
+    } = use_context();
+    let translations = use_context::<Translations>();
+    let current = draft.read().clone();
+    let done_text = t(&translations, "action.done");
+    rsx! {
+        Sheet {
+            title: t(&translations, "config.notice"),
+            help: t(&translations, "config.notice_note"),
+            on_close: move |_| sheet.set(None),
+            Chips::<u8> {
+                grow: true,
+                options: NOTICE_MINUTES
+                    .iter()
+                    .map(|m| (*m, if *m == 0 {
+                        t(&translations, "config.fade_off")
+                    } else {
+                        t(&translations, "text.minutes").replace("{minutes}", &m.to_string())
+                    }))
+                    .collect::<Vec<_>>(),
+                selected: Some(current.notify_before_minutes),
+                on_pick: move |minutes: u8| draft.write().notify_before_minutes = minutes,
             }
             SheetDone { label: done_text.clone(), on_click: move |_| sheet.set(None) }
         }
@@ -329,7 +363,6 @@ pub(super) fn DeleteSheet(id: String) -> Element {
     rsx! {
         Sheet {
             title: t(&translations, "alarm.delete_confirm"),
-            note: t(&translations, "alarm.delete_warning"),
             on_close: move |_| sheet.set(None),
             SheetItem {
                 label: t(&translations, "action.delete"),
@@ -369,7 +402,6 @@ pub(super) fn DiscardSheet() -> Element {
     rsx! {
         Sheet {
             title: t(&translations, "config.discard_title"),
-            note: t(&translations, "config.discard_note"),
             on_close: move |_| sheet.set(None),
             SheetItem {
                 label: t(&translations, "config.discard"),

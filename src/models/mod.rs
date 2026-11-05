@@ -3,6 +3,7 @@ pub mod challenge;
 pub mod history;
 pub mod settings;
 pub mod setup;
+pub mod theme;
 
 // Re-export key types
 pub use alarm::AlarmId;
@@ -12,3 +13,4 @@ pub use settings::{
     Accent, AppSettings, Locale, Prefs, SortMode, ThemeMode, TimeFormat, WeekStart,
 };
 pub use setup::ChallengeSetup;
+pub use theme::{CustomTheme, Palette, Rgb};

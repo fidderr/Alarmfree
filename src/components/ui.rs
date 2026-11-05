@@ -7,10 +7,16 @@ use crate::back::use_back_handler;
 use crate::components::{Icon, IconName};
 
 /// A panel over the screen, from the bottom. Back and tapping beside it close it.
+///
+/// What explains it goes in `help`, behind a `?` next to the title. `note` is always there, and
+/// for what someone has to read before they tap: a real warning. `action` sits top right and
+/// stays in reach, like the title, while the panel scrolls.
 #[component]
 pub fn Sheet(
     title: String,
     #[props(default)] note: String,
+    #[props(default)] help: String,
+    #[props(default = VNode::empty())] action: Element,
     on_close: EventHandler<()>,
     children: Element,
 ) -> Element {
@@ -18,6 +24,7 @@ pub fn Sheet(
     let OpenSheets(mut open) = use_context();
     use_effect(move || open.with_mut(|count| *count += 1));
     use_drop(move || open.with_mut(|count| *count = count.saturating_sub(1)));
+    let help_open = use_signal(|| false);
     rsx! {
         button {
             class: "sheet-scrim",
@@ -25,8 +32,22 @@ pub fn Sheet(
             onclick: move |_| on_close.call(()),
         }
         div { class: "sheet", role: "dialog", "aria-label": "{title}",
-            span { class: "sheet-grab", "aria-hidden": "true" }
-            h2 { class: "sheet-title", "{title}" }
+            div { class: "sheet-head",
+                span { class: "sheet-grab", "aria-hidden": "true" }
+                div { class: "sheet-title-row",
+                    div { class: "sheet-title-main",
+                        h2 { class: "sheet-title", "{title}" }
+                        if !help.is_empty() {
+                            HelpButton { open: help_open }
+                        }
+                    }
+                    span { class: "grow" }
+                    {action}
+                }
+            }
+            if help_open() {
+                p { class: "help-text", "{help}" }
+            }
             if !note.is_empty() {
                 p { class: "sheet-note", "{note}" }
             }
@@ -35,15 +56,59 @@ pub fn Sheet(
     }
 }
 
+/// The `?` that opens an explanation in place, and closes it again.
+#[component]
+fn HelpButton(open: Signal<bool>) -> Element {
+    let translations = use_context::<Translations>();
+    let is_open = open();
+    rsx! {
+        button {
+            class: if is_open { "help-btn open" } else { "help-btn" },
+            "aria-label": t(&translations, "action.help"),
+            "aria-expanded": if is_open { "true" } else { "false" },
+            onclick: move |_| open.set(!is_open),
+            span { class: "help-mark", "aria-hidden": "true", "?" }
+        }
+    }
+}
+
+/// Starts and stops something to try, top right in a panel.
+#[component]
+pub fn StartStop(running: bool, on_start: EventHandler<()>, on_stop: EventHandler<()>) -> Element {
+    let translations = use_context::<Translations>();
+    let (icon, label) = if running {
+        (IconName::Stop, t(&translations, "action.stop"))
+    } else {
+        (IconName::Play, t(&translations, "action.start"))
+    };
+    rsx! {
+        button {
+            class: if running { "link-btn start-stop running" } else { "link-btn start-stop" },
+            "aria-pressed": if running { "true" } else { "false" },
+            onclick: move |_| if running { on_stop.call(()) } else { on_start.call(()) },
+            Icon { name: icon, size: 14 }
+            span { "{label}" }
+        }
+    }
+}
+
 /// How many sheets are open. A message moves out of the way of their buttons.
 #[derive(Clone, Copy)]
 pub struct OpenSheets(pub Signal<u32>);
 
-/// The main button at the bottom of a sheet.
+/// The main button at the bottom of a sheet. `quiet` when leaving is not the point of the panel.
 #[component]
-pub fn SheetDone(label: String, on_click: EventHandler<()>) -> Element {
+pub fn SheetDone(
+    label: String,
+    on_click: EventHandler<()>,
+    #[props(default)] quiet: bool,
+) -> Element {
     rsx! {
-        button { class: "btn btn-primary sheet-done", onclick: move |_| on_click.call(()), "{label}" }
+        button {
+            class: if quiet { "btn sheet-done" } else { "btn btn-primary sheet-done" },
+            onclick: move |_| on_click.call(()),
+            "{label}"
+        }
     }
 }
 
@@ -173,22 +238,32 @@ pub fn Switch(on: bool) -> Element {
     }
 }
 
-/// The top of a screen below the main three.
+/// The top of a screen below the main three. What explains the screen goes in `help`, behind a
+/// `?` next to the title.
 #[component]
 pub fn ScreenHeader(
     title: String,
     on_back: EventHandler<()>,
+    #[props(default)] help: String,
     #[props(default)] children: Element,
 ) -> Element {
     let translations = use_context::<Translations>();
     let back = t(&translations, "action.back");
+    let help_open = use_signal(|| false);
     rsx! {
         header { class: "screen-header",
             button { class: "icon-btn", "aria-label": "{back}", onclick: move |_| on_back.call(()),
                 Icon { name: IconName::ArrowLeft, size: 20 }
             }
             h1 { class: "screen-title", "{title}" }
+            if !help.is_empty() {
+                HelpButton { open: help_open }
+            }
+            span { class: "grow" }
             {children}
+        }
+        if help_open() {
+            p { class: "help-text help-text-screen", "{help}" }
         }
     }
 }
@@ -219,7 +294,7 @@ pub fn BottomNav(current: Route) -> Element {
                                     nav.replace(route.clone());
                                 }
                             },
-                            Icon { name: icon, size: 22 }
+                            span { class: "nav-icon", Icon { name: icon, size: 22 } }
                             span { "{label}" }
                         }
                     }

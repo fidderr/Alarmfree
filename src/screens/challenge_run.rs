@@ -58,21 +58,12 @@ pub struct ChallengeToRun {
 }
 
 /// Make the actual sums and passages for an alarm's challenges.
-pub fn prepare(
-    setups: &[ChallengeSetup],
-    random_order: bool,
-    locale: Locale,
-) -> Vec<ChallengeToRun> {
+pub fn prepare(setups: &[ChallengeSetup], locale: Locale) -> Vec<ChallengeToRun> {
     let mut engine = ChallengeEngine::new(locale);
-    let mut prepared: Vec<ChallengeToRun> = setups
+    setups
         .iter()
         .map(|setup| prepare_one(&mut engine, setup))
-        .collect();
-    if random_order {
-        use rand::seq::SliceRandom;
-        prepared.shuffle(&mut rand::thread_rng());
-    }
-    prepared
+        .collect()
 }
 
 fn prepare_one(engine: &mut ChallengeEngine, setup: &ChallengeSetup) -> ChallengeToRun {
@@ -466,7 +457,7 @@ mod tests {
             .iter()
             .map(|key| ChallengeSetup::new(key).unwrap())
             .collect();
-        let prepared = prepare(&setups, false, Locale::English);
+        let prepared = prepare(&setups, Locale::English);
         assert_eq!(prepared.len(), setups.len());
         assert!(prepared.iter().any(
             |c| matches!(&c.challenge, Challenge::Math { expression, .. } if !expression.is_empty())
@@ -480,13 +471,13 @@ mod tests {
     }
 
     #[test]
-    fn random_order_keeps_all_the_challenges() {
+    fn challenges_come_in_the_order_they_were_set() {
         let setups = vec![
             ChallengeSetup::Shake { count: 1 },
             ChallengeSetup::Steps { count: 2 },
             ChallengeSetup::Hold { count: 3, secs: 1 },
         ];
-        let mut counts: Vec<u32> = prepare(&setups, true, Locale::English)
+        let counts: Vec<u32> = prepare(&setups, Locale::English)
             .into_iter()
             .map(|c| match c.challenge {
                 Challenge::Shake { count }
@@ -495,7 +486,6 @@ mod tests {
                 other => panic!("did not ask for {other:?}"),
             })
             .collect();
-        counts.sort_unstable();
         assert_eq!(counts, [1, 2, 3]);
     }
 }

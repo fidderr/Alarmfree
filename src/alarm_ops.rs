@@ -33,7 +33,7 @@ pub fn factory_alarm() -> AlarmData {
         note: String::new(),
         vibration: 0,
         volume_percent: None,
-        random_order: false,
+        notify_before_minutes: 0,
         wake_check_minutes: 0,
         max_brightness: false,
         sound_delay_secs: 0,
@@ -93,6 +93,7 @@ pub fn quick_alarm(
     alarm.label = label;
     alarm.delete_after_ring = true;
     alarm.wake_check_minutes = 0;
+    alarm.notify_before_minutes = 0;
     alarm
 }
 
@@ -103,6 +104,7 @@ pub fn wake_check_alarm(source: &AlarmData, now: NaiveDateTime, label: String) -
     alarm.challenges = Vec::new();
     alarm.snooze_count = 0;
     alarm.wake_check_minutes = 0;
+    alarm.notify_before_minutes = 0;
     alarm.fade_in_secs = 0;
     alarm.note = String::new();
     alarm.label = label;
@@ -115,6 +117,41 @@ pub fn wake_check_alarm(source: &AlarmData, now: NaiveDateTime, label: String) -
         alarm,
         now + Duration::minutes(i64::from(source.wake_check_minutes)),
     )
+}
+
+/// The next ring is not wanted, said on the notice before it. A repeating alarm skips that one,
+/// the way its menu does, and an alarm with one date has nothing left to ring for.
+pub fn skip_from_notice(alarm: &mut AlarmData, next_fire: Option<i64>) -> bool {
+    if crate::schedule::is_one_time(alarm) {
+        let was_on = alarm.enabled;
+        alarm.enabled = false;
+        return was_on;
+    }
+    if next_fire.is_none() || alarm.skip_until_ms == next_fire {
+        return false;
+    }
+    alarm.skip_until_ms = next_fire;
+    true
+}
+
+/// The notice's tap taken back.
+pub fn undo_skip_from_notice(alarm: &mut AlarmData) -> bool {
+    if crate::schedule::is_one_time(alarm) {
+        let was_off = !alarm.enabled;
+        alarm.enabled = true;
+        return was_off;
+    }
+    alarm.skip_until_ms.take().is_some()
+}
+
+/// What was one setting for all alarms goes to each of them, and to what new ones start from.
+pub fn give_notice_to_all(list: &mut [AlarmData], defaults: Option<&mut AlarmData>, minutes: u8) {
+    for alarm in list.iter_mut().filter(|alarm| !alarm.hidden) {
+        alarm.notify_before_minutes = minutes;
+    }
+    if let Some(defaults) = defaults {
+        defaults.notify_before_minutes = minutes;
+    }
 }
 
 /// An alarm to try the whole ring path with: real, but not listed, without challenges,
@@ -196,6 +233,76 @@ pub fn import_json(
 mod tests {
     use super::*;
     use chrono::NaiveDate;
+
+    #[test]
+    fn an_alarm_saved_by_an_older_version_still_loads() {
+        let mut saved = serde_json::to_value(factory_alarm()).unwrap();
+        let fields = saved.as_object_mut().unwrap();
+        fields.remove("notify_before_minutes");
+        fields.insert("random_order".to_owned(), true.into());
+        let alarm: AlarmData = serde_json::from_value(saved).unwrap();
+        assert_eq!(alarm.notify_before_minutes, 0);
+    }
+
+    #[test]
+    fn a_notice_skips_the_next_ring_and_can_take_it_back() {
+        let mut alarm = factory_alarm();
+        assert!(skip_from_notice(&mut alarm, Some(1_000)));
+        assert_eq!(alarm.skip_until_ms, Some(1_000));
+        assert!(alarm.enabled, "the rings after that one stay");
+        assert!(
+            !skip_from_notice(&mut alarm, Some(1_000)),
+            "already skipped"
+        );
+        assert!(undo_skip_from_notice(&mut alarm));
+        assert_eq!(alarm.skip_until_ms, None);
+        assert!(!undo_skip_from_notice(&mut alarm), "nothing to take back");
+        assert!(!skip_from_notice(&mut alarm, None), "no next ring to skip");
+    }
+
+    #[test]
+    fn a_notice_turns_off_an_alarm_with_one_date_and_can_turn_it_on_again() {
+        let mut alarm = factory_alarm();
+        alarm.days = [false; 7];
+        alarm.date = Some("2030-01-01".to_owned());
+        assert!(skip_from_notice(&mut alarm, Some(1_000)));
+        assert!(!alarm.enabled);
+        assert_eq!(alarm.skip_until_ms, None);
+        assert!(undo_skip_from_notice(&mut alarm));
+        assert!(alarm.enabled);
+    }
+
+    #[test]
+    fn what_was_one_notice_for_all_goes_to_each_alarm() {
+        let mut list = vec![factory_alarm(), factory_alarm()];
+        list[1].hidden = true;
+        let mut defaults = factory_alarm();
+        give_notice_to_all(&mut list, Some(&mut defaults), 10);
+        assert_eq!(list[0].notify_before_minutes, 10);
+        assert_eq!(
+            list[1].notify_before_minutes, 0,
+            "not one of the user's alarms"
+        );
+        assert_eq!(defaults.notify_before_minutes, 10);
+    }
+
+    #[test]
+    fn alarms_made_along_the_way_give_no_notice() {
+        let mut source = factory_alarm();
+        source.notify_before_minutes = 30;
+        let now = NaiveDate::from_ymd_opt(2030, 1, 1)
+            .unwrap()
+            .and_hms_opt(7, 0, 0)
+            .unwrap();
+        assert_eq!(
+            quick_alarm(now, 10, String::new(), Some(&source)).notify_before_minutes,
+            0
+        );
+        assert_eq!(
+            wake_check_alarm(&source, now, String::new()).notify_before_minutes,
+            0
+        );
+    }
 
     fn at(hour: u32, minute: u32, second: u32) -> NaiveDateTime {
         NaiveDate::from_ymd_opt(2026, 11, 3)

@@ -3,8 +3,13 @@
 use serde::{Deserialize, Serialize};
 
 use crate::app::AlarmData;
+use crate::models::theme::{
+    BaseColours, CustomTheme, Palette, Rgb, BLACK_THEME, DARK, FOREST, LIGHT, MIDNIGHT, MIST, PLUM,
+    SAND,
+};
 
-/// Visual theme for the app. Persisted via serde directly.
+/// Visual theme for the app. Persisted via serde directly. A theme that no longer exists
+/// reads as the default.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ThemeMode {
     /// Follows the phone's dark theme setting.
@@ -14,38 +19,61 @@ pub enum ThemeMode {
     Light,
     /// Dark, on a pure black background.
     Black,
-    Colorblind,
+    Midnight,
+    Forest,
+    Plum,
+    Sand,
+    Mist,
+    /// The colours the user chose.
+    Custom,
 }
 
 impl ThemeMode {
-    pub fn css_class(self, system_dark: bool) -> &'static str {
+    /// The themes to pick from, apart from the user's own.
+    pub const PRESETS: [ThemeMode; 9] = [
+        ThemeMode::System,
+        ThemeMode::Dark,
+        ThemeMode::Light,
+        ThemeMode::Black,
+        ThemeMode::Midnight,
+        ThemeMode::Forest,
+        ThemeMode::Plum,
+        ThemeMode::Sand,
+        ThemeMode::Mist,
+    ];
+
+    /// This theme's colours. The user's own theme has none of its own.
+    pub fn base(self, system_dark: bool) -> BaseColours {
         match self {
-            ThemeMode::System if system_dark => "theme-dark",
-            ThemeMode::System => "theme-light",
-            ThemeMode::Dark => "theme-dark",
-            ThemeMode::Light => "theme-light",
-            ThemeMode::Black => "theme-black",
-            ThemeMode::Colorblind => "theme-colorblind",
+            ThemeMode::System if system_dark => DARK,
+            ThemeMode::System | ThemeMode::Light => LIGHT,
+            ThemeMode::Dark | ThemeMode::Custom => DARK,
+            ThemeMode::Black => BLACK_THEME,
+            ThemeMode::Midnight => MIDNIGHT,
+            ThemeMode::Forest => FOREST,
+            ThemeMode::Plum => PLUM,
+            ThemeMode::Sand => SAND,
+            ThemeMode::Mist => MIST,
         }
     }
 
-    /// This theme's background, for the system bars: `--bg` in the style sheet.
-    pub fn background(self, system_dark: bool) -> u32 {
-        match self.css_class(system_dark) {
-            "theme-light" => 0xFFF5_F6F9,
-            "theme-black" => 0xFF00_0000,
-            "theme-colorblind" => 0xFF14_151C,
-            _ => 0xFF10_1218,
+    pub fn name_key(self) -> &'static str {
+        match self {
+            ThemeMode::System => "theme.system",
+            ThemeMode::Dark => "theme.dark",
+            ThemeMode::Light => "theme.light",
+            ThemeMode::Black => "theme.black",
+            ThemeMode::Midnight => "theme.midnight",
+            ThemeMode::Forest => "theme.forest",
+            ThemeMode::Plum => "theme.plum",
+            ThemeMode::Sand => "theme.sand",
+            ThemeMode::Mist => "theme.mist",
+            ThemeMode::Custom => "theme.custom",
         }
-    }
-
-    /// Whether this theme has a light background, for the system bar icons.
-    pub fn is_light(self, system_dark: bool) -> bool {
-        self.css_class(system_dark) == "theme-light"
     }
 }
 
-/// The colour of what stands out. The colorblind theme keeps its own.
+/// The colour of what stands out.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Accent {
     #[default]
@@ -54,24 +82,43 @@ pub enum Accent {
     Purple,
     Pink,
     Amber,
+    Coral,
+    Sage,
+    Sky,
+    Lime,
+    /// The colour the user picked on the wheel.
+    Custom,
 }
 
 impl Accent {
-    pub const ALL: [Accent; 5] = [
+    /// The soft colours that come with the app.
+    pub const PRESETS: [Accent; 9] = [
         Accent::Blue,
         Accent::Teal,
         Accent::Purple,
         Accent::Pink,
         Accent::Amber,
+        Accent::Coral,
+        Accent::Sage,
+        Accent::Sky,
+        Accent::Lime,
     ];
 
-    pub fn css_class(self) -> &'static str {
+    /// What it looks like on a dark and on a light background: one shade does not read on both.
+    pub fn colours(self) -> (Rgb, Rgb) {
+        let pair = |dark: Rgb, light: Rgb| (dark, light);
         match self {
-            Accent::Blue => "accent-blue",
-            Accent::Teal => "accent-teal",
-            Accent::Purple => "accent-purple",
-            Accent::Pink => "accent-pink",
-            Accent::Amber => "accent-amber",
+            Accent::Blue | Accent::Custom => {
+                pair(Rgb::new(0x7c, 0xb0, 0xff), Rgb::new(0x1f, 0x5f, 0xd6))
+            }
+            Accent::Teal => pair(Rgb::new(0x5f, 0xd4, 0xc4), Rgb::new(0x00, 0x73, 0x6a)),
+            Accent::Purple => pair(Rgb::new(0xb9, 0xa0, 0xff), Rgb::new(0x6a, 0x3f, 0xd1)),
+            Accent::Pink => pair(Rgb::new(0xff, 0x94, 0xc8), Rgb::new(0xb8, 0x24, 0x6f)),
+            Accent::Amber => pair(Rgb::new(0xff, 0xc4, 0x5c), Rgb::new(0x8a, 0x5a, 0x00)),
+            Accent::Coral => pair(Rgb::new(0xff, 0x9d, 0x8a), Rgb::new(0xc2, 0x45, 0x2d)),
+            Accent::Sage => pair(Rgb::new(0x9a, 0xd4, 0x9a), Rgb::new(0x3c, 0x7d, 0x4a)),
+            Accent::Sky => pair(Rgb::new(0x86, 0xd4, 0xf0), Rgb::new(0x0b, 0x72, 0x85)),
+            Accent::Lime => pair(Rgb::new(0xcf, 0xe3, 0x7a), Rgb::new(0x5f, 0x7a, 0x00)),
         }
     }
 
@@ -82,6 +129,11 @@ impl Accent {
             Accent::Purple => "accent.purple",
             Accent::Pink => "accent.pink",
             Accent::Amber => "accent.amber",
+            Accent::Coral => "accent.coral",
+            Accent::Sage => "accent.sage",
+            Accent::Sky => "accent.sky",
+            Accent::Lime => "accent.lime",
+            Accent::Custom => "accent.custom",
         }
     }
 }
@@ -155,9 +207,14 @@ pub struct Prefs {
     pub less_motion: bool,
     pub confetti: bool,
     pub accent: Accent,
+    /// What the wheel was set to, for [`Accent::Custom`].
+    pub custom_accent: Option<Rgb>,
+    /// The colours of [`ThemeMode::Custom`].
+    pub custom_theme: Option<CustomTheme>,
     /// What the user called their own sounds, by file name.
     pub sound_names: std::collections::BTreeMap<String, String>,
-    /// Show a notification this long before an alarm rings (0 = off).
+    /// From when this was one setting for all alarms. Each alarm has its own now, and this is
+    /// only read once to hand it to them.
     pub notify_before_minutes: u8,
     /// The first-run setup was gone through.
     pub setup_done: bool,
@@ -179,6 +236,8 @@ impl Default for Prefs {
             less_motion: false,
             confetti: true,
             accent: Accent::default(),
+            custom_accent: None,
+            custom_theme: None,
             sound_names: std::collections::BTreeMap::new(),
             notify_before_minutes: 0,
             setup_done: false,
@@ -197,6 +256,22 @@ pub struct AppSettings {
     /// the user. 0 leaves the volume alone.
     pub min_volume_percent: u8,
     pub prefs: Prefs,
+}
+
+impl AppSettings {
+    /// The colours on screen right now.
+    pub fn palette(&self, system_dark: bool) -> Palette {
+        let wheel = self
+            .prefs
+            .custom_accent
+            .filter(|_| self.prefs.accent == Accent::Custom);
+        // A colour off the wheel is what it is, on any background.
+        let accent = wheel.map_or_else(|| self.prefs.accent.colours(), |colour| (colour, colour));
+        match (self.theme, self.prefs.custom_theme) {
+            (ThemeMode::Custom, Some(colours)) => Palette::new(colours, accent),
+            (theme, _) => Palette::from_base(theme.base(system_dark), accent),
+        }
+    }
 }
 
 impl Locale {
@@ -247,13 +322,115 @@ impl Default for AppSettings {
 mod tests {
     use super::*;
 
+    fn palette_of(theme: ThemeMode, system_dark: bool) -> Palette {
+        AppSettings {
+            theme,
+            ..AppSettings::default()
+        }
+        .palette(system_dark)
+    }
+
     #[test]
     fn the_system_theme_follows_the_phone_and_the_others_do_not() {
-        assert_eq!(ThemeMode::System.css_class(true), "theme-dark");
-        assert_eq!(ThemeMode::System.css_class(false), "theme-light");
-        assert_eq!(ThemeMode::Black.css_class(false), "theme-black");
-        assert!(ThemeMode::Light.is_light(true));
-        assert!(!ThemeMode::Colorblind.is_light(false));
+        assert_eq!(
+            palette_of(ThemeMode::System, true).background,
+            DARK.background
+        );
+        assert_eq!(
+            palette_of(ThemeMode::System, false).background,
+            LIGHT.background
+        );
+        assert_eq!(
+            palette_of(ThemeMode::Black, false).background,
+            BLACK_THEME.background
+        );
+        assert!(palette_of(ThemeMode::Light, true).light);
+        assert!(palette_of(ThemeMode::Sand, true).light);
+        assert!(!palette_of(ThemeMode::Plum, false).light);
+    }
+
+    #[test]
+    fn the_colorblind_theme_someone_had_saved_reads_as_the_default() {
+        let theme: ThemeMode = serde_json::from_str("\"Colorblind\"").unwrap_or_default();
+        assert_eq!(theme, ThemeMode::System);
+    }
+
+    #[test]
+    fn every_theme_that_comes_with_the_app_reads_with_every_accent() {
+        for theme in ThemeMode::PRESETS {
+            for accent in Accent::PRESETS {
+                let settings = AppSettings {
+                    theme,
+                    prefs: Prefs {
+                        accent,
+                        ..Prefs::default()
+                    },
+                    ..AppSettings::default()
+                };
+                let palette = settings.palette(true);
+                let wanted = if palette.light {
+                    accent.colours().1
+                } else {
+                    accent.colours().0
+                };
+                assert_eq!(
+                    palette.accent, wanted,
+                    "{accent:?} on {theme:?} was changed"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn a_colour_off_the_wheel_is_used_on_any_theme() {
+        let colour = Rgb::new(0xb0, 0x40, 0x10);
+        let mut settings = AppSettings {
+            theme: ThemeMode::Light,
+            prefs: Prefs {
+                accent: Accent::Custom,
+                custom_accent: Some(colour),
+                ..Prefs::default()
+            },
+            ..AppSettings::default()
+        };
+        assert_eq!(settings.palette(false).accent, colour);
+        // Only what would not read gets changed, and only as far as it takes.
+        settings.prefs.custom_accent = Some(Rgb::new(0xff, 0xff, 0xf0));
+        let on_light = settings.palette(false);
+        assert!(on_light.accent.contrast(on_light.card) >= crate::models::theme::MIN_CONTRAST);
+    }
+
+    #[test]
+    fn the_users_own_theme_uses_their_colours() {
+        let colours = CustomTheme {
+            background: Rgb::new(0x20, 0x10, 0x30),
+            card: None,
+            text: None,
+        };
+        let mut settings = AppSettings {
+            theme: ThemeMode::Custom,
+            ..AppSettings::default()
+        };
+        // Nothing chosen yet: it looks like Dark.
+        assert_eq!(settings.palette(false).background, DARK.background);
+        settings.prefs.custom_theme = Some(colours);
+        assert_eq!(settings.palette(false).background, colours.background);
+    }
+
+    #[test]
+    fn colours_survive_saving() {
+        let prefs = Prefs {
+            accent: Accent::Custom,
+            custom_accent: Some(Rgb::new(1, 2, 3)),
+            custom_theme: Some(CustomTheme {
+                background: Rgb::new(4, 5, 6),
+                card: Some(Rgb::new(7, 8, 9)),
+                text: None,
+            }),
+            ..Prefs::default()
+        };
+        let again: Prefs = serde_json::from_str(&serde_json::to_string(&prefs).unwrap()).unwrap();
+        assert_eq!(again, prefs);
     }
 
     #[test]

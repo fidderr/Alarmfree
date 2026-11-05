@@ -46,7 +46,7 @@ pub fn ChallengeRunner(challenges: Vec<ChallengeSetup>, on_exit: EventHandler<()
     use_back_handler(on_exit);
 
     let settings = use_context::<Signal<AppSettings>>();
-    let prepared = use_signal(|| prepare(&challenges, false, settings.peek().locale));
+    let prepared = use_signal(|| prepare(&challenges, settings.peek().locale));
     let mut finished = use_signal(|| false);
 
     let exit_text = t(&translations, "practice.exit");

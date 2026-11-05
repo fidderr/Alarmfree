@@ -43,7 +43,7 @@ pub(super) fn SortSheet() -> Element {
     rsx! {
         Sheet {
             title: t(&translations, "home.sort_title"),
-            note: t(&translations, "home.sort_note"),
+            help: t(&translations, "home.sort_note"),
             on_close: move |_| sheet.set(None),
             for (mode, key) in options {
                 SheetItem {
@@ -75,7 +75,7 @@ pub(super) fn PauseAllSheet() -> Element {
     rsx! {
         Sheet {
             title: t(&translations, "home.pause_title"),
-            note: t(&translations, "home.pause_note"),
+            help: t(&translations, "home.pause_note"),
             on_close: move |_| sheet.set(None),
             if paused_until.is_some() {
                 SheetItem {
@@ -133,7 +133,7 @@ pub(super) fn PauseDateSheet(only: Option<String>) -> Element {
     rsx! {
         Sheet {
             title: t(&translations, "home.pause_date"),
-            note: t(&translations, "home.pause_date_note"),
+            help: t(&translations, "home.pause_date_note"),
             on_close: move |_| sheet.set(None),
             input {
                 class: "field",
@@ -205,7 +205,6 @@ pub(super) fn AlarmMenuSheet(id: String, next: Option<i64>) -> Element {
     rsx! {
         Sheet {
             title,
-            note: t(&translations, "home.menu_note"),
             on_close: move |_| sheet.set(None),
             if !alarm.challenges.is_empty() {
                 SheetItem {

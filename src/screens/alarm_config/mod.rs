@@ -10,8 +10,8 @@ use dioxus::prelude::*;
 
 use challenge_sheets::{AddChallengeSheet, ChallengeDetailSheet, ChallengesSheet};
 use simple_sheets::{
-    DateSheet, DeleteSheet, DiscardSheet, LabelSheet, LimitSheet, SnoozeSheet, TimeSheet,
-    WakeCheckSheet,
+    DateSheet, DeleteSheet, DiscardSheet, LabelSheet, LimitSheet, NoticeSheet, SnoozeSheet,
+    TimeSheet, WakeCheckSheet,
 };
 use sound_sheets::{SoundSheet, VibrationSheet, VIBRATION_KEYS};
 
@@ -22,8 +22,8 @@ use crate::components::{Icon, IconName, Row, ScreenHeader, SwitchRow, ToastMessa
 use crate::models::{AppSettings, ChallengeSetup};
 use crate::screens::practice::ChallengeRunner;
 
-/// How long "Try" rings.
-const TRY_MS: u64 = 10_000;
+/// How long trying a sound or a vibration lasts.
+const PREVIEW_MS: u64 = 15_000;
 
 /// The panel open over the editor.
 #[derive(Clone, PartialEq)]
@@ -39,38 +39,63 @@ enum EditorSheet {
     Detail(usize),
     Limit,
     WakeCheck,
+    Notice,
     Delete,
     Discard,
 }
 
-/// A sound playing for a moment. The token makes an older timer leave a newer preview
+/// A sound or a vibration being tried. The token makes an older timer leave a newer preview
 /// alone.
 #[derive(Clone, Copy)]
 struct Preview {
     handle: Signal<u64>,
     token: Signal<u64>,
-    try_running: Signal<bool>,
+    sounding: Signal<bool>,
+    vibrating: Signal<bool>,
 }
 
 impl Preview {
     fn stop(mut self) {
         stop_preview(*self.handle.peek());
         self.handle.set(0);
+        if *self.vibrating.peek() {
+            mobile_sentinel::haptics::cancel();
+        }
         let token = *self.token.peek() + 1;
         self.token.set(token);
-        self.try_running.set(false);
+        self.sounding.set(false);
+        self.vibrating.set(false);
     }
 
-    fn play_for(mut self, sound: String, ms: u64) {
-        self.stop();
-        self.handle.set(play_preview(&sound));
+    /// Whichever panel started it: the timer goes with that panel, and so does what it stopped.
+    fn stop_after_a_while(self) {
         let token = *self.token.peek();
         spawn(async move {
-            crate::timer::sleep_ms(ms).await;
+            crate::timer::sleep_ms(PREVIEW_MS).await;
             if *self.token.peek() == token {
                 self.stop();
             }
         });
+    }
+
+    fn play(mut self, sound: &str) {
+        self.stop();
+        let handle = play_preview(sound);
+        self.handle.set(handle);
+        self.sounding.set(handle != 0);
+        self.stop_after_a_while();
+    }
+
+    /// Not through the touch feedback: turning that off should not turn this off.
+    fn vibrate(mut self, pattern: u8) {
+        self.stop();
+        let pattern = crate::platform::VIBRATION_PATTERNS
+            [usize::from(pattern).min(crate::platform::VIBRATION_PATTERNS.len() - 1)];
+        mobile_sentinel::haptics::vibrate_pattern(&crate::platform::repeated_pattern(
+            pattern, PREVIEW_MS,
+        ));
+        self.vibrating.set(true);
+        self.stop_after_a_while();
     }
 }
 
@@ -106,8 +131,9 @@ fn play_preview(sound: &str) -> u64 {
         log::warn!("[AlarmFree] No playback path found for: {sound}");
         return 0;
     };
-    // As the alarm will sound, and also with the media volume at zero.
-    match mobile_sentinel::audio::play_as_alarm(&path.to_string_lossy(), false) {
+    // As the alarm will sound, and also with the media volume at zero. Round and round, as it
+    // would ring: a short sound still lasts as long as the preview.
+    match mobile_sentinel::audio::play_as_alarm(&path.to_string_lossy(), true) {
         Ok(handle) => handle.id(),
         Err(e) => {
             log::warn!("[AlarmFree] Preview play failed: {e}");
@@ -223,11 +249,13 @@ fn Editor(id: String) -> Element {
     let mut trying: Signal<Option<Vec<ChallengeSetup>>> = use_signal(|| None);
     let handle = use_signal(|| 0u64);
     let token = use_signal(|| 0u64);
-    let mut try_running = use_signal(|| false);
+    let sounding = use_signal(|| false);
+    let vibrating = use_signal(|| false);
     let preview = Preview {
         handle,
         token,
-        try_running,
+        sounding,
+        vibrating,
     };
     use_context_provider(|| EditorState {
         draft,
@@ -241,7 +269,12 @@ fn Editor(id: String) -> Element {
         trying,
         preview,
     });
-    use_drop(move || stop_preview(*handle.peek()));
+    use_drop(move || {
+        stop_preview(*handle.peek());
+        if *vibrating.peek() {
+            mobile_sentinel::haptics::cancel();
+        }
+    });
 
     // Drag a challenge by its handle to put it in a different step.
     crate::reorder::use_reorder(
@@ -339,39 +372,19 @@ fn Editor(id: String) -> Element {
         t(&translations, "alarm.edit")
     };
 
-    // Summary rows.
+    // Summary rows: what it is, and the details are one tap away.
     let sound_summary = if current.sound_mode == 2 {
         t(&translations, "config.vibration_only")
     } else {
-        let name =
-            crate::custom_sounds::display_name(&current.sound, &settings.read().prefs.sound_names);
-        if current.fade_in_secs == 0 {
-            name
-        } else {
-            format!(
-                "{name}, {} {}",
-                t(&translations, "config.fade_in_lower"),
-                seconds_label(&translations, current.fade_in_secs),
-            )
-        }
+        crate::custom_sounds::display_name(&current.sound, &settings.read().prefs.sound_names)
     };
     let vibration_summary = if current.sound_mode == 1 {
         t(&translations, "vibration.off")
     } else {
-        let pattern = t(
+        t(
             &translations,
             VIBRATION_KEYS[usize::from(current.vibration).min(VIBRATION_KEYS.len() - 1)],
-        );
-        if current.sound_mode == 0 && current.sound_delay_secs > 0 {
-            t(&translations, "config.sound_delay_summary")
-                .replace("{pattern}", &pattern)
-                .replace(
-                    "{time}",
-                    &seconds_label(&translations, current.sound_delay_secs),
-                )
-        } else {
-            pattern
-        }
+        )
     };
     let snooze_summary = if current.snooze_count == 0 {
         t(&translations, "config.no_snooze")
@@ -391,9 +404,8 @@ fn Editor(id: String) -> Element {
             .collect();
         match names.len() {
             0 => t(&translations, "config.none"),
-            // The row has room for about three names; more than that was cut off mid-word.
-            1..=3 => names.join(", "),
-            n => format!("{} +{}", names[..2].join(", "), n - 2),
+            1 | 2 => names.join(", "),
+            n => format!("{} +{}", names[0], n - 1),
         }
     };
     let limit_summary = match current.ring_limit_secs {
@@ -405,8 +417,14 @@ fn Editor(id: String) -> Element {
     let check_summary = if current.wake_check_minutes == 0 {
         t(&translations, "config.fade_off")
     } else {
-        t(&translations, "text.minutes")
+        t(&translations, "config.check_after")
             .replace("{minutes}", &current.wake_check_minutes.to_string())
+    };
+    let notice_summary = if current.notify_before_minutes == 0 {
+        t(&translations, "config.fade_off")
+    } else {
+        t(&translations, "text.minutes")
+            .replace("{minutes}", &current.notify_before_minutes.to_string())
     };
     let label_summary = if current.label.is_empty() {
         t(&translations, "config.none")
@@ -427,12 +445,12 @@ fn Editor(id: String) -> Element {
         Some(EditorSheet::Detail(index)) => rsx! { ChallengeDetailSheet { key: "{index}", index } },
         Some(EditorSheet::Limit) => rsx! { LimitSheet {} },
         Some(EditorSheet::WakeCheck) => rsx! { WakeCheckSheet {} },
+        Some(EditorSheet::Notice) => rsx! { NoticeSheet {} },
         Some(EditorSheet::Delete) => rsx! { DeleteSheet { id: id.clone() } },
         Some(EditorSheet::Discard) => rsx! { DiscardSheet {} },
     };
 
     let save = {
-        let build = build.clone();
         let id = id.clone();
         move |_| {
             preview.stop();
@@ -506,8 +524,11 @@ fn Editor(id: String) -> Element {
                     Row { title: t(&translations, "config.vibration"), value: vibration_summary, on_click: move |_| sheet.set(Some(EditorSheet::Vibration)) }
                     Row { title: t(&translations, "config.snooze"), value: snooze_summary, on_click: move |_| sheet.set(Some(EditorSheet::Snooze)) }
                     Row { title: t(&translations, "config.challenges"), value: challenge_summary_text, on_click: move |_| sheet.set(Some(EditorSheet::Challenges)) }
+                }
+                ul { class: "list",
                     Row { title: t(&translations, "config.ring_limit"), value: limit_summary, on_click: move |_| sheet.set(Some(EditorSheet::Limit)) }
                     Row { title: t(&translations, "config.wake_check"), value: check_summary, on_click: move |_| sheet.set(Some(EditorSheet::WakeCheck)) }
+                    Row { title: t(&translations, "config.notice"), value: notice_summary, on_click: move |_| sheet.set(Some(EditorSheet::Notice)) }
                     SwitchRow {
                         title: t(&translations, "config.max_brightness"),
                         on: current.max_brightness,
@@ -517,34 +538,6 @@ fn Editor(id: String) -> Element {
             }
 
             div { class: "save-bar",
-                if !for_defaults {
-                    button {
-                        class: "btn btn-quiet try-btn",
-                        onclick: {
-                            let build = build.clone();
-                            move |_| {
-                                if try_running() {
-                                    preview.stop();
-                                    return;
-                                }
-                                let alarm = build();
-                                if alarm.sound_mode != 1 {
-                                    crate::feedback::pattern(crate::platform::VIBRATION_PATTERNS[usize::from(alarm.vibration).min(2)]);
-                                }
-                                if alarm.sound_mode == 2 {
-                                    return;
-                                }
-                                preview.play_for(alarm.sound, TRY_MS);
-                                try_running.set(true);
-                            }
-                        },
-                        if try_running() {
-                            {t(&translations, "config.try_stop")}
-                        } else {
-                            {t(&translations, "config.try_ring")}
-                        }
-                    }
-                }
                 button { class: "btn btn-primary save-btn", onclick: save, {t(&translations, "action.save")} }
             }
 
@@ -680,7 +673,7 @@ fn RepeatSection() -> Element {
                     ("config.every_day", [true; 7]),
                 ] {
                     button {
-                        class: "chip-small",
+                        class: if !one_time() && current.days == days { "chip-small on" } else { "chip-small" },
                         onclick: move |_| {
                             one_time.set(false);
                             draft.write().days = days;
@@ -690,7 +683,7 @@ fn RepeatSection() -> Element {
                     }
                 }
                 button {
-                    class: "chip-small",
+                    class: if one_time() { "chip-small on" } else { "chip-small" },
                     onclick: move |_| {
                         let now = chrono::Local::now().naive_local();
                         let (hour, minute) = {

@@ -9,6 +9,6 @@ pub use celebration::Celebration;
 pub use icon::{Icon, IconName};
 pub use toast::{Toast, ToastLevel, ToastMessage};
 pub use ui::{
-    BottomNav, Chips, GroupTitle, Row, ScreenHeader, Sheet, SheetDone, SheetItem, Stepper, Switch,
-    SwitchRow,
+    BottomNav, Chips, GroupTitle, Row, ScreenHeader, Sheet, SheetDone, SheetItem, StartStop,
+    Stepper, Switch, SwitchRow,
 };

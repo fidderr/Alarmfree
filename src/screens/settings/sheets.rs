@@ -2,58 +2,15 @@
 
 use dioxus::prelude::*;
 
-use super::{format_name, notify_name, theme_name, volume_name, week_name, SettingsState};
+use super::{format_name, volume_name, week_name, SettingsState};
 use crate::alarm_ops;
 use crate::app::{t, AlarmData, Translations};
-use crate::components::{Chips, GroupTitle, Sheet, SheetDone, SheetItem, ToastMessage};
+use crate::components::{Chips, Sheet, SheetDone, SheetItem, ToastMessage};
 use crate::i18n;
-use crate::models::{Accent, Locale, ThemeMode, TimeFormat, WeekStart};
-
-/// What "Before an alarm" offers, in minutes.
-const NOTIFY_MINUTES: [u8; 4] = [0, 5, 10, 30];
+use crate::models::{Locale, TimeFormat, WeekStart};
 
 /// The percentages for the minimum volume.
 const VOLUMES: [u8; 5] = [0, 25, 50, 75, 100];
-
-#[component]
-pub(super) fn ThemeSheet() -> Element {
-    let state = use_context::<SettingsState>();
-    let SettingsState {
-        settings,
-        mut sheet,
-    } = state;
-    let translations = use_context::<Translations>();
-    let now = settings.read().clone();
-    rsx! {
-        Sheet {
-            title: t(&translations, "settings.theme"),
-            on_close: move |_| sheet.set(None),
-            for mode in [ThemeMode::System, ThemeMode::Dark, ThemeMode::Light, ThemeMode::Black, ThemeMode::Colorblind] {
-                SheetItem {
-                    label: theme_name(mode, &translations),
-                    selected: now.theme == mode,
-                    on_click: move |_| {
-                        state.update(&mut |s| s.theme = mode);
-                        sheet.set(None);
-                    },
-                }
-            }
-            if now.theme != ThemeMode::Colorblind {
-                GroupTitle { text: t(&translations, "settings.accent") }
-                div { class: "swatches",
-                    for accent in Accent::ALL {
-                        button {
-                            class: if now.prefs.accent == accent { "swatch selected {accent.css_class()}" } else { "swatch {accent.css_class()}" },
-                            "aria-label": t(&translations, accent.name_key()),
-                            "aria-pressed": if now.prefs.accent == accent { "true" } else { "false" },
-                            onclick: move |_| state.update(&mut |s| s.prefs.accent = accent),
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
 
 #[component]
 pub(super) fn LanguageSheet() -> Element {
@@ -155,32 +112,6 @@ pub(super) fn WeekStartSheet() -> Element {
     }
 }
 
-/// How long before an alarm a notification comes.
-#[component]
-pub(super) fn NotifySheet() -> Element {
-    let state = use_context::<SettingsState>();
-    let SettingsState {
-        settings,
-        mut sheet,
-    } = state;
-    let translations = use_context::<Translations>();
-    let selected = settings.read().prefs.notify_before_minutes;
-    rsx! {
-        Sheet {
-            title: t(&translations, "settings.notify_before"),
-            note: t(&translations, "settings.notify_before_note"),
-            on_close: move |_| sheet.set(None),
-            Chips::<u8> {
-                grow: true,
-                options: NOTIFY_MINUTES.iter().map(|m| (*m, notify_name(*m, &translations))).collect::<Vec<_>>(),
-                selected: Some(selected),
-                on_pick: move |minutes: u8| state.update(&mut |s| s.prefs.notify_before_minutes = minutes),
-            }
-            SheetDone { label: t(&translations, "action.done"), on_click: move |_| sheet.set(None) }
-        }
-    }
-}
-
 #[component]
 pub(super) fn VolumeSheet() -> Element {
     let state = use_context::<SettingsState>();
@@ -193,7 +124,7 @@ pub(super) fn VolumeSheet() -> Element {
     rsx! {
         Sheet {
             title: t(&translations, "settings.min_volume"),
-            note: t(&translations, "settings.min_volume_desc"),
+            help: t(&translations, "settings.min_volume_desc"),
             on_close: move |_| sheet.set(None),
             Chips::<u8> {
                 grow: true,
@@ -219,7 +150,7 @@ pub(super) fn BackupSheet() -> Element {
     rsx! {
         Sheet {
             title: t(&translations, "settings.backup"),
-            note: t(&translations, "settings.backup_note"),
+            help: t(&translations, "settings.backup_note"),
             on_close: move |_| sheet.set(None),
             SheetItem {
                 label: t(&translations, "settings.backup_save"),

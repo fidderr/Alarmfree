@@ -5,23 +5,20 @@ mod sheets;
 use dioxus::prelude::*;
 
 use sheets::{
-    AboutSheet, BackupSheet, LanguageSheet, NotifySheet, ThemeSheet, TimeFormatSheet, VolumeSheet,
-    WeekStartSheet,
+    AboutSheet, BackupSheet, LanguageSheet, TimeFormatSheet, VolumeSheet, WeekStartSheet,
 };
 
 use crate::app::{t, Route, Translations};
 use crate::components::{BottomNav, Icon, IconName, Row, SwitchRow};
-use crate::models::{AppSettings, ThemeMode, TimeFormat, WeekStart};
+use crate::models::{AppSettings, TimeFormat, WeekStart};
 use crate::screens::history::DeleteHistorySheet;
 
 /// The panel open over the settings.
 #[derive(Clone, Copy, PartialEq)]
 enum SettingsSheet {
-    Theme,
     Language,
     TimeFormat,
     WeekStart,
-    NotifyBefore,
     Volume,
     Backup,
     DeleteHistory,
@@ -44,19 +41,6 @@ impl SettingsState {
     }
 }
 
-fn theme_name(mode: ThemeMode, translations: &Translations) -> String {
-    t(
-        translations,
-        match mode {
-            ThemeMode::System => "theme.system",
-            ThemeMode::Dark => "theme.dark",
-            ThemeMode::Light => "theme.light",
-            ThemeMode::Black => "theme.black",
-            ThemeMode::Colorblind => "theme.colorblind",
-        },
-    )
-}
-
 fn format_name(format: TimeFormat, translations: &Translations) -> String {
     t(
         translations,
@@ -77,14 +61,6 @@ fn week_name(start: WeekStart, translations: &Translations) -> String {
             WeekStart::Saturday => "day.saturday",
         },
     )
-}
-
-fn notify_name(minutes: u8, translations: &Translations) -> String {
-    if minutes == 0 {
-        t(translations, "config.fade_off")
-    } else {
-        t(translations, "text.minutes").replace("{minutes}", &minutes.to_string())
-    }
 }
 
 fn volume_name(percent: u8, translations: &Translations) -> String {
@@ -122,11 +98,9 @@ pub fn Settings() -> Element {
 
     let sheet_view = match sheet() {
         None => rsx! {},
-        Some(SettingsSheet::Theme) => rsx! { ThemeSheet {} },
         Some(SettingsSheet::Language) => rsx! { LanguageSheet {} },
         Some(SettingsSheet::TimeFormat) => rsx! { TimeFormatSheet {} },
         Some(SettingsSheet::WeekStart) => rsx! { WeekStartSheet {} },
-        Some(SettingsSheet::NotifyBefore) => rsx! { NotifySheet {} },
         Some(SettingsSheet::Volume) => rsx! { VolumeSheet {} },
         Some(SettingsSheet::Backup) => rsx! { BackupSheet {} },
         Some(SettingsSheet::DeleteHistory) => {
@@ -167,7 +141,7 @@ pub fn Settings() -> Element {
 
                 h2 { class: "list-title", {t(&translations, "settings.general")} }
                 ul { class: "list",
-                    Row { title: t(&translations, "settings.theme"), value: theme_name(now.theme, &translations), on_click: move |_| sheet.set(Some(SettingsSheet::Theme)) }
+                    Row { title: t(&translations, "settings.theme"), value: t(&translations, now.theme.name_key()), on_click: move |_| { nav.push(Route::ThemeScreen {}); } }
                     Row { title: t(&translations, "settings.language"), value: language_name, on_click: move |_| sheet.set(Some(SettingsSheet::Language)) }
                     Row { title: t(&translations, "settings.time_format"), value: format_name(prefs.time_format, &translations), on_click: move |_| sheet.set(Some(SettingsSheet::TimeFormat)) }
                     Row { title: t(&translations, "settings.week_start"), value: week_name(prefs.week_start, &translations), on_click: move |_| sheet.set(Some(SettingsSheet::WeekStart)) }
@@ -182,19 +156,17 @@ pub fn Settings() -> Element {
                     }
                 }
 
-                h2 { class: "list-title", {t(&translations, "settings.alarm_defaults")} }
+                h2 { class: "list-title", {t(&translations, "settings.alarms")} }
                 ul { class: "list",
                     Row {
                         title: t(&translations, "settings.new_alarms"),
-                        value: t(&translations, "settings.edit"),
                         on_click: move |_| { nav.push(Route::AlarmConfig { id: "defaults".to_string() }); },
                     }
-                    Row { title: t(&translations, "settings.notify_before"), value: notify_name(prefs.notify_before_minutes, &translations), on_click: move |_| sheet.set(Some(SettingsSheet::NotifyBefore)) }
+                    Row { title: t(&translations, "settings.min_volume"), value: volume_name(now.min_volume_percent, &translations), on_click: move |_| sheet.set(Some(SettingsSheet::Volume)) }
                 }
 
-                h2 { class: "list-title", {t(&translations, "settings.ringing")} }
+                h2 { class: "list-title", {t(&translations, "settings.feel")} }
                 ul { class: "list",
-                    Row { title: t(&translations, "settings.min_volume"), value: volume_name(now.min_volume_percent, &translations), on_click: move |_| sheet.set(Some(SettingsSheet::Volume)) }
                     SwitchRow {
                         title: t(&translations, "settings.touch_feedback"),
                         on: prefs.touch_feedback,

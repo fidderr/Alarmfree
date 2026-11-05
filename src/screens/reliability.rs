@@ -158,6 +158,14 @@ fn ReliabilityScreen(first_run: bool) -> Element {
     let has_ring_record =
         crate::platform::alarm_kit_optional().is_some_and(|kit| !kit.timing_log().is_empty());
     let test_pending = alarms.read().iter().any(|alarm| alarm.test);
+    let help = format!(
+        "{} {} {last_test}",
+        t(&translations, "reliability.intro"),
+        t(&translations, "reliability.test_note"),
+    );
+    // What needs doing first.
+    let mut checks = CHECKS.to_vec();
+    checks.sort_by_key(|check| health.is_ok(*check));
 
     rsx! {
         div { class: "screen",
@@ -168,19 +176,16 @@ fn ReliabilityScreen(first_run: bool) -> Element {
             } else {
                 ScreenHeader {
                     title: t(&translations, "reliability.title"),
+                    help,
                     on_back: move |_| leave(),
                 }
             }
             div { class: "scroll",
-                p { class: "intro",
-                    if first_run {
-                        {t(&translations, "setup.intro")}
-                    } else {
-                        {t(&translations, "reliability.intro")}
-                    }
+                if first_run {
+                    p { class: "intro", {t(&translations, "setup.intro")} }
                 }
                 ul { class: "list",
-                    for check in CHECKS {
+                    for check in checks {
                         {
                             let ok = health.is_ok(check);
                             let (title, note) = check_text(&translations, check);
@@ -280,10 +285,6 @@ fn ReliabilityScreen(first_run: bool) -> Element {
                         {t(&translations, "reliability.test_cancel")}
                     }
                 } else {
-                    p { class: "test-note",
-                        {t(&translations, "reliability.test_note")}
-                        " {last_test}"
-                    }
                     button {
                         class: "btn btn-primary",
                         onclick: move |_| {

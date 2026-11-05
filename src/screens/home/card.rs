@@ -9,7 +9,8 @@ use crate::components::{Icon, IconName, Switch};
 use crate::models::AppSettings;
 use crate::schedule;
 
-/// What an alarm's card says about when it rings.
+/// What an alarm's card says about when it rings: only what the days and the switch do not
+/// show already.
 fn when_text(
     translations: &Translations,
     alarm: &AlarmData,
@@ -17,8 +18,8 @@ fn when_text(
     now_ms: i64,
     twenty_four: bool,
 ) -> String {
-    if !alarm.enabled {
-        return t(translations, "home.off");
+    if !alarm.enabled && !schedule::is_one_time(alarm) {
+        return String::new();
     }
     let snoozed_until = crate::platform::alarm_kit_optional()
         .and_then(|kit| kit.snoozed_until(&mobile_sentinel::InstanceId::new(alarm.id.clone())))
@@ -41,17 +42,24 @@ fn when_text(
                 .replace("{day}", &crate::text::day_name(translations, date));
         }
     }
-    let Some(date) = next_fire.and_then(local_date) else {
+    // The days say when a repeating alarm rings, and the top of the screen which is next.
+    if !schedule::is_one_time(alarm) {
+        return String::new();
+    }
+    let date = next_fire.and_then(local_date).or_else(|| {
+        alarm
+            .date
+            .as_deref()
+            .and_then(|date| chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d").ok())
+    });
+    let Some(date) = date else {
         return String::new();
     };
     let today = chrono::Local::now().date_naive();
     match schedule::day_label(today, date) {
         schedule::DayLabel::Today => t(translations, "home.today"),
         schedule::DayLabel::Tomorrow => t(translations, "home.tomorrow"),
-        schedule::DayLabel::Weekday(_) if schedule::is_one_time(alarm) => {
-            crate::text::short_date(translations, date)
-        }
-        schedule::DayLabel::Weekday(_) => crate::text::day_name(translations, date),
+        schedule::DayLabel::Weekday(_) => crate::text::short_date(translations, date),
     }
 }
 
@@ -101,10 +109,14 @@ pub(super) fn AlarmCard(alarm: AlarmData, next: Option<i64>, now_ms: i64) -> Ele
                     onclick: move |_| { nav.push(Route::AlarmConfig { id: open_id.clone() }); },
                     span { class: if twenty_four { "alarm-time" } else { "alarm-time h12" }, "{time}" }
                     span { class: "alarm-info",
-                        span { class: "alarm-label", "{alarm.label}" }
+                        if !alarm.label.is_empty() {
+                            span { class: "alarm-label", "{alarm.label}" }
+                        }
+                        // One line whatever it says, so all cards are the same height.
                         span { class: "alarm-when",
-                            span { "{when}" }
-                            if !one_time {
+                            if !when.is_empty() {
+                                span { class: "alarm-state", "{when}" }
+                            } else {
                                 span { class: "alarm-days",
                                     for day in week_start.day_order() {
                                         span {

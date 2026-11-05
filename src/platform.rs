@@ -8,7 +8,7 @@ use chrono::Local;
 use mobile_sentinel::context::schema::{ChallengeSpec, ScheduleSpec, SnoozePolicy, SoundIdSpec};
 use mobile_sentinel::jobs::RingEnd;
 use mobile_sentinel::recipes::alarm_class::AlarmClassConfig;
-use mobile_sentinel::{AlarmKit, AlarmSpec, InstanceId};
+use mobile_sentinel::{AlarmKit, AlarmSpec, InstanceId, ReminderButton, ReminderTap};
 use std::sync::OnceLock;
 
 use crate::app::AlarmData;
@@ -30,6 +30,34 @@ pub const VIBRATION_PATTERNS: [&[i64]; 3] = [
     // Heartbeat: two quick beats and a rest.
     &[0, 100, 100, 100, 700],
 ];
+
+/// A pattern over and over, for as long as `total_ms`, in one list of wait and vibrate times.
+/// A list of odd length ends on a wait: laid end to end as it is, the next round's wait would
+/// land on a place for vibrating and swap the two, so what is the same kind is added up.
+pub fn repeated_pattern(pattern: &[i64], total_ms: u64) -> Vec<u64> {
+    let mut times: Vec<u64> = Vec::new();
+    let mut left = total_ms;
+    if pattern.iter().all(|ms| *ms <= 0) {
+        return times;
+    }
+    while left > 0 {
+        for (position, ms) in pattern.iter().enumerate() {
+            let ms = (*ms).max(0) as u64;
+            let taken = ms.min(left);
+            left -= taken;
+            // Even places wait, odd places vibrate, in the pattern and in the list.
+            if times.len() % 2 == position % 2 {
+                times.push(taken);
+            } else if let Some(last) = times.last_mut() {
+                *last += taken;
+            }
+            if left == 0 {
+                break;
+            }
+        }
+    }
+    times
+}
 
 /// The backup screen, for when the app's own cannot come up: as many long holds as
 /// the slowest challenge takes, because it must not be the easy way out.
@@ -147,7 +175,6 @@ pub fn refresh_outside_app() {
         return;
     };
     let settings = crate::persistence::load_settings();
-    let before_ms = i64::from(settings.prefs.notify_before_minutes) * 60_000;
     let translations = crate::i18n::load_translations(settings.locale);
     let text = |key: &str| translations.get(key).cloned().unwrap_or_default();
     let twenty_four = crate::text::uses_24_hours(&settings);
@@ -161,11 +188,15 @@ pub fn refresh_outside_app() {
                 soonest = Some((at, alarm.clone()));
             }
         }
-        match next
-            .filter(|at| before_ms > 0 && alarm.enabled && !alarm.hidden && at - before_ms > now_ms)
-        {
-            Some(at) => {
+        let before_ms = i64::from(alarm.notify_before_minutes) * 60_000;
+        let wanted = next.filter(|_| {
+            before_ms > 0 && alarm.enabled && !alarm.hidden && kit.snoozed_until(&id).is_none()
+        });
+        match wanted {
+            Some(at) if at - before_ms > now_ms => {
                 let time = crate::text::clock(alarm.time_hour, alarm.time_minute, twenty_four);
+                let done_title = text("reminder.skipped").replace("{time}", &time);
+                let (skip, undo) = (text("reminder.skip"), text("action.undo"));
                 kit.set_reminder(
                     &id,
                     at - before_ms,
@@ -173,8 +204,15 @@ pub fn refresh_outside_app() {
                     &alarm.label,
                     &text("reminder.channel"),
                     before_ms,
+                    Some(ReminderButton {
+                        label: &skip,
+                        done_title: &done_title,
+                        undo_label: &undo,
+                    }),
                 );
             }
+            // Its time has come: what shows now stays until the alarm takes over.
+            Some(_) => {}
             None => kit.clear_reminder(&id),
         }
     }
@@ -339,6 +377,12 @@ fn sync_alarms(kit: &'static AlarmKit, woken: bool) {
     if crate::schedule::date_undated_one_time(&mut list, Local::now().naive_local()) {
         crate::persistence::save_alarms(&list);
     }
+    // Only with a list that can be trusted. Otherwise the alarm simply rings, and what was
+    // tapped has no effect.
+    if readable && (hand_notice_to_alarms(&mut list) | apply_reminder_taps(kit, &mut list)) {
+        crate::persistence::save_alarms(&list);
+        RING_END_NEWS.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
 
     // Single call: end alarms a reboot interrupted + rearm all alarms +
     // process active jobs + reengage firing
@@ -393,6 +437,38 @@ fn sync_alarms(kit: &'static AlarmKit, woken: bool) {
         RING_END_NEWS.store(true, std::sync::atomic::Ordering::Relaxed);
     }
     refresh_outside_app();
+}
+
+/// The notice before an alarm used to be one setting for all of them: each has its own now.
+fn hand_notice_to_alarms(list: &mut [AlarmData]) -> bool {
+    let mut settings = crate::persistence::load_settings();
+    let minutes = settings.prefs.notify_before_minutes;
+    if minutes == 0 {
+        return false;
+    }
+    crate::alarm_ops::give_notice_to_all(list, settings.prefs.alarm_defaults.as_mut(), minutes);
+    settings.prefs.notify_before_minutes = 0;
+    crate::persistence::save_settings(&settings);
+    true
+}
+
+/// What was tapped on the notices before alarms. Whether the app ran or not: the tap wakes it.
+fn apply_reminder_taps(kit: &AlarmKit, list: &mut [AlarmData]) -> bool {
+    let mut changed = false;
+    for (id, tap) in kit.take_reminder_taps() {
+        let next_fire = kit.next_fire(&id).ok().flatten();
+        match list.iter_mut().find(|alarm| alarm.id == id.0) {
+            Some(alarm) => {
+                changed |= match tap {
+                    ReminderTap::Act => crate::alarm_ops::skip_from_notice(alarm, next_fire),
+                    ReminderTap::Undo => crate::alarm_ops::undo_skip_from_notice(alarm),
+                };
+            }
+            // Deleted since: taking the skip back brought its notice back, for nothing.
+            None => kit.clear_reminder(&id),
+        }
+    }
+    changed
 }
 
 /// Write `text` to a file in the phone's Downloads. Returns where it went.
@@ -612,6 +688,38 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_pattern_keeps_its_rhythm_when_it_repeats() {
+        // Heartbeat: buzz, pause, buzz, rest, and the next beat starts right after the rest.
+        assert_eq!(
+            repeated_pattern(VIBRATION_PATTERNS[2], 2_000),
+            vec![0, 100, 100, 100, 700, 100, 100, 100, 700]
+        );
+        // Steady: the short gap stays a gap, and does not turn into a buzz.
+        assert_eq!(
+            repeated_pattern(VIBRATION_PATTERNS[1], 4_200),
+            vec![0, 2000, 100, 2000, 100]
+        );
+        // Pulse ends on a buzz, so the next round has its own wait in between.
+        assert_eq!(
+            repeated_pattern(VIBRATION_PATTERNS[0], 2_600),
+            vec![0, 500, 300, 500, 0, 500, 300, 500]
+        );
+    }
+
+    #[test]
+    fn a_repeated_pattern_lasts_as_long_as_was_asked() {
+        for pattern in VIBRATION_PATTERNS {
+            let total: u64 = repeated_pattern(pattern, 15_000).iter().sum();
+            assert_eq!(total, 15_000);
+        }
+        assert!(
+            repeated_pattern(&[0, 0], 15_000).is_empty(),
+            "or it never ends"
+        );
+        assert!(repeated_pattern(&[], 15_000).is_empty());
+    }
+
+    #[test]
     fn the_widget_says_when_the_next_alarm_rings_and_nothing_that_goes_stale() {
         use chrono::TimeZone;
         let text = |key: &str| key.to_owned();
@@ -660,7 +768,7 @@ mod tests {
             note: String::new(),
             vibration: 0,
             volume_percent: None,
-            random_order: false,
+            notify_before_minutes: 0,
             wake_check_minutes: 0,
             max_brightness: false,
             sound_delay_secs: 0,

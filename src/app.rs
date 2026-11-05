@@ -15,6 +15,7 @@ use crate::screens::Home;
 use crate::screens::Practice;
 use crate::screens::Reliability;
 use crate::screens::Settings;
+use crate::screens::ThemeScreen;
 
 /// Type alias for the translations signal used across the app.
 pub type Translations = Signal<HashMap<String, String>>;
@@ -42,6 +43,8 @@ pub enum Route {
     History {},
     #[route("/settings")]
     Settings {},
+    #[route("/theme")]
+    ThemeScreen {},
     #[route("/reliability")]
     Reliability {},
     #[route("/welcome")]
@@ -168,15 +171,15 @@ pub struct AlarmData {
     /// minimum from the settings.
     #[serde(default)]
     pub volume_percent: Option<u8>,
-    /// Do the challenges in a different order each time.
-    #[serde(default)]
-    pub random_order: bool,
     /// This long after it was turned off, confirm being up or it rings again (0 = off).
     #[serde(default)]
     pub wake_check_minutes: u8,
     /// The screen goes to full brightness while it rings.
     #[serde(default)]
     pub max_brightness: bool,
+    /// A silent notice this long before it rings, from which the ring can be skipped (0 = off).
+    #[serde(default)]
+    pub notify_before_minutes: u8,
     /// Only vibrate this long before the sound starts. Needs both on (`sound_mode` 0).
     #[serde(default)]
     pub sound_delay_secs: u16,
@@ -212,9 +215,9 @@ const STYLESHEET: &str = include_str!("../assets/style.css");
 /// not drawing, as after another screen closed, has no frames until it is touched, and until
 /// then every task of the UI stands still, also what turns an alarm off after a challenge.
 /// Dioxus's mode for a page nobody sees does without them.
-fn set_system_bars(theme: crate::models::ThemeMode, system_dark: bool) {
-    mobile_sentinel::display::set_light_system_bars(theme.is_light(system_dark));
-    mobile_sentinel::display::set_system_bar_color(theme.background(system_dark));
+fn set_system_bars(palette: &crate::models::Palette) {
+    mobile_sentinel::display::set_light_system_bars(palette.light);
+    mobile_sentinel::display::set_system_bar_color(palette.background_argb());
 }
 
 const WINDOW_WATCH: &str = "\
@@ -259,10 +262,8 @@ const HISTORY_KEEP_DAYS: u32 = 5 * 365;
 /// background, so the start does not flash. Read before the UI starts.
 pub fn start_background() -> (u8, u8, u8, u8) {
     let settings = crate::persistence::load_settings();
-    let argb = settings
-        .theme
-        .background(mobile_sentinel::display::system_dark());
-    let [_, r, g, b] = argb.to_be_bytes();
+    let palette = settings.palette(mobile_sentinel::display::system_dark());
+    let [_, r, g, b] = palette.background_argb().to_be_bytes();
     (r, g, b, 255)
 }
 
@@ -411,14 +412,14 @@ pub fn App() -> Element {
     let mut safe_area = use_signal(SafeArea::default);
     let mut system_dark = use_signal(mobile_sentinel::display::system_dark);
     use_effect(move || {
-        set_system_bars(settings.read().theme, system_dark());
+        set_system_bars(&settings.read().palette(system_dark()));
     });
     let mut read_window = move || {
         let current = SafeArea::query();
         if current != *safe_area.peek() {
             safe_area.set(current);
             // A recreated window can reset their colours.
-            set_system_bars(settings.peek().theme, *system_dark.peek());
+            set_system_bars(&settings.peek().palette(*system_dark.peek()));
         }
         let dark = mobile_sentinel::display::system_dark();
         if dark != *system_dark.peek() {
@@ -448,18 +449,22 @@ pub fn App() -> Element {
     let firing_id_val = firing_id.read().clone();
 
     // Read theme reactively inside rsx! so Dioxus tracks it as a dependency
-    let theme_class = settings.read().theme.css_class(system_dark());
+    let palette = settings.read().palette(system_dark());
+    let theme_class = if palette.light {
+        "theme-light"
+    } else {
+        "theme-dark"
+    };
     let motion_class = if settings.read().prefs.less_motion {
         "less-motion"
     } else {
         ""
     };
-    let accent_class = settings.read().prefs.accent.css_class();
-    let safe_style = safe_area.read().css_vars();
+    let root_style = format!("{} {}", palette.css_vars(), safe_area.read().css_vars());
 
     rsx! {
         style { "{STYLESHEET}" }
-        div { class: "app-root {theme_class} {accent_class} {motion_class}", style: "{safe_style}",
+        div { class: "app-root {theme_class} {motion_class}", style: "{root_style}",
             if let Some(alarm_id) = firing_id_val {
                 // Show alarm firing screen directly, bypassing router
                 crate::screens::AlarmFiring { key: "{alarm_id}", id: alarm_id }

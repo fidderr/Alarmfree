@@ -120,7 +120,6 @@ pub fn AlarmFiring(id: String) -> Element {
         .as_ref()
         .map(|a| ChallengeSetup::list_from_stored(&a.challenges))
         .unwrap_or_default();
-    let random_order = alarm.as_ref().is_some_and(|a| a.random_order);
 
     // How this ring stands, from the SDK, which still knows after a snooze or a
     // restart. Read once: the record is gone after a dismiss, while this still shows.
@@ -307,7 +306,7 @@ pub fn AlarmFiring(id: String) -> Element {
                         }
                         let kit = crate::platform::alarm_kit();
                         let instance = mobile_sentinel::InstanceId::new(id.clone());
-                        let prepared = prepare(&setups, random_order, settings.peek().locale);
+                        let prepared = prepare(&setups, settings.peek().locale);
                         if prepared.is_empty() {
                             // No challenge, or none this version knows: the SDK refuses
                             // to dismiss a challenge alarm until it is marked solved, so

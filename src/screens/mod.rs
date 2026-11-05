@@ -6,6 +6,7 @@ pub mod home;
 pub mod practice;
 pub mod reliability;
 pub mod settings;
+pub mod theme;
 
 pub use alarm_config::AlarmConfig;
 pub use alarm_firing::AlarmFiring;
@@ -14,3 +15,4 @@ pub use home::Home;
 pub use practice::Practice;
 pub use reliability::{FirstRun, Reliability};
 pub use settings::Settings;
+pub use theme::ThemeScreen;

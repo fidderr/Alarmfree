@@ -5,11 +5,10 @@ use dioxus::prelude::*;
 use super::{seconds_label, EditorState};
 use crate::alarm_ops;
 use crate::app::{t, AlarmData, Translations};
-use crate::components::{Chips, GroupTitle, Icon, IconName, Sheet, SheetDone, ToastMessage};
+use crate::components::{
+    Chips, GroupTitle, Icon, IconName, Sheet, SheetDone, StartStop, ToastMessage,
+};
 use crate::models::AppSettings;
-
-/// How long tapping a sound plays it.
-const SOUND_PREVIEW_MS: u64 = 5_000;
 
 const FADE_SECONDS: [u16; 6] = [0, 15, 30, 60, 120, 300];
 const SOUND_DELAY_SECONDS: [u16; 4] = [0, 15, 30, 60];
@@ -46,10 +45,21 @@ pub(super) fn SoundSheet() -> Element {
     let mut deleting: Signal<Option<String>> = use_signal(|| None);
     let delete_text = t(&translations, "action.delete");
     let keep_text = t(&translations, "alarm.keep");
+    let sounding = *preview.sounding.read();
+    let to_try = selected_sound.clone();
     rsx! {
         Sheet {
             title: t(&translations, "config.sound"),
-            note: t(&translations, "config.sound_note"),
+            help: t(&translations, "config.sound_note"),
+            action: rsx! {
+                if !vibrate_only {
+                    StartStop {
+                        running: sounding,
+                        on_start: move |_| preview.play(&to_try),
+                        on_stop: move |_| preview.stop(),
+                    }
+                }
+            },
             on_close: move |_| {
                 preview.stop();
                 sheet.set(None);
@@ -131,7 +141,11 @@ pub(super) fn SoundSheet() -> Element {
                                                 alarm.sound_mode = 0;
                                             }
                                         }
-                                        preview.play_for(to_pick.clone(), SOUND_PREVIEW_MS);
+                                        // Only a tap on Start makes a sound. While one plays, the
+                                        // sound picked takes over.
+                                        if *preview.sounding.peek() {
+                                            preview.play(&to_pick);
+                                        }
                                     },
                                     span { class: "radio-mark" }
                                     span { class: "radio-text", "{name}" }
@@ -235,7 +249,6 @@ pub(super) fn SoundSheet() -> Element {
                                     .sound_names
                                     .insert(imported.file.clone(), imported.name);
                                 crate::persistence::save_settings(&settings.peek());
-                                preview.play_for(imported.file, SOUND_PREVIEW_MS);
                             }
                             Ok(Err(reason)) if reason == crate::custom_sounds::NOT_A_SOUND => {
                                 toast.set(Some(ToastMessage::error(t(&translations, "sound.not_a_sound"))));
@@ -292,11 +305,13 @@ pub(super) fn VibrationSheet() -> Element {
     let EditorState {
         mut sheet,
         mut draft,
+        preview,
         ..
     } = use_context();
     let translations = use_context::<Translations>();
     let current = draft.read().clone();
     let done_text = t(&translations, "action.done");
+    let vibrating = *preview.vibrating.read();
     let selected = if current.sound_mode == 1 {
         None
     } else {
@@ -312,8 +327,20 @@ pub(super) fn VibrationSheet() -> Element {
     rsx! {
         Sheet {
             title: t(&translations, "config.vibration"),
-            note: t(&translations, "config.vibration_note"),
-            on_close: move |_| sheet.set(None),
+            help: t(&translations, "config.vibration_note"),
+            action: rsx! {
+                if let Some(pattern) = selected {
+                    StartStop {
+                        running: vibrating,
+                        on_start: move |_| preview.vibrate(pattern),
+                        on_stop: move |_| preview.stop(),
+                    }
+                }
+            },
+            on_close: move |_| {
+                preview.stop();
+                sheet.set(None);
+            },
             Chips::<u8> {
                 grow: true,
                 options,
@@ -325,12 +352,15 @@ pub(super) fn VibrationSheet() -> Element {
                         if alarm.sound_mode != 2 {
                             alarm.sound_mode = 1;
                         }
+                        drop(alarm);
+                        preview.stop();
                     } else {
                         alarm.vibration = pattern;
                         if alarm.sound_mode == 1 {
                             alarm.sound_mode = 0;
                         }
-                        crate::feedback::pattern(crate::platform::VIBRATION_PATTERNS[usize::from(pattern)]);
+                        drop(alarm);
+                        preview.vibrate(pattern);
                     }
                 },
             }
@@ -352,7 +382,13 @@ pub(super) fn VibrationSheet() -> Element {
                     on_pick: move |secs: u16| draft.write().sound_delay_secs = secs,
                 }
             }
-            SheetDone { label: done_text.clone(), on_click: move |_| sheet.set(None) }
+            SheetDone {
+                label: done_text.clone(),
+                on_click: move |_| {
+                    preview.stop();
+                    sheet.set(None);
+                },
+            }
         }
     }
 }

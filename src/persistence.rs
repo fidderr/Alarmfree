@@ -247,7 +247,7 @@ mod tests {
             note: String::new(),
             vibration: 0,
             volume_percent: None,
-            random_order: false,
+            notify_before_minutes: 0,
             wake_check_minutes: 0,
             max_brightness: false,
             sound_delay_secs: 0,

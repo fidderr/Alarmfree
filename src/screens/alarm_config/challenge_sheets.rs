@@ -90,27 +90,37 @@ fn difficulty_example(translations: &Translations, setup: &ChallengeSetup) -> St
 pub(super) fn ChallengesSheet() -> Element {
     let EditorState {
         mut sheet,
-        mut draft,
         mut setups,
         mut trying,
         ..
     } = use_context();
     let translations = use_context::<Translations>();
-    let current = draft.read().clone();
     let done_text = t(&translations, "action.done");
     let list = setups.read().clone();
     let count = list.len();
     let try_text = t(&translations, "challenge.try");
     let remove_text = t(&translations, "config.remove_challenge");
     let drag_text = t(&translations, "config.drag_challenge");
-    let order_options = vec![
-        (false, t(&translations, "config.order_fixed")),
-        (true, t(&translations, "config.order_random")),
-    ];
+    let try_all_text = t(&translations, "config.try_all");
     rsx! {
         Sheet {
             title: t(&translations, "config.challenges"),
-            note: t(&translations, "config.challenges_note"),
+            help: t(&translations, "config.challenges_note"),
+            action: rsx! {
+                if count > 0 {
+                    button {
+                        class: "link-btn",
+                        onclick: move |_| {
+                            let list = setups.peek().clone();
+                            for setup in &list {
+                                request_challenge_permission(setup);
+                            }
+                            trying.set(Some(list));
+                        },
+                        "{try_all_text}"
+                    }
+                }
+            },
             on_close: move |_| sheet.set(None),
             div { id: "challenge-list", class: "challenge-list",
                 for (index, setup) in list.iter().cloned().enumerate() {
@@ -158,26 +168,6 @@ pub(super) fn ChallengesSheet() -> Element {
                     {t(&translations, "config.add_challenge")}
                 }
             }
-            if count > 0 {
-                button {
-                    class: "btn btn-quiet",
-                    onclick: move |_| {
-                        let list = setups.peek().clone();
-                        for setup in &list {
-                            request_challenge_permission(setup);
-                        }
-                        trying.set(Some(list));
-                    },
-                    {t(&translations, "config.try_all")}
-                }
-            }
-            GroupTitle { text: t(&translations, "config.order") }
-            Chips::<bool> {
-                grow: true,
-                options: order_options,
-                selected: Some(current.random_order),
-                on_pick: move |random: bool| draft.write().random_order = random,
-            }
             SheetDone { label: done_text.clone(), on_click: move |_| sheet.set(None) }
         }
     }
@@ -195,7 +185,7 @@ pub(super) fn AddChallengeSheet() -> Element {
     rsx! {
         Sheet {
             title: t(&translations, "config.select_challenge"),
-            note: t(&translations, "config.add_note"),
+            help: t(&translations, "config.add_note"),
             on_close: move |_| sheet.set(Some(EditorSheet::Challenges)),
             for key in CHALLENGE_TYPES {
                 button {
@@ -211,11 +201,12 @@ pub(super) fn AddChallengeSheet() -> Element {
                         }
                     },
                     span { class: "add-name", {t(&translations, key)} }
-                    span { class: "add-desc", {t(&translations, &key.replace("challenge.", "challenge.desc."))} }
+                    span { class: "add-desc", {t(&translations, &key.replace("challenge.", "challenge.short."))} }
                 }
             }
             SheetDone {
                 label: t(&translations, "challenge.config.back"),
+                quiet: true,
                 on_click: move |_| sheet.set(Some(EditorSheet::Challenges)),
             }
         }
@@ -248,6 +239,7 @@ pub(super) fn ChallengeDetailSheet(index: usize) -> Element {
         }
     };
     let to_try = setup.clone();
+    let try_text = t(&translations, "challenge.try");
     let controls = match setup {
         ChallengeSetup::Math { difficulty }
         | ChallengeSetup::Memory { difficulty }
@@ -361,24 +353,26 @@ pub(super) fn ChallengeDetailSheet(index: usize) -> Element {
     rsx! {
         Sheet {
             title: name,
-            note: description,
+            help: description,
+            action: rsx! {
+                button {
+                    class: "link-btn",
+                    onclick: move |_| {
+                        request_challenge_permission(&to_try);
+                        trying.set(Some(vec![to_try.clone()]));
+                    },
+                    "{try_text}"
+                }
+            },
             on_close: move |_| sheet.set(Some(EditorSheet::Challenges)),
             {controls}
             button {
-                class: "btn btn-quiet",
-                onclick: move |_| {
-                    request_challenge_permission(&to_try);
-                    trying.set(Some(vec![to_try.clone()]));
-                },
-                {t(&translations, "challenge.config.test")}
-            }
-            button {
-                class: "btn btn-quiet danger",
+                class: "link-btn danger sheet-remove",
                 onclick: move |_| {
                     setups.write().remove(index);
                     sheet.set(Some(EditorSheet::Challenges));
                 },
-                {t(&translations, "config.remove_from_alarm")}
+                {t(&translations, "config.remove_challenge")}
             }
             SheetDone { label: done_text.clone(), on_click: move |_| sheet.set(Some(EditorSheet::Challenges)) }
         }
