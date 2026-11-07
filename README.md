@@ -232,7 +232,9 @@ a `Locale` variant, and an arm in `load_translations`.
 3. `./build.sh aab && ./sign-aab.sh`. The result is in `release/`. The upload keystore is not in
    this repository, and every release needs the same one; `sign-aab.sh` says what to do when
    there is none.
-4. `play-store-description.md` has the listing texts and what Play Console asks about.
+4. [store/README.md](store/README.md) has the listing in five languages, the graphics, and what Play
+   Console asks about. New screenshots: `bash devtest/store_shots.sh`, then `python store/make_graphics.py`;
+   the foreground service video: `bash devtest/store_video.sh`. The privacy policy is `docs/privacy.html`.
 
 ## License
 
