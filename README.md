@@ -93,12 +93,12 @@ Policy stays in Rust, in `src/platform.rs` and the SDK's AlarmKit; Kotlin only e
 | The UI process is killed | Sound goes on, the screen comes back. |
 | The ring process is killed | Android or the watchdog alarm brings it back within seconds. |
 | Both killed, as a swipe does on some phones | The same, and a provider in the new `:sentinel` starts guarding again. |
-| The UI freezes | A heartbeat through the page stops, the guardian restarts it. After two failures a native backup screen takes over. |
+| The UI freezes | A heartbeat through the page stops, the guardian restarts it. After two failures a native backup screen takes over: 20 holds of 3 seconds end the ring. |
 | A dark-mode switch, font change, rotation or fold | Handled in place, no restart. |
 | A sound that cannot play | The next one: the system default, then a bundled one, then vibration. |
 | Restart in the middle of a ring | Counts as dismissed, with a notice. |
 | Phone off at ring time | Under 15 minutes late it still rings; later it is reported as missed. |
-| Before the first unlock | Files are device-encrypted, so it rings, on the backup screen. |
+| The phone restarted and was not unlocked yet | Files are device-encrypted, so it rings, with its own sound. The app's screen cannot start until the first unlock, so a plain screen asks for that. After its button the ring is quiet for a minute, for the PIN. Unlocked, the alarm's own screen is there, with its challenges. Still locked, the sound and the screen come back. |
 | A restart nobody told the app about | Detected, and explained on the reliability screen. |
 | Force-stop | Android removes the alarms and no app can prevent that. Detected at the next start, and told. |
 

@@ -7,6 +7,21 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+### Changed
+
+- **A phone that restarted and was not unlocked yet**, as after an update in the night. The alarm
+  rang there on a screen that asked for 20 long holds, which had nothing to do with the alarm's
+  own challenges. Now a screen says the phone has to be unlocked, with one button for that. The
+  ring is quiet for a minute after the button, and with the phone unlocked the alarm's own screen
+  is there. Still locked after that minute, it sounds again.
+
+### Fixed
+
+- Unlocking the phone in the middle of such a ring could leave the alarm ringing behind a
+  notification, with no screen to turn it off on.
+- The phone cleaning the app up while it was locked could leave the alarm on the screen with the
+  holds, also after the unlock.
+
 ## [0.4.0] - 2026-11-05
 
 ### Added
