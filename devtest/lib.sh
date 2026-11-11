@@ -278,10 +278,22 @@ reboot_and_wait() {
     reboot_only || return 1
     open_shells
 }
-# Android writes "no longer stopped" to disk 10-11 s after a force-stopped app starts, measured.
-# A phone saves it when shutting down, but a restart here kills the emulator: any sooner and the
-# app counts as force-stopped after the boot, and gets no boot signal.
+# Android writes "stopped" and "no longer stopped" to disk up to 10 s after the fact, measured.
+# A phone saves it when shutting down, but a restart here kills the emulator: with "stopped" on
+# disk the app counts as force-stopped after the boot, and gets no boot signal. For an app that
+# has started since: asked from the saved file itself, which an emulator's root can read, and
+# which often never said "stopped" at all.
+saved_as_running() {
+    dev "su 0 abx2xml /data/system/users/0/package-restrictions.xml - | tr '>' '\n' | grep 'name=\"$PKG\"'" | grep -v -q 'stopped="true"'
+}
 stopped_state_saved() {
+    # No device, as before an emulator's first start: nothing to save.
+    [ "$(timeout 5 "$ADB" -s "$SERIAL" get-state 2> /dev/null | tr -d '\r')" = device ] || return 0
+    local from=$SECONDS
+    if wait_for 14 saved_as_running; then
+        [ $((SECONDS - from)) -lt 2 ] || note "waited $((SECONDS - from))s for Android to save that the app is not stopped"
+        return 0
+    fi
     local since=$((SECONDS - ${STARTED_AT:-0}))
     [ "$since" -ge 12 ] || sleep $((12 - since))
 }
