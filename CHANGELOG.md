@@ -7,6 +7,10 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-11-11
+
+Built on mobile-sentinel 0.5.0.
+
 ### Changed
 
 - **A phone that restarted and was not unlocked yet**, as after an update in the night. The alarm
@@ -21,6 +25,7 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
   notification, with no screen to turn it off on.
 - The phone cleaning the app up while it was locked could leave the alarm on the screen with the
   holds, also after the unlock.
+- An alarm that ended on the backup screen could be in the history twice.
 
 ## [0.4.0] - 2026-11-05
 
