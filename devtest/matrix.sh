@@ -3207,6 +3207,8 @@ ON_A_PHONE="s01 s03 s04 s05 s06 s07 s10 s15 s16 s16b s17 s22 s23a s23b s23c s25 
 
 : > "$RESULTS"
 RUN_START=$SECONDS
+# Started by itself, and not from a run that claimed the device already.
+[ -n "${RUN_ID:-}" ] || claim_device
 open_shells
 if on_emulator; then
     dev settings put global auto_time 0

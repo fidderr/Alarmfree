@@ -17,8 +17,33 @@ mkdir -p "$OUT"
 # Seconds from setting up an alarm until it rings: long enough to arm it and kill the app.
 LEAD="${LEAD:-6}"
 
+# One run per device. A run that was stopped can live on, as Windows does not show bash's
+# children, and it then drives the device next to the new run, which looks like the app
+# failing. The newest run owns the device, and an older one ends at its next step.
+OWNER_FILE="${TMPDIR:-/tmp}/af_devtest_owner_$SERIAL"
+claim_device() {
+    RUN_ID="$$.$RANDOM$RANDOM"
+    export RUN_ID
+    echo "$RUN_ID" > "$OWNER_FILE"
+}
+still_ours() {
+    local owner=""
+    [ -n "${RUN_ID:-}" ] || return 0
+    read -r owner < "$OWNER_FILE" 2> /dev/null
+    [ "$owner" = "$RUN_ID" ]
+}
+# From a subshell too: `$$` is the script itself.
+give_way() {
+    echo "STOP  another run took over $SERIAL: this one ends" >&2
+    kill "$$" 2> /dev/null
+    exit 3
+}
+
 # Nothing may hang a run: an unresponsive device fails instead of waiting forever.
-adb_() { timeout 120 "$ADB" -s "$SERIAL" "$@"; }
+adb_() {
+    still_ours || give_way
+    timeout 120 "$ADB" -s "$SERIAL" "$@"
+}
 device_ok() { [ "$(timeout 20 "$ADB" -s "$SERIAL" shell echo ok | tr -d '\r')" = ok ]; }
 # The app's files are device-encrypted (direct_boot in sentinel.toml), and run-as
 # starts in the credential-encrypted directory.
@@ -49,6 +74,7 @@ shells_open() { kill -0 "$DEV_PID" 2> /dev/null && kill -0 "$APP_PID" 2> /dev/nu
 # not leave the rest in the way of the next answer. Returns what the command returned.
 ask() { # pid in out command
     local pid=$1 line text="" rest
+    still_ours || give_way
     printf '{ %s\n} < /dev/null 2>&1; echo "__DONE__$?"\n' "$4" >&"$2"
     while :; do
         if ! IFS= read -r -t 90 line <&"$3"; then
@@ -237,11 +263,13 @@ AVD="${AVD:-af36}"
 EMULATOR="${EMULATOR:-$LOCALAPPDATA/Android/Sdk/emulator/emulator.exe}"
 
 emulator_start() {
+    still_ours || return 0
     powershell.exe -NoProfile -Command "Start-Process -WindowStyle Hidden -FilePath '$(cygpath -w "$EMULATOR")' -ArgumentList '-avd $AVD -no-window -no-audio -no-boot-anim -no-snapshot -gpu ${EMULATOR_GPU:-host} -port ${SERIAL#emulator-}'"
 }
 
 # This emulator, and not another one running next to it.
 emulator_stop() {
+    still_ours || return 0
     powershell.exe -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { \$_.Name -match 'emulator|qemu' -and \$_.CommandLine -match '-port ${SERIAL#emulator-}' } | ForEach-Object { Stop-Process -Id \$_.ProcessId -Force -ErrorAction SilentlyContinue }"
     sleep 1
 }
@@ -682,6 +710,7 @@ scenario() {
     SCENARIO_START=$SECONDS
     echo
     echo "=== $CURRENT"
+    still_ours || give_way
     if ! device_ok; then
         echo "device not responding, stopping the run"
         echo "STOP  $CURRENT  device not responding" >> "$RESULTS"

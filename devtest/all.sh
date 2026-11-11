@@ -28,6 +28,7 @@ run_on() { # avd port scenarios...
     (
         export AVD=$avd SERIAL=emulator-$port OUT="devtest-out/${NAME}_$avd"
         . devtest/lib.sh
+        claim_device
         reboot_and_wait || { echo "FAIL  $avd did not start"; exit 1; }
         # A failed install would go on to test what is already on it.
         said=$(adb_ install -r -g "$APK" 2>&1)
