@@ -54,7 +54,8 @@ run_on() { # avd port scenarios...
 START=$SECONDS
 # The big screens first: next to the other emulator's tour of every panel, late in its run, Android
 # 16 starved to the point of its own system UI freezing.
-FIRST=big_screens SKIP=$OLDEST_ONLY run_on af36 5554 &
+# The restarts with a PIN last: Android 12 is done by then, and they stay under a minute.
+FIRST=big_screens LAST="s13d s13b s13" SKIP=$OLDEST_ONLY run_on af36 5554 &
 # Android 12's graphics on the host's GPU crashed the emulator now and then, in the middle of a run.
 EMULATOR_GPU=swiftshader_indirect SKIP=$NEWEST_ONLY run_on af31 5556 &
 wait

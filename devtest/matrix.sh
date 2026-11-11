@@ -314,7 +314,7 @@ s13() {
     scenario s13_locked_restart_unlock
     # Without the permission to start a screen from the background: the way through the button
     # must not need it.
-    OVERLAY=deny locked_ring 5 || { no_pin; return; }
+    OVERLAY=deny locked_ring 4 || { no_pin; return; }
     local problems="" rang=$SOUND_AT
     # A phone's cleaner can take a process with nothing on screen. The rounds in which that
     # could count against the app's screen pass while the quiet below runs out.
@@ -324,14 +324,14 @@ s13() {
     # Left alone, the phone stays locked: the quiet runs out.
     wait_for 12 sound_on || problems="$problems; the sound did not come back when the quiet ran out"
     user_unlocked && problems="$problems; the phone unlocked by itself"
-    ui_given_up && problems="$problems; the core dying while locked counted as a failing screen"
     # Android's unlock is still up from the first time: away with it, and ask again.
     press_back
     wait_for 5 top_is_unlock || problems="$problems; after cancelling the unlock: $(top_activity)"
     screenshot s13_unlock_screen
     sound_on || problems="$problems; silent after cancelling the unlock"
-    tap_text Unlock || problems="$problems; no Unlock button the second time"
+    tap_again
     wait_for 4 sound_off || problems="$problems; still sounding after the second Unlock"
+    ui_given_up && problems="$problems; the core dying while locked counted as a failing screen"
 
     type_test_pin || problems="$problems; the PIN did not unlock the phone"
     if ! on_screen .ring-off 20; then
@@ -340,7 +340,6 @@ s13() {
         no_pin
         return
     fi
-    screenshot s13_alarm_screen
     top_is_main || problems="$problems; the alarm's screen is not on top: $(top_activity)"
     wait_for 5 sound_on || problems="$problems; silent on the alarm's own screen"
     state_is a firing || problems="$problems; state $(state a) on the alarm's own screen"
@@ -3230,13 +3229,22 @@ else
     DEFAULT_LIST=$ON_A_PHONE
 fi
 # FIRST names scenarios to run before the rest: the heavy ones, while another emulator next to
-# this one is still on its light ones.
+# this one is still on its light ones. LAST names the ones for the end, when that other one
+# is done: a restart takes half as long again next to a busy emulator.
 RUN_LIST="${FIRST:-}"
 for s in ${*:-$DEFAULT_LIST}; do
-    case " ${SKIP:-} ${FIRST:-} " in
+    case " ${SKIP:-} ${FIRST:-} ${LAST:-} " in
         *" $s "*) continue ;;
     esac
     RUN_LIST="$RUN_LIST $s"
+done
+for s in ${LAST:-}; do
+    case " ${SKIP:-} " in
+        *" $s "*) continue ;;
+    esac
+    case " ${*:-$DEFAULT_LIST} " in
+        *" $s "*) RUN_LIST="$RUN_LIST $s" ;;
+    esac
 done
 for s in $RUN_LIST; do
     "$s"

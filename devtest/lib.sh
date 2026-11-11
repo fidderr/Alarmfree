@@ -646,7 +646,16 @@ tap_text() {
     [ -n "$box" ] || return 1
     # shellcheck disable=SC2086
     set -- $box
-    dev input tap $((($1 + $3) / 2)) $((($2 + $4) / 2))
+    TAPPED_AT="$((($1 + $3) / 2)) $((($2 + $4) / 2))"
+    # shellcheck disable=SC2086
+    dev input tap $TAPPED_AT
+}
+# Where tap_text last tapped, without looking the screen over again, which takes seconds.
+TAPPED_AT=""
+tap_again() {
+    [ -n "$TAPPED_AT" ] || return 1
+    # shellcheck disable=SC2086
+    dev input tap $TAPPED_AT
 }
 
 # The PIN a scenario set itself, typed into Android's own unlock. Only on an emulator: nothing
