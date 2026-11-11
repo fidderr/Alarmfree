@@ -31,6 +31,12 @@ open_shells() {
     { coproc DEV_SH { "$ADB" -s "$SERIAL" shell -T sh 2>&1; }; } 2> /dev/null
     exec 5>&"${DEV_SH[1]}" 6<&"${DEV_SH[0]}"
     DEV_PID=$DEV_SH_PID
+    open_app_shell
+}
+# The one as the app. It does not start on a phone that restarted and is still locked: once
+# more after the unlock, or everything that asks the app or its page goes the slow way, which
+# cannot carry a script.
+open_app_shell() {
     { coproc APP_SH { "$ADB" -s "$SERIAL" shell -T "run-as $PKG sh" 2>&1; }; } 2> /dev/null
     exec 7>&"${APP_SH[1]}" 8<&"${APP_SH[0]}"
     APP_PID=$APP_SH_PID
@@ -584,6 +590,54 @@ await_ring() { # id [seconds past T]
 }
 
 top_is_backup() { dev "dumpsys activity activities | grep -E 'topResumedActivity|ResumedActivity:' | head -1 | grep -q SentinelBackupActivity" > /dev/null; }
+# The screen that asks for the unlock, on a phone that restarted and was not unlocked yet.
+top_is_unlock() { dev "dumpsys activity activities | grep -E 'topResumedActivity|ResumedActivity:' | head -1 | grep -q SentinelUnlockActivity" > /dev/null; }
+# The app's own screen, and not one of the SDK's, which are in the same package.
+top_is_main() { dev "dumpsys activity activities | grep -E 'topResumedActivity|ResumedActivity:' | head -1 | grep -q '$PKG/$ACTIVITY'" > /dev/null; }
+# What is on top, for a message.
+top_activity() { dev "dumpsys activity activities | grep -E 'topResumedActivity|ResumedActivity:' | head -1 | sed -E 's/.* u0 ([^ ]+) .*/\\1/'"; }
+user_unlocked() { dev "dumpsys user | grep -q RUNNING_UNLOCKED" > /dev/null; }
+
+# Tap the plain Android view that shows this text. For a screen that is no page: nothing to ask
+# there, and no script runs in it.
+tap_text() {
+    local box
+    box=$(dev "uiautomator dump /data/local/tmp/af_ui.xml > /dev/null 2>&1; tr '>' '\\n' < /data/local/tmp/af_ui.xml | grep 'text=\"$1\"' | sed -E 's/.*bounds=\"\\[([0-9]+),([0-9]+)\\]\\[([0-9]+),([0-9]+)\\]\".*/\\1 \\2 \\3 \\4/' | head -1")
+    [ -n "$box" ] || return 1
+    # shellcheck disable=SC2086
+    set -- $box
+    dev input tap $((($1 + $3) / 2)) $((($2 + $4) / 2))
+}
+
+# The PIN a scenario set itself, typed into Android's own unlock. Only on an emulator: nothing
+# here knows, sets or asks for the PIN of somebody's phone.
+type_test_pin() {
+    on_emulator || return 1
+    # Keys typed before Android's unlock has the focus go nowhere, and it has the focus a
+    # moment before its keypad is there to take them.
+    wait_for 5 unlock_has_focus || note "Android's unlock does not have the focus: $(focused_window)"
+    sleep 1
+    dev input text 1234
+    dev input keyevent 66
+    if ! wait_for 5 user_unlocked; then
+        note "the PIN did not go in the first time, focus: $(focused_window)"
+        dev input text 1234
+        dev input keyevent 66
+        if ! wait_for 8 user_unlocked; then
+            note "still locked. $(dev "dumpsys window | grep -i -m8 -E 'bouncer|keyguardshowing|occluded|mCurrentFocus'" | tr '\n' ' ')"
+            return 1
+        fi
+    fi
+    # The shell as the app could not start while the phone was locked.
+    wait_for 10 app_shell_answers
+}
+# Android shows its unlock in the window of the notification shade.
+unlock_has_focus() { focused_window | grep -q -E 'NotificationShade|Bouncer'; }
+app_shell_answers() {
+    kill -0 "$APP_PID" 2> /dev/null || open_app_shell
+    sleep 0.3
+    kill -0 "$APP_PID" 2> /dev/null && [ "$(as_app 'echo ok' 2> /dev/null)" = ok ]
+}
 
 # Do the backup screen's challenge: `n` long presses where its button is.
 solve_backup() {

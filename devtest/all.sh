@@ -20,7 +20,7 @@ for repo in . ../mobile-sentinel; do
 done
 
 OLDEST_ONLY="s29 s30 s31 s32 s34 s38 s43 s44 s45 s46 s47 s50 s51 s52"
-NEWEST_ONLY="s13 big_screens"
+NEWEST_ONLY="s13 s13b s13d big_screens"
 
 run_on() { # avd port scenarios...
     local avd=$1 port=$2

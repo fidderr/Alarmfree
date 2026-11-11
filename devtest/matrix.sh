@@ -259,50 +259,197 @@ s11() {
     fi
 }
 
-# Rebooted and never unlocked: the alarm rings, and the backup screen is the way out, because
-# the app's own screen cannot come up yet. Sets a PIN, so never on a phone somebody uses.
-s13() {
-    if [ -n "${NO_LOCK:-}" ]; then
-        note "s13 sets a PIN: not here"
-        return
-    fi
-    scenario s13_before_first_unlock
+# ---- Restarted and not unlocked yet ----
+#
+# The app's own screen cannot start until the first unlock: the alarm rings all the same, and a
+# screen of the SDK asks for that unlock. These set a PIN, so never on a phone somebody uses.
+
+# An alarm that rings on a phone that restarted and stayed locked, behind the unlock screen.
+# `$1`: seconds the ring is quiet after the Unlock button, `$2`: its ring limit in seconds.
+# `OVERLAY=deny` takes away the permission that lets the app start a screen from the background.
+locked_ring() {
     fresh
-    shorten backup_holds 1
+    [ "${OVERLAY:-}" = deny ] && deny_overlay
+    shorten unlock_quiet_secs "${1:-60}"
     on_emulator && set_clock "$(date +%s)"
     next_minute 3600
-    seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
+    seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null air 0 0 3 1 '[]' "${2:-1800}")"
     arm a
     dev locksettings set-pin 1234 > /dev/null
     dead
     # Now and not during the restart's own wait: a clock change that wakes the app up meanwhile
     # would find it overdue and ring it, and the restart ends a ring as dismissed.
     stopped_state_saved
-    note "before the restart: main=[$(main_pid)] sentinel=[$(sentinel_pid)] state=$(state a)"
     dead
     make_overdue a 2
-    reboot_and_wait || { fail "reboot hung"; return; }
-    local locked
-    locked=$(dev dumpsys user | grep -c 'RUNNING_LOCKED')
+    reboot_and_wait || { fail "reboot hung"; return 1; }
     T=$(now_s)
-    if [ "$locked" = 0 ]; then
+    if [ "$(dev dumpsys user | grep -c 'RUNNING_LOCKED')" = 0 ]; then
         fail "the phone is not locked after the restart"
-    elif ! await_sound 60; then
-        fail "no sound in 60s, locked users: $locked, state=$(state a) job=$(job_status a) main=$(main_pid) $(dev dumpsys package "$PKG" | grep -m1 -oE 'stopped=[a-z]+')"
-    elif ! wait_for 15 top_is_backup; then
-        screenshot s13_backup_screen
-        fail "rang, but the backup screen is not on top: $(dev dumpsys activity activities | grep -m1 ResumedActivity)"
-    else
-        screenshot s13_backup_screen
-        solve_backup 1
-        if wait_for 5 sound_off; then
-            pass "rang ${SOUND_AT}s after the boot while locked (locked users: $locked), stopped by the backup screen"
-        else
-            fail "still ringing after the challenge, top: $(dev dumpsys activity activities | grep -m1 ResumedActivity)"
-        fi
+        return 1
     fi
+    await_sound 60 || { fail "no sound in 60s, main=$(main_pid) $(dev dumpsys package "$PKG" | grep -m1 -oE 'stopped=[a-z]+')"; return 1; }
+    wait_for 15 top_is_unlock || { fail "rang, but the unlock screen is not on top: $(top_activity)"; return 1; }
+}
+# After a scenario that set the PIN, whatever became of it.
+no_pin() {
     dev locksettings clear --old 1234 > /dev/null
+    OVERLAY=
     SCREEN_WENT_OFF=1
+}
+no_lock_here() {
+    [ -n "${NO_LOCK:-}" ] || return 1
+    note "$1 sets a PIN: not here"
+}
+# Whether the SDK gave up on the app's screen for this ring. As root: the app's own shell does
+# not start while the phone is locked.
+ui_given_up() { [ "$(dev "su 0 sh -c 'test -e $DATA/files/sentinel/ringing/ui_failed && echo y'")" = y ]; }
+
+# The whole way: it rings behind the unlock screen, nothing there ends it, its button brings
+# Android's own unlock, and with the PIN in, the alarm's own screen is there to turn it off on.
+# On the way, what must not happen: the app's core dying while locked must not count as its
+# screen failing, and a ring that went quiet for the unlock must come back by itself.
+s13() {
+    no_lock_here s13 && return
+    scenario s13_locked_restart_unlock
+    # Without the permission to start a screen from the background: the way through the button
+    # must not need it.
+    OVERLAY=deny locked_ring 5 || { no_pin; return; }
+    local problems="" rang=$SOUND_AT
+    # A phone's cleaner can take a process with nothing on screen. The rounds in which that
+    # could count against the app's screen pass while the quiet below runs out.
+    kill_main
+    tap_text Unlock || problems="$problems; no Unlock button on the screen"
+    wait_for 4 sound_off || problems="$problems; still sounding after Unlock"
+    # Left alone, the phone stays locked: the quiet runs out.
+    wait_for 12 sound_on || problems="$problems; the sound did not come back when the quiet ran out"
+    user_unlocked && problems="$problems; the phone unlocked by itself"
+    ui_given_up && problems="$problems; the core dying while locked counted as a failing screen"
+    # Android's unlock is still up from the first time: away with it, and ask again.
+    press_back
+    wait_for 5 top_is_unlock || problems="$problems; after cancelling the unlock: $(top_activity)"
+    screenshot s13_unlock_screen
+    sound_on || problems="$problems; silent after cancelling the unlock"
+    tap_text Unlock || problems="$problems; no Unlock button the second time"
+    wait_for 4 sound_off || problems="$problems; still sounding after the second Unlock"
+
+    type_test_pin || problems="$problems; the PIN did not unlock the phone"
+    if ! on_screen .ring-off 20; then
+        screenshot s13_after_unlock
+        fail "the alarm's own screen did not come up after the unlock: $(top_activity)${problems}"
+        no_pin
+        return
+    fi
+    screenshot s13_alarm_screen
+    top_is_main || problems="$problems; the alarm's screen is not on top: $(top_activity)"
+    wait_for 5 sound_on || problems="$problems; silent on the alarm's own screen"
+    state_is a firing || problems="$problems; state $(state a) on the alarm's own screen"
+    click .ring-off 0 0.5
+    finished() { sound_off && state_is a scheduled && [ "$(outcomes solved)" = 1 ]; }
+    wait_for 8 finished || problems="$problems; after turning it off: sound=$(sound_on && echo ON || echo off) state=$(state a) solved=$(outcomes solved)"
+    [ "$(outcomes backup)" = 0 ] || problems="$problems; history says backup screen"
+    if [ -z "$problems" ]; then
+        pass "rang ${rang}s after the boot behind the unlock screen, quiet for the unlock and back, own screen after the PIN, turned off there"
+    else
+        fail "${problems#; }"
+    fi
+    no_pin
+}
+
+# Not the button but the lock screen itself: the alarm's own screen still comes up by itself,
+# and before that the ring comes back after its service is killed in the quiet.
+s13b() {
+    no_lock_here s13b && return
+    scenario s13b_locked_restart_lock_screen
+    locked_ring 60 || { no_pin; return; }
+    local problems=""
+    tap_text Unlock || problems="$problems; no Unlock button on the screen"
+    wait_for 4 sound_off || problems="$problems; still sounding after Unlock"
+    kill_sentinel
+    wait_for 15 sound_on || problems="$problems; no sound within 15s of the ring service being killed in the quiet"
+    wait_for 10 top_is_unlock || problems="$problems; the unlock screen did not come back after that: $(top_activity)"
+    # Android's unlock can still be up from the button, and it takes Home for itself.
+    press_back
+    go_home
+    left() { ! top_is_unlock; }
+    wait_for 3 left || problems="$problems; Home did not leave the unlock screen"
+    sound_on || problems="$problems; silent after Home"
+    dev wm dismiss-keyguard
+    type_test_pin || problems="$problems; the PIN did not unlock the phone"
+    if ! on_screen .ring-off 20; then
+        screenshot s13b_after_unlock
+        fail "the alarm's own screen did not come up after unlocking on the lock screen: $(top_activity)${problems}"
+        no_pin
+        return
+    fi
+    sound_on || problems="$problems; silent on the alarm's own screen"
+    click .ring-off 0 0.5
+    finished() { sound_off && state_is a scheduled && [ "$(outcomes solved)" = 1 ]; }
+    wait_for 8 finished || problems="$problems; after turning it off: sound=$(sound_on && echo ON || echo off) state=$(state a) solved=$(outcomes solved)"
+    if [ -z "$problems" ]; then
+        pass "the ring came back after its service died in the quiet, and unlocking on the lock screen brought the alarm's own screen"
+    else
+        fail "${problems#; }"
+    fi
+    no_pin
+}
+
+# The same without the permission to start a screen from the background. Android then allows no
+# more than a notification once the phone is in use: the alarm rings on, and is there to turn
+# off as soon as the app is opened. Only by name, not in a whole run: what the SDK does here is
+# what s13b tests, the rest is Android's, and each of these takes a restart.
+s13c() {
+    no_lock_here s13c && return
+    scenario s13c_locked_restart_no_overlay
+    OVERLAY=deny locked_ring 60 || { no_pin; return; }
+    local problems="" how="own screen only once the app was opened, as Android allows without the overlay"
+    go_home
+    sleep 1
+    dev wm dismiss-keyguard
+    type_test_pin || problems="$problems; the PIN did not unlock the phone"
+    wait_for 8 top_is_main && how="own screen up by itself"
+    sound_on || problems="$problems; silent after the unlock"
+    state_is a firing || problems="$problems; state $(state a) after the unlock"
+    top_is_backup && problems="$problems; the backup screen came up"
+    start_app
+    if ! on_screen .ring-off 20; then
+        fail "the alarm's own screen is not there when the app is opened: $(top_activity)${problems}"
+        no_pin
+        return
+    fi
+    click .ring-off 0 0.5
+    finished() { sound_off && state_is a scheduled && [ "$(outcomes solved)" = 1 ]; }
+    wait_for 8 finished || problems="$problems; after turning it off: sound=$(sound_on && echo ON || echo off) state=$(state a) solved=$(outcomes solved)"
+    if [ -z "$problems" ]; then
+        pass "rang on after the unlock, $how, turned off there"
+    else
+        fail "${problems#; }"
+    fi
+    no_pin
+}
+
+# Nobody comes: the ring ends at its limit with the phone still locked, the unlock screen goes
+# with it, and the history tells after the unlock.
+s13d() {
+    no_lock_here s13d && return
+    scenario s13d_locked_restart_limit
+    locked_ring 60 8 || { no_pin; return; }
+    local problems=""
+    await_silence 60 || problems="$problems; still ringing 60s after the boot with a limit of 8s"
+    gone() { ! top_is_unlock; }
+    wait_for 6 gone || problems="$problems; the unlock screen stayed after the ring ended"
+    user_unlocked && problems="$problems; the phone unlocked by itself"
+    dev wm dismiss-keyguard
+    type_test_pin || problems="$problems; the PIN did not unlock the phone"
+    recorded() { [ "$(outcomes limit)" = 1 ] && state_is a scheduled; }
+    wait_for 15 recorded || problems="$problems; after the unlock: limit=$(outcomes limit) state=$(state a)"
+    sound_off || problems="$problems; sounding after the unlock"
+    if [ -z "$problems" ]; then
+        pass "stopped at its limit ${STOPPED_AT}s after the boot while locked, and the history says so"
+    else
+        fail "${problems#; }"
+    fi
+    no_pin
 }
 
 # A time-zone change re-arms for the new local time, no app opened.
@@ -3055,7 +3202,7 @@ s62p() {
 
 . "$(dirname "$0")/panels.sh"
 
-ALL="s01 s03 s04 s05 s06 s07 s10 s11 s13 s14 s15 s16 s16b s17 s19 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s34 s36 s37 s38 s39 s40 s42 s43 s44 s45 s46 s47 s48 s49 s50 s51 s52 s53 s55 s56 s57 s58 s59 s60 s61 s62 s63 big_screens s54"
+ALL="s01 s03 s04 s05 s06 s07 s10 s11 s13 s13b s13d s14 s15 s16 s16b s17 s19 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s34 s36 s37 s38 s39 s40 s42 s43 s44 s45 s46 s47 s48 s49 s50 s51 s52 s53 s55 s56 s57 s58 s59 s60 s61 s62 s63 big_screens s54"
 ON_A_PHONE="s01 s03 s04 s05 s06 s07 s10 s15 s16 s16b s17 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s36 s37 s38 s39 s42 s43 s45 s46 s47 s49 s50 s51 s52 s53 s55 s56 s57 s58 s59 s61 s62 s63 s60p_a s60p_b s62p"
 
 : > "$RESULTS"
