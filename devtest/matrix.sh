@@ -3218,6 +3218,9 @@ if on_emulator; then
     dev locksettings set-disabled false > /dev/null
     # The one time Android 12 explains full screen, over the scanner, it takes the keys.
     dev settings put secure immersive_mode_confirmations confirmed
+    # A clean app has no warning on its list: on an emulator that was just made it would have
+    # one about the battery, which comes a moment after the list and moves it.
+    dev dumpsys deviceidle whitelist +"$PKG" > /dev/null
     remove_widgets
 fi
 APP_UID=$(dev cmd package list packages -U "$PKG" | sed -E 's/.*uid:([0-9]+).*/\1/')
