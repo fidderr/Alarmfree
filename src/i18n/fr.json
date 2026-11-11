@@ -180,6 +180,8 @@
   "ring.body": "Appuyez pour ouvrir",
   "ring.fallback_title": "Alarme",
   "ring.backup_hold": "Maintenez pour arrêter l'alarme",
+  "ring.unlock_text": "Votre téléphone a redémarré. Déverrouillez-le pour arrêter l'alarme.",
+  "ring.unlock_button": "Déverrouiller",
   "validation.date_past": "Choisissez une date et une heure futures",
   "home.next_in_d": "{days} j",
   "home.next_in_dh": "{days} j {hours} h",

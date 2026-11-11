@@ -59,10 +59,15 @@ pub fn repeated_pattern(pattern: &[i64], total_ms: u64) -> Vec<u64> {
     times
 }
 
-/// The backup screen, for when the app's own cannot come up: as many long holds as
+/// The backup screen, for when the app's own keeps failing: as many long holds as
 /// the slowest challenge takes, because it must not be the easy way out.
 const BACKUP_HOLDS: u32 = 20;
 const BACKUP_HOLD_MS: u32 = 3_000;
+
+/// A phone that restarted and was not unlocked yet cannot show this app's screen. The alarm
+/// rings all the same, and a screen of the SDK asks for the unlock. After its button the ring
+/// is quiet for this long, to unlock in peace, and it is back if the phone is still locked then.
+const UNLOCK_QUIET_SECS: u32 = 60;
 
 /// The UI may fail this often during a ring before the backup screen takes over.
 const UI_FAILURES_BEFORE_BACKUP: u32 = 2;
@@ -276,6 +281,8 @@ fn apply_ring_texts(config: &mut AlarmClassConfig, locale: Locale) {
     config.firing_body = text("ring.body");
     config.fallback_title = text("ring.fallback_title");
     config.backup_text = text("ring.backup_hold");
+    config.unlock_text = text("ring.unlock_text");
+    config.unlock_button = text("ring.unlock_button");
 }
 
 /// The user picked another language. An alarm rings by the plan it was armed with,
@@ -338,6 +345,9 @@ fn setup_platform(woken: bool) {
         backup_holds: shortened("backup_holds", BACKUP_HOLDS),
         backup_hold_ms: BACKUP_HOLD_MS,
         backup_text: String::new(),
+        unlock_text: String::new(),
+        unlock_button: String::new(),
+        unlock_quiet_secs: shortened("unlock_quiet_secs", UNLOCK_QUIET_SECS),
     };
     apply_ring_texts(&mut alarm_class_config, settings.locale);
 

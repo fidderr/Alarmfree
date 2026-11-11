@@ -180,6 +180,8 @@
   "ring.body": "Zum Öffnen tippen",
   "ring.fallback_title": "Wecker",
   "ring.backup_hold": "Gedrückt halten, um den Wecker zu stoppen",
+  "ring.unlock_text": "Dein Handy wurde neu gestartet. Entsperre es, um den Wecker zu stoppen.",
+  "ring.unlock_button": "Entsperren",
   "validation.date_past": "Wähle ein Datum und eine Uhrzeit in der Zukunft",
   "home.next_in_d": "{days} T",
   "home.next_in_dh": "{days} T {hours} Std",

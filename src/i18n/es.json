@@ -180,6 +180,8 @@
   "ring.body": "Toca para abrir",
   "ring.fallback_title": "Alarma",
   "ring.backup_hold": "Mantén pulsado para detener la alarma",
+  "ring.unlock_text": "Tu teléfono se ha reiniciado. Desbloquéalo para detener la alarma.",
+  "ring.unlock_button": "Desbloquear",
   "validation.date_past": "Elige una fecha y una hora futuras",
   "home.next_in_d": "{days} d",
   "home.next_in_dh": "{days} d {hours} h",

@@ -180,6 +180,8 @@
   "ring.body": "Tap to open",
   "ring.fallback_title": "Alarm",
   "ring.backup_hold": "Hold to stop the alarm",
+  "ring.unlock_text": "Your phone restarted. Unlock it to stop the alarm.",
+  "ring.unlock_button": "Unlock",
   "validation.date_past": "Pick a date and time in the future",
   "home.next_in_d": "{days} d",
   "home.next_in_dh": "{days} d {hours} h",

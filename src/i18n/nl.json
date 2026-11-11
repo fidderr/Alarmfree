@@ -180,6 +180,8 @@
   "ring.body": "Tik om te openen",
   "ring.fallback_title": "Wekker",
   "ring.backup_hold": "Ingedrukt houden om de wekker te stoppen",
+  "ring.unlock_text": "Je telefoon is opnieuw opgestart. Ontgrendel hem om de wekker te stoppen.",
+  "ring.unlock_button": "Ontgrendelen",
   "validation.date_past": "Kies een datum en tijd in de toekomst",
   "home.next_in_d": "{days} d",
   "home.next_in_dh": "{days} d {hours} u",
