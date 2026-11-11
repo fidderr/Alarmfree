@@ -1,0 +1,15 @@
+[package]
+name = "af_sqlite3"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# Not part of the app: its own lock file and target folder.
+[workspace]
+
+[dependencies]
+rusqlite = { version = "0.31", features = ["bundled"] }
+
+[profile.release]
+opt-level = "s"
+strip = true
