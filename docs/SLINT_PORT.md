@@ -1,0 +1,737 @@
+# AlarmFree: Dioxus to Slint port inventory
+
+Feature checklist the Slint port (Slint 1.18.1, `.slint` + Rust glue) is measured against. Derived from the code in
+`C:/Git/alarmfree-slint` (a copy of AlarmFree 0.4.x, Rust + Dioxus 0.7 in an Android WebView). Section 9 is the
+checklist. Everything the Rust core already does (alarm_ops, schedule, ordering, persistence, db, models, platform,
+custom_sounds, ring_photos, history_persistence, firing_state, i18n, text) stays; only `src/app.rs`, `src/screens/**`,
+`src/components/**`, `src/back.rs`, `src/reorder.*`, `src/debug_hooks.rs` (script part) are replaced.
+
+Conventions: "t(key)" = translation lookup from `src/i18n/{en,nl,es,fr,de}.json` (480 keys, missing key returns the key
+itself). "css" = `assets/style.css` (2619 lines). All paths are relative to `src/` unless noted.
+
+Docs mismatches found while reading (the code wins, port the code):
+- README says "colorblind themes with five accent colours" and "challenges in your order or at random". The code has 9
+  themes (no colorblind; a saved "Colorblind" falls back to System, `settings.rs` test) and 9 accents; no random challenge order exists.
+- `Prefs.notify_before_minutes` and `alarm_ops::give_notice_to_all` exist but no screen uses them (the notice is per alarm only).
+- Dioxus 0.7 and the WebView are gone in the port: `style.css`, `reorder.js`, `WINDOW_WATCH`, `document::eval` all go away.
+
+---
+
+## 1. Screens / routes
+
+Routes (`app.rs` `Route`): `/` Home, `/alarm/:id` AlarmConfig (`id` = `new`, `defaults`, `copy-<id>` or an alarm id),
+`/practice/:id` Practice, `/history`, `/settings`, `/theme`, `/reliability`, `/welcome` FirstRun. The ringing screen
+(AlarmFiring) is NOT a route: `App` renders it instead of the Router while `firing_id` is `Some`.
+
+Navigation semantics to keep:
+- `nav.push` for Home to AlarmConfig, Practice, Reliability, ThemeScreen, AlarmConfig("defaults") from Settings.
+- `nav.replace` between the three main tabs (Home / History / Settings) via BottomNav: no stacking.
+- Back (system button, see 8.4): top of the back stack handler first (sheets, preview, practice), else leave screen:
+  Home sends the app to the background (`foregrounding::move_to_back`); History and Settings `replace` to Home;
+  other screens `go_back` if possible else replace Home. Ignored entirely while an alarm rings.
+- First launch: if `!prefs.setup_done`, `NavWatcher` replaces to `/welcome` once (`use_hook`).
+- `nav_intent`: after a ring is finished AlarmFiring sets the next route (History for normal alarms, Home for `hidden`
+  ones) and `NavWatcher` applies it when the Router remounts.
+- Wide layout: when window width >= 840 css px (`SPLIT_FROM_WIDTH`) and route is Home or AlarmConfig, show a two-pane
+  split: left Home list in a fixed 400 px column with a 1 px right border, right pane = the routed screen; on `/` the
+  right pane shows the centred text t("home.pick"). Editor is keyed by `id` (`AlarmConfig` wraps `Editor { key: id }`) so
+  picking another alarm in the list restarts the editor with fresh state. Other screens: single column centred, max-width 560.
+
+### 1.1 Home (`screens/home/mod.rs`, `card.rs`)
+Layout: header, optional problem banner, quick row, scrolling list (bottom padding for FAB), FAB, BottomNav, sheet layer.
+- Header: label t("home.next_label"); big title = "<day name> <clock>" of the earliest future fire among enabled
+  non-hidden alarms (`schedule::earliest_future` over `AlarmKit::next_fire`), or t("home.none_on"); subtitle "in 7 h 12 min"
+  (`text::time_left` + t("home.in")); nothing if none. Two round icon buttons: Pause (opens PauseAll sheet; style `on`
+  when every listed alarm is paused, `alarm_ops::all_paused_until`), Sort (opens Sort sheet).
+- Problem banner (`reliability::first_problem(hidden_warnings)`): warning icon + t("reliability.banner"){check} +
+  t("reliability.fix"); whole banner taps to push `/reliability`; a small X hides that warning (appends the check name to
+  `prefs.hidden_warnings`, saved) only for `can_hide` checks (Overlay, BatteryUnrestricted, KeptWhenUnused, BootSignal).
+  Re-evaluated 1.5 s after mount, then every 15 s (also drives re-render of countdowns / day labels).
+- Quick row: label t("home.quick") and 5 chips "+5 +10 +15 +30 +60" (QUICK_MINUTES). Tap creates a one-time nap alarm
+  (`alarm_ops::quick_alarm`: seconds round up, `delete_after_ring=true`, wake check 0, notice 0, label t("home.quick_alarm"),
+  user defaults applied, `order = order_for_new`), toast t("home.quick_set"){minutes} with Undo. At 50 alarms
+  (`MAX_ALARMS`) shows error toast t("alarm.limit_reached") instead.
+- Alarm list (`ul #alarm-list`, or `#alarm-list-sorted` when sort != Own so dragging is off). Rows from
+  `ordering::sorted_for_display`, hidden alarms removed, then Own = stored order, Time = (hour, minute), NextRing =
+  AlarmKit next fire (`i64::MAX` when none). One `AlarmCard` per alarm (below).
+- Empty state (no listed alarms): clock icon in circle, t("alarm.no_alarms"), t("alarm.tap_to_create"), and two template
+  buttons: "Weekdays 07:00" (Mon-Fri 07:00) and "Weekend 09:00" (Sat+Sun 09:00) (`home.template_weekdays/weekend`, time
+  formatted per 12/24 h); each creates an alarm from the defaults, toast "Rings in..." (`text::rings_in`) with Undo.
+- FAB (+, bottom right): at limit shows error toast, else `push /alarm/new`.
+- BottomNav (Alarms / History / Settings).
+- Reorder: long press (450 ms) a card, drag vertically, drop = reorder, saved (`ordering::apply_reorder`, positions mapped
+  from shown list to full list incl. hidden). Only when sort == Own. See 8.2.
+- Data: reads `alarms`, `settings.prefs.{sort, time_format, week_start, alarm_defaults, hidden_warnings}`,
+  `platform::alarm_kit_optional().next_fire/snoozed_until`; writes `alarms` via `persistence::save_alarms`, `settings`
+  via `save_settings`. Every list mutation goes through `HomeState::change` = save + toast with Undo (restores the whole
+  previous list and saves it).
+
+AlarmCard (one row):
+- Card = horizontal scroll-snap strip: face (full width, min-height 76) + swipe actions (right). Swipe left reveals
+  [Skip next / Undo skip] (only if enabled, not one-time, and (skip active or a next fire exists)) and [Delete] (danger
+  red, 64 px wide each). Skip tap toggles `skip_until_ms` (next fire or None), toast with Undo, and the strip scrolls back.
+  Delete tap removes the alarm, toast t("home.deleted"){alarm} / t("home.deleted_plain") with Undo.
+- Face: time button (opens `/alarm/<id>`; also the long-press drag handle, class `hold-to-drag`), 24 px time (min-width 76;
+  12 h variant `h12` min-width 104, 20 px) + info block: label (if set) and one line "when": priority = snoozed until
+  (t("home.snoozed_until"){time}, only if enabled or one-time) > paused until date (t("home.paused_until")) > skip
+  (t("home.skips"){day}) > for one-time alarms Today / Tomorrow / short date > otherwise seven day letters in week-start
+  order with enabled days highlighted (only highlighted when alarm is on). Disabled repeating alarms show the letters
+  dimmed (`.off`). Kebab (three dots) button opens the AlarmMenu sheet; Switch (role switch) toggles `enabled`: when
+  turning on, `schedule::refresh_one_time_date` and toast `text::rings_in`; turning off toast t("home.switched_off"); both
+  with Undo.
+- `alarm-card off` styling when disabled (dimmed time).
+
+### 1.2 AlarmConfig / Editor (`screens/alarm_config/mod.rs`)
+Modes by `id`: `new` (defaults prefilled), `copy-<id>` (label becomes t("alarm.copy_label"){label}), existing id, `defaults`
+(edits what new alarms start from: hides time + repeat sections, title t("config.defaults_title"), Save writes
+`prefs.alarm_defaults` with empty id and goes back). Titles: t("alarm.create") / t("alarm.edit").
+- Header: back arrow (calls `leave`), title, trash button (only for existing, non-defaults) opens Delete sheet.
+- Time section: big time button (opens Time sheet, clears `typed_time`) flanked by step buttons -1/-5 (left) and +1/+5
+  (right) that wrap around 24 h; below, `rings-in` line (`rings_text`: t("config.rings_on"){day,time}, day = today /
+  tomorrow / short date, from `schedule::next_ring_moment`; empty if none).
+- Repeat section: seven day chips (aria-pressed, week-start order, letter label) toggling `days[d]`; presets chips
+  Weekdays / Weekend / Every day (highlighted when `days` equals and not one-time; sets `one_time=false`); chip
+  "One date" (`config.one_date`): switches to one-time, if the date is not ahead picks `schedule::next_occurrence`, and
+  opens Date sheet. When one-time, the chips row is replaced by a primary button t("config.once_on"){date} that opens
+  the Date sheet. Inline red error text under it (`validation.select_day`, `validation.date_past`).
+- Two grouped lists of summary rows (each opens a sheet): Label (value = label or "None"), Sound (name, or
+  "Vibration only"), Vibration (pattern name or "Off"), Snooze (counted summary "N x M min" or "No snooze"), Challenges
+  (1-2 names joined, or "First +N", or "None"); then Ring look (backdrop name), Ring limit ("N min" / "Forever"), Wake
+  check ("Off" / "after N min"), Notice before ("Off" / "N min"), plus a SwitchRow Max brightness.
+- Save bar (sticky bottom): primary Save. Validation: one-time needs date+time in the future, repeating needs >=1 day.
+  Builds the alarm (`build`): sanitized label and note (`sanitize::sanitize_label`), `days` cleared + `date` set if
+  one-time, challenges via `ChallengeSetup::to_stored`, new id (uuid) for new/copy, `order = order_for_new` for new else
+  original, `enabled = true`, `skip_until_ms = None` (pause kept). Existing: replace in list; new: push. Saves, toast
+  `rings_in` (info), `go_back`.
+- Unsaved-changes guard: `has_changes` compares built alarm to original (ignoring id/order/enabled/skip and the
+  initial one-time date); back / header arrow / system Back with changes opens the Discard sheet, else leaves.
+- State kept while temporary full-screen views replace the editor (editor state lives on): `trying` (challenge runner for
+  "Try"), `previewing_look` (ring preview).
+- Sound/vibration preview (`Preview`): at most one running; auto-stops after 15 s (`PREVIEW_MS`, token-guarded); stopped
+  on sheet close, on save/leave, on Drop. Sound via `audio::play_as_alarm(path, loop=true)`; vibration via
+  `haptics::vibrate_pattern(repeated_pattern(pattern, 15000))` (NOT through touch-feedback setting).
+- Data: reads `alarms` (copy/edit source, used labels), `settings.prefs.{alarm_defaults, sound_names, week_start, time_format}`,
+  `settings.min_volume_percent`; writes `alarms` or `prefs.alarm_defaults`.
+
+### 1.3 Practice (`screens/practice.rs`)
+Route `/practice/:id` = `ChallengeRunner` over the saved alarm's challenges; also reused inside the editor ("Try" and
+"Try all"). Shows `ChallengeRun` in practice mode (header "Practice N/M", Exit link, no idle timer, no history, AlarmKit never
+called). If the list is empty shows t("practice.empty") + Exit; after finishing shows t("practice.done") + Exit.
+`on_exit` = go_back (route) or close (editor). Back = exit.
+
+### 1.4 History (`screens/history.rs`)
+- Header t("history.title") + trash icon (opens DeleteHistory sheet). Horizontal scrolling period pills:
+  This week, Last week, This month, Last month, This year, Last year, Custom days (`PERIODS`); Custom shows an inline
+  number field "Last [N] days" (1..365, default 30, clamped).
+- Empty states: nothing ever recorded (t("history.no_events") + subtitle) vs nothing in period (t("history.none_in_period")).
+- Summary card: three headline stats (Streak "N days", avg time to stop, avg snoozes with one decimal), bar chart
+  (shown except for Custom days): 7 bars Mon.. by week-start order for a week, 5 bars (days 1, 8, 15, 22, 29) for a
+  month, 12 month initials for a year; bar height = average dismissal seconds of Solved events scaled to max (56 px max,
+  min 3 px, 0 if none); the current day/week/month bar is highlighted; toggle link "All stats / Fewer stats" expands a
+  definition list: Alarms, avg reaction, avg total, avg time snoozed, avg snooze gap, avg challenge time, then per
+  challenge-and-difficulty avg solve time.
+- Streak = consecutive days (look back 400 days) in which every alarm was Solved/Backup; days without alarms neither
+  break nor count.
+- Event list (`ul`): row = "<short date> <time> <label>", sub line (outcome text for Missed (danger colour), Limit/Reboot
+  (warn colour), Backup; else "snoozed once/N times" or challenge names), right value = total dismissal duration (only for
+  Solved), chevron rotates when open. Tapping toggles a detail block (one open at a time): reaction time, each snooze
+  length, each challenge solve (name + difficulty for Math/Memory/Typing) with duration, and a danger link "Delete" that
+  opens a confirm sheet.
+- Sheets: DeleteHistory (older than 30 days / 90 days / all) each followed by an AskDelete confirm sheet (title, note
+  t("history.delete_all_note"), Delete danger + Cancel). Deleting toasts t("history.deleted") and refreshes.
+- Data: `history_persistence::{query_history, aggregate_history, delete_event, delete_history}` with `HistoryFilter`
+  (ThisWeek(week_start), LastWeek, ThisMonth, LastMonth, ThisYear, LastYear, LastDays(n)); `prefs.week_start`, 12/24 h.
+
+### 1.5 Settings (`screens/settings/mod.rs`, `sheets.rs`)
+Header t("settings.title") (large). Scroll content, then BottomNav:
+- Reliability banner (tall): title + sub ("All fine" / "1 thing" / "N things", from `health::report(...).problems().len()`
+  read once on mount), tinted warn if problems else `fine`; trailing "Check" text or chevron; pushes `/reliability`.
+- General list: Theme (value = theme name; pushes `/theme`), Language (value), Time format (value), Week starts on (value),
+  and "Add widget" row only when `home_widget::can_add()` (calls `home_widget::add()`).
+- Alarms list: New alarm defaults (pushes `/alarm/defaults`), Minimum volume (value "Off"/"N%").
+- Feel list: Touch feedback, Less motion, Confetti switch rows (see 3.1).
+- Data list: Backup (sheet), Delete history (opens the same DeleteHistory sheet as History), About (value = app version
+  `CARGO_PKG_VERSION`).
+- Each change = `SettingsState::update`: write signal, `persistence::save_settings`, `platform::refresh_outside_app()`
+  (re-renders widget/notification texts).
+
+### 1.6 ThemeScreen (`screens/theme.rs`)
+Screen (not a sheet) so the result is visible. Back handler = go back.
+- Header with back, title t("settings.theme").
+- Fixed live preview card (`aria-hidden`): a mock alarm row (07:00, label "Weekdays", Mon-Fri letters highlighted, on
+  switch) plus a fake primary Save button and "Try" link.
+- Theme grid: 9 tiles (System, Dark, Light, Black, Midnight, Forest, Plum, Sand, Mist): tile face = that theme's background
+  with a card chip, text line and accent dot; System shows a diagonal 135 deg split of the dark and light backgrounds;
+  selected tile ringed with accent. Tap sets `settings.theme` and saves.
+- "Your own" row with rainbow dot (selected ring when `theme == Custom`): tapping seeds `prefs.custom_theme` from the
+  current palette background (`own_colours`) and selects Custom. When on Custom, a list of three colour rows appears:
+  Background, Cards (shows "Auto" when unset), Text ("Auto" when unset), each with colour dot + chevron opening the
+  ColorSheet for that role.
+- Accent section: nine swatches (shade for light/dark of the current background), selected ring; plus a 10th "wheel"
+  swatch (conic gradient; centre dot shows the custom colour when active) opening ColorSheet(Accent).
+- ColorSheet (role = Accent | Background | Card | Text): preset swatches (accent presets; or 10 background / 10 card / 10
+  text presets in `theme.rs`), `ColorControls` (wheel, brightness slider, hex field, optional "Auto" chip for Card/Text),
+  note t("theme.adjusted") when the shown colour differs from the chosen one (auto contrast fix), Done. Changes apply
+  live to the whole app; saved on finger lift / field change / sheet close.
+- Data: `settings.theme`, `prefs.{accent, custom_accent, custom_theme}`, `mobile_sentinel::display::system_dark()`.
+
+### 1.7 Reliability (`screens/reliability.rs`)
+Header with back + "?" help (intro + test note + "last ring took X.Y s" from AlarmKit timing log). List of 10 checks
+(`CHECKS` order, failing ones sorted first): ExactAlarms, Notifications, FullScreen, Overlay, BatteryUnrestricted,
+BackgroundAllowed, KeptWhenUnused, ChannelImportance, NotTotalSilence, BootSignal. Row: ok (check) / warn icon, title, note
+(only when failing), "Fix" small button (not for BootSignal). Fix: Notifications = `permissions::request(POST_NOTIFICATIONS)`;
+BatteryUnrestricted = `battery::request_exemption()`; others = `health::open_settings(check, FOREGROUND_CHANNEL_ID)`.
+Report re-polled every 1.5 s so the list updates when the user returns from system settings. Second list: "App settings"
+(`permissions::open_app_settings`), and "Save ring record" (only if AlarmKit timing log is non-empty; writes
+`alarmfree-rings.txt` to Downloads, toast with place or failure). Sticky bottom bar: "Test alarm" primary (adds a hidden
+one-time test alarm 60 s ahead via `alarm_ops::test_alarm`, toast t("reliability.test_set")); while one is pending shows
+t("reliability.test_set") note + quiet "Cancel test" (removes alarms with `test`).
+- FirstRun (`/welcome`): same list, but header is the large t("setup.title"), intro paragraph t("setup.intro"), no back
+  arrow/help, and the bottom button is primary t("setup.done") which sets `prefs.setup_done = true` (saved) and replaces
+  to Home. Back button does the same.
+
+### 1.8 AlarmFiring (`screens/alarm_firing.rs`, `ring_face.rs`)
+Shown instead of the router while `firing_id` is set (rendered with `key = alarm_id`). Pure view over AlarmKit state.
+- `RingFace`: full-screen, padding top 56+safe, sides 20, bottom 24+safe; backdrop (5.2), date line ("Thursday 5 Nov"), big live
+  clock (96 px, 64 px for 12 h; size divided by system font scale `--text-zoom`; style per `RingClock`), label (28 px bold,
+  falls back to t("alarm.fallback_label")), optional note (16 px, text2), then children.
+- Below (spacer pushes to bottom): Snooze button t("ring.snooze"){minutes,left} only while `snoozes_left > 0`; challenge
+  hint t("ring.one_challenge") / t("ring.challenges"){count} plus one dot per challenge when >1 (or an empty 48 px gap when
+  none); primary "Turn off" (t("ring.turn_off")).
+- Snooze: decrements `snoozes_left`, `kit.snooze(id)`; if no other session is ringing (`kit.current_session()` is None)
+  `foregrounding::finish_activity()`; else the screen moves to the next ringing alarm.
+- Turn off: records `first_interaction` once; `prepare(setups, locale)` generates challenges; none = `kit.mark_solved` +
+  `kit.dismiss` + finish; else `kit.pause(id)` (sound pauses) and show `ChallengeRun` (real mode).
+- Real-mode `ChallengeRun`: `on_solved` = mark_solved + dismiss + finish; `on_idle` (60 s with no touch/sensor change)
+  returns to the ring screen and `kit.resume(id)` (sound back); `on_long_scan(true/false)` while the camera has been open
+  >= 180 s: resume / pause again.
+- Finish: record history event (`history_persistence::record_alarm_event`, skipped when alarm `hidden`) with fire time from
+  the first ring, reaction time to the last ring, snoozes, challenge solves, total time; `finish_alarm` (wake-check
+  alarm creation via `alarm_ops::wake_check_alarm` if `wake_check_minutes > 0`; one-time alarms switch off or are removed
+  by `schedule::finish_if_one_time`); then `nav_intent` = History (Home when hidden).
+- Side effects: `kit.note_ui_up(id)` on mount; `display::set_max_brightness()` (re-applied every 5 s) and
+  `restore_brightness()` on drop when the alarm has `max_brightness`; clock re-read every 5 s.
+- Heartbeat: `App` sends `jobs::ui_heartbeat()` every second while firing only if a UI round trip succeeds within 3 s
+  (see 8.5). The Slint port must keep an equivalent liveness signal (the event loop answering a posted closure).
+
+### 1.9 ChallengeRun (`screens/challenge_run.rs`)
+Shared by ring and practice. Top bar: progress t("challenge.progress"|"practice.progress"){current,total}; Exit link
+(practice only); dots (when total > 1; filled up to current). Real mode shows a thin time-left bar (width = 100 - idle%,
+1 s linear transition, role=progressbar). Body = the current challenge component (keyed per index). "Can't do this one?"
+link (t("challenge.fallback.link"); hidden for Hold, during fallback, and during celebration) opens a Sheet
+(fallback.title / explain; Cancel and confirm) that swaps the current challenge for 20 holds of 3000 ms (back arrow
+cancels the fallback). Solving: records `ChallengeSolve { type (HoldButton if fallback), difficulty, duration }`, haptic
+pattern [0,45,60,90], shows Celebration for 1800 ms (confetti 28 particles unless `prefs.confetti` off; label "i / total"
+if > 1), then next challenge or `on_solved(solves)`. Idle clock: any click / input / touch resets to 0; sensor change
+(shake or step count) also resets and calls `kit.note_activity()`; scanner open pauses the idle clock; 60 s idle fires
+`on_idle` once. Debug override of idle/scan limits via `platform::shortened("idle_secs"|"scan_quiet_secs")`.
+
+---
+
+## 2. Sheets and dialogs
+
+Base `Sheet` component (`components/ui.rs`): scrim (rgba 0,0,0,0.55, full screen, tap closes) + bottom panel (radius 28
+top, max-height 90%, scrolls, max-width 560 centred, slide-up 0.18 s) with grab handle, title row (title, optional "?"
+help toggle that expands an accent-soft help paragraph in place, spacer, optional top-right `action` slot), optional
+`note` (always visible warning text), content, bottom padding for insets. Opening registers a Back handler (Back closes)
+and bumps `OpenSheets` (toasts move to the top while any sheet is open). `SheetDone` = primary full-width button
+(`quiet` = secondary). `SheetItem` = full-width choice row (selected tick style / danger red). `Chips<T>` single-select
+(optional `grow` = equal width). `Stepper` = title, minus round button, value, plus round button. `GroupTitle` = small
+heading. `StartStop` = top-right Start/Stop link with play/stop icon.
+
+### 2.1 Home sheets (`home/sheets.rs`)
+| Sheet | Purpose | Controls |
+|---|---|---|
+| Sort | list order, help t("home.sort_note") | 3 SheetItems: Own order, By time, By next ring; selected shown; saves `prefs.sort` and closes |
+| PauseAll | holiday pause, help t("home.pause_note") | "End pause" (only when all paused: `resume_all`), "Until tomorrow" (start of day +1), "For a week" (start of day +7), "Until a date..." (opens PauseDate). Each toasts t("home.paused_message"){date} with Undo |
+| PauseDate(None or alarm id) | pick pause end date, help t("home.pause_date_note") | native date input (min = tomorrow, default today+7), Apply button; must be > now; `alarm_ops::pause_all` or sets one alarm's `pause_until_ms` |
+| AlarmMenu(id) | per-alarm actions, title = "<time> <label>" | Practice (only if alarm has challenges; pushes `/practice/<id>`), Skip next / Undo skip (same condition as swipe), Duplicate (limit check then `/alarm/copy-<id>`), Pause alarm / End pause (pause_active toggles; pause opens PauseDate(Some(id))), "Use as default for new alarms" (`prefs.alarm_defaults = as_defaults(alarm)`, info toast), Delete (danger, with Undo toast) |
+
+### 2.2 Editor sheets (`alarm_config/*_sheets.rs`)
+| Sheet | Purpose | Controls / options |
+|---|---|---|
+| Time (`TimePicker`) | set the time | two drum wheels (hours 0-23 or 12 h with AM/PM label, minutes 0-59) + numeric text field "type a time" accepting `7`, `730`, `07:30`, `7.30`, `7 30`, `7h30` (`parse_typed_time`; applies live when valid); Done |
+| Date | one-time date | native date input (min today), "Quick" chips Today / Tomorrow / Next week (+7 d); help t("config.date_note"); Done |
+| Label | name and ring note | Label text field (max 100), Note text field (max 100, shown while ringing), "Used before" chips of existing non-hidden labels (sorted, dedup); help; Done |
+| Sound | pick sound, volume, fade | Start/Stop preview (top right, hidden when vibration-only), radio "No sound" (vibration only, `sound_mode=2`), radio list of 10 bundled tones then custom sounds (selection sets `sound`; if `sound_mode==2` it becomes 0; if a preview is playing it switches to the new sound); custom rows have rename (inline field max 60 + check; empty name removes the alias) and delete (X, then inline red "Delete" + keep X confirm; deleting replaces the sound in the draft, all alarms, and defaults by `factory_alarm().sound`, removes alias, deletes file); "Import sound" button (file picker thread `custom_sounds::pick_audio_file_native`; error toast t("sound.not_a_sound") or db.save_failed); volume slider 0-100 step 5 with % readout (writes `volume_percent`; default shown = global minimum); "Fade in" chips Off/15 s/30 s/1 min/2 min/5 min (`FADE_SECONDS` 0,15,30,60,120,300); Done |
+| Vibration | pattern and delay | Start/Stop preview; chips Off / Pulse / Steady / Heartbeat (Off sets `sound_mode` 1 unless 2; a pattern sets `vibration` and moves `sound_mode` 1 to 0; choosing a pattern vibrates immediately); when `sound_mode==0`: "Sound starts" chips Together / 15 s / 30 s / 1 min after vibration (`sound_delay_secs` 0,15,30,60); Done |
+| Snooze | count and length | Stepper length (1..60 min; by 1 up to 10, by 5 above: `longer_or_shorter`); Stepper count (0..10 times; 0 = no snooze); help |
+| Challenges | list, order, try | top-right "Try all" (when >0); rows: drag handle (grip), number, name + summary (opens Detail), "Try" link, X remove; drag by handle reorders (`list_edit::move_item`); "Add challenge" button while < 10 (`MAX_CHALLENGES`); Done |
+| AddChallenge | choose type | 8 options (name + short description: Math, Typing, Memory, Reaction, Hold, Steps, Shake, Scan, order of `CHALLENGE_TYPES`); choosing appends with defaults, requests runtime permission (Steps = ACTIVITY_RECOGNITION, Scan = CAMERA) and opens its Detail; "Back" quiet button |
+| ChallengeDetail(index) | configure one | per-type controls (see 4); top-right "Try"; help = long description; "Remove challenge" danger link; Done returns to the Challenges sheet; Back/scrim also returns to the list sheet |
+| Limit | max ring time | chips 30 min / 60 / 90 / 120 / Forever (`ring_limit_secs` Some(1800..7200) or None) |
+| WakeCheck | confirm-awake check | chips Off / 3 / 5 / 10 min (`wake_check_minutes`) |
+| Notice | silent notice before ring | chips Off / 5 / 10 / 30 / 60 min (`notify_before_minutes`) |
+| RingLook | lock-screen look | top-right "Preview" link (full-screen preview), 4-column grid of 8 backdrop tiles (live miniature each; Photo tile shows "+" until a photo exists and then picks one), "Choose another photo" link when Photo selected, Ring colour row (only for backdrops that take a colour; shows "Auto" + dot + chevron), Clock style chips (Clean, Thin, Bold, Classic, Mono), Done |
+| RingColour | colour the background moves in | live backdrop preview, accent preset swatches, `ColorControls` with an "Auto" chip (clears to accent/sunrise default), Preview link, Done returns to RingLook |
+| Delete | confirm deleting the alarm | "Delete" danger (stops preview, removes, toast with Undo, goes back) and "Keep" |
+| Discard | unsaved changes | "Discard changes" danger (go back) and "Keep editing" |
+
+Ring preview (`RingPreview`, not a sheet): full-screen `RingFace` of the draft with fake Snooze (if count>0), hint text
+t("ring.preview_hint") and a fake Turn off; any tap or Back closes it; the buttons do nothing.
+
+### 2.3 Settings sheets (`settings/sheets.rs`)
+| Sheet | Controls |
+|---|---|
+| Language | "Follow phone" (maps `mobile_sentinel::device_language()` to a locale), then English, Nederlands, Espanol, Francais, Deutsch; sets `prefs.language_follows_phone`, `settings.locale`, reloads translations, `platform::set_ring_language(locale)` |
+| TimeFormat | Follow phone / 24-hour / 12-hour (`prefs.time_format`) |
+| WeekStart | Monday / Sunday / Saturday (`prefs.week_start`) |
+| Volume | help t("settings.min_volume_desc"); chips Off, 25, 50, 75, 100 % (`settings.min_volume_percent`, applied live via `platform::set_min_volume`); Done |
+| Backup | note t("settings.backup_note"); "Save to file" (writes `alarmfree-YYYY-MM-DD.json` via `platform::save_to_downloads`, toast with place or failure) and "Restore from file" (file picker thread, `alarm_ops::import_json`, appends up to the room left under 50, assigns order, toast t("settings.backup_restored") counted, with Undo; bad file = error toast; cancel = silent) |
+| DeleteHistory | same component as History (30 d / 90 d / all, each confirmed) |
+| About | title "AlarmFree <version>", note t("app.description"), line t("app.tagline"), Done |
+
+### 2.4 Other dialogs
+- Fallback sheet in ChallengeRun (1.9).
+- Toast (not a dialog, `components/toast.rs`): see 6.
+
+---
+
+## 3. Settings
+
+### 3.1 App settings (`models/settings.rs`; persisted by `persistence::save_settings` JSON in the db)
+| Setting | Field | Type / options | Default | UI |
+|---|---|---|---|---|
+| Theme | `theme` | System, Dark, Light, Black, Midnight, Forest, Plum, Sand, Mist, Custom | System | ThemeScreen |
+| Language | `locale` + `prefs.language_follows_phone` | English, Dutch, Spanish, French, German; follow phone | English / true | Language sheet |
+| Min volume | `min_volume_percent` | 0,25,50,75,100 | 50 | Volume sheet |
+| Time format | `prefs.time_format` | System, H24, H12 | System | sheet |
+| Week start | `prefs.week_start` | Monday, Sunday, Saturday | Monday | sheet |
+| Sort | `prefs.sort` | Own, Time, NextRing | Own | Home sort sheet |
+| Touch feedback | `prefs.touch_feedback` | bool (also `feedback::set_enabled`) | true | switch |
+| Less motion | `prefs.less_motion` | bool (adds `less-motion` class) | false | switch |
+| Confetti | `prefs.confetti` | bool (28 particles or 0) | true | switch |
+| Accent | `prefs.accent` | Blue, Teal, Purple, Pink, Amber, Coral, Sage, Sky, Lime, Custom | Blue | ThemeScreen |
+| Custom accent | `prefs.custom_accent` | Option<Rgb> (used when accent == Custom) | None | wheel |
+| Custom theme | `prefs.custom_theme` | Option<{background, card?, text?}> | None | ThemeScreen |
+| Sound names | `prefs.sound_names` | map file to display name | empty | rename |
+| New-alarm defaults | `prefs.alarm_defaults` | Option<AlarmData> | None (then `factory_alarm`) | defaults editor, menu "make default" |
+| Hidden warnings | `prefs.hidden_warnings` | Vec<check name> | empty | Home banner X |
+| Setup done | `prefs.setup_done` | bool | false | FirstRun |
+| (unused) | `prefs.notify_before_minutes` | u8 | 0 | no UI |
+
+Factory alarm (`alarm_ops::factory_alarm`): 07:00, Mon-Fri, fade-in 60 s, ring limit `DEFAULT_RING_LIMIT_SECS`, first
+bundled sound, sound_mode 0, 3 snoozes of 5 min, vibration 0, no challenges.
+
+### 3.2 Per alarm (`AlarmData`, `app.rs`)
+| Field | Meaning / options | Edited in |
+|---|---|---|
+| `id` | uuid ("" for defaults) | n/a |
+| `time_hour`, `time_minute` | 0-23, 0-59 | time section / Time sheet |
+| `days: [bool;7]` | Mon first; none selected + `date` = one-time | repeat section |
+| `date: Option<YYYY-MM-DD>` | one-time date | Date sheet |
+| `label`, `note` | <= 100 chars, sanitized | Label sheet |
+| `enabled` | on/off | Home switch (editor save forces true) |
+| `skip_until_ms` | skip next occurrence | swipe / menu |
+| `pause_until_ms` | holiday pause | menu / pause-all |
+| `order` | manual position, 0 = unsorted | drag |
+| `sound` | file name; `sound_mode` 0 sound+vib, 1 sound only, 2 vibration only | Sound / Vibration sheets |
+| `vibration` | 0 Pulse `[0,500,300,500]`, 1 Steady `[0,2000,100]`, 2 Heartbeat `[0,100,100,100,700]` | Vibration sheet |
+| `sound_delay_secs` | 0,15,30,60 (only with sound_mode 0) | Vibration sheet |
+| `volume_percent` | Option<0..100 step 5>; None = global minimum | Sound sheet |
+| `fade_in_secs` | 0,15,30,60,120,300 | Sound sheet |
+| `snooze_count` | 0-10; `snooze_interval` 1-60 min | Snooze sheet |
+| `challenges: Vec<(type, json)>` | up to 10 | Challenges sheets |
+| `ring_limit_secs` | Some(1800/3600/5400/7200) or None | Limit sheet |
+| `wake_check_minutes` | 0,3,5,10 | Wake check sheet |
+| `notify_before_minutes` | 0,5,10,30,60 | Notice sheet |
+| `max_brightness` | bool | switch row |
+| `ring_look` | `{backdrop, colour?, clock, photo?}` | Ring look sheets |
+| `delete_after_ring` | naps, wake checks, tests (not user editable) | n/a |
+| `test`, `hidden` | test alarm / not listed (wake checks, tests) | n/a |
+
+---
+
+## 4. Challenges
+
+Registry: `models/setup.rs` `ChallengeSetup` (+ `CHALLENGE_TYPES` order: math, typing, memory, reaction, hold, steps, shake,
+scan), generation in `models/challenge.rs` `ChallengeEngine`, run in `screens/challenge_run.rs` + `components/challenges/*`.
+All challenge components are told `on_complete`/`on_solved` once; each lives under `.challenge-wrapper` with an instruction line.
+Difficulty names: Easy, Medium, Hard, Extreme (`difficulty.<name>`); new Math/Memory/Typing default to Medium.
+
+| # | Challenge | Setup fields (range, default, step in editor) | Rules |
+|---|---|---|---|
+| 1 | Math | difficulty | Sum shown, answer on on-screen keypad (1-9, backspace, 0, check). Solved automatically as soon as the typed digits equal the answer (max 12 digits); the check key only shows "incorrect" (`wrong` state, display shakes red via class). Easy `XX +/- XX` (10..98), Medium `XXX +/- XXX` (100..998), Hard `a x b` (11..48 x 2..18), Extreme `a x b` (100..498 x 2..11); subtraction is always big minus small |
+| 2 | Typing | difficulty | Passage of random everyday words in the user's locale (word pools for en/nl/de/fr/es, unaccented). Words: Easy 5-10, Medium 15-20, Hard 25-35, Extreme 40-60; min accuracy 80/85/90/95 %. Passage drawn as per-character spans (correct green, incorrect red, cursor highlight on next, pending), words never break mid-word; multiline text area (no autocorrect/capitalize/spellcheck, autofocus, soft keyboard); live "Accuracy N%" (good/bad colour) next to "min N%", progress "typed/total". Accuracy = 1 - Levenshtein/longest, case-insensitive, trailing spaces ignored (`typing_accuracy`). Done when accurate enough AND typed + `floor(len*(1-min))` >= len; if all typed but too wrong shows "incorrect" |
+| 3 | Memory | difficulty | Grid 3x3 (Easy, Medium) or 4x3 cells (Hard, Extreme); sequence length 4/6/9/12, no repeats. Display phase: after 300 ms each cell lights 1 s, 500 ms pause, then input. Input: tap cells in order; correct tap marks it with its order number; a wrong tap marks the cell red (shake 0.3 s) and counts; 3 wrongs replay the sequence from the start; a correct tap clears red marks and wrong count; tapped cells cannot be re-tapped; status line "done/total" + "wrong x/3" (fixed height); hints below per phase |
+| 4 | Shake | `count` 5..200 (step 5), default 20 | `sensors::reset_shake_count` + `start_accelerometer` on mount (effect), `stop_accelerometer` on drop; poll `shake_count()` every 200 ms; ring shows count/required + unit; done at >= required. Permission: none |
+| 5 | Steps | `count` 5..200 (step 5), default 20 | `sensors::start_step_counter` / `stop_step_counter`; poll `step_count()` every 250 ms; ring progress. Permission ACTIVITY_RECOGNITION requested when added/tried |
+| 6 | Hold | `count` 1..30 (default 10), `secs` 1..15 (default 3) | Bubble at a random position in the play area (position as 0..1 fractions mapped inside a 64 px safe margin). Press the bubble and hold until its ring fills (CSS stroke transition over `hold_ms`, min 300 ms); release anywhere in the area drains it and cancels; completion = pop animation 280 ms (check icon), haptic ticks 18 / 45 / 130 ms, new bubble elsewhere; progress "done / required unit". Optional back arrow (fallback mode) |
+| 7 | Reaction | `targets` 3..30 (default 10), `secs` 2..10 (default 3), `rounds` 1..5 (default 2) | Round 1 opens with a 3 s "Get ready" countdown (1.5 s between later rounds). Up to 3 targets visible; each pop spawns a replacement until the round's quota is met; targets avoid each other (min separation 0.34, 32 tries); timer bar drains over the time limit (min 1 s, polled every 40 ms); time-out resets to round 1 with full countdown (haptic 60); clearing a round haptic 80, final 130; progress "round/rounds . popped/targets". Pointer-down pops (no click delay) |
+| 8 | Scan | `code` string (empty = any code) | Button opens the SDK camera scanner (`scanner::scan()` blocking in a thread; `SCANNER_OPEN` flag read by ChallengeRun to pause the idle clock). States Ready, Scanning ("point camera"), WrongCode (red text + "tap to retry"), Done (check). Success when trimmed scan equals trimmed expected (or any if empty). In the editor: text field for the code plus "Scan now" button that fills it from a scan. Permission CAMERA requested when added/tried. Code sanitized by `sanitize_reference_value` on save |
+
+Editor summaries (`challenge_summary`): difficulty name; "N shakes"/"N steps"; Hold "N x S s" (counted key);
+Reaction "N targets / S s / R rounds" (`reaction_one` variant if rounds==1); Scan "any code"/"code X". Detail sheet also
+shows a difficulty example line (`challenge.example.<type>_<difficulty>`) and a description as help (`challenge.desc.*`).
+Shared progress ring (`ProgressRing`): 180 px circle, track + accent arc (stroke-dashoffset, 0.3 s ease), centre text
+"count / required", unit label below. Hold button, ring, reaction target, memory cell visuals are listed in 5.4.
+
+Practice mode: same generators and components via `ChallengeRunner` (`practice.rs`): generated once per run (`prepare`),
+Exit always available, nothing written to history or AlarmKit. Editor "Try" (one) and "Try all" call it in place
+and request the needed permission first.
+
+Fallback: any non-Hold challenge can be swapped (confirm sheet) for 20 holds of 3 s (`FALLBACK_HOLDS`, `FALLBACK_HOLD_MS`);
+history records it as HoldButton.
+
+---
+
+## 5. Theme system, ring looks, animations
+
+### 5.1 Palettes (`models/theme.rs`) and derivation
+Base colours (background / card / text): Dark `101218/1b1e27/f2f3f7`, Light `f5f6f9/ffffff/14161c`, Black
+`000000/101116/f2f3f7`, Midnight `0b1220/162033/eef2fa`, Forest `0e1714/18241f/eef4f0`, Plum `17101c/241a2c/f4eff7`,
+Sand `f3ede2/fbf7ef/2a2419`, Mist `e9eef2/f7f9fb/1c252c`. System = Dark when the phone is dark else Light (re-evaluated on
+a dark-mode change). Custom = `CustomTheme { background, card?, text? }`; missing card/text computed: card = background
+mixed 7 % toward white if dark, 60 % toward white if light (or 4 % toward black if the page is nearly white); text =
+light/dark default.
+Accents `(dark shade, light shade)`: Blue 7cb0ff/1f5fd6, Teal 5fd4c4/00736a, Purple b9a0ff/6a3fd1, Pink ff94c8/b8246f,
+Amber ffc45c/8a5a00, Coral ff9d8a/c2452d, Sage 9ad49a/3c7d4a, Sky 86d4f0/0b7285, Lime cfe37a/5f7a00; Custom wheel colour is
+used for both. Palette `accent` = shade for light/dark background then `readable_on(bg, card)`.
+`MIN_CONTRAST` = 3.0: text/accent/warn/danger/ok are nudged toward white or black (20 steps) until >= 3.0 against both
+background and card; `is_light` = more contrast against black than white.
+
+Derived variables (`Palette::css_vars`; in Slint put these into a `Palette` global struct): `--bg --surface(card)
+--surface2 --line --text --text2 --accent --on-accent --accent-soft --accent-glow --warn --warn-soft --danger --ok
+--ok-glow --off --knob-off --inverse --on-inverse --bar-soft`. Formulas (mix(a,b,t) = a toward b):
+- surface2 = card.mix(text, raised), line = card.mix(text, line), off = card.mix(text, offAmt); (raised, line, offAmt, soft) =
+  light (0.09, 0.12, 0.23, 0.12), dark (0.06, 0.09, 0.145, 0.17).
+- text2 = text.mix(bg, 0.3).readable_on(bg, card); accent-soft = bg.mix(accent, soft); bar-soft = card.mix(accent, 0.45).
+- accent-glow = rgba(accent, 0.35 light / 0.45 dark); ok-glow = rgba(ok, 0.55); warn-soft = bg.mix(warn, 0.15).
+- warn/danger/ok = light `8f5400/b3261e/1b7a4b`, dark `ffb454/ff8a7a/6fd6a0`, each readable_on(bg, card).
+- on-accent = accent.mix(black, 0.85) if accent is light else white; knob-off = white (light) else text2;
+  inverse = text; on-inverse = card.
+Other root tokens: radii 8 / 14 / 20, nav height 64, `--safe-top/bottom/left/right`, `--text-zoom` (font scale probe),
+sizes: type 11 (day letters), 12, 14, 16, 20, 24 (list times), 28 (titles), 64/96 (ring clock). Spacing in steps of 4.
+Also set on theme change: `display::set_light_system_bars(palette.light)` and `display::set_system_bar_color(background_argb)`;
+initial window background = saved palette background (`app::start_background`) to avoid a flash.
+
+### 5.2 Colour editor (`components/color.rs` `ColorControls`) and wheel
+Inputs `hsv` (kept apart from rgb so black keeps its hue) and `typed` (hex field text while editing). Elements:
+- 200 x 200 px circular wheel: conic hue gradient (from red at 3 o'clock, clockwise: red, yellow, green, cyan, blue,
+  magenta) with a radial white-to-transparent overlay (saturation), a darkening overlay with opacity `min(1 - value, 0.65)`,
+  and a thumb (circle filled with the shown colour) at `radius * s` along the hue angle. Pointer-down / move (while
+  touching) maps `(x, y)` to hue = atan2 degrees, saturation = distance / radius clamped to 1 (outside = rim); on near-black
+  (value < 0.05) a touch sets value to 1. Pointer up / cancel = `on_release` (saves). Touch-action none (must not scroll).
+- Brightness slider 0-100 (`value`), change = `on_colour`, release = `on_release`.
+- Hex text field (max 7, no autocapitalize): `Rgb::parse` accepts `#rrggbb`, `rrggbb`, `#rgb`; valid input applies live and
+  moves the wheel; raw text is shown while typing; change event = release. `extra` slot beside it (the "Auto" chip).
+- Swatch row above (selected ring).
+
+### 5.3 Ring looks (`models/ring_look.rs`, `screens/ring_face.rs`, css 1255-1500)
+`RingLook { backdrop, colour?, clock, photo? }`, stored in `AlarmData.ring_look`; unknown/corrupt values deserialize to
+defaults. `colours(accent)` returns 3 colours: base = chosen colour, else orange `ff8a4c` for Sunrise, else the theme
+accent; neighbours = hue +35 and -35 degrees (same S, V); if a neighbour lands in hue 50-100 (olive zone) both go the same
+other way (+-35, +-70); Sunrise ignores the olive rule. Exposed as `--ring-1..3`. Backdrops take no touches; `Plain` and `Photo`
+take no colour (`takes_a_colour`). Unit `u` = 1vmin (window) on the ring screen, 0.3vmin and height 76 px on a tile / live
+preview; `h` = window height. Everything under half strength so text stays readable. On `ring-dressed` screens the date,
+clock, label, note and challenge hint get a halo `text-shadow` in the background colour.
+
+| Backdrop | Parts | How it is drawn |
+|---|---|---|
+| Plain | 0 | nothing |
+| Aurora | 3 | three 130u circles with radial gradient (ring-N to transparent at 66 %): 1 at top -20 % left -40 % opacity .5, drift 19 s ease-in-out alternate to (+36u, +26u) scale 1.2; 2 at top 16 % right -55 % opacity .42, 25 s to (-40u, +34u) scale .85; 3 at bottom -28 % left -18 % opacity .38, 31 s to (+28u, -44u) scale 1.15 |
+| Sunrise | 2 | sky: full-screen linear gradient bottom-up `ring-1, ring-3 36 %, transparent 76 %` opacity .55, fades in from .08 over 45 s ease-out then stays; sun: 120u circle, centred, bottom 2 %, radial `ring-2, ring-1 30 %, transparent 68 %` opacity .85, rises from +0.34h and opacity .2 over 45 s ease-out then stays |
+| Waves | 3 | three 280u squares centred horizontally with top at 56 / 62 / 68 % of h, border-radius 44 / 42 / 46 %, colours 1/2/3, opacity .22 / .20 / .18, rotate 360 deg linear 23 s / 31 s (reverse) / 41 s, so the top edge rolls |
+| Stars | 3 | three full-screen layers of 5-7 tiny radial-gradient dots (radius .48-.96u, min 1 px) in colour 1/2/3 with fixed positions (see css 1388-1425); each layer twinkles (opacity to .2 and up 3u) alternate: 5 s, 7 s (delay 1 s, reversed), 11 s (delay 2 s); layer opacity 1 / .85 / .9. On the real ring screen a vertical mask hides stars between 10 % and 44 % of height (behind the time) |
+| Rings | 4 | concentric 46u circles with 2 px border at left 50 %, top 22 %; start scales 1 / 1.7 / 2.4 / 3.1 and opacity .36 / .26 / .16 / .08; borders ring-1, ring-2, ring-1, ring-3; animation `ring-out` 9 s ease-out infinite (scale 0.6 to 4, opacity .6 to 0), delays -2.25 s steps |
+| Bubbles | 9 | circles 7u-30u with radial gradient (transparent to 52 % then ring colour to the rim, colours cycle 1,2,3) opacity .6, fixed left/top, each rises bottom to top (`bubble-up`: from +h, 50 % at 0 with +4u sway, to -h) linear infinite, durations 19-37 s with negative delays |
+| Photo | image | user-picked image (`ring_photos::import()` native picker, stored in app files, `data_url(name)` loader, pruned at start) covering the screen with slow zoom to 1.09 over 40 s alternate, plus a 50 % black scrim; text forced white (`--text #fff`, `--bg #000`), snooze button black 50 %; falls back to Plain if the file is unreadable |
+
+Clock styles (class on the big clock): Clean (default: weight 500, letter-spacing -2), Thin (weight 200, -1), Bold (800, -3),
+Classic (serif 400, -1), Mono (monospace 500, -6; -4 for 12 h). Less motion: backdrops render their static first frame.
+
+### 5.4 Animations (`@keyframes` and transitions in style.css)
+| Name | Animates | Where used |
+|---|---|---|
+| `aurora-one/two/three` | translate + scale of blobs | Aurora backdrop |
+| `sunrise-sky`, `sunrise-sun` | sky opacity from .08; sun rise + opacity | Sunrise backdrop (45 s once) |
+| `wave-turn` | rotate 360 deg | Waves backdrop |
+| `stars-twinkle` | opacity .2 + translateY -3u | Stars backdrop |
+| `ring-out` | scale .6 to 4 + fade | Rings backdrop |
+| `bubble-up` | translate bottom to top | Bubbles backdrop |
+| `photo-drift` | scale to 1.09 | Photo backdrop |
+| `sheet-up` | slide up 24 px + fade, 0.18 s | `.sheet` |
+| `toast-in` | rise 8 px + fade, 0.15-0.18 s | toast, help text paragraphs |
+| `cell-shake` | translateX 0, -4, +4, 0 (0.3 s) | `.memory-cell.wrong` |
+| `bubble-in` | scale .3 to 1.12 to 1 + fade, 0.42 s overshoot | new hold bubble |
+| `bubble-pop` | scale 1.08, 1.22, .5 + fade, 280 ms | `.hold-bubble.popping` |
+| `hold-ripple` | scale 1 to 1.9 + fade, 280 ms | ripple on pop (`.hold-bubble.popping::after`) |
+| `celebration-fade` | overlay dims 0 to .25 to 0, 1800 ms | Celebration overlay |
+| `check-pop` | scale 0 rotate -30 to 1.15 to 1, 500 ms | Celebration check |
+| `confetti-burst` | outward `--dx/--dy` (radius 220 px), falls +200 px, rotates 900 deg, fades, 1600 ms with per-piece delay | Celebration pieces |
+| `reaction-count-pop` | scale .7 to 1.1 to 1, 1 s repeating | reaction countdown number |
+| `reaction-spawn` | scale .2 to 1.15 to 1, 0.22 s | new reaction target |
+| `reaction-target-pulse` | accent ring expands 0 to 12 px, 1.1 s repeating | reaction target |
+Transitions: switch track/knob 0.15 s; chip/cell colours 0.2-0.25 s; hold ring fill `--hold-ms` linear (drain 0.35 s ease-out);
+reaction timer width `--react-ms` linear; run-timer width 1 s linear; progress ring offset 0.3 s; time wheel snap 0.24 s
+cubic-bezier(.22,1,.36,1); history chevron rotate 0.2 s; reorder neighbour shift 0.15 s.
+Less motion / prefers-reduced-motion: every animation and transition 0.01 ms, iterations 1, EXCEPT functional ones
+(`hold-ring-fill`, `reaction-timer-fill`, `run-timer-fill`); celebration overlay animation none.
+
+---
+
+## 6. Shared components: the Slint component list to build
+
+From `components/ui.rs` unless noted. Props in brackets.
+
+| Slint component | Source | Props / callbacks | Notes |
+|---|---|---|---|
+| `Sheet` | ui.rs | title, note, help, action slot, content slot, closed() | scrim + panel, slide-up, "?" toggle, registers Back (see 7), counts into `open-sheets` |
+| `SheetDone`, `SheetItem` | ui.rs | label, quiet / danger / selected, clicked() | primary vs quiet; selected/danger styles |
+| `GroupTitle` | ui.rs | text | |
+| `Chips` (generic) | ui.rs | options [(value,label)], selected, grow, picked(value) | build as `[string]` + selected-index; value mapping in Rust |
+| `Stepper` | ui.rs | title, value, less(), more() | two round buttons |
+| `StartStop` | ui.rs | running, start(), stop() | play/stop icon + text |
+| `Row` / `SwitchRow` | ui.rs | title, value, clicked / on, toggled(bool) | chevron / switch |
+| `Switch` | ui.rs | on | track + knob, animated 0.15 s |
+| `ScreenHeader` | ui.rs | title, help, back(), extra slot | back arrow, title, optional "?" with in-place help paragraph |
+| `BottomNav` | ui.rs | current route | 3 items clock / bar-chart / gear icons, labels t("nav.*"), active highlight |
+| `HelpButton` | ui.rs | open | circle "?" toggling help text |
+| `Icon` | components/icon.rs | name, size, colour | 19 outline icons: Clock, ChartBar, Gear, Trash, Check, Xmark, Plus, ChevronRight, ArrowLeft, Grip, EllipsisVertical, Pause, Sort, Warning, Pencil, Skip, Touch, Play, Stop. Stroke 2 (3 for EllipsisVertical), round caps; use `Path` with SVG commands (24x24 view box) |
+| `Toast` | components/toast.rs | message, level (info/error), undo present, dismiss(), undo() | bottom (top while a sheet is open), auto-dismiss 3 s info / 6 s with undo / 10 s error, tap dismisses, Undo button stops propagation; a new message replaces and restarts the timer |
+| `Celebration` | components/celebration.rs | label, particles | overlay dim + check pop + N confetti pieces (angle = i*360/N, radius 220, delay (i%6)*30 ms, hue (i*47)%360, size 6 + (i%4)*2 px) |
+| `TimePicker` / `WheelColumn` | components/time_picker.rs | hour, minute, twenty-four, changed(h,m) | 2 drum wheels, 7 visible rows, row pitch 40 px; drag up = increase, 1:1 finger tracking with snap on release; tap neighbour = +/-1/2; wraps 24/60; haptic tick 8 ms per step; swallow the click after a drag; 12 h hour labels carry AM/PM; centre 24 px bold-ish, near 20 px .8, far 16 px .5, edge 14 px .28; 3D tilt (rotateX 20 deg per row) can be approximated with scale/opacity |
+| `ColorControls` | components/color.rs | hsv, typed, code, colour-changed(rgb), released(), extra slot | see 5.2 |
+| `ProgressRing` | challenges/progress_ring.rs | count, required, unit | `Path` arc (circumference 282.74 at r 45) |
+| `MathChallenge`, `MemoryGameChallenge`, `TypingChallenge`, `ShakeChallenge`, `StepCountChallenge`, `HoldButtonChallenge`, `ReactionChallenge`, `ScanChallenge` | challenges/*.rs | per 4; `complete()` | state machines in Rust, view in Slint |
+| `AlarmCard` | home/card.rs | alarm view struct, next-fire text, handlers | swipe-reveal strip (custom `Flickable` with snap), long-press drag |
+| `RingFace`, `RingBackdrop` | screens/ring_face.rs | look, date, clock, label, note, children | shared by ring screen, preview, tiles |
+| `CheckRow`, `Banner` | reliability.rs / home | | status rows and the tappable banner |
+| `Field` | `.field` | text, placeholder, input-type (numeric, text, date), max-length, edited(text) | wraps `TextInput`; date needs a custom picker (see 8.6) |
+| `Slider` | `.slider` | min, max, step, value | volume 0-100/5 and brightness 0-100 |
+| `Chip` / `Pill` / `DayChip` / `Swatch` / `ThemeTile` / `LookTile` / `BarChart` / `Dots` | various | | small leaf components |
+
+---
+
+## 7. State map (Dioxus to Slint)
+
+Recommendation: one `global AppState` (Slint `export global`) for UI-visible, read-mostly data and callbacks; a Rust
+`AppCore` (Rc<RefCell<..>>, UI thread) that owns the real data (`Vec<AlarmData>`, `AppSettings`, translations) and pushes
+snapshots to Slint via `VecModel`/properties; ephemeral per-screen state lives in the screen's own properties.
+
+| Dioxus state | Holds | Slint mapping |
+|---|---|---|
+| `settings: Signal<AppSettings>` (context) | theme, locale, min volume, prefs | Rust `Store.settings` + global `Settings` properties (theme index, time-format, week-start, sort, three bools, locale index, `24h` resolved bool); setters = callbacks into Rust which save (`persistence::save_settings`) then call `platform::refresh_outside_app` where Dioxus did |
+| `alarms: Signal<Vec<AlarmData>>` (context) | all alarms incl. hidden | Rust `Store.alarms`; Slint gets `[AlarmRow]` (`VecModel`) of the listed, sorted, display-ready rows (time text, label, when text, day flags, enabled, skip_active, can_skip, id). Rebuild on any change and on the 15 s tick; actions pass the `id` |
+| `translations: Signal<HashMap>` | current language strings | Rust `Translator` + a global `T` of properties, OR set a global `Strings` struct; changing language rebuilds all strings (Slint `@tr` is gettext-based and does not match the JSON, so do NOT use `@tr`). Keep `t(key)` in Rust and push resolved strings, or expose a `string -> string` pure callback `T.t(key)` |
+| `toast_signal: Signal<Option<ToastMessage>>` | message, level, undo snapshot | Rust `ToastController` (owns the undo `Vec<AlarmData>` snapshot and the dismiss timer); Slint global `Toast { visible, text, level, has-undo, top }` + callbacks `dismiss()`, `undo()` |
+| `OpenSheets(Signal<u32>)` | open sheet count | Rust counter in `SheetStack`; Slint property `Toast.top` |
+| `BackStack` + `BACK_PRESSED` + `leave_screen: Signal<u32>` | Back handler stack, press queue, "leave screen" tick | Rust `BackDispatcher`: `Vec<(id, Box<dyn Fn()>)>`, `on_back` from SDK posts to the UI thread (`slint::invoke_from_event_loop`), pops the top handler, else navigates; ignored while firing |
+| `Route` + `NavWatcher` + `nav_intent` | current route, intent after ring | Rust `Navigator` + global `Nav { current-page: int, can-go-back }`; stack `Vec<Route>`; `push/replace/go_back` callbacks; `nav_intent` becomes a field applied when the ring screen closes |
+| `firing_id: Signal<Option<String>>` + `FiringWatch` poll (500 ms, `firing_state::store_marker/peek_firing_alarm`) | which alarm rings | Rust `FiringWatcher` (Timer 500 ms) -> global `Firing { active, alarm-id }`; when active the root shows the ring page instead of the nav page |
+| `wide: WideScreen(Signal<bool>)` | width >= 840 css px | Slint `window.width` binding in the root; compute logical px (Android density) so the 840 css px threshold still means 840 dp |
+| `safe_area` (App local) + `--safe-*` | top/bottom/left/right insets (bottom = max(nav bar, keyboard)) | global `Insets { top, bottom, left, right }` set from `display::safe_area_insets()` by Rust `InsetsWatcher` (poll at 0 / 300 / 1500 ms after start and on window resize/focus/keyboard) |
+| `system_dark` (App local) | phone dark mode | Rust: `display::system_dark()` read on resize/focus; re-derive palette |
+| `palette` (derived from settings + system_dark) | colour set | global `Palette` struct (all 20 tokens + `light`), rebuilt in Rust by `Palette::css_vars`-equivalent; also call `set_system_bars` |
+| `text-zoom` (CSS var) | Android font scale | global `Scale.text-zoom` read from Android config (needed to keep ring clock size constant) |
+| `motion_class` | `less_motion` | global `Settings.less-motion` bool; animated properties use `duration: Settings.less-motion ? 0ms : X` |
+| Home local: `tick`, `problem`, `sheet`, `pause_date` | timer re-render, banner check, open sheet, picked date | Rust `HomeController` with `Timer` (1.5 s then 15 s) + Slint property `sheet: int` + `pause-date: string` |
+| `HomeState` (context) | alarms, toast, translations, sheet, pause date + `change()` | Rust `fn change(message, mutate)` = snapshot, mutate, save, toast with undo |
+| Editor `EditorState`: `draft`, `one_time`, `date_value`, `setups`, `sheet`, `error`, `typed_time`, `renaming`, `trying`, `preview`, `previewing_look` | working copy and dialog state | Rust `EditorSession` (owns `draft: AlarmData`, `original`, `setups: Vec<ChallengeSetup>`, `one_time`, `date`, preview handles) + Slint `Editor` page properties (flattened strings/ints/bools); `has_changes` computed in Rust |
+| `Preview` (handle, token, sounding, vibrating) | running preview | Rust `PreviewPlayer` with generation token + 15 s `Timer`; Slint props `sounding`, `vibrating` |
+| `SettingsState` | settings + open sheet | Slint page `sheet` int; actions call `Store` setters |
+| History locals: `period`, `custom_days`, `deleting`, `show_all`, `open_event`, `confirm_delete`, `refresh` and the memo | period filters etc. | Rust `HistoryController` computing a `HistoryView` struct (stats, bars `[Bar]`, events `[EventRow]`); Slint holds ephemeral toggles |
+| Reliability `current` + 1.5 s poll | `HealthReport` | Rust `HealthPoller` (Timer 1.5 s) -> `[CheckRow]` model (title, note, ok, can-fix) + `first_problem` banner string for Home |
+| ThemeScreen `picking`, ColorSheet `hsv`, `typed` | role being picked, colour editor | Slint props + Rust `ColorEditor` (role, hsv, typed) |
+| `AlarmFiring`: `snoozes_left`, `first_interaction`, `running`, `now`, `RingTimes` | ring screen state | Rust `RingController` (loads `RingTimes` from `kit.session`, owns the snooze/turn-off logic and `finished()`), Slint `Ring` page props |
+| `ChallengeRun`: `index`, `idle_secs`, `celebrating`, `solves`, `started_at`, `fallback`, `asking_fallback` | run state | Rust `RunController` (1 s idle timer, sensor deltas, celebration timer) + Slint props; each challenge has its own Rust state machine struct driven by `Timer`s |
+
+Rust-side bridge objects to name in the port: `AppCore/Store`, `Translator`, `Navigator`, `BackDispatcher`,
+`ToastController`, `SheetStack`, `InsetsWatcher`, `PaletteService`, `HomeController`, `EditorSession`, `PreviewPlayer`,
+`HistoryController`, `HealthPoller`, `FiringWatcher`, `RingController`, `RunController`, `ReorderController`,
+`FilePicker` (sound, photo, backup; each blocks in a thread and posts the result back), `DatePicker`, `HapticsBridge`
+(wraps `feedback::tick/pattern`), `LivenessBeat` (replaces `ui_round_trip`).
+
+---
+
+## 8. Platform glue used by the UI
+
+### 8.1 `document::eval` snippets (all must be replaced)
+- `app.rs` `WINDOW_WATCH` (see 8.3) and `ui_round_trip` (`dioxus.send(1)` round trip, 3 s timeout) and the debug `script_loop`.
+- `reorder.rs`/`reorder.js` (8.2).
+- `home/card.rs`: after Skip, scroll all `.alarm-card` back to `left: 0` smoothly.
+- `debug_hooks.rs`: `js:<script>` action runs arbitrary script in the page and writes `debug_script_result.txt`. This is how
+  `devtest/` scenarios press buttons and read the screen. The port needs a replacement: a debug-only action file/command
+  channel (e.g. `tap:<element-id>`, `text:<id>:<value>`, `dump` writing a tree of visible text/ids) or accessibility labels,
+  otherwise `devtest/all.sh` cannot run. Other actions (`snooze:<id>`, `dismiss:<id>`, `hang_ui`, `debug_<name>.txt` numeric
+  overrides read by `platform::shortened`) are UI-independent and stay. `hang_ui` must block the Slint event loop thread.
+
+### 8.2 `reorder.js` (drag to reorder)
+- Params: container id (`alarm-list`, `challenge-list`), row class, optional handle class, long press 450 ms.
+- Home list: no handle; a long press on a row (movement tolerance 10 px cancels) starts the drag; buttons are ignored except
+  the card's main button (`hold-to-drag`); inputs/labels/links ignored. Challenge list: starts immediately on the grip handle.
+- While dragging: row follows the finger (translateY), gets raised style (surface2, shadow), neighbours shift by one slot to
+  show the target, the scroll container auto-scrolls (finger within 110 px of the top or 170 px of the bottom: 14 px per
+  16 ms), page scroll is blocked, haptic 15 ms on start, context menu suppressed.
+- Drop: rows reset without animation; clicks within 400 ms are swallowed; reports `(from, to)` row indexes only if changed;
+  cancel reports nothing. Rust remaps shown-index to full-list index (hidden alarms excluded) and saves. Port as
+  `ReorderController` + a Slint list item with `TouchArea` and pointer-event tracking inside a `Flickable`.
+
+### 8.3 `WINDOW_WATCH` (inside `app.rs`)
+Sets `window.interpreter.headless = true` (apply DOM changes immediately instead of in animation frames, so a hidden WebView
+still processes UI tasks, e.g. dismissing after a challenge); measures the text zoom (probe 100 px element -> `--text-zoom`);
+sends the inner width on resize, visibility change and dark-scheme change (drives `wide`); while a text field is focused
+polls every 200 ms (stops after ~1 s without focus) and scrolls the focused field into view above the soft keyboard
+(`innerHeight - --safe-bottom`). Port needs: width callback, dark-mode change callback, font-scale read, keyboard-aware
+scrolling (8.6), and headless-equivalent liveness (the event loop must keep processing while the window is not drawn).
+
+### 8.4 Back handling
+SDK `foregrounding::on_back(|| ...)` (the activity never finishes on Back, so the process lives): a press is queued; the UI
+pops the top `use_back_handler` entry (sheets, ring preview, practice/ChallengeRunner, ThemeScreen, editor leave guard,
+Reliability leave) else applies the route rule (1). Drop of a component removes its handler. Ignored while `firing_id` is set
+(the SDK's kiosk blocks Back, Home, Recents, volume keys during a ring).
+
+### 8.5 Window insets, system bars, heartbeat
+- `display::safe_area_insets()` (top, bottom, left, right, keyboard; bottom = max(bar, keyboard)), rounded to whole px, read
+  at 0 / 300 / 1500 ms after start and on every window event; used for padding of screens, sheets, ring screen, FAB and nav bar.
+- `display::set_light_system_bars`, `set_system_bar_color` after theme change and after a window recreate.
+- `mobile_sentinel::keep_event_loop_awake()` at start (keeps the event loop alive when the window is not drawn).
+- Heartbeat: every 1 s while ringing `jobs::ui_heartbeat()` only after a UI round trip proved the UI thread works; if it stops
+  the `:sentinel` guardian restarts the app; after two UI failures the SDK shows its native backup screen.
+- Start-up in `App`: `platform::init_platform`, `feedback::set_enabled`, `history_persistence::delete_history(5 years)`,
+  `ring_photos::prune`, DB recovery notices (`db.recovered`, `db.volatile`, `db.unreadable`) and unseen outcome notices
+  (`alarm.ended_by_reboot`, `alarm.missed`, `alarm.ended_by_limit`) as one error toast; every 500 ms: `take_save_failure` toast
+  `db.save_failed`; `take_ring_end_news` reloads the alarm list and shows outcome notices.
+
+### 8.6 Soft keyboard and pickers
+Text inputs that need the soft keyboard: Time sheet typed time (numeric), Label, Note (both max 100), sound rename (max 60),
+scan code, hex colour (max 7, no autocapitalize), history custom days (number 1-365), Typing challenge (multiline, no autocorrect /
+capitalize / spellcheck, autofocus). The field must stay visible above the keyboard (see 8.3). Native `<input type="date">`
+is used in two places (Pause date sheet, alarm Date sheet; with `min`): Slint has no native date picker, so build a small
+month-grid date picker component (or call the SDK if one exists) and keep the `YYYY-MM-DD` contract. Range inputs: two
+(volume, brightness). Pointer events with captured drag: time wheels, colour wheel, hold bubble, reaction targets, reorder.
+File/photo pickers: `custom_sounds::pick_audio_file_native`, `ring_photos::import`, `media_picker::pick_files` (backup) all
+block, so run them on a thread and post the result back to the UI thread.
+
+### 8.7 SDK calls per screen
+- Home: `platform::alarm_kit_optional()` (`next_fire`, `snoozed_until`), `persistence::save_*`, `health::report` (via reliability).
+- Editor: `audio::play_as_alarm/stop`, `haptics::vibrate_pattern/cancel`, `permissions::request`, `scanner::scan`, `media_picker` (via
+  helpers), `display::system_dark`, `display::uses_24_hour_clock` (via `text::uses_24_hours`).
+- Settings: `health::report`, `home_widget::can_add/add`, `device_language`, `platform::set_ring_language/set_min_volume/refresh_outside_app/save_to_downloads`, `media_picker::pick_files`.
+- Reliability: `health::report/open_settings`, `permissions::request/open_app_settings`, `battery::request_exemption`, AlarmKit `timing_log`.
+- Ring: AlarmKit `session/current_session/pause/resume/snooze/mark_solved/dismiss/note_ui_up/note_activity`,
+  `foregrounding::finish_activity`, `display::set_max_brightness/restore_brightness`, `jobs::ui_heartbeat`, `sensors::*`, `scanner::scan`, `haptics` (via `feedback`).
+- App: `foregrounding::on_back/move_to_back`, `display::*` (bars, insets, dark), `keep_event_loop_awake`.
+
+---
+
+## 9. Port checklist (suggested order)
+
+Order: A core loop (home list, editor basics + time picker, ring screen), then B challenges, C editor sheets, D the rest.
+Each line is one feature; tick when it works on the emulator (AVD `af36`) and on a phone.
+
+### Phase 0: foundations
+- [ ] Slint 1.18.1 app on Android (winit/android-activity) starts, edge-to-edge, correct window background before first paint
+- [ ] `AppCore/Store` loads/saves alarms and settings through the existing `persistence` (no format change)
+- [ ] Translator: JSON locales en/nl/es/fr/de, `t(key)` pushed to Slint, language switch live (no `@tr`)
+- [ ] `Palette` global with all 20 derived tokens from `AppSettings.palette(system_dark)`; light/dark/system bar colours set
+- [ ] Insets global (top/bottom/left/right/keyboard) and font-scale (`text-zoom`) global; re-read on resize/focus
+- [ ] Navigator with push / replace / go_back and the three-tab rule; first-run redirect when `!setup_done`
+- [ ] BackDispatcher (SDK `on_back` to UI thread): top handler first, else route rule, Home = move to background, ignored while ringing
+- [ ] Wide two-pane layout at >= 840 dp (list 400 + detail, empty-pane text), editor restarts per picked alarm
+- [ ] Toast controller: info 3 s, error 10 s, undo 6 s, tap dismiss, top placement while a sheet is open, replace restarts timer
+- [ ] Startup tasks: init_platform, feedback enabled, history prune (5 y), ring_photos prune, DB recovery + unseen outcome notices, 500 ms poll (save failure, ring-end news, firing state)
+- [ ] Debug build command channel replacing `js:` (tap/type/dump) so `devtest/` can run; `snooze:`/`dismiss:`/`hang_ui`/`shortened` kept
+
+### Phase 1: core loop
+Home
+- [ ] Header: next alarm title (day + time) and "in X h Y min" subtitle, "none on" state
+- [ ] Pause button (highlighted when all paused) and Sort button
+- [ ] Problem banner (first reliability problem, tap to Reliability, X to hide for hideable checks)
+- [ ] Quick-alarm chips +5 +10 +15 +30 +60 (nap alarm, auto-delete, toast + undo, limit toast at 50)
+- [ ] Alarm list rows: time (24 h / 12 h), label, when-text priority (snoozed / paused / skip / today / tomorrow / date), day letters in week-start order
+- [ ] Enable switch per card with toast ("rings in ...", "switched off") and undo
+- [ ] Open editor by tapping a card; FAB new alarm (limit check); kebab opens menu sheet
+- [ ] Swipe card sideways to reveal Skip next / Undo skip and Delete (snap), delete with undo toast
+- [ ] Long-press (450 ms) drag to reorder in Own sort, saves order, hidden alarms excluded, auto-scroll near edges
+- [ ] Empty state with icon, texts and Weekdays 07:00 / Weekend 09:00 template buttons
+- [ ] Countdown and labels refresh on the 1.5 s / 15 s tick
+- [ ] BottomNav with active state, no stacking
+Editor basics
+- [ ] Editor modes new / existing / copy-<id> (label "(copy)") / defaults
+- [ ] Big time button + -1 -5 +1 +5 steps with wrap; "rings in" line
+- [ ] Time sheet: two drum wheels (drag, tap neighbours, haptic tick, wrap, 12 h AM/PM) and typed-time field (all accepted formats)
+- [ ] Day chips in week-start order, presets Weekdays / Weekend / Every day, "One date" mode with Date sheet and quick chips
+- [ ] Validation errors (select a day, date in the past), Save builds alarm (sanitize, order, enabled, skip cleared) and toasts "rings in"
+- [ ] Unsaved-changes guard: Discard sheet on back / arrow / system Back
+- [ ] Delete sheet (existing alarms only) with undo toast
+- [ ] Summary rows list with all values and sheets wired (Label, Sound, Vibration, Snooze, Challenges, Ring look, Ring limit, Wake check, Notice, Max brightness switch)
+Ring screen
+- [ ] Full-screen RingFace: date, live clock (5 s), label/fallback, note, insets, big-clock sizes with font-scale compensation
+- [ ] Clock styles Clean / Thin / Bold / Classic / Mono
+- [ ] Snooze button (text with minutes and left; hides at 0; `kit.snooze`, finish activity when no other ring)
+- [ ] Challenge hint ("N challenges" + dots) or gap; Turn off: no challenges = mark solved + dismiss; else pause + run
+- [ ] Max-brightness handling (set / re-apply every 5 s / restore) and `note_ui_up`
+- [ ] Finish: history event, wake-check alarm, one-time switch-off, nav intent (History, or Home for hidden)
+- [ ] Liveness: event-loop round trip drives `ui_heartbeat` every second while ringing
+
+### Phase 2: challenges
+- [ ] ChallengeRun shell: progress text, dots, Exit (practice), time-left bar (real), idle 60 s -> back to ring + resume, any touch resets
+- [ ] Idle clock also reset by shake/step sensor change (+ `note_activity`); scanner-open pauses idle; 180 s camera limit -> resume/pause
+- [ ] Celebration overlay 1800 ms (check pop, confetti 28 or 0 per setting, "i / total" label), haptic pattern on solve
+- [ ] Fallback link + confirm sheet -> 20 x 3 s holds (with back arrow), recorded as HoldButton
+- [ ] Math: keypad, auto-solve on match, max 12 digits, check key shows incorrect, 4 difficulties
+- [ ] Typing: per-character colouring, cursor, word wrap, accuracy readout, soft keyboard textarea, completion rule, incorrect state
+- [ ] Memory: 3x3 / 4x3 grid, display phase timing, input rules, 3 wrongs replay, wrong-cell shake, progress/wrong text
+- [ ] Shake: accelerometer start/stop, 200 ms poll, progress ring
+- [ ] Steps: step counter start/stop, 250 ms poll, progress ring, ACTIVITY_RECOGNITION request
+- [ ] Hold: bubble random position with safe margin, press-and-hold fill, release cancel, pop, haptics, progress
+- [ ] Reaction: countdown, 3 visible targets with spacing, replacement spawn, timer bar, time-out reset, rounds, haptics
+- [ ] Scan: camera scanner thread, states (ready / scanning / wrong / done), any-code vs expected, CAMERA request
+- [ ] Practice route and in-editor Try / Try all (no history, no AlarmKit), empty / done messages, Back = exit
+- [ ] ProgressRing component
+
+### Phase 3: editor sheets
+- [ ] Sheet base: scrim, slide-up, grab handle, title, "?" help toggle, note, top-right action slot, Back closes
+- [ ] Label sheet: label + note fields (100), used-before chips
+- [ ] Sound sheet: radio list (No sound + 10 bundled + custom), Start/Stop preview (15 s auto stop), switch-while-playing
+- [ ] Sound sheet: custom sound rename (inline, empty removes), delete with inline confirm and fallback replacement everywhere, import via picker + error toasts
+- [ ] Sound sheet: volume slider 0-100/5, fade-in chips (Off, 15 s, 30 s, 1, 2, 5 min)
+- [ ] Vibration sheet: Off / Pulse / Steady / Heartbeat chips with immediate preview, sound delay chips (when sound + vibration), sound_mode rules
+- [ ] Snooze sheet: interval stepper (1-60, step 1 to 10 then 5), count stepper (0-10)
+- [ ] Challenges sheet: rows with grip drag-reorder, number, name + summary, Try, remove, Try all, Add (max 10)
+- [ ] Add challenge sheet (8 types with descriptions, permission request on add)
+- [ ] Challenge detail sheet: difficulty chips + example (Math / Memory / Typing), steppers (Shake, Steps, Hold x2, Reaction x3), Scan code field + Scan now, Try, Remove, help text
+- [ ] Ring limit (30 / 60 / 90 / 120 / Forever), Wake check (Off / 3 / 5 / 10), Notice (Off / 5 / 10 / 30 / 60) sheets
+- [ ] Ring look sheet: 8 live backdrop tiles, photo picker (+ other photo), colour row (Auto / dot), clock chips, Preview link
+- [ ] Ring colour sheet: live backdrop, accent swatches, ColorControls with Auto chip
+- [ ] Full-screen ring preview (tap or Back closes, fake buttons)
+- [ ] Defaults editor (no time/repeat), "Use as default" from card menu
+
+### Phase 4: backdrops, themes, polish
+- [ ] Aurora backdrop (3 drifting radial blobs)
+- [ ] Sunrise backdrop (45 s sky + sun rise, orange default)
+- [ ] Waves backdrop (3 rotating rounded squares)
+- [ ] Stars backdrop (3 twinkling dot layers, text-band mask on ring screen)
+- [ ] Rings backdrop (4 expanding rings)
+- [ ] Bubbles backdrop (9 rising bubbles)
+- [ ] Photo backdrop (cover, slow zoom, scrim, forced white text) with unreadable-file fallback
+- [ ] Ring colour triad (+-35 deg neighbours, olive avoidance, sunrise exception) and halo text-shadow on dressed screens
+- [ ] Less-motion switch honoured by every animation (functional timers exempt)
+- [ ] ThemeScreen: preview card, 9 theme tiles (System diagonal split), Your own row, Background / Cards / Text rows with Auto, accent swatches + wheel swatch
+- [ ] Colour editor: wheel (conic + radial, dim overlay, thumb), brightness slider, hex field, swatch presets, adjusted-contrast note, save on release
+- [ ] Palette derivation parity (contrast nudging, tokens) incl. system dark switching and system bar colours
+
+### Phase 5: remaining screens
+- [ ] History: period pills (7), custom days field, empty states, summary stats, streak, bar chart (week / month / year, current highlighted), expandable all stats
+- [ ] History events: rows with outcome colours, expandable details, per-event delete confirm
+- [ ] History / Settings: Delete history sheet (30 d / 90 d / all) with confirm sheet and toast
+- [ ] Settings: reliability banner (problem count), General list (Theme, Language, Time format, Week start, Add widget when available)
+- [ ] Settings: Alarms list (defaults editor entry, minimum volume), Feel switches (touch feedback, less motion, confetti)
+- [ ] Settings sheets: Language (follow phone + 5), Time format, Week start, Volume chips (live `set_min_volume`), About
+- [ ] Settings: Backup save to Downloads / restore from picker (limit, undo, errors)
+- [ ] Settings changes call `refresh_outside_app`; language change also `set_ring_language`
+- [ ] Reliability screen: 10 checks sorted, Fix actions per check, 1.5 s refresh, help text with last ring time, app settings, save ring record
+- [ ] Reliability test alarm: add / pending note / cancel
+- [ ] FirstRun welcome screen (large title, intro, same list, Done sets `setup_done`)
+- [ ] Home sheets: Sort (3), PauseAll (end / tomorrow / week / date), PauseDate, AlarmMenu (Practice, Skip, Duplicate, Pause, Make default, Delete)
+- [ ] Date picker component replacing `<input type=date>` (min date support)
+- [ ] Toast outcome notices and error toasts shown as in 8.5
+- [ ] Haptics through `feedback` (ticks in wheel 8 ms, reorder 15 ms, hold 18/45/130, reaction 15/60/80/130, solve pattern) honouring touch-feedback setting
+- [ ] Accessibility labels / roles on switches, chips (pressed), progress bar, status text; text scaling
+
+### Phase 6: verification
+- [ ] `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test` green (model/core tests untouched)
+- [ ] Emulator `devtest/all.sh` scenarios pass with the new debug channel
+- [ ] Ring path on a phone: kiosk (Back / Home / Recents blocked), locked-boot backup screen, guardian restart on frozen UI
+- [ ] Tablet / fold width: split layout; rotation and font-scale changes handled in place
