@@ -619,11 +619,12 @@ block, so run them on a thread and post the result back to the UI thread.
 
 Milestones are commits on branch `slint-port`; the SDK parts are on `native-host` of mobile-sentinel.
 
+- **M4 (so far)** Home panels: sort (own/time/next ring), pause all (until tomorrow, a week, a date), alarm menu (skip next / undo skip, duplicate, pause until a date, end pause, use for new alarms, delete) with undo toasts; the toast moves to the top while a panel is open; panels scroll when long.
 - **M3** `devtest/compare.sh`: APK size, cold start, PSS, SurfaceFlinger frame times, side by side with the original.
 - **M2** Home list, editor (time wheel sheet, -1/-5/+1/+5, days and presets, label, sound with preview and "add your own", snooze), save, delete, discard guard, ring screen (clock, date, label, note, snooze, turn off), firing poll, heartbeat, history event on dismiss, wake-up check, one-time alarms switching off.
 - **M1** Slint skeleton on a NativeActivity (`libmain.so`), `build.sh` with `build_sentinel --project`, theme from `Palette`, insets, system bars, back button, toast with undo, quick alarms, empty-state templates, alarm switch.
 
-Known gaps right now (all in the checklist below, unticked): challenges (turning off an alarm that has challenges skips them, with a warning in the log), the alarm menu sheet and swipe actions, sort and pause sheets, the reliability banner and screen, history, settings, theme editor, first run, date sheet and typed time, ring looks, widgets, wide layout, the debug command channel for `devtest/`.
+Known gaps right now (all in the checklist below, unticked): challenges (turning off an alarm that has challenges skips them, with a warning in the log), the swipe actions on a card (the menu has the same actions) and drag to reorder, the practice entry of the menu, the reliability banner and screen, history, settings, theme editor, first run, date sheet and typed time, ring looks, widgets, wide layout, the debug command channel for `devtest/`.
 
 ### Comparing
 

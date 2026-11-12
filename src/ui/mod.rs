@@ -15,6 +15,7 @@ slint::include_modules!();
 
 mod editor;
 mod home;
+mod home_sheets;
 mod palette;
 mod ring;
 mod toast;
@@ -30,6 +31,7 @@ pub struct Ctx {
     pub toast_timer: slint::Timer,
     pub timers: RefCell<Vec<slint::Timer>>,
     pub editor: RefCell<Option<editor::EditorState>>,
+    pub home_sheet: RefCell<home_sheets::SheetState>,
     pub preview_timer: slint::Timer,
     pub ring: RefCell<Option<ring::RingState>>,
     pub firing_watch: RefCell<crate::firing_state::FiringWatch>,
@@ -88,6 +90,10 @@ fn back(ctx: &Rc<Ctx>) {
     if ui.get_ringing() {
         return;
     }
+    if ui.get_screen() == 0 && ui.get_home_sheet() != HomeSheet::None {
+        home_sheets::close(ctx);
+        return;
+    }
     match ui.get_screen() {
         1 => editor::back(ctx),
         _ => mobile_sentinel::foregrounding::move_to_back(),
@@ -115,6 +121,7 @@ pub fn run() -> Result<(), slint::PlatformError> {
         toast_timer: slint::Timer::default(),
         timers: RefCell::new(Vec::new()),
         editor: RefCell::new(None),
+        home_sheet: RefCell::new(home_sheets::SheetState::default()),
         preview_timer: slint::Timer::default(),
         ring: RefCell::new(None),
         firing_watch: RefCell::new(crate::firing_state::FiringWatch::default()),
@@ -148,6 +155,13 @@ pub fn run() -> Result<(), slint::PlatformError> {
     on!(on_quick, |ctx, i| home::quick(&ctx, i as usize));
     on!(on_template, |ctx, i| home::template(&ctx, i as usize));
     on!(on_open, |ctx, id| editor::open(&ctx, id.as_str()));
+    on!(on_sort, |ctx| home_sheets::open_sort(&ctx));
+    on!(on_pause_all, |ctx| home_sheets::open_pause_all(&ctx));
+    on!(on_menu, |ctx, id| home_sheets::open_menu(&ctx, id.as_str()));
+    on!(on_hs_close, |ctx| home_sheets::close(&ctx));
+    on!(on_hs_picked, |ctx, i| home_sheets::picked(&ctx, i as usize));
+    on!(on_hs_pause_step, |ctx, d| home_sheets::pause_step(&ctx, d));
+    on!(on_hs_pause_apply, |ctx| home_sheets::pause_apply(&ctx));
     on!(on_create, |ctx| home::create(&ctx));
     on!(on_ed_back, |ctx| editor::back(&ctx));
     on!(on_ed_save, |ctx| editor::save(&ctx));

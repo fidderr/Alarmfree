@@ -1,0 +1,60 @@
+import { Pal, Tr } from "theme.slint";
+import { Icon, IconName } from "components.slint";
+import { Sheet, PrimaryButton, Stepper } from "widgets.slint";
+
+export struct SheetChoice { text: string, selected: bool, danger: bool }
+
+// Which panel is open over the list.
+export enum HomeSheet { none, sort, pause-all, pause-date, menu }
+
+component SheetItem inherits Rectangle {
+    in property <SheetChoice> choice;
+    callback clicked();
+    height: 52px;
+    HorizontalLayout {
+        padding-left: 4px;
+        padding-right: 4px;
+        Text {
+            horizontal-stretch: 1;
+            text: root.choice.text;
+            font-size: 16px;
+            color: root.choice.danger ? Pal.danger : Pal.text;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+        if root.choice.selected: Icon { name: IconName.check; size: 20px; tint: Pal.accent; y: (parent.height - self.height) / 2; }
+    }
+    TouchArea { clicked => { root.clicked(); } }
+}
+
+// The panels over the alarm list: the order, pausing, and what else can be done to one alarm.
+export component HomeSheets inherits Rectangle {
+    in property <HomeSheet> sheet;
+    in property <string> title;
+    in property <[SheetChoice]> choices;
+    in property <string> pause-date-text;
+    callback close();
+    callback picked(int);
+    callback pause-step(int);
+    callback pause-apply();
+    if root.sheet == HomeSheet.sort || root.sheet == HomeSheet.pause-all || root.sheet == HomeSheet.menu: Sheet {
+        title: root.title;
+        close => { root.close(); }
+        for choice[i] in root.choices: SheetItem {
+            choice: choice;
+            clicked => { root.picked(i); }
+        }
+    }
+    if root.sheet == HomeSheet.pause-date: Sheet {
+        title: Tr.t("home.pause_date");
+        close => { root.close(); }
+        Text { text: Tr.t("home.pause_date_note"); font-size: 14px; color: Pal.text2; wrap: word-wrap; }
+        Stepper {
+            title: "";
+            value: root.pause-date-text;
+            less => { root.pause-step(-1); }
+            more => { root.pause-step(1); }
+        }
+        PrimaryButton { text: Tr.t("home.pause_apply"); clicked => { root.pause-apply(); } }
+    }
+}

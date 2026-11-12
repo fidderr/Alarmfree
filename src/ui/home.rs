@@ -289,3 +289,39 @@ pub fn create(ctx: &Rc<Ctx>) {
         super::editor::open(ctx, "new");
     }
 }
+
+pub fn toggle_skip(ctx: &Rc<Ctx>, id: &str, next: Option<i64>, skip_active: bool) {
+    let message = {
+        let tr = ctx.tr.borrow();
+        if skip_active {
+            t(&tr, "home.skip_undone")
+        } else {
+            t(&tr, "home.skipped")
+        }
+    };
+    change(ctx, message, &mut |list| {
+        // Skipping remembers the occurrence to skip (the next ring); undoing clears it.
+        if let Some(alarm) = list.iter_mut().find(|a| a.id == id) {
+            alarm.skip_until_ms = if skip_active { None } else { next };
+        }
+    });
+}
+
+pub fn delete_alarm(ctx: &Rc<Ctx>, id: &str) {
+    let name = ctx
+        .alarms
+        .borrow()
+        .iter()
+        .find(|a| a.id == id)
+        .map(|a| a.label.clone())
+        .unwrap_or_default();
+    let message = {
+        let tr = ctx.tr.borrow();
+        if name.is_empty() {
+            t(&tr, "home.deleted_plain")
+        } else {
+            t(&tr, "home.deleted").replace("{alarm}", &name)
+        }
+    };
+    change(ctx, message, &mut |list| list.retain(|a| a.id != id));
+}
