@@ -42,6 +42,8 @@ pub struct Panel {
     pub chips: Vec<(String, Act)>,
     pub chip_selected: i32,
     pub done: Option<(String, Act)>,
+    /// Shows Slint's attribution (the About panel).
+    pub about: bool,
 }
 
 pub fn show(ctx: &Ctx, panel: Panel) {
@@ -79,6 +81,7 @@ pub fn show(ctx: &Ctx, panel: Panel) {
     ui.set_pn_choices(ModelRc::from(Rc::new(VecModel::from(choices))));
     ui.set_pn_chips(ModelRc::from(Rc::new(VecModel::from(chip_labels))));
     ui.set_pn_chip_selected(panel.chip_selected);
+    ui.set_pn_about(panel.about);
     ui.set_panel_open(true);
 }
 

@@ -308,6 +308,7 @@ fn open_about(ctx: &Ctx) {
             line: t(&tr, "app.tagline"),
             chip_selected: -1,
             done: Some((t(&tr, "action.done"), Act::Close)),
+            about: true,
             ..Panel::default()
         },
     );

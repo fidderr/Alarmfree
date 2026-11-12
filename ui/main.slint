@@ -76,6 +76,7 @@ export component MainWindow inherits Window {
     in property <[SheetChoice]> pn-choices;
     in property <[string]> pn-chips;
     in property <int> pn-chip-selected;
+    in property <bool> pn-about;
     callback pn-close();
     callback pn-picked(int);
     callback pn-chip-picked(int);
@@ -229,6 +230,7 @@ export component MainWindow inherits Window {
         choices: root.pn-choices;
         chips: root.pn-chips;
         chip-selected: root.pn-chip-selected;
+        about: root.pn-about;
         close => { root.panel-open = false; root.pn-close(); }
         picked(i) => { root.pn-picked(i); }
         chip-picked(i) => { root.pn-chip-picked(i); }

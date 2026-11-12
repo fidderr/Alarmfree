@@ -1,3 +1,4 @@
+import { AboutSlint } from "std-widgets.slint";
 import { Pal } from "theme.slint";
 import { Sheet, PrimaryButton } from "widgets.slint";
 import { SheetChoice } from "home_sheets.slint";
@@ -31,6 +32,8 @@ export component PanelSheet inherits Rectangle {
     in property <[SheetChoice]> choices;
     in property <[string]> chips;
     in property <int> chip-selected;
+    // The About sheet: the attribution Slint's licence asks for.
+    in property <bool> about;
     callback close();
     callback picked(int);
     callback chip-picked(int);
@@ -71,6 +74,17 @@ export component PanelSheet inherits Rectangle {
             font-size: 14px;
             color: Pal.text;
             wrap: word-wrap;
+        }
+        if root.about: VerticalLayout {
+            spacing: 8px;
+            AboutSlint { height: 120px; }
+            Text {
+                text: "Made with Slint (slint.dev), used under the Slint Royalty-Free license.";
+                font-size: 12px;
+                color: Pal.text2;
+                wrap: word-wrap;
+                horizontal-alignment: center;
+            }
         }
         if root.done-text != "": VerticalLayout {
             padding-top: 16px;
