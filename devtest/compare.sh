@@ -154,10 +154,21 @@ seed_alarms() { # pkg act
   shell am start -W -n "$1/$2" > /dev/null
   sleep 4
   local i
-  for ((i = 0; i < 14; i++)); do
-    shell input tap 216 385
-    sleep 0.6
-  done
+  if [ "$1" = "$SLINT_PKG" ]; then
+    # The Slint copy has the reliability banner and, once there is an alarm, the "next alarm"
+    # sub line above the quick row, so the pill sits lower; it also needs time to rebuild the list.
+    shell input tap 216 500
+    sleep 1.5
+    for ((i = 1; i < 14; i++)); do
+      shell input tap 216 564
+      sleep 1.5
+    done
+  else
+    for ((i = 0; i < 14; i++)); do
+      shell input tap 216 385
+      sleep 0.6
+    done
+  fi
   sleep 1
 }
 
@@ -205,6 +216,14 @@ read -r O_TOT O_JANK O_P50 O_P90 O_P95 O_P99 <<< "$(scroll_frames $ORIG_PKG $ORI
 echo "measuring the Slint copy..." >&2
 shell pm clear $SLINT_PKG > /dev/null
 for p in POST_NOTIFICATIONS ACTIVITY_RECOGNITION CAMERA; do dev shell pm grant $SLINT_PKG android.permission.$p > /dev/null 2>&1 || true; done
+# Past the first run page (Get started, then back out of the reliability screen it opens).
+shell am start -W -n "$SLINT_PKG/$SLINT_ACT" > /dev/null
+sleep 5
+shell input tap 540 2164
+sleep 2
+shell input tap 78 146
+sleep 2
+stop_all
 S_START=$(cold_start $SLINT_PKG $SLINT_ACT)
 read -r S_M1 S_M2 S_WV <<< "$(measure_memory $SLINT_PKG $SLINT_ACT)"
 read -r S_TOT S_JANK S_P50 S_P90 S_P95 S_P99 <<< "$(scroll_frames $SLINT_PKG $SLINT_ACT)"

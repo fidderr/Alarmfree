@@ -62,10 +62,19 @@ component AlarmCard inherits Rectangle {
         height: parent.height;
         background: root.lifted ? Pal.surface2 : Pal.surface;
         border-radius: root.lifted ? 14px : 0px;
-        drop-shadow-blur: root.lifted ? 24px : 0px;
-        drop-shadow-offset-y: 8px;
-        drop-shadow-color: #00000066;
         animate x { duration: root.mode == 1 ? 0ms : 180ms; easing: ease-out; }
+        // The shadow of a lifted card only exists while it is lifted: a shadow on every card
+        // makes each one an offscreen layer that is redrawn while the list scrolls.
+        if root.lifted: Rectangle {
+            width: parent.width;
+            height: parent.height;
+            z: -1;
+            border-radius: 14px;
+            background: Pal.surface2;
+            drop-shadow-blur: 24px;
+            drop-shadow-offset-y: 8px;
+            drop-shadow-color: #00000066;
+        }
         HorizontalLayout {
             padding-right: 6px;
             Rectangle {

@@ -657,86 +657,102 @@ Run on the emulator (Android 12, x86_64, release builds, Slint at M2):
 
 The Slint copy has fewer screens than the original at this point, so size and memory will grow as the port does.
 
+## Parity summary
+
+Audit of the checklist against the original (`2f65c82`) at `eb15e66`: 70 lines `[x]`, 26 lines `[~]`, 11 lines `[ ]` (the `[ ]` count
+includes the gaps found by the audit). Every screen, sheet, setting and challenge of the original exists in the Slint port;
+what is not at parity yet:
+- Missing behaviour: navigation to History (Home for a hidden alarm) after a ring ends; wheel haptic tick (8 ms); "?" help on
+  the Sort and Pause-all sheets; Android font-scale compensation of the big clocks; OS reduce-animations preference; less motion
+  on the card swipe and reorder shift; `keep_event_loop_awake` call at start; accessibility labels and roles (none at all).
+- Ported but never tried: Photo backdrop and the photo picker, real code scan, step counter, 180 s camera limit, typing to
+  completion, real sound and vibration, max-brightness on the ring, DB-recovery and unseen-outcome toasts, validation error
+  texts, the colour wheel with a finger, system dark switch, `hang_ui` guardian restart, auto-scroll while dragging a card.
+- Not done at all: `devtest/all.sh` and `matrix.sh` scenarios (need rewriting against `ui:snapshot`), everything on a phone
+  (kiosk ring path, locked-boot screen), tablet AVD, fmt/clippy/test re-run after the audit.
+
 ## 9. Port checklist (suggested order)
 
 Order: A core loop (home list, editor basics + time picker, ring screen), then B challenges, C editor sheets, D the rest.
-Each line is one feature; tick when it works on the emulator (AVD `af36`) and on a phone.
+Legend: `[x]` ported and exercised on emulator-5556 (status sections below) or covered by tests; `[~]` ported, but part of it is
+only compile-checked or not tried (the note says what); `[ ]` missing. Audited against the original (`2f65c82`) on branch
+`slint-port` at `eb15e66`. Nothing here has been tried on a phone yet.
 
 ### Phase 0: foundations
-- [ ] Slint 1.18.1 app on Android (winit/android-activity) starts, edge-to-edge, correct window background before first paint
-- [ ] `AppCore/Store` loads/saves alarms and settings through the existing `persistence` (no format change)
-- [ ] Translator: JSON locales en/nl/es/fr/de, `t(key)` pushed to Slint, language switch live (no `@tr`)
-- [ ] `Palette` global with all 20 derived tokens from `AppSettings.palette(system_dark)`; light/dark/system bar colours set
-- [ ] Insets global (top/bottom/left/right/keyboard) and font-scale (`text-zoom`) global; re-read on resize/focus
-- [ ] Navigator with push / replace / go_back and the three-tab rule; first-run redirect when `!setup_done`
-- [ ] BackDispatcher (SDK `on_back` to UI thread): top handler first, else route rule, Home = move to background, ignored while ringing
-- [x] Wide two-pane layout at >= 840 dp (list 400 + detail, empty-pane text), editor restarts per picked alarm
-- [ ] Toast controller: info 3 s, error 10 s, undo 6 s, tap dismiss, top placement while a sheet is open, replace restarts timer
-- [ ] Startup tasks: init_platform, feedback enabled, history prune (5 y), ring_photos prune, DB recovery + unseen outcome notices, 500 ms poll (save failure, ring-end news, firing state)
+- [x] Slint 1.18.1 app on Android (NativeActivity) starts, edge-to-edge, correct window background before first paint (`start_background`)
+- [x] `AppCore/Store` loads/saves alarms and settings through the existing `persistence` (no format change)
+- [x] Translator: JSON locales en/nl/es/fr/de, `t(key)` pushed to Slint, language switch live (no `@tr`) (German checked on all screens, step 4)
+- [x] `Palette` global (`Pal`) with all 20 derived tokens from `AppSettings.palette(system_dark)`; light/dark/system bar colours set
+- [~] Insets global (top/bottom/left/right/keyboard) done; font-scale (`text-zoom`) global NOT ported: the original divided the big clocks by the measured Android font scale (`--text-zoom`); Slint text is not scaled by the system font size and no compensation exists (unverified with a large font setting)
+- [x] Navigator with push / replace / go_back and the three-tab rule; first-run redirect when `!setup_done` (screen index + `editor_trail`; first run seen in step 4)
+- [x] BackDispatcher (SDK `on_back` to UI thread): top handler first, else route rule, Home = move to background, ignored while ringing (`ui::back`)
+- [x] Wide two-pane layout at >= 840 dp (list 400 + detail, empty-pane text), editor restarts per picked alarm (seen with a size override, no tablet AVD)
+- [x] Toast controller: info 3 s, error 10 s, undo 6 s, tap dismiss, top placement while a sheet is open, replace restarts timer
+- [~] Startup tasks: `init_platform`, feedback enabled, history prune (5 y), ring_photos prune, DB recovery + unseen outcome notices, 500 ms poll (save failure, ring-end news, firing state) are all in `ui::run`/`ring::poll`; the poll was seen working, but the DB recovered / volatile / unreadable toasts and the unseen-outcome toasts were never triggered; `mobile_sentinel::keep_event_loop_awake()` (called by the original at start) is NOT called in the port
 - [x] Debug build command channel replacing `js:` (tap/type/dump) so `devtest/` can run; `snooze:`/`dismiss:`/`hang_ui`/`shortened` kept (ui: commands + devtest/slint_smoke.sh; the old matrix scenarios are not ported)
 
 ### Phase 1: core loop
 Home
-- [ ] Header: next alarm title (day + time) and "in X h Y min" subtitle, "none on" state
-- [ ] Pause button (highlighted when all paused) and Sort button
-- [ ] Problem banner (first reliability problem, tap to Reliability, X to hide for hideable checks)
-- [ ] Quick-alarm chips +5 +10 +15 +30 +60 (nap alarm, auto-delete, toast + undo, limit toast at 50)
-- [ ] Alarm list rows: time (24 h / 12 h), label, when-text priority (snoozed / paused / skip / today / tomorrow / date), day letters in week-start order
-- [ ] Enable switch per card with toast ("rings in ...", "switched off") and undo
-- [ ] Open editor by tapping a card; FAB new alarm (limit check); kebab opens menu sheet
+- [x] Header: next alarm title (day + time) and "in X h Y min" subtitle, "none on" state
+- [x] Pause button (highlighted when all paused) and Sort button
+- [x] Problem banner (first reliability problem, tap to Reliability, X to hide for hideable checks) (step 3)
+- [x] Quick-alarm chips +5 +10 +15 +30 +60 (nap alarm, auto-delete, toast + undo, limit toast at 50)
+- [x] Alarm list rows: time (24 h / 12 h), label, when-text priority (snoozed / paused / skip / today / tomorrow / date), day letters in week-start order (`when_text` is a copy of the original)
+- [x] Enable switch per card with toast ("rings in ...", "switched off") and undo
+- [x] Open editor by tapping a card; FAB new alarm (limit check); kebab opens menu sheet
 - [x] Swipe card sideways to reveal Skip next / Undo skip and Delete (snap), delete with undo toast (seen: Delete reveal and snap; Skip action not tried by hand)
 - [x] Long-press (450 ms) drag to reorder in Own sort, saves order, hidden alarms excluded, auto-scroll near edges (seen: lift, neighbours shift, drop saved; auto-scroll not tried)
-- [ ] Empty state with icon, texts and Weekdays 07:00 / Weekend 09:00 template buttons
-- [ ] Countdown and labels refresh on the 1.5 s / 15 s tick
-- [ ] BottomNav with active state, no stacking
+- [x] Empty state with icon, texts and Weekdays 07:00 / Weekend 09:00 template buttons
+- [~] Countdown and labels refresh on the 1.5 s / 15 s tick (timers in `ui::run` call `home::refresh`; the tick itself was not watched over a minute change)
+- [x] BottomNav with active state, no stacking
 Editor basics
-- [ ] Editor modes new / existing / copy-<id> (label "(copy)") / defaults
-- [ ] Big time button + -1 -5 +1 +5 steps with wrap; "rings in" line
-- [ ] Time sheet: two drum wheels (drag, tap neighbours, haptic tick, wrap, 12 h AM/PM) and typed-time field (all accepted formats)
-- [ ] Day chips in week-start order, presets Weekdays / Weekend / Every day, "One date" mode with Date sheet and quick chips
-- [ ] Validation errors (select a day, date in the past), Save builds alarm (sanitize, order, enabled, skip cleared) and toasts "rings in"
-- [ ] Unsaved-changes guard: Discard sheet on back / arrow / system Back
-- [ ] Delete sheet (existing alarms only) with undo toast
-- [ ] Summary rows list with all values and sheets wired (Label, Sound, Vibration, Snooze, Challenges, Ring look, Ring limit, Wake check, Notice, Max brightness switch)
+- [x] Editor modes new / existing / copy-<id> (label "(copy)") / defaults (copy from the alarm menu "Duplicate")
+- [x] Big time button + -1 -5 +1 +5 steps with wrap; "rings in" line
+- [~] Time sheet: two drum wheels (drag, tap neighbours, wrap, 12 h AM/PM) and typed-time field (`text::parse_typed_time`, tested); the haptic tick (8 ms) per wheel step of the original is MISSING; wheel finger drag only tried with the emulator mouse
+- [x] Day chips in week-start order, presets Weekdays / Weekend / Every day, "One date" mode with Date sheet and quick chips (the date sheet is a month grid, the original used the system date input)
+- [~] Validation errors (select a day, date in the past), Save builds alarm (sanitize, order, enabled, skip cleared) and toasts "rings in": save was exercised, the two error texts were never triggered by hand (code is a copy of the original)
+- [x] Unsaved-changes guard: Discard sheet on back / arrow / system Back
+- [x] Delete sheet (existing alarms only) with undo toast
+- [x] Summary rows list with all values and sheets wired (Label, Sound, Vibration, Snooze, Challenges, Ring look, Ring limit, Wake check, Notice, Max brightness switch)
 Ring screen
-- [ ] Full-screen RingFace: date, live clock (5 s), label/fallback, note, insets, big-clock sizes with font-scale compensation
-- [ ] Clock styles Clean / Thin / Bold / Classic / Mono
-- [ ] Snooze button (text with minutes and left; hides at 0; `kit.snooze`, finish activity when no other ring)
-- [~] Challenge hint ("N challenges" + dots) or gap; Turn off: no challenges = mark solved + dismiss; else pause + run (turn-off flow done and checked; the dots of the hint are not drawn)
-- [ ] Max-brightness handling (set / re-apply every 5 s / restore) and `note_ui_up`
-- [ ] Finish: history event, wake-check alarm, one-time switch-off, nav intent (History, or Home for hidden)
-- [ ] Liveness: event-loop round trip drives `ui_heartbeat` every second while ringing
+- [~] Full-screen RingFace: date, live clock (5 s), label/fallback, note, insets, big-clock sizes; the clock is NOT divided by the system font scale (see Phase 0)
+- [x] Clock styles Clean / Thin / Bold / Classic / Mono (one screenshot per style; fonts by name `Noto Serif` / `Droid Sans Mono`)
+- [x] Snooze button (text with minutes and left; hides at 0; `kit.snooze`, finish activity when no other ring) (snooze in `devtest/slint_smoke.sh`)
+- [x] Challenge hint ("N challenges" + one dot per challenge when more than one) or 48 px gap; Turn off: no challenges = mark solved + dismiss; else pause + run (step 5a)
+- [~] Max-brightness handling (set / re-apply every 5 s / restore) and `note_ui_up`: written like the original (`ring::start`, `ring::poll`, `ring::stop`), the brightness itself was not observed on the emulator
+- [~] Finish: history event, wake-check alarm, one-time switch-off done and seen; the navigation afterwards is MISSING: the original opened History (Home for a hidden alarm) once the ring ended, the port stays on the screen that was open under the ring
+- [~] Liveness: `ui_heartbeat` is called on the UI thread every 500 ms poll while ringing (the original did a JS round trip every 1 s); `hang_ui` (guardian restart on a frozen UI) was not run
 
 ### Phase 2: challenges
 - [x] ChallengeRun shell: progress text, dots, Exit (practice), time-left bar (real), idle 60 s -> back to ring + resume, any touch resets
-- [x] Idle clock also reset by shake/step sensor change (+ `note_activity`); scanner-open pauses idle; 180 s camera limit -> resume/pause
+- [~] Idle clock also reset by shake/step sensor change (+ `note_activity`); scanner-open pauses idle; 180 s camera limit -> resume/pause (code only; the 180 s limit and the sensor resets were not exercised)
 - [x] Celebration overlay 1800 ms (check pop, confetti 28 or 0 per setting, "i / total" label), haptic pattern on solve
 - [x] Fallback link + confirm sheet -> 20 x 3 s holds (with back arrow), recorded as HoldButton
 - [x] Math: keypad, auto-solve on match, max 12 digits, check key shows incorrect, 4 difficulties
-- [x] Typing: per-character colouring, cursor, word wrap, accuracy readout, soft keyboard textarea, completion rule, incorrect state
+- [~] Typing: per-character colouring, cursor, word wrap, accuracy readout, soft keyboard textarea, incorrect state seen; typing to completion not seen; no autocorrect-off flag in Slint
 - [x] Memory: 3x3 / 4x3 grid, display phase timing, input rules, 3 wrongs replay, wrong-cell shake, progress/wrong text
-- [x] Shake: accelerometer start/stop, 200 ms poll, progress ring
-- [~] Steps: step counter start/stop, 250 ms poll, progress ring, ACTIVITY_RECOGNITION request
-- [x] Hold: bubble random position with safe margin, press-and-hold fill, release cancel, pop, haptics, progress
-- [x] Reaction: countdown, 3 visible targets with spacing, replacement spawn, timer bar, time-out reset, rounds, haptics
-- [~] Scan: camera scanner thread, states (ready / scanning / wrong / done), any-code vs expected, CAMERA request
+- [x] Shake: accelerometer start/stop, 200 ms poll, progress ring (virtual sensor)
+- [~] Steps: step counter start/stop, 250 ms poll, progress ring, ACTIVITY_RECOGNITION request (compile-checked only; the step sensor was never fed, status "not verified")
+- [x] Hold: bubble random position with safe margin, press-and-hold fill, release cancel, pop, haptics, progress (haptics themselves not observable)
+- [x] Reaction: countdown, 3 visible targets with spacing, replacement spawn, timer bar, time-out reset, rounds, haptics (haptics not observable)
+- [~] Scan: camera scanner thread, states (ready / scanning / wrong / done), any-code vs expected, CAMERA request (screen and permission prompt seen; no real code was ever scanned)
 - [x] Practice route and in-editor Try / Try all (no history, no AlarmKit), empty / done messages, Back = exit
 - [x] ProgressRing component
 
 ### Phase 3: editor sheets
-- [ ] Sheet base: scrim, slide-up, grab handle, title, "?" help toggle, note, top-right action slot, Back closes
+- [x] Sheet base: scrim, slide-up, grab handle, title, "?" help toggle, note, top-right action slot, Back closes
 - [x] Label sheet: label + note fields (100), used-before chips
-- [x] Sound sheet: radio list (No sound + 10 bundled + custom), Start/Stop preview (15 s auto stop), switch-while-playing
+- [~] Sound sheet: radio list (No sound + 10 bundled + custom), Start/Stop preview (15 s auto stop), switch-while-playing (playback of the preview not verified by ear)
 - [x] Sound sheet: custom sound rename (inline, empty removes), delete with inline confirm and fallback replacement everywhere, import via picker + error toasts
 - [x] Sound sheet: volume slider 0-100/5, fade-in chips (Off, 15 s, 30 s, 1, 2, 5 min)
-- [x] Vibration sheet: Off / Pulse / Steady / Heartbeat chips with immediate preview, sound delay chips (when sound + vibration), sound_mode rules
+- [~] Vibration sheet: Off / Pulse / Steady / Heartbeat chips with immediate preview, sound delay chips (when sound + vibration), sound_mode rules (real vibration feel not verified)
 - [x] Snooze sheet: interval stepper (1-60, step 1 to 10 then 5), count stepper (0-10)
 - [x] Challenges sheet: rows with grip drag-reorder, number, name + summary, Try, remove, Try all, Add (max 10)
 - [x] Add challenge sheet (8 types with descriptions, permission request on add)
 - [x] Challenge detail sheet: difficulty chips + example (Math / Memory / Typing), steppers (Shake, Steps, Hold x2, Reaction x3), Scan code field + Scan now, Try, Remove, help text
-- [x] Ring limit (30 / 60 / 90 / 120 / Forever), Wake check (Off / 3 / 5 / 10), Notice (Off / 5 / 10 / 30 / 60) sheets
-- [x] Ring look sheet: 8 live backdrop tiles, photo picker (+ other photo), colour row (Auto / dot), clock chips, Preview link
-- [x] Ring colour sheet: live backdrop, accent swatches, ColorControls with Auto chip
+- [x] Ring limit (30 / 60 / 90 / 120 / Forever), Wake check (Off / 3 / 5 / 10), Notice (Off / 5 / 10 / 30 / 60) sheets (a notice 10 minutes before a one-time alarm was seen)
+- [~] Ring look sheet: 8 live backdrop tiles, colour row (Auto / dot), clock chips, Preview link seen; photo picker (+ other photo) never tried
+- [~] Ring colour sheet: live backdrop, accent swatches, ColorControls with Auto chip (wheel tapped, never dragged with a finger)
 - [x] Full-screen ring preview (tap or Back closes, fake buttons)
 - [x] Defaults editor (no time/repeat), "Use as default" from card menu
 
@@ -747,36 +763,48 @@ Ring screen
 - [x] Stars backdrop (3 twinkling dot layers, text-band mask on ring screen)
 - [x] Rings backdrop (4 expanding rings)
 - [x] Bubbles backdrop (9 rising bubbles)
-- [ ] Photo backdrop (cover, slow zoom, scrim, forced white text) with unreadable-file fallback
+- [~] Photo backdrop (cover, slow zoom, scrim, forced white text) with unreadable-file fallback: written (`look::load_photo`, `photo-drift`), never shown because the picker was not used
 - [x] Ring colour triad (+-35 deg neighbours, olive avoidance, sunrise exception) and halo text-shadow on dressed screens
-- [ ] Less-motion switch honoured by every animation (functional timers exempt)
-- [ ] ThemeScreen: preview card, 9 theme tiles (System diagonal split), Your own row, Background / Cards / Text rows with Auto, accent swatches + wheel swatch
-- [ ] Colour editor: wheel (conic + radial, dim overlay, thumb), brightness slider, hex field, swatch presets, adjusted-contrast note, save on release
-- [ ] Palette derivation parity (contrast nudging, tokens) incl. system dark switching and system bar colours
+- [~] Less-motion switch honoured by every animation (functional timers exempt): backdrops, wheels, sheets, switches, celebration use `Motion`; the card swipe snap (180 ms) and the reorder shift (150 ms) in `ui/home.slint` do not; the OS "reduce animations" preference (`prefers-reduced-motion` in the original) is not read; not checked visually
+- [x] ThemeScreen: preview card, 9 theme tiles (System diagonal split), Your own row, Background / Cards / Text rows with Auto, accent swatches + wheel swatch
+- [~] Colour editor: wheel (conic + radial, dim overlay, thumb), brightness slider, hex field, swatch presets, adjusted-contrast note, save on release (finger drag on the wheel not tried, only taps)
+- [~] Palette derivation parity (contrast nudging, tokens) incl. system dark switching and system bar colours: derivation is the unchanged `models` code and bars were checked on Mist, Sand and a custom pink; the live switch when the phone goes dark (2 s timer in `ui::run`) was not tried
 
 ### Phase 5: remaining screens
-- [x] History: period pills (7), custom days field, empty states, summary stats, streak, bar chart (week / month / year, current highlighted), expandable all stats
+- [x] History: period pills (7), custom days field, empty states, summary stats, streak, bar chart (week / month / year, current highlighted), expandable all stats (custom days typing not tried by hand)
 - [x] History events: rows with outcome colours, expandable details, per-event delete confirm
 - [x] History / Settings: Delete history sheet (30 d / 90 d / all) with confirm sheet and toast
-- [ ] Settings: reliability banner (problem count) and Theme row: left out until the Reliability and Theme screens are ported (no dead rows); General list (Language, Time format, Week start, Add widget) done
+- [x] Settings: reliability banner (problem count) and Theme row (step 3 and 4); General list (Language, Time format, Week start, Add widget) done
 - [x] Settings: Alarms list (defaults editor entry, minimum volume), Feel switches (touch feedback, less motion, confetti)
-- [x] Settings sheets: Language (follow phone + 5), Time format, Week start, Volume chips (live `set_min_volume`), About
+- [x] Settings sheets: Language (follow phone + 5), Time format, Week start, Volume chips (live `set_min_volume`, not tried on a phone), About
 - [x] Settings: Backup save to Downloads / restore from picker (limit, undo, errors)
 - [x] Settings changes call `refresh_outside_app`; language change also `set_ring_language`
-- [ ] Reliability screen: 10 checks sorted, Fix actions per check, 1.5 s refresh, help text with last ring time, app settings, save ring record
-- [ ] Reliability test alarm: add / pending note / cancel
-- [ ] FirstRun welcome screen (large title, intro, same list, Done sets `setup_done`)
-- [ ] Home sheets: Sort (3), PauseAll (end / tomorrow / week / date), PauseDate, AlarmMenu (Practice, Skip, Duplicate, Pause, Make default, Delete)
-- [ ] Date picker component replacing `<input type=date>` (min date support)
-- [ ] Toast outcome notices and error toasts shown as in 8.5
-- [ ] Haptics through `feedback` (ticks in wheel 8 ms, reorder 15 ms, hold 18/45/130, reaction 15/60/80/130, solve pattern) honouring touch-feedback setting
-- [ ] Accessibility labels / roles on switches, chips (pressed), progress bar, status text; text scaling
+- [x] Reliability screen: 10 checks sorted, Fix actions per check, 1.5 s refresh, help text with last ring time, app settings, save ring record (Fix buttons not tried on a phone)
+- [x] Reliability test alarm: add / pending note / cancel
+- [x] FirstRun welcome screen (large title, intro, same list, Done sets `setup_done`)
+- [~] Home sheets: Sort (3), PauseAll (end / tomorrow / week / date), PauseDate, AlarmMenu (Practice, Skip, Duplicate, Pause, Make default, Delete) all done and seen; the "?" help of the Sort and Pause-all sheets (`home.sort_note`, `home.pause_note`) is MISSING (only the pause-date sheet has its note)
+- [x] Date picker component replacing `<input type=date>` (min date support)
+- [~] Toast outcome notices and error toasts shown as in 8.5 (code is a copy; see the Phase 0 startup line for what was never triggered)
+- [~] Haptics through `feedback` (reorder 15 ms, hold 18/45/130, reaction 15/60/80/130, solve pattern, touch-feedback switch honoured) done; the wheel tick (8 ms) is MISSING; haptics are not observable on an emulator
+- [ ] Accessibility labels / roles on switches, chips (pressed), progress bar, status text; text scaling: none of the original's aria labels exist in the Slint UI (no `accessible-*` property anywhere in `ui/`)
 
 ### Phase 6: verification
-- [ ] `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test` green (model/core tests untouched)
-- [ ] Emulator `devtest/all.sh` scenarios pass with the new debug channel
+- [~] `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test` green (model/core tests untouched): ran before each commit per the working rules, not re-run by this audit
+- [ ] Emulator `devtest/all.sh` scenarios pass with the new debug channel (only `devtest/slint_smoke.sh` passes; `matrix.sh`/`all.sh` still read the page with `js:` and need rewriting)
 - [ ] Ring path on a phone: kiosk (Back / Home / Recents blocked), locked-boot backup screen, guardian restart on frozen UI
-- [ ] Tablet / fold width: split layout; rotation and font-scale changes handled in place
+- [~] Tablet / fold width: split layout seen with `wm size` override; rotation and font-scale changes in place not tried
+
+### Gaps found by the audit
+Original behaviour with no line (or a wrong line) above, found by reading `2f65c82` screens against the port:
+- [ ] After a ring ends (turned off, challenge solved) the original navigated to History (Home for a hidden alarm) through `nav_intent`; the port stays on whatever screen was open under the ring
+- [ ] `mobile_sentinel::keep_event_loop_awake()` is called once at start by the original (`app.rs`); no call in the port (check whether the native host does it itself before relying on it)
+- [ ] Haptic tick (8 ms) per step on the time wheels (`time_picker.rs`)
+- [ ] "?" help text on the Sort sheet (`home.sort_note`) and the Pause-all sheet (`home.pause_note`)
+- [ ] Accessibility: aria labels for every icon button, switch role/state, chart label (`history.chart_aria`), progress label (`challenge.time_left`), reliability ok/attention icons (`reliability.ok`, `reliability.attention`), theme code and custom accent (`theme.code`, `accent.custom`); screen readers read nothing useful
+- [ ] OS "reduce animations" preference (`prefers-reduced-motion`) forced the original's animations off as well as the in-app switch; the port reads only the in-app switch
+- [ ] Less motion does not reach the card swipe snap and reorder shift in `ui/home.slint`
+- [ ] Big clocks (editor time, ring clock) are not compensated for the Android font scale
+Covered by shared, unchanged logic (not gaps): `HISTORY_KEEP_DAYS` prune and ring photo prune (`ui::run`), `give_notice_to_all` and reminder taps (`platform.rs`, run by `init_platform`), home-widget refresh (`persistence::save_*` and settings call `refresh_outside_app`), sound names, notify-before, ring photo import (`ring_photos::import`, error toast `ring.photo_failed`).
 
 
 ## Status: challenges and practice (step 1 of the port)
@@ -869,3 +897,6 @@ Done and seen on emulator-5556 (`wm size 1800x2400` + `wm density 280`, reset af
 - Devtest channel: `ui:screen`, `ui:snapshot`, `ui:press:<callback>:<arg>` (documented in `src/debug_hooks.rs`, debug builds only,
   `src/ui/debug.rs`) and `devtest/slint_smoke.sh` (alarm, widget text, ring, snooze, ring again, turn off: ALL PASS on emulator-5556).
   The old `matrix.sh`/`all.sh` scenarios read the page with `js:` and every one of them needs rewriting against `ui:snapshot`.
+
+## Scroll measurement note
+`devtest/compare.sh` used to measure the first-run page, not the list: the Slint copy starts on the first-run screen, and its quick pill sits lower (reliability banner, "next alarm" sub line). The script now gets past the first-run page and taps the right pill, with 14 alarms on the list. On emulator-5556 (release, x86_64): before the shadow change 908 frames, p50 32.9 ms, 706 janky; after 1058 frames, p50 31.4 ms, 607 janky. A plain screen (Settings) scrolls with the same p50 of about 30 ms, so the floor is the emulator's input rate, not the list. A drop shadow on every card (blur 0 when not lifted) made each card an offscreen layer; the shadow now exists only on the lifted card. Idle: 0 frames in 4 s on Home.
