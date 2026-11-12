@@ -13,8 +13,10 @@ use crate::models::{AlarmData, AppSettings};
 
 slint::include_modules!();
 
+mod editor;
 mod home;
 mod palette;
+mod ring;
 mod toast;
 
 /// Everything the screens share. Only the UI thread touches it.
@@ -27,6 +29,23 @@ pub struct Ctx {
     pub toast_undo: RefCell<Option<Vec<AlarmData>>>,
     pub toast_timer: slint::Timer,
     pub timers: RefCell<Vec<slint::Timer>>,
+    pub editor: RefCell<Option<editor::EditorState>>,
+    pub preview_timer: slint::Timer,
+    pub ring: RefCell<Option<ring::RingState>>,
+    pub firing_watch: RefCell<crate::firing_state::FiringWatch>,
+    pub ticks: Cell<u32>,
+}
+
+thread_local! {
+    /// For what comes back to the UI thread from another one.
+    static CTX: RefCell<std::rc::Weak<Ctx>> = const { RefCell::new(std::rc::Weak::new()) };
+}
+
+/// Run `f` with the shared state, on the UI thread.
+fn with_ctx(f: impl FnOnce(&Rc<Ctx>)) {
+    if let Some(ctx) = CTX.with(|ctx| ctx.borrow().upgrade()) {
+        f(&ctx);
+    }
 }
 
 /// History is kept this long.
@@ -66,8 +85,12 @@ fn back(ctx: &Rc<Ctx>) {
     let Some(ui) = ctx.ui.upgrade() else {
         return;
     };
-    if ui.get_screen() == 0 {
-        mobile_sentinel::foregrounding::move_to_back();
+    if ui.get_ringing() {
+        return;
+    }
+    match ui.get_screen() {
+        1 => editor::back(ctx),
+        _ => mobile_sentinel::foregrounding::move_to_back(),
     }
 }
 
@@ -91,7 +114,13 @@ pub fn run() -> Result<(), slint::PlatformError> {
         toast_undo: RefCell::new(None),
         toast_timer: slint::Timer::default(),
         timers: RefCell::new(Vec::new()),
+        editor: RefCell::new(None),
+        preview_timer: slint::Timer::default(),
+        ring: RefCell::new(None),
+        firing_watch: RefCell::new(crate::firing_state::FiringWatch::default()),
+        ticks: Cell::new(0),
     });
+    CTX.with(|slot| *slot.borrow_mut() = Rc::downgrade(&ctx));
 
     {
         let ctx = Rc::downgrade(&ctx);
@@ -118,8 +147,82 @@ pub fn run() -> Result<(), slint::PlatformError> {
     on!(on_toggle, |ctx, id| home::toggle(&ctx, id.as_str()));
     on!(on_quick, |ctx, i| home::quick(&ctx, i as usize));
     on!(on_template, |ctx, i| home::template(&ctx, i as usize));
+    on!(on_open, |ctx, id| editor::open(&ctx, id.as_str()));
+    on!(on_create, |ctx| home::create(&ctx));
+    on!(on_ed_back, |ctx| editor::back(&ctx));
+    on!(on_ed_save, |ctx| editor::save(&ctx));
+    on!(on_ed_shift, |ctx, m| editor::shift(&ctx, m));
+    on!(on_ed_day_toggled, |ctx, i| editor::toggle_day(
+        &ctx, i as usize
+    ));
+    on!(on_ed_preset, |ctx, i| editor::preset(&ctx, i as usize));
+    on!(on_ed_hour_changed, |ctx, h| editor::set_hour(&ctx, h));
+    on!(on_ed_minute_changed, |ctx, m| editor::set_minute(&ctx, m));
+    on!(on_ed_label_edited, |ctx, s| editor::set_label(
+        &ctx,
+        s.as_str()
+    ));
+    on!(on_ed_sound_picked, |ctx, i| editor::pick_sound(
+        &ctx, i as usize
+    ));
+    on!(on_ed_no_sound, |ctx| editor::no_sound(&ctx));
+    on!(on_ed_sound_preview, |ctx| editor::toggle_preview(&ctx));
+    on!(on_ed_snooze_interval, |ctx, l| editor::snooze_interval(
+        &ctx, l
+    ));
+    on!(on_ed_snooze_count, |ctx, m| editor::snooze_count(&ctx, m));
+    on!(on_ed_add_sound, |ctx| editor::add_sound(&ctx));
+    on!(on_ed_delete_confirmed, |ctx| editor::delete(&ctx));
+    on!(on_ed_discard_confirmed, |ctx| editor::discard(&ctx));
+    on!(on_ed_sheet_closed, |ctx| editor::sheet_closed(&ctx));
+    on!(on_ring_snooze, |ctx| ring::snooze(&ctx));
+    on!(on_ring_turn_off, |ctx| ring::turn_off(&ctx));
     on!(on_toast_undo, |ctx| toast::undo(&ctx));
     on!(on_toast_dismiss, |ctx| toast::dismiss(&ctx));
+
+    // Anything the user must know about what happened while the app was away: a database that
+    // had to be reset (or cannot persist) instead of a silently empty alarm list, and alarms
+    // that ended without the user.
+    {
+        use crate::persistence::DbRecovery;
+        let mut notices = Vec::new();
+        {
+            let tr = ctx.tr.borrow();
+            match crate::persistence::db_recovery() {
+                DbRecovery::None => {}
+                DbRecovery::Recovered { .. } => notices.push(i18n::t(&tr, "db.recovered")),
+                DbRecovery::Volatile => notices.push(i18n::t(&tr, "db.volatile")),
+            }
+            let unreadable = crate::persistence::unreadable_alarms();
+            if unreadable > 0 {
+                notices.push(
+                    i18n::t(&tr, "db.unreadable").replace("{count}", &unreadable.to_string()),
+                );
+            }
+        }
+        notices.extend(ring::unseen_outcome_notices(&ctx));
+        if !notices.is_empty() {
+            toast::error(&ctx, notices.join(" "));
+        }
+    }
+
+    // Whether an alarm rings: primed from disk at once, then polled, because the ring state
+    // machine writes it from another process.
+    ring::poll(&ctx);
+    {
+        let weak = Rc::downgrade(&ctx);
+        let poll = slint::Timer::default();
+        poll.start(
+            slint::TimerMode::Repeated,
+            Duration::from_millis(crate::firing_state::POLL_MS),
+            move || {
+                if let Some(ctx) = weak.upgrade() {
+                    ring::poll(&ctx);
+                }
+            },
+        );
+        ctx.timers.borrow_mut().push(poll);
+    }
 
     // What the clock moves: the countdown, "Today" and "Tomorrow". Soon after coming up too,
     // because what the startup found may only just be in.

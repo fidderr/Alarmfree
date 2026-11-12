@@ -1,7 +1,9 @@
 import { Pal, Tr, Insets } from "theme.slint";
 import { HomeScreen, AlarmRow, DayCell } from "home.slint";
 import { Toast } from "components.slint";
-export { Pal, Tr, Insets, AlarmRow, DayCell }
+import { EditorScreen, ChoiceRow, EditorSheet } from "editor.slint";
+import { RingScreen } from "ring.slint";
+export { Pal, Tr, Insets, AlarmRow, DayCell, ChoiceRow, EditorSheet }
 
 export component MainWindow inherits Window {
     in property <string> next-title;
@@ -13,7 +15,63 @@ export component MainWindow inherits Window {
     in property <bool> banner-can-hide;
     in property <string> empty-weekdays;
     in property <string> empty-weekend;
+    // 0 alarms, 1 editor.
     in-out property <int> screen: 0;
+    in property <bool> ringing;
+    // The editor.
+    in property <string> ed-title;
+    in property <bool> ed-deletable;
+    in property <string> ed-time-text;
+    in property <bool> ed-twelve;
+    in property <string> ed-rings-text;
+    in property <[DayCell]> ed-days;
+    in property <[string]> ed-preset-labels;
+    in property <int> ed-preset-active;
+    in property <bool> ed-one-time;
+    in property <string> ed-once-text;
+    in property <string> ed-error;
+    in property <string> ed-label-summary;
+    in property <string> ed-sound-summary;
+    in property <string> ed-label-text;
+    in property <string> ed-snooze-summary;
+    in property <string> ed-snooze-interval-text;
+    in property <string> ed-snooze-count-text;
+    in property <[string]> ed-hour-labels;
+    in property <[string]> ed-minute-labels;
+    in-out property <int> ed-hour;
+    in-out property <int> ed-minute;
+    in property <[ChoiceRow]> ed-sounds;
+    in property <bool> ed-sound-none;
+    in property <bool> ed-sounding;
+    in-out property <EditorSheet> ed-sheet: EditorSheet.none;
+    callback ed-back();
+    callback ed-save();
+    callback ed-shift(int);
+    callback ed-day-toggled(int);
+    callback ed-preset(int);
+    callback ed-hour-changed(int);
+    callback ed-minute-changed(int);
+    callback ed-label-edited(string);
+    callback ed-sound-picked(int);
+    callback ed-no-sound();
+    callback ed-sound-preview();
+    callback ed-add-sound();
+    callback ed-snooze-interval(bool);
+    callback ed-snooze-count(bool);
+    callback ed-delete-confirmed();
+    callback ed-discard-confirmed();
+    callback ed-sheet-closed();
+    // The ring screen.
+    in property <string> ring-date;
+    in property <string> ring-clock;
+    in property <string> ring-label;
+    in property <string> ring-note;
+    in property <string> ring-snooze-text;
+    in property <bool> ring-can-snooze;
+    in property <string> ring-challenges-text;
+    in property <int> ring-challenge-count;
+    callback ring-snooze();
+    callback ring-turn-off();
     callback open(string);
     callback menu(string);
     callback toggle(string);
@@ -46,7 +104,7 @@ export component MainWindow inherits Window {
     changed safe-area-insets => { update-insets(); }
     changed virtual-keyboard-size => { update-insets(); }
 
-    HomeScreen {
+    if root.screen == 0: HomeScreen {
         next-title: root.next-title;
         next-sub: root.next-sub;
         rows: root.rows;
@@ -67,6 +125,64 @@ export component MainWindow inherits Window {
         open-banner => { root.open-banner(); }
         hide-banner => { root.hide-banner(); }
         template(i) => { root.template(i); }
+    }
+
+    if root.screen == 1: editor := EditorScreen {
+        title: root.ed-title;
+        deletable: root.ed-deletable;
+        time-text: root.ed-time-text;
+        twelve: root.ed-twelve;
+        rings-text: root.ed-rings-text;
+        days: root.ed-days;
+        preset-labels: root.ed-preset-labels;
+        preset-active: root.ed-preset-active;
+        one-time: root.ed-one-time;
+        once-text: root.ed-once-text;
+        error: root.ed-error;
+        label-summary: root.ed-label-summary;
+        sound-summary: root.ed-sound-summary;
+        label-text: root.ed-label-text;
+        snooze-summary: root.ed-snooze-summary;
+        snooze-interval-text: root.ed-snooze-interval-text;
+        snooze-count-text: root.ed-snooze-count-text;
+        hour-labels: root.ed-hour-labels;
+        minute-labels: root.ed-minute-labels;
+        time-hour: root.ed-hour;
+        time-minute: root.ed-minute;
+        sounds: root.ed-sounds;
+        sound-none: root.ed-sound-none;
+        sounding: root.ed-sounding;
+        sheet <=> root.ed-sheet;
+        back => { root.ed-back(); }
+        save => { root.ed-save(); }
+        shift(m) => { root.ed-shift(m); }
+        day-toggled(i) => { root.ed-day-toggled(i); }
+        preset(i) => { root.ed-preset(i); }
+        hour-changed(h) => { root.ed-hour = h; root.ed-hour-changed(h); }
+        minute-changed(m) => { root.ed-minute = m; root.ed-minute-changed(m); }
+        label-edited(s) => { root.ed-label-edited(s); }
+        sound-picked(i) => { root.ed-sound-picked(i); }
+        no-sound => { root.ed-no-sound(); }
+        sound-preview => { root.ed-sound-preview(); }
+        add-sound => { root.ed-add-sound(); }
+        snooze-interval(l) => { root.ed-snooze-interval(l); }
+        snooze-count(m) => { root.ed-snooze-count(m); }
+        delete-confirmed => { root.ed-delete-confirmed(); }
+        discard-confirmed => { root.ed-discard-confirmed(); }
+        sheet-closed => { root.ed-sheet-closed(); }
+    }
+
+    if root.ringing: RingScreen {
+        date: root.ring-date;
+        clock: root.ring-clock;
+        label: root.ring-label;
+        note: root.ring-note;
+        snooze-text: root.ring-snooze-text;
+        can-snooze: root.ring-can-snooze;
+        challenges-text: root.ring-challenges-text;
+        challenge-count: root.ring-challenge-count;
+        snooze => { root.ring-snooze(); }
+        turn-off => { root.ring-turn-off(); }
     }
 
     if root.toast-visible: Toast {

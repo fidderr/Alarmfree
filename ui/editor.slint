@@ -1,0 +1,281 @@
+import { Pal, Tr, Insets } from "theme.slint";
+import { Icon, IconName } from "components.slint";
+import { ScreenHeader, Row, SwitchRow, RowList, Separator, PrimaryButton, Chip, Sheet, RadioRow, Wheel, Stepper } from "widgets.slint";
+import { DayCell } from "home.slint";
+
+export struct ChoiceRow { text: string, selected: bool }
+
+// Which panel is open over the editor.
+export enum EditorSheet { none, time, label, sound, snooze, delete, discard }
+
+// Making and changing an alarm: the time and the days are right there; everything else is one
+// summary row that opens a sheet.
+export component EditorScreen inherits Rectangle {
+    in property <string> title;
+    in property <bool> deletable;
+    in property <string> time-text;
+    in property <bool> twelve;
+    in property <string> rings-text;
+    in property <[DayCell]> days;
+    in property <[string]> preset-labels;
+    in property <int> preset-active: -1;
+    in property <bool> one-time;
+    in property <string> once-text;
+    in property <string> error;
+    in property <string> label-summary;
+    in property <string> sound-summary;
+    in property <string> label-text;
+    in property <string> snooze-summary;
+    in property <string> snooze-interval-text;
+    in property <string> snooze-count-text;
+    in property <[string]> hour-labels;
+    in property <[string]> minute-labels;
+    in-out property <int> time-hour;
+    in-out property <int> time-minute;
+    in property <[ChoiceRow]> sounds;
+    in property <bool> sound-none;
+    in property <bool> sounding;
+    in-out property <EditorSheet> sheet: EditorSheet.none;
+    callback back();
+    callback save();
+    callback shift(int);
+    callback day-toggled(int);
+    callback preset(int);
+    callback hour-changed(int);
+    callback minute-changed(int);
+    callback label-edited(string);
+    callback sound-picked(int);
+    callback no-sound();
+    callback sound-preview();
+    callback add-sound();
+    callback snooze-interval(bool);
+    callback snooze-count(bool);
+    callback delete-confirmed();
+    callback discard-confirmed();
+    callback sheet-closed();
+    background: Pal.bg;
+
+    function open(s: EditorSheet) { root.sheet = s; }
+    public function close-sheet() {
+        root.sheet = EditorSheet.none;
+        root.sheet-closed();
+    }
+
+    VerticalLayout {
+        padding-top: Insets.top;
+        padding-left: Insets.left;
+        padding-right: Insets.right;
+        ScreenHeader {
+            title: root.title;
+            back => { root.back(); }
+            if root.deletable: Rectangle {
+                width: 44px;
+                Icon { name: IconName.trash; size: 20px; tint: Pal.text2; }
+                TouchArea { clicked => { root.open(EditorSheet.delete); } }
+            }
+        }
+        Flickable {
+            vertical-stretch: 1;
+            content-height: content.preferred-height + 16px;
+            content := VerticalLayout {
+                spacing: 16px;
+                padding-bottom: 16px;
+                // The time, large, with a step either way, and when that rings.
+                VerticalLayout {
+                    spacing: 8px;
+                    padding-left: 16px;
+                    padding-right: 16px;
+                    HorizontalLayout {
+                        height: 88px;
+                        spacing: 8px;
+                        VerticalLayout {
+                            width: 52px;
+                            spacing: 8px;
+                            alignment: center;
+                            Chip { text: "\u{2212}1"; clicked => { root.shift(-1); } }
+                            Chip { text: "\u{2212}5"; clicked => { root.shift(-5); } }
+                        }
+                        Rectangle {
+                            horizontal-stretch: 1;
+                            Text {
+                                text: root.time-text;
+                                font-size: root.twelve ? 40px : 56px;
+                                font-weight: 700;
+                                color: Pal.text;
+                            }
+                            TouchArea { clicked => { root.open(EditorSheet.time); } }
+                        }
+                        VerticalLayout {
+                            width: 52px;
+                            spacing: 8px;
+                            alignment: center;
+                            Chip { text: "+1"; clicked => { root.shift(1); } }
+                            Chip { text: "+5"; clicked => { root.shift(5); } }
+                        }
+                    }
+                    Text {
+                        text: root.rings-text;
+                        font-size: 14px;
+                        color: Pal.text2;
+                        horizontal-alignment: center;
+                        wrap: word-wrap;
+                    }
+                }
+                // Which days, or the one date.
+                VerticalLayout {
+                    spacing: 12px;
+                    padding-left: 16px;
+                    padding-right: 16px;
+                    if root.one-time: PrimaryButton {
+                        text: root.once-text;
+                        clicked => { root.preset(3); }
+                    }
+                    if !root.one-time: HorizontalLayout {
+                        spacing: 6px;
+                        for day[i] in root.days: Rectangle {
+                            horizontal-stretch: 1;
+                            height: 48px;
+                            border-radius: 14px;
+                            background: day.on ? Pal.accent : Pal.surface;
+                            Text {
+                                text: day.letter;
+                                font-size: 15px;
+                                font-weight: 500;
+                                color: day.on ? Pal.on-accent : Pal.text;
+                            }
+                            TouchArea { clicked => { root.day-toggled(i); } }
+                        }
+                    }
+                    HorizontalLayout {
+                        spacing: 8px;
+                        for label[i] in root.preset-labels: Chip {
+                            horizontal-stretch: 1;
+                            text: label;
+                            on: root.preset-active == i;
+                            clicked => { root.preset(i); }
+                        }
+                    }
+                    if root.error != "": Text {
+                        text: root.error;
+                        font-size: 14px;
+                        color: Pal.danger;
+                        wrap: word-wrap;
+                    }
+                }
+                HorizontalLayout {
+                    padding-left: 16px;
+                    padding-right: 16px;
+                    RowList {
+                        Row { title: Tr.t("config.label"); value: root.label-summary; clicked => { root.open(EditorSheet.label); } }
+                        Separator { }
+                        Row { title: Tr.t("config.sound"); value: root.sound-summary; clicked => { root.open(EditorSheet.sound); } }
+                        Separator { }
+                        Row { title: Tr.t("config.snooze"); value: root.snooze-summary; clicked => { root.open(EditorSheet.snooze); } }
+                    }
+                }
+            }
+        }
+        Rectangle {
+            height: 68px + Insets.bottom;
+            VerticalLayout {
+                padding: 8px;
+                padding-left: 16px;
+                padding-right: 16px;
+                padding-bottom: 8px + Insets.bottom;
+                PrimaryButton { text: Tr.t("action.save"); clicked => { root.save(); } }
+            }
+        }
+    }
+
+    if root.sheet == EditorSheet.time: Sheet {
+        title: Tr.t("config.change_time");
+        action-text: Tr.t("action.done");
+        close => { root.close-sheet(); }
+        action => { root.close-sheet(); }
+        HorizontalLayout {
+            alignment: center;
+            spacing: 4px;
+            Wheel {
+                value: root.time-hour;
+                labels: root.hour-labels;
+                changed(v) => { root.time-hour = v; root.hour-changed(v); }
+            }
+            Text { text: ":"; font-size: 28px; font-weight: 700; color: Pal.text; vertical-alignment: center; }
+            Wheel {
+                value: root.time-minute;
+                labels: root.minute-labels;
+                changed(v) => { root.time-minute = v; root.minute-changed(v); }
+            }
+        }
+    }
+    if root.sheet == EditorSheet.label: Sheet {
+        title: Tr.t("config.label");
+        action-text: Tr.t("action.done");
+        close => { root.close-sheet(); }
+        action => { root.close-sheet(); }
+        Rectangle {
+            height: 52px;
+            border-radius: 14px;
+            background: Pal.surface;
+            border-width: 1px;
+            border-color: Pal.line;
+            HorizontalLayout {
+                padding-left: 14px;
+                padding-right: 14px;
+                field := TextInput {
+                    text: root.label-text;
+                    font-size: 16px;
+                    color: Pal.text;
+                    single-line: true;
+                    vertical-alignment: center;
+                    edited => { root.label-edited(self.text); }
+                    accepted => { root.close-sheet(); }
+                    init => { self.focus(); }
+                }
+            }
+        }
+    }
+    if root.sheet == EditorSheet.sound: Sheet {
+        title: Tr.t("config.sound");
+        action-text: root.sound-none ? "" : (root.sounding ? Tr.t("action.stop") : Tr.t("action.start"));
+        close => { root.close-sheet(); }
+        action => { root.sound-preview(); }
+        RadioRow { text: Tr.t("config.no_sound"); selected: root.sound-none; clicked => { root.no-sound(); } }
+        for choice[i] in root.sounds: RadioRow {
+            text: choice.text;
+            selected: choice.selected;
+            clicked => { root.sound-picked(i); }
+        }
+        PrimaryButton { quiet: true; text: Tr.t("sound.import"); clicked => { root.add-sound(); } }
+    }
+    if root.sheet == EditorSheet.snooze: Sheet {
+        title: Tr.t("config.snooze");
+        action-text: Tr.t("action.done");
+        close => { root.close-sheet(); }
+        action => { root.close-sheet(); }
+        Stepper {
+            title: Tr.t("config.snooze_interval");
+            value: root.snooze-interval-text;
+            less => { root.snooze-interval(false); }
+            more => { root.snooze-interval(true); }
+        }
+        Stepper {
+            title: Tr.t("config.snooze_count");
+            value: root.snooze-count-text;
+            less => { root.snooze-count(false); }
+            more => { root.snooze-count(true); }
+        }
+    }
+    if root.sheet == EditorSheet.delete: Sheet {
+        title: Tr.t("alarm.delete_confirm");
+        close => { root.close-sheet(); }
+        PrimaryButton { text: Tr.t("action.delete"); clicked => { root.delete-confirmed(); } }
+        PrimaryButton { quiet: true; text: Tr.t("alarm.keep"); clicked => { root.close-sheet(); } }
+    }
+    if root.sheet == EditorSheet.discard: Sheet {
+        title: Tr.t("config.discard_title");
+        close => { root.close-sheet(); }
+        PrimaryButton { text: Tr.t("config.discard"); clicked => { root.discard-confirmed(); } }
+        PrimaryButton { quiet: true; text: Tr.t("config.keep_editing"); clicked => { root.close-sheet(); } }
+    }
+}

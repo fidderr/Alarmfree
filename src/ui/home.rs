@@ -282,3 +282,10 @@ pub fn template(ctx: &Rc<Ctx>, index: usize) {
     let message = crate::text::rings_in(&ctx.tr.borrow(), &alarm);
     change(ctx, message, &mut |list| list.push(alarm.clone()));
 }
+
+/// The + button: a new alarm, if there is room.
+pub fn create(ctx: &Rc<Ctx>) {
+    if has_room(ctx) {
+        super::editor::open(ctx, "new");
+    }
+}

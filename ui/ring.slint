@@ -1,0 +1,32 @@
+import { Pal, Tr, Insets } from "theme.slint";
+import { PrimaryButton } from "widgets.slint";
+
+// What shows while an alarm rings: the time, what it is, and the way to turn it off.
+export component RingScreen inherits Rectangle {
+    in property <string> date;
+    in property <string> clock;
+    in property <string> label;
+    in property <string> note;
+    in property <string> snooze-text;
+    in property <bool> can-snooze;
+    in property <string> challenges-text;
+    in property <int> challenge-count;
+    callback snooze();
+    callback turn-off();
+    background: Pal.bg;
+    VerticalLayout {
+        padding: 24px;
+        padding-top: 24px + Insets.top;
+        padding-bottom: 24px + Insets.bottom;
+        spacing: 12px;
+        Rectangle { vertical-stretch: 1; }
+        Text { text: root.date; font-size: 16px; color: Pal.text2; horizontal-alignment: center; }
+        Text { text: root.clock; font-size: 72px; font-weight: 700; color: Pal.text; horizontal-alignment: center; }
+        Text { text: root.label; font-size: 24px; font-weight: 500; color: Pal.text; horizontal-alignment: center; wrap: word-wrap; }
+        if root.note != "": Text { text: root.note; font-size: 16px; color: Pal.text2; horizontal-alignment: center; wrap: word-wrap; }
+        Rectangle { vertical-stretch: 2; }
+        if root.can-snooze: PrimaryButton { quiet: true; text: root.snooze-text; clicked => { root.snooze(); } }
+        if root.challenge-count > 0: Text { text: root.challenges-text; font-size: 14px; color: Pal.text2; horizontal-alignment: center; }
+        PrimaryButton { text: Tr.t("ring.turn_off"); clicked => { root.turn-off(); } }
+    }
+}

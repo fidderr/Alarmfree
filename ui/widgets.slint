@@ -1,0 +1,314 @@
+import { Pal, Tr, Insets } from "theme.slint";
+import { Icon, IconName, AppSwitch } from "components.slint";
+
+// The screen's top bar: back arrow, title, and room for actions on the right.
+export component ScreenHeader inherits Rectangle {
+    in property <string> title;
+    callback back();
+    height: 60px;
+    HorizontalLayout {
+        padding: 8px;
+        padding-bottom: 4px;
+        spacing: 4px;
+        Rectangle {
+            width: 44px;
+            Icon { name: IconName.arrow-left; size: 22px; tint: Pal.text; }
+            TouchArea { clicked => { root.back(); } }
+        }
+        Text {
+            horizontal-stretch: 1;
+            text: root.title;
+            font-size: 20px;
+            font-weight: 700;
+            color: Pal.text;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+        @children
+    }
+}
+
+// One line of a list: a title, what it is now, and a chevron.
+export component Row inherits Rectangle {
+    in property <string> title;
+    in property <string> value;
+    callback clicked();
+    height: 56px;
+    HorizontalLayout {
+        padding-left: 16px;
+        padding-right: 12px;
+        spacing: 8px;
+        Text { text: root.title; font-size: 16px; color: Pal.text; vertical-alignment: center; }
+        Text {
+            horizontal-stretch: 1;
+            text: root.value;
+            font-size: 14px;
+            color: Pal.text2;
+            horizontal-alignment: right;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+        Icon { name: IconName.chevron-right; size: 18px; tint: Pal.text2; y: (parent.height - self.height) / 2; }
+    }
+    TouchArea { clicked => { root.clicked(); } }
+}
+
+export component SwitchRow inherits Rectangle {
+    in property <string> title;
+    in property <bool> on;
+    callback toggled(bool);
+    height: 56px;
+    HorizontalLayout {
+        padding-left: 16px;
+        padding-right: 16px;
+        Text { horizontal-stretch: 1; text: root.title; font-size: 16px; color: Pal.text; vertical-alignment: center; }
+        Rectangle { width: 44px; AppSwitch { on: root.on; } }
+    }
+    TouchArea { clicked => { root.toggled(!root.on); } }
+}
+
+// Rows in one rounded surface, with a line between them.
+export component RowList inherits Rectangle {
+    background: Pal.surface;
+    border-radius: 20px;
+    clip: true;
+    VerticalLayout {
+        @children
+    }
+}
+
+export component Separator inherits Rectangle {
+    height: 1px;
+    background: Pal.line;
+}
+
+export component PrimaryButton inherits Rectangle {
+    in property <string> text;
+    in property <bool> quiet: false;
+    callback clicked();
+    height: 52px;
+    border-radius: 16px;
+    background: quiet ? Pal.surface : Pal.accent;
+    Text {
+        text: root.text;
+        font-size: 16px;
+        font-weight: 500;
+        color: root.quiet ? Pal.text : Pal.on-accent;
+    }
+    TouchArea { clicked => { root.clicked(); } }
+}
+
+// A small pill the user picks one of.
+export component Chip inherits Rectangle {
+    in property <string> text;
+    in property <bool> on;
+    callback clicked();
+    height: 44px;
+    min-width: 52px;
+    border-radius: 22px;
+    background: on ? Pal.accent-soft : Pal.surface;
+    Text {
+        text: root.text;
+        font-size: 14px;
+        font-weight: 500;
+        color: root.on ? Pal.accent : Pal.text;
+    }
+    TouchArea { clicked => { root.clicked(); } }
+}
+
+// A panel that slides up over the screen. `close` fires on the dimmed area.
+export component Sheet inherits Rectangle {
+    in property <string> title;
+    in property <string> action-text;
+    callback close();
+    callback action();
+    property <bool> shown: false;
+    init => { shown = true; }
+    background: #00000066;
+    TouchArea { clicked => { root.close(); } }
+    panel := Rectangle {
+        x: 0px;
+        width: parent.width;
+        height: min(parent.height * 0.85, 76px + body.preferred-height + Insets.bottom + 16px);
+        y: root.shown ? parent.height - self.height : parent.height;
+        animate y { duration: 220ms; easing: ease-out; }
+        background: Pal.bg;
+        border-top-left-radius: 24px;
+        border-top-right-radius: 24px;
+        TouchArea { }
+        Rectangle {
+            y: 8px;
+            width: 36px;
+            height: 4px;
+            border-radius: 2px;
+            background: Pal.line;
+        }
+        HorizontalLayout {
+            y: 16px;
+            height: 52px;
+            padding-left: 20px;
+            padding-right: 12px;
+            Text { horizontal-stretch: 1; text: root.title; font-size: 18px; font-weight: 700; color: Pal.text; vertical-alignment: center; overflow: elide; }
+            if root.action-text != "": Rectangle {
+                width: 80px;
+                Text { text: root.action-text; font-size: 14px; font-weight: 500; color: Pal.accent; }
+                TouchArea { clicked => { root.action(); } }
+            }
+        }
+        Flickable {
+            y: 72px;
+            height: parent.height - 72px;
+            content-height: body.preferred-height + Insets.bottom + 16px;
+            body := VerticalLayout {
+                padding-left: 16px;
+                padding-right: 16px;
+                spacing: 8px;
+                @children
+            }
+        }
+    }
+}
+
+// One choice among several in a sheet.
+export component RadioRow inherits Rectangle {
+    in property <string> text;
+    in property <bool> selected;
+    callback clicked();
+    height: 52px;
+    HorizontalLayout {
+        padding-left: 4px;
+        spacing: 14px;
+        Rectangle {
+            width: 22px;
+            Rectangle {
+                width: 22px;
+                height: 22px;
+                border-radius: 11px;
+                border-width: 2px;
+                border-color: root.selected ? Pal.accent : Pal.off;
+                Rectangle {
+                    width: 10px;
+                    height: 10px;
+                    border-radius: 5px;
+                    background: Pal.accent;
+                    visible: root.selected;
+                }
+            }
+        }
+        Text { horizontal-stretch: 1; text: root.text; font-size: 16px; color: Pal.text; vertical-alignment: center; overflow: elide; }
+    }
+    TouchArea { clicked => { root.clicked(); } }
+}
+
+// A drum of numbers: drag it up or down, or tap a neighbour.
+export component Wheel inherits Rectangle {
+    in-out property <int> value;
+    in property <[string]> labels;
+    callback changed(int);
+    property <length> pitch: 40px;
+    property <length> start-y;
+    property <int> start-value;
+    property <int> last-steps;
+    property <length> drag-px: 0px;
+    property <bool> dragging: false;
+    property <bool> moved: false;
+    property <int> modulus: labels.length;
+    width: 84px;
+    height: 200px;
+    clip: true;
+    for off[i] in [-3, -2, -1, 0, 1, 2, 3]: Text {
+        y: (i - 1) * root.pitch + root.drag-px;
+        height: root.pitch;
+        width: parent.width;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        text: root.labels[Math.mod(root.value + off + root.modulus * 2, root.modulus)];
+        font-size: off == 0 ? 30px : (off == 1 || off == -1) ? 22px : off == 2 || off == -2 ? 18px : 15px;
+        font-weight: off == 0 ? 700 : 400;
+        color: off == 0 ? Pal.text : Pal.text2;
+        opacity: off == 0 ? 1.0 : (off == 1 || off == -1) ? 0.8 : off == 2 || off == -2 ? 0.5 : 0.28;
+        animate y { duration: root.dragging ? 0ms : 240ms; easing: ease-out; }
+    }
+    ta := TouchArea {
+        pointer-event(e) => {
+            if (e.kind == PointerEventKind.down) {
+                root.dragging = true;
+                root.moved = false;
+                root.last-steps = 0;
+                root.drag-px = 0px;
+                root.start-value = root.value;
+                root.start-y = self.mouse-y;
+            } else if (e.kind == PointerEventKind.up || e.kind == PointerEventKind.cancel) {
+                root.dragging = false;
+                root.drag-px = 0px;
+                if (!root.moved) {
+                    // A tap on a neighbour steps to it.
+                    root.tap(self.mouse-y);
+                }
+            }
+        }
+        moved => {
+            if (root.dragging) {
+                root.step-drag(self.mouse-y - root.start-y);
+            }
+        }
+    }
+    function tap(y: length) {
+        // Rows: the centre one spans 80..120 px.
+        if (y < 80px) {
+            root.value = Math.mod(root.value - (y < 40px ? 2 : 1) + root.modulus * 2, root.modulus);
+            root.changed(root.value);
+        } else if (y >= 120px) {
+            root.value = Math.mod(root.value + (y >= 160px ? 2 : 1) + root.modulus * 2, root.modulus);
+            root.changed(root.value);
+        }
+    }
+    function step-drag(dy: length) {
+        if (Math.abs(dy) > 4px) {
+            root.moved = true;
+        }
+        // Drag up (negative dy) increases the value, flipping at the half-row crossing.
+        root.apply-steps(Math.round(-dy / root.pitch));
+        // The whole rows are the value changing; only the rest moves the stack.
+        root.drag-px = dy + root.last-steps * root.pitch;
+    }
+    function apply-steps(steps: int) {
+        if (steps != root.last-steps) {
+            root.last-steps = steps;
+            root.value = Math.mod(root.start-value + steps + root.modulus * 100, root.modulus);
+            root.changed(root.value);
+        }
+    }
+}
+
+// A number with less and more buttons.
+export component Stepper inherits Rectangle {
+    in property <string> title;
+    in property <string> value;
+    callback less();
+    callback more();
+    height: 56px;
+    HorizontalLayout {
+        spacing: 8px;
+        Text { horizontal-stretch: 1; text: root.title; font-size: 16px; color: Pal.text; vertical-alignment: center; }
+        Rectangle {
+            width: 44px;
+            height: 44px;
+            y: (parent.height - self.height) / 2;
+            border-radius: 22px;
+            background: Pal.surface;
+            Text { text: "\u{2212}"; font-size: 20px; color: Pal.text; }
+            TouchArea { clicked => { root.less(); } }
+        }
+        Text { min-width: 84px; text: root.value; font-size: 16px; font-weight: 500; color: Pal.text; horizontal-alignment: center; vertical-alignment: center; }
+        Rectangle {
+            width: 44px;
+            height: 44px;
+            y: (parent.height - self.height) / 2;
+            border-radius: 22px;
+            background: Pal.surface;
+            Text { text: "+"; font-size: 20px; color: Pal.text; }
+            TouchArea { clicked => { root.more(); } }
+        }
+    }
+}

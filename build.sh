@@ -59,7 +59,9 @@ cargo build --lib --target "$TARGET" ${CARGO_FLAGS[@]+"${CARGO_FLAGS[@]}"}
 # android/src/java, and the manifest and theme from app/src/main.
 rm -rf build/jniLibs
 mkdir -p "build/jniLibs/$ABI" android/app/src/main/res/values
-cp "target/$TARGET/$MODE/libalarmfree.so" "build/jniLibs/$ABI/libalarmfree.so"
+# Named main: the SDK's Kotlin loads the library by that name (SentinelBridge), also for what runs
+# without the UI (a ring, a restart after a boot).
+cp "target/$TARGET/$MODE/libalarmfree.so" "build/jniLibs/$ABI/libmain.so"
 cp android/src/AndroidManifest.template.xml android/app/src/main/AndroidManifest.xml
 cp android/src/res/values/styles.xml android/app/src/main/res/values/styles.xml
 

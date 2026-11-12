@@ -14,7 +14,7 @@
             android:turnScreenOn="true"
             android:windowSoftInputMode="adjustResize"
             android:configChanges="mcc|mnc|locale|touchscreen|keyboard|keyboardHidden|navigation|screenLayout|fontScale|uiMode|orientation|density|screenSize|smallestScreenSize|layoutDirection|colorMode|fontWeightAdjustment">
-            <meta-data android:name="android.app.lib_name" android:value="alarmfree" />
+            <meta-data android:name="android.app.lib_name" android:value="main" />
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
