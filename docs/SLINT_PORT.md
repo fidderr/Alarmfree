@@ -642,20 +642,25 @@ processes, which `dumpsys meminfo <pkg>` leaves out), and the time between frame
 because neither is drawn by Android's own renderer). An emulator without a real GPU says little about smoothness: read the
 frame rows on a phone.
 
-Run on the emulator (Android 12, x86_64, release builds, Slint at M2):
+Run on the emulator (Android 12, x86_64, release builds, Slint at feature parity, commit 1ea9c8b plus the SDK on native-host):
 
     AlarmFree (WebView)  AlarmFree Slint
-    APK size (MB)                    18.8   30.5
-    Cold start, median of 5 (ms)     652    272
-    PSS after start (MB)             87     58
-    PSS after the editor (MB)        95     65
-    WebView processes (PSS, MB)      42     0
-    PSS app + WebView, editor (MB)   137    65
-    Frames seen while scrolling      132    1450
-    Janky frames (> 25 ms apart)     24 (18.2%)   644 (44.4%)
-    Time between frames p50 / p90    17.5 / 28.2 ms   23.2 / 39.1 ms
+    APK size (MB)                    18.8   42.9
+    Cold start, median of 5 (ms)     625    271
+    PSS after start (MB)             86     62
+    PSS after the editor (MB)        93     67
+    WebView processes (PSS, MB)      43     0
+    PSS app + WebView, editor (MB)   136    67
+    Frames seen while scrolling      144    980
+    Janky frames (> 25 ms apart)     84 (58.3%)   612 (62.4%)
+    Time between frames p50 / p90    30.8 / 57.8 ms   32.8 / 38.4 ms
+    Time between frames p95 / p99    79.0 / 79.0 ms   52.0 / 83.4 ms
 
-The Slint copy has fewer screens than the original at this point, so size and memory will grow as the port does.
+How to read it: the emulator draws with a software GPU, so every frame row is dominated by that (both apps sit near 30 ms
+here); size, cold start and memory are less affected. The Slint APK is bigger because Skia and the std widgets are linked in
+statically (the original's WebView lives in the system). Earlier runs on the same device varied by a few hundred ms in cold
+start and by tens of percent in jank, so compare only large differences, and repeat on the phone. The numbers before the
+first-run page was handled by `compare.sh` (Slint scrolling the welcome page) were wrong and are not used.
 
 ## Parity summary
 
