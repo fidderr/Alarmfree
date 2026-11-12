@@ -615,6 +615,47 @@ block, so run them on a thread and post the result back to the UI thread.
 
 ---
 
+## Status (what is built, newest first)
+
+Milestones are commits on branch `slint-port`; the SDK parts are on `native-host` of mobile-sentinel.
+
+- **M3** `devtest/compare.sh`: APK size, cold start, PSS, SurfaceFlinger frame times, side by side with the original.
+- **M2** Home list, editor (time wheel sheet, -1/-5/+1/+5, days and presets, label, sound with preview and "add your own", snooze), save, delete, discard guard, ring screen (clock, date, label, note, snooze, turn off), firing poll, heartbeat, history event on dismiss, wake-up check, one-time alarms switching off.
+- **M1** Slint skeleton on a NativeActivity (`libmain.so`), `build.sh` with `build_sentinel --project`, theme from `Palette`, insets, system bars, back button, toast with undo, quick alarms, empty-state templates, alarm switch.
+
+Known gaps right now (all in the checklist below, unticked): challenges (turning off an alarm that has challenges skips them, with a warning in the log), the alarm menu sheet and swipe actions, sort and pause sheets, the reliability banner and screen, history, settings, theme editor, first run, date sheet and typed time, ring looks, widgets, wide layout, the debug command channel for `devtest/`.
+
+### Comparing
+
+`devtest/compare.sh` measures both apps on one emulator (`emulator-5556`, AVD `af31`). The original is built from a copy of
+its source in `build/original` (never in `C:/Git/Alarmfree`):
+
+    (cd build/original && TARGET=x86_64-linux-android ./build.sh release)   # dx needs ANDROID_NDK_HOME = ndk 28.2
+    TARGET=x86_64-linux-android ./build.sh release
+    devtest/compare.sh
+
+It starts from clean data (the original's welcome page is passed with its "Get started" button), takes the median of 5 cold
+starts (`am start -W`), PSS from `dumpsys meminfo` after the start and after opening the editor (plus the WebView helper
+processes, which `dumpsys meminfo <pkg>` leaves out), and the time between frames of the app's layer from
+`dumpsys SurfaceFlinger --latency` while a list of 14 alarms is scrolled (`dumpsys gfxinfo` sees no frames of either app,
+because neither is drawn by Android's own renderer). An emulator without a real GPU says little about smoothness: read the
+frame rows on a phone.
+
+Run on the emulator (Android 12, x86_64, release builds, Slint at M2):
+
+    AlarmFree (WebView)  AlarmFree Slint
+    APK size (MB)                    18.8   30.5
+    Cold start, median of 5 (ms)     652    272
+    PSS after start (MB)             87     58
+    PSS after the editor (MB)        95     65
+    WebView processes (PSS, MB)      42     0
+    PSS app + WebView, editor (MB)   137    65
+    Frames seen while scrolling      132    1450
+    Janky frames (> 25 ms apart)     24 (18.2%)   644 (44.4%)
+    Time between frames p50 / p90    17.5 / 28.2 ms   23.2 / 39.1 ms
+
+The Slint copy has fewer screens than the original at this point, so size and memory will grow as the port does.
+
 ## 9. Port checklist (suggested order)
 
 Order: A core loop (home list, editor basics + time picker, ring screen), then B challenges, C editor sheets, D the rest.
