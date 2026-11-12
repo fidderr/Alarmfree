@@ -2,6 +2,9 @@
 //! The `.slint` files are in `ui/`; this is the Rust side that feeds them and takes their
 //! callbacks.
 
+// Clippy asks for a `const` initializer on the Android target, which the slot already has.
+#![allow(clippy::missing_const_for_thread_local)]
+
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::time::Duration;
@@ -38,8 +41,8 @@ pub struct Ctx {
     pub ticks: Cell<u32>,
 }
 
+// For what comes back to the UI thread from another one.
 thread_local! {
-    /// For what comes back to the UI thread from another one.
     static CTX: RefCell<std::rc::Weak<Ctx>> = const { RefCell::new(std::rc::Weak::new()) };
 }
 
