@@ -5,6 +5,20 @@
 //!
 //!   `snooze:<id>`, `dismiss:<id>`: the same calls as the screens make.
 //!   `hang_ui`: freeze the UI thread, to exercise the guardian.
+//!   `ui:<command>`: ask or press something in the Slint window. The answer is written to
+//!   `<files>/debug_script_result.txt` (one line, or JSON), after the harness removed the
+//!   old one. The commands:
+//!     `ui:screen`: which screen, sheet and panel are open (`screen=0 home_sheet=None ...`;
+//!       screens: 0 alarms, 1 editor, 2 history, 3 settings, 4 reliability, 5 theme).
+//!     `ui:snapshot`: the main properties of the window as JSON: screen, the alarm rows
+//!       (id, time, label, when, on, can_skip), sheets and panel titles and choices, the
+//!       editor's time and rings text, the ring screen and the toast.
+//!     `ui:press:<callback>:<arg>`: call a callback of the window as a tap would. Callbacks:
+//!       toggle, open, menu, skip, delete-alarm (arg: alarm id); quick, go, hs-picked,
+//!       pn-picked, st-row, ed-shift, ed-day-toggled, ed-preset, ed-hour, ed-minute
+//!       (arg: number); create, pause-all, sort, back, hs-close, pn-done-tapped, ed-back,
+//!       ed-save, ed-delete-confirmed, ed-discard-confirmed, ring-snooze, ring-turn-off,
+//!       toast-undo. The answer is `OK` or `ERR ...`.
 //!
 //! `<files>/debug_<name>.txt` holds a number to use instead of a wait that takes too long
 //! for a test, see [`crate::platform::shortened`].
@@ -26,6 +40,12 @@ pub fn start() {
             continue;
         };
         let contents = contents.trim();
+        #[cfg(debug_assertions)]
+        if let Some(command) = contents.strip_prefix("ui:") {
+            let _ = std::fs::remove_file(&path);
+            crate::ui::debug_command(command.to_owned(), write_result);
+            continue;
+        }
         let Some(kit) = alarm_kit_optional() else {
             continue;
         };
@@ -42,6 +62,15 @@ pub fn start() {
         }
         let _ = std::fs::remove_file(&path);
     });
+}
+
+#[cfg(debug_assertions)]
+fn write_result(answer: String) {
+    let dir = mobile_sentinel::app_files_dir();
+    let tmp = dir.join("debug_script_result.tmp");
+    if std::fs::write(&tmp, answer).is_ok() {
+        let _ = std::fs::rename(&tmp, dir.join("debug_script_result.txt"));
+    }
 }
 
 /// The number the harness left for `name`, if any.

@@ -20,6 +20,8 @@ mod challenge_run;
 mod challenge_sheets;
 mod colour;
 mod datepicker;
+#[cfg(debug_assertions)]
+mod debug;
 mod editor;
 mod editor_look;
 mod editor_sound;
@@ -78,6 +80,16 @@ fn with_ctx(f: impl FnOnce(&Rc<Ctx>)) {
     if let Some(ctx) = CTX.with(|ctx| ctx.borrow().upgrade()) {
         f(&ctx);
     }
+}
+
+/// Run a `ui:` command of the devtest channel on the UI thread; `reply` gets the answer.
+#[cfg(debug_assertions)]
+pub fn debug_command(command: String, reply: impl FnOnce(String) + Send + 'static) {
+    let _ = slint::invoke_from_event_loop(move || {
+        let mut answer = String::from("ERR the UI is not up");
+        with_ctx(|ctx| answer = debug::run(ctx, &command));
+        reply(answer);
+    });
 }
 
 /// History is kept this long.

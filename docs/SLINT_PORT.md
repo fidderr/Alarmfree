@@ -670,10 +670,10 @@ Each line is one feature; tick when it works on the emulator (AVD `af36`) and on
 - [ ] Insets global (top/bottom/left/right/keyboard) and font-scale (`text-zoom`) global; re-read on resize/focus
 - [ ] Navigator with push / replace / go_back and the three-tab rule; first-run redirect when `!setup_done`
 - [ ] BackDispatcher (SDK `on_back` to UI thread): top handler first, else route rule, Home = move to background, ignored while ringing
-- [ ] Wide two-pane layout at >= 840 dp (list 400 + detail, empty-pane text), editor restarts per picked alarm
+- [x] Wide two-pane layout at >= 840 dp (list 400 + detail, empty-pane text), editor restarts per picked alarm
 - [ ] Toast controller: info 3 s, error 10 s, undo 6 s, tap dismiss, top placement while a sheet is open, replace restarts timer
 - [ ] Startup tasks: init_platform, feedback enabled, history prune (5 y), ring_photos prune, DB recovery + unseen outcome notices, 500 ms poll (save failure, ring-end news, firing state)
-- [ ] Debug build command channel replacing `js:` (tap/type/dump) so `devtest/` can run; `snooze:`/`dismiss:`/`hang_ui`/`shortened` kept
+- [x] Debug build command channel replacing `js:` (tap/type/dump) so `devtest/` can run; `snooze:`/`dismiss:`/`hang_ui`/`shortened` kept (ui: commands + devtest/slint_smoke.sh; the old matrix scenarios are not ported)
 
 ### Phase 1: core loop
 Home
@@ -684,8 +684,8 @@ Home
 - [ ] Alarm list rows: time (24 h / 12 h), label, when-text priority (snoozed / paused / skip / today / tomorrow / date), day letters in week-start order
 - [ ] Enable switch per card with toast ("rings in ...", "switched off") and undo
 - [ ] Open editor by tapping a card; FAB new alarm (limit check); kebab opens menu sheet
-- [ ] Swipe card sideways to reveal Skip next / Undo skip and Delete (snap), delete with undo toast
-- [ ] Long-press (450 ms) drag to reorder in Own sort, saves order, hidden alarms excluded, auto-scroll near edges
+- [x] Swipe card sideways to reveal Skip next / Undo skip and Delete (snap), delete with undo toast (seen: Delete reveal and snap; Skip action not tried by hand)
+- [x] Long-press (450 ms) drag to reorder in Own sort, saves order, hidden alarms excluded, auto-scroll near edges (seen: lift, neighbours shift, drop saved; auto-scroll not tried)
 - [ ] Empty state with icon, texts and Weekdays 07:00 / Weekend 09:00 template buttons
 - [ ] Countdown and labels refresh on the 1.5 s / 15 s tick
 - [ ] BottomNav with active state, no stacking
@@ -851,3 +851,21 @@ Differences: easing is smoothstep / quadratic ease-out instead of CSS cubic-bezi
 `Noto Serif` and `Droid Sans Mono` by name (the generic names did not resolve); the tiles in the ring look sheet stay still while the live
 colour preview animates; the clock is not divided by the system font scale. Not verified: the Photo backdrop (needs the picker) and its
 forced white text, less motion on a device, a phone.
+
+## Status: remaining items (step 5b of the port)
+Done and seen on emulator-5556 (`wm size 1800x2400` + `wm density 280`, reset afterwards):
+- Swipe and drag on the list (`ui/home.slint` `AlarmCard`, `src/ui/home.rs`): one `TouchArea` per card decides tap (open / menu / switch by
+  x position), sideways swipe (face follows the finger, snaps open or closed at half of the 64 dp actions, one card open at a time, Skip when
+  `can_skip`, Delete) and 450 ms hold to lift the card (shadow, neighbours slide by one slot, drop calls `home::reorder`, which maps shown
+  positions to `ordering::apply_reorder` as the original handler did). A drag is only possible in the user's own order (the original let
+  you drag and then ignored the drop). Haptic tick 15 ms at lift. Edge auto-scroll is written (16 ms timer, 14 dp a step) but not tried.
+- Wide layout: `MainWindow.split` = width >= 840 dp on Home and the editor: list in 400 dp, 1 px line, editor or the `home.pick` text on the
+  right; the editor restarts for every picked alarm and back returns to the alarm before it, as the original's route stack did
+  (`Ctx.editor_trail`). Differences: editor sheets cover only the right pane (the left pane is dimmed and blocked); a tablet AVD was not
+  available, so a size and density override on the phone AVD was used.
+- About: Slint's `AboutSlint` plus a licence line in the About panel (std-widgets compile on the Android build).
+- Widget: the Settings row asked the launcher to pin the widget (logcat: `CONFIRM_PIN_APPWIDGET` started in the launcher); the widget
+  text file (`sentinel/home_widget.txt`) held the next alarm and the smoke script checks it. The launcher dialog was not answered.
+- Devtest channel: `ui:screen`, `ui:snapshot`, `ui:press:<callback>:<arg>` (documented in `src/debug_hooks.rs`, debug builds only,
+  `src/ui/debug.rs`) and `devtest/slint_smoke.sh` (alarm, widget text, ring, snooze, ring again, turn off: ALL PASS on emulator-5556).
+  The old `matrix.sh`/`all.sh` scenarios read the page with `js:` and every one of them needs rewriting against `ui:snapshot`.
