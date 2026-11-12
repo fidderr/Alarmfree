@@ -18,68 +18,174 @@ export struct AlarmRow {
 
 component AlarmCard inherits Rectangle {
     in property <AlarmRow> data;
+    in property <bool> opened;
+    in property <bool> can-reorder;
+    in property <bool> lifted;
     callback open();
     callback menu();
     callback toggle();
+    callback skip();
+    callback delete();
+    callback snap(bool);
+    callback reorder-begin(length);
+    callback reorder-move(length);
+    callback reorder-end();
+    // 0 waiting, 1 swiping sideways, 2 being dragged to a new place, 3 settled or scrolling.
+    property <int> mode: 0;
+    property <length> swipe: 0px;
+    property <length> ref-y: 0px;
+    property <length> action-w: (data.can-skip ? 2 : 1) * 64px;
+    property <length> face-x: clamp((opened ? -action-w : 0px) + swipe, -action-w, 0px);
     height: 76px;
-    HorizontalLayout {
-        padding-right: 6px;
-        Rectangle {
-            horizontal-stretch: 1;
-            HorizontalLayout {
-                padding-left: 16px;
-                padding-top: 8px;
-                padding-bottom: 8px;
-                spacing: 16px;
-                Text {
-                    min-width: data.twelve ? 104px : 76px;
-                    text: data.time;
-                    font-size: data.twelve ? 20px : 24px;
-                    font-weight: 500;
-                    letter-spacing: data.twelve ? 0px : -0.3px;
-                    color: data.on ? Pal.text : Pal.text2;
-                    vertical-alignment: center;
-                }
-                VerticalLayout {
-                    alignment: center;
-                    spacing: 5px;
-                    horizontal-stretch: 1;
-                    if data.label != "": Text {
-                        text: data.label;
-                        font-size: 14px;
+    clip: !lifted;
+
+    Rectangle {
+        x: parent.width - root.action-w;
+        width: root.action-w;
+        visible: root.face-x < -0.5px;
+        HorizontalLayout {
+            if data.can-skip: Rectangle {
+                background: Pal.surface2;
+                Icon { name: IconName.skip; size: 20px; tint: Pal.text; }
+                TouchArea { clicked => { root.skip(); } }
+            }
+            Rectangle {
+                background: Pal.danger;
+                Icon { name: IconName.trash; size: 20px; tint: Pal.bg; }
+                TouchArea { clicked => { root.delete(); } }
+            }
+        }
+    }
+    face := Rectangle {
+        x: root.face-x;
+        width: parent.width;
+        height: parent.height;
+        background: root.lifted ? Pal.surface2 : Pal.surface;
+        border-radius: root.lifted ? 14px : 0px;
+        drop-shadow-blur: root.lifted ? 24px : 0px;
+        drop-shadow-offset-y: 8px;
+        drop-shadow-color: #00000066;
+        animate x { duration: root.mode == 1 ? 0ms : 180ms; easing: ease-out; }
+        HorizontalLayout {
+            padding-right: 6px;
+            Rectangle {
+                horizontal-stretch: 1;
+                HorizontalLayout {
+                    padding-left: 16px;
+                    padding-top: 8px;
+                    padding-bottom: 8px;
+                    spacing: 16px;
+                    Text {
+                        min-width: data.twelve ? 104px : 76px;
+                        text: data.time;
+                        font-size: data.twelve ? 20px : 24px;
                         font-weight: 500;
-                        overflow: elide;
+                        letter-spacing: data.twelve ? 0px : -0.3px;
                         color: data.on ? Pal.text : Pal.text2;
+                        vertical-alignment: center;
                     }
-                    if data.when != "": Text {
-                        text: data.when;
-                        font-size: 12px;
-                        color: Pal.text2;
-                        overflow: elide;
-                    }
-                    if data.when == "": HorizontalLayout {
-                        spacing: 2px;
-                        alignment: start;
-                        for day in data.days: Text {
-                            text: day.letter;
+                    VerticalLayout {
+                        alignment: center;
+                        spacing: 5px;
+                        horizontal-stretch: 1;
+                        if data.label != "": Text {
+                            text: data.label;
+                            font-size: 14px;
+                            font-weight: 500;
+                            overflow: elide;
+                            color: data.on ? Pal.text : Pal.text2;
+                        }
+                        if data.when != "": Text {
+                            text: data.when;
                             font-size: 12px;
-                            font-weight: (day.on && data.on) ? 700 : 400;
-                            color: (day.on && data.on) ? Pal.accent : Pal.text2;
+                            color: Pal.text2;
+                            overflow: elide;
+                        }
+                        if data.when == "": HorizontalLayout {
+                            spacing: 2px;
+                            alignment: start;
+                            for day in data.days: Text {
+                                text: day.letter;
+                                font-size: 12px;
+                                font-weight: (day.on && data.on) ? 700 : 400;
+                                color: (day.on && data.on) ? Pal.accent : Pal.text2;
+                            }
                         }
                     }
                 }
             }
-            TouchArea { clicked => { root.open(); } }
+            Rectangle {
+                width: 32px;
+                Icon { name: IconName.ellipsis-vertical; size: 18px; tint: Pal.text2; }
+            }
+            Rectangle {
+                width: 52px;
+                AppSwitch { on: data.on; }
+            }
         }
-        Rectangle {
-            width: 32px;
-            Icon { name: IconName.ellipsis-vertical; size: 18px; tint: Pal.text2; }
-            TouchArea { clicked => { root.menu(); } }
+    }
+    // Held for a moment: the card can be dragged to another place.
+    hold := Timer {
+        interval: 450ms;
+        running: false;
+        triggered => {
+            self.running = false;
+            if (root.mode == 0) {
+                root.mode = 2;
+                root.ref-y = ta.mouse-y;
+                root.reorder-begin(ta.mouse-y);
+            }
         }
-        Rectangle {
-            width: 52px;
-            AppSwitch { on: data.on; }
-            TouchArea { clicked => { root.toggle(); } }
+    }
+    ta := TouchArea {
+        x: 0px;
+        width: root.opened ? root.width - root.action-w : root.width;
+        height: root.height;
+        pointer-event(e) => {
+            if (e.kind == PointerEventKind.down) {
+                root.mode = 0;
+                root.swipe = 0px;
+                hold.running = root.can-reorder && (ta.mouse-x - face.x) < face.width - 6px - 84px;
+            } else if (e.kind == PointerEventKind.up || e.kind == PointerEventKind.cancel) {
+                hold.running = false;
+                if (root.mode == 0 && e.kind == PointerEventKind.up && abs(ta.mouse-x - ta.pressed-x) > 10px && abs(ta.mouse-x - ta.pressed-x) > abs(ta.mouse-y - ta.pressed-y)) {
+                    // A quick swipe that ended before a move was seen.
+                    root.mode = 3;
+                    root.snap((root.opened ? -root.action-w : 0px) + (ta.mouse-x - ta.pressed-x) < -root.action-w / 2);
+                } else if (root.mode == 0 && e.kind == PointerEventKind.up) {
+                    root.mode = 3;
+                    if (ta.mouse-x - face.x > face.width - 6px - 52px) {
+                        root.toggle();
+                    } else if (ta.mouse-x - face.x > face.width - 6px - 84px) {
+                        root.menu();
+                    } else {
+                        root.open();
+                    }
+                } else if (root.mode == 1) {
+                    root.mode = 3;
+                    root.snap(root.face-x < -root.action-w / 2);
+                    root.swipe = 0px;
+                } else if (root.mode == 2) {
+                    root.mode = 3;
+                    root.reorder-end();
+                }
+            }
+        }
+        moved => {
+            if (root.mode == 0) {
+                if (abs(ta.mouse-x - ta.pressed-x) > 10px && abs(ta.mouse-x - ta.pressed-x) > abs(ta.mouse-y - ta.pressed-y)) {
+                    root.mode = 1;
+                    hold.running = false;
+                } else if (abs(ta.mouse-y - ta.pressed-y) > 10px) {
+                    root.mode = 3;
+                    hold.running = false;
+                }
+            }
+            if (root.mode == 1) {
+                root.swipe = ta.mouse-x - ta.pressed-x;
+            } else if (root.mode == 2) {
+                root.reorder-move(ta.mouse-y - root.ref-y);
+            }
         }
     }
 }
@@ -94,6 +200,17 @@ export component HomeScreen inherits Rectangle {
     in property <bool> banner-can-hide;
     in property <string> empty-weekdays;
     in property <string> empty-weekend;
+    in property <bool> can-reorder;
+    // The card swiped open, and the card being dragged.
+    property <string> open-id;
+    property <int> drag-from: -1;
+    property <length> drag-dy: 0px;
+    property <length> press-y: 0px;
+    property <int> drag-to: drag-from < 0 ? -1 : clamp(drag-from + Math.round(drag-dy / 76px), 0, root.rows.length - 1);
+    callback skip(string);
+    callback delete(string);
+    callback reorder(int, int);
+    callback reorder-started();
     callback open(string);
     callback menu(string);
     callback toggle(string);
@@ -171,8 +288,9 @@ export component HomeScreen inherits Rectangle {
                 clicked => { root.quick(i); }
             }
         }
-        Flickable {
+        fl := Flickable {
             vertical-stretch: 1;
+            interactive: root.drag-from < 0;
             content-height: max(self.height, 12px + root.rows.length * 76px + 120px + Insets.bottom);
             Rectangle {
                 x: 16px;
@@ -180,17 +298,39 @@ export component HomeScreen inherits Rectangle {
                 width: parent.width - 32px;
                 height: root.rows.length * 76px;
                 border-radius: 20px;
-                clip: true;
+                clip: root.drag-from < 0;
                 background: Pal.surface;
                 visible: root.rows.length > 0;
-                for row[i] in root.rows: Rectangle {
-                    y: i * 76px;
-                    height: 76px;
-                    AlarmCard {
-                        data: row;
-                        open => { root.open(row.id); }
-                        menu => { root.menu(row.id); }
-                        toggle => { root.toggle(row.id); }
+                for row[i] in root.rows: AlarmCard {
+                    y: i == root.drag-from ? i * 76px + root.drag-dy
+                        : i * 76px + ((root.drag-from >= 0 && root.drag-from < root.drag-to && i > root.drag-from && i <= root.drag-to) ? -76px
+                        : ((root.drag-from >= 0 && root.drag-from > root.drag-to && i >= root.drag-to && i < root.drag-from) ? 76px : 0px));
+                    z: i == root.drag-from ? 10 : 0;
+                    animate y { duration: i == root.drag-from ? 0ms : 150ms; easing: ease-out; }
+                    data: row;
+                    opened: root.open-id == row.id;
+                    can-reorder: root.can-reorder;
+                    lifted: i == root.drag-from;
+                    open => { root.open(row.id); }
+                    menu => { root.menu(row.id); }
+                    toggle => { root.toggle(row.id); }
+                    skip => { root.open-id = ""; root.skip(row.id); }
+                    delete => { root.open-id = ""; root.delete(row.id); }
+                    snap(open) => { root.open-id = open ? row.id : ""; }
+                    reorder-begin(y) => {
+                        root.open-id = "";
+                        root.press-y = y;
+                        root.drag-dy = 0px;
+                        root.drag-from = i;
+                        root.reorder-started();
+                    }
+                    reorder-move(delta) => {
+                        root.drag-dy = clamp(root.drag-dy + delta, -i * 76px, (root.rows.length - 1 - i) * 76px);
+                    }
+                    reorder-end() => {
+                        root.reorder(root.drag-from, root.drag-to);
+                        root.drag-from = -1;
+                        root.drag-dy = 0px;
                     }
                 }
             }
@@ -218,6 +358,24 @@ export component HomeScreen inherits Rectangle {
                     background: Pal.surface;
                     Text { text: label; font-size: 14px; font-weight: 500; color: Pal.text; }
                     TouchArea { clicked => { root.template(i); } }
+                }
+            }
+        }
+        Timer {
+            interval: 16ms;
+            running: root.drag-from >= 0;
+            triggered => {
+                // Near the top or bottom edge of the list it scrolls under the finger.
+                let finger = 12px + root.drag-from * 76px + root.press-y + root.drag-dy + fl.content-y;
+                let room = fl.content-height - fl.height + fl.content-y;
+                if (finger < 70px && fl.content-y < 0px) {
+                    let step = min(14px, -fl.content-y);
+                    fl.content-y += step;
+                    root.drag-dy -= step;
+                } else if (finger > fl.height - 70px && room > 0px) {
+                    let step = min(14px, room);
+                    fl.content-y -= step;
+                    root.drag-dy += step;
                 }
             }
         }

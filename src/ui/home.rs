@@ -165,6 +165,7 @@ pub fn refresh(ctx: &Ctx) {
         })
         .collect();
     ui.set_rows(ModelRc::from(Rc::new(VecModel::from(rows))));
+    ui.set_can_reorder(settings.prefs.sort == SortMode::Own);
 
     let next_ms = schedule::earliest_future(now_ms, next_fire.values().copied());
     let (title, sub) = match next_ms {
@@ -326,4 +327,48 @@ pub fn delete_alarm(ctx: &Rc<Ctx>, id: &str) {
         }
     };
     change(ctx, message, &mut |list| list.retain(|a| a.id != id));
+}
+
+/// The Skip action behind a swiped card.
+pub fn skip_from_swipe(ctx: &Rc<Ctx>, id: &str) {
+    let Some(alarm) = ctx.alarms.borrow().iter().find(|a| a.id == id).cloned() else {
+        return;
+    };
+    let now_ms = chrono::Local::now().timestamp_millis();
+    let next = next_fire_times(std::slice::from_ref(&alarm))
+        .get(id)
+        .copied();
+    let skip_active = alarm.skip_until_ms.is_some_and(|skip| skip > now_ms);
+    toggle_skip(ctx, id, next, skip_active);
+}
+
+/// A card dropped at a new place: positions in the list as shown, which leaves out the
+/// alarms it does not show. Only the user's own order can be arranged.
+pub fn reorder(ctx: &Rc<Ctx>, from: usize, to: usize) {
+    if ctx.settings.borrow().prefs.sort != SortMode::Own || from == to {
+        return;
+    }
+    let moved = {
+        let mut list = ctx.alarms.borrow_mut();
+        let shown: Vec<String> = crate::ordering::sorted_for_display(&list)
+            .into_iter()
+            .filter(|a| !a.hidden)
+            .map(|a| a.id)
+            .collect();
+        let position = |id: Option<&String>| {
+            id.and_then(|id| {
+                crate::ordering::sorted_for_display(&list)
+                    .iter()
+                    .position(|a| a.id == *id)
+            })
+        };
+        match (position(shown.get(from)), position(shown.get(to))) {
+            (Some(from), Some(to)) => crate::ordering::apply_reorder(&mut list, from, to),
+            _ => false,
+        }
+    };
+    if moved {
+        crate::persistence::save_alarms(&ctx.alarms.borrow());
+    }
+    refresh(ctx);
 }

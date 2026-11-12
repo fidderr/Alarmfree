@@ -331,6 +331,17 @@ pub fn run() -> Result<(), slint::PlatformError> {
         }};
     }
     on!(on_toggle, |ctx, id| home::toggle(&ctx, id.as_str()));
+    on!(on_skip, |ctx, id| home::skip_from_swipe(&ctx, id.as_str()));
+    on!(on_delete_alarm, |ctx, id| home::delete_alarm(
+        &ctx,
+        id.as_str()
+    ));
+    on!(on_reorder, |ctx, from, to| home::reorder(
+        &ctx,
+        from as usize,
+        to as usize
+    ));
+    on!(on_reorder_started, |_ctx| crate::feedback::tick(15));
     on!(on_quick, |ctx, i| home::quick(&ctx, i as usize));
     on!(on_template, |ctx, i| home::template(&ctx, i as usize));
     on!(on_open, |ctx, id| editor::open(&ctx, id.as_str()));

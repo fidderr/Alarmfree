@@ -30,6 +30,11 @@ export component MainWindow inherits Window {
     in property <bool> banner-can-hide;
     in property <string> empty-weekdays;
     in property <string> empty-weekend;
+    in property <bool> can-reorder;
+    callback skip(string);
+    callback delete-alarm(string);
+    callback reorder(int, int);
+    callback reorder-started();
     // 0 alarms, 1 editor, 2 history, 3 settings.
     in-out property <int> screen: 0;
     in property <bool> ringing;
@@ -154,6 +159,11 @@ export component MainWindow inherits Window {
         banner-can-hide: root.banner-can-hide;
         empty-weekdays: root.empty-weekdays;
         empty-weekend: root.empty-weekend;
+        can-reorder: root.can-reorder;
+        skip(id) => { root.skip(id); }
+        delete(id) => { root.delete-alarm(id); }
+        reorder(from, to) => { root.reorder(from, to); }
+        reorder-started => { root.reorder-started(); }
         open(id) => { root.open(id); }
         menu(id) => { root.menu(id); }
         toggle(id) => { root.toggle(id); }
