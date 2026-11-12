@@ -822,3 +822,16 @@ screen already takes the look of the alarm); labels used before are put in lines
 month grid, where the original used the system date input. Not verified: real vibration feel, sound playback of the preview,
 photo picking, Fix buttons on a phone, hiding a warning, the colour wheel by finger drag.
 
+
+## Status: theme, first run, language (step 4 of the port)
+Done and seen on emulator-5556: theme screen (`src/ui/theme.rs`, `ui/theme_screen.slint`, screen 5, opened by the Theme row at the
+top of Settings General, back returns to Settings): fixed preview card, 9 theme tiles (System split dark/light), "Your own theme"
+row, Background / Cards / Text rows with Automatic, accent swatches plus the wheel swatch, and the colour sheet (swatches, wheel,
+brightness, code, Automatic chip, "changed a little" note, Done; back closes the sheet first). Every change applies at once to
+`Pal` and the system bars (status bar icons dark on a light theme, checked on Mist, Sand and the custom pink) and is saved on
+tile / swatch tap, finger lift, valid code and sheet close. The wheel callbacks of `Hue` go to the theme screen while its sheet
+is open, else to the editor's ring colour sheet. First run: started at launch when `!setup_done` (same as the original's NavWatcher);
+"Get started" or back sets `setup_done` and goes to Home. The original asks for no permission at start, only from the Fix button
+and challenges, which are ported. Language: after switching to German all of Settings, Theme, Home, editor and History re-read
+and nothing clipped, except the Home banner text ("Akkusparen: Wecker koennten zu ..." elides). Not checked: fr/es/nl screenshots of
+every screen, finger drag on the wheel (tapped only), the original's hard-coded colours in challenge screens (white text on photo).

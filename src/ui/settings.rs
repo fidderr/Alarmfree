@@ -78,6 +78,7 @@ pub fn refresh(ctx: &Ctx) {
     let tr = ctx.tr.borrow();
     let problems = crate::reliability::report().problems().len();
     ui.set_st(SettingsView {
+        theme: t(&tr, settings.theme.name_key()).into(),
         language: language_name(&settings, &tr).into(),
         time_format: format_name(settings.prefs.time_format, &tr).into(),
         week_start: week_name(settings.prefs.week_start, &tr).into(),
@@ -165,6 +166,7 @@ pub fn row(ctx: &Rc<Ctx>, index: i32) {
         7 => super::history::open_delete(ctx),
         8 => open_about(ctx),
         9 => super::reliability::open(ctx, false),
+        10 => super::theme::open(ctx),
         _ => {}
     }
 }

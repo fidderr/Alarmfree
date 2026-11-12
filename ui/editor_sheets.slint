@@ -2,13 +2,13 @@ import { Pal, Tr, Insets } from "theme.slint";
 import { Icon, IconName } from "components.slint";
 import { Sheet, RadioRow, Wheel, Stepper, PrimaryButton, AppSlider, ChoiceChips, GroupTitle, LinkButton, TextField } from "widgets.slint";
 import { DatePicker } from "datepicker.slint";
-import { ColourControls } from "colour.slint";
+import { ColourControls, SwatchGrid, SwatchCell } from "colour.slint";
+export { SwatchCell }
 import { Backdrop } from "backdrop.slint";
 
 // state 0: a row to pick, 1: being renamed, 2: asking whether to delete it.
 export struct SoundRow { text: string, selected: bool, custom: bool, state: int }
 export struct LookTile { name: string, kind: int, selected: bool, add: bool, c1: color, c2: color, c3: color, photo: image, has-photo: bool }
-export struct SwatchCell { colour: color, selected: bool }
 export struct UsedChip { text: string, line: int, selected: bool }
 
 // What the sheets of the editor show; Rust fills it from the alarm being edited.
@@ -463,30 +463,7 @@ export component RingColourSheet inherits Rectangle {
                 unit: 1.2px;
             }
         }
-        Rectangle {
-            height: 2 * 44px + 12px + 8px;
-            property <length> gap: (self.width - 5 * 44px) / 4;
-            for swatch[i] in Ed.swatches: Rectangle {
-                x: Math.mod(i, 5) * (44px + parent.gap);
-                y: 4px + Math.floor(i / 5) * (44px + 12px);
-                width: 44px;
-                height: 44px;
-                border-radius: 22px;
-                border-width: 1px;
-                border-color: #80808080;
-                background: swatch.colour;
-                if swatch.selected: Rectangle {
-                    x: -4px;
-                    y: -4px;
-                    width: 52px;
-                    height: 52px;
-                    border-radius: 26px;
-                    border-width: 2px;
-                    border-color: Pal.text;
-                }
-                TouchArea { clicked => { Ed.swatch-picked(i); } }
-            }
-        }
+        SwatchGrid { swatches: Ed.swatches; picked(i) => { Ed.swatch-picked(i); } }
         ColourControls { }
         PrimaryButton { text: Tr.t("action.done"); clicked => { root.back(); } }
     }

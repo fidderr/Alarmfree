@@ -1,6 +1,37 @@
 import { Pal, Tr } from "theme.slint";
 import { AppSlider, TextField } from "widgets.slint";
 
+export struct SwatchCell { colour: color, selected: bool }
+
+// Round colour choices, five to a row, the chosen one ringed.
+export component SwatchGrid inherits Rectangle {
+    in property <[SwatchCell]> swatches;
+    in property <color> ring: Pal.text;
+    callback picked(int);
+    height: (root.swatches.length > 5 ? 2 : 1) * 44px + (root.swatches.length > 5 ? 12px : 0px) + 8px;
+    property <length> gap: (self.width - 5 * 44px) / 4;
+    for swatch[i] in root.swatches: Rectangle {
+        x: Math.mod(i, 5) * (44px + root.gap);
+        y: 4px + Math.floor(i / 5) * (44px + 12px);
+        width: 44px;
+        height: 44px;
+        border-radius: 22px;
+        border-width: 1px;
+        border-color: #80808080;
+        background: swatch.colour;
+        if swatch.selected: Rectangle {
+            x: -4px;
+            y: -4px;
+            width: 52px;
+            height: 52px;
+            border-radius: 26px;
+            border-width: 2px;
+            border-color: root.ring;
+        }
+        TouchArea { clicked => { root.picked(i); } }
+    }
+}
+
 // Choosing any colour: a wheel, how bright, and its code. What it is a colour for is up to
 // the panel around it. Rust keeps hue, saturation and brightness and the code; this draws
 // them and reports touches.

@@ -96,28 +96,49 @@ pub fn connect(ctx: &Rc<Ctx>, ui: &super::MainWindow) {
     let weak = Rc::downgrade(ctx);
     hue.on_touch(move |x, y| {
         if let Some(ctx) = weak.upgrade() {
-            super::editor_look::wheel_touched(&ctx, f64::from(x), f64::from(y));
+            if super::theme::has_wheel(&ctx) {
+                super::theme::wheel_touched(&ctx, f64::from(x), f64::from(y));
+            } else {
+                super::editor_look::wheel_touched(&ctx, f64::from(x), f64::from(y));
+            }
         }
     });
     let weak = Rc::downgrade(ctx);
     hue.on_brightness_changed(move |percent| {
         if let Some(ctx) = weak.upgrade() {
-            super::editor_look::wheel_brightness(&ctx, percent);
+            if super::theme::has_wheel(&ctx) {
+                super::theme::wheel_brightness(&ctx, percent);
+            } else {
+                super::editor_look::wheel_brightness(&ctx, percent);
+            }
         }
     });
     let weak = Rc::downgrade(ctx);
     hue.on_code_edited(move |text| {
         if let Some(ctx) = weak.upgrade() {
-            super::editor_look::wheel_code(&ctx, text.as_str());
+            if super::theme::has_wheel(&ctx) {
+                super::theme::wheel_code(&ctx, text.as_str());
+            } else {
+                super::editor_look::wheel_code(&ctx, text.as_str());
+            }
         }
     });
     let weak = Rc::downgrade(ctx);
     hue.on_auto_picked(move || {
         if let Some(ctx) = weak.upgrade() {
-            super::editor_look::wheel_auto(&ctx);
+            if super::theme::has_wheel(&ctx) {
+                super::theme::wheel_auto(&ctx);
+            } else {
+                super::editor_look::wheel_auto(&ctx);
+            }
         }
     });
-    hue.on_released(|| {});
+    let weak = Rc::downgrade(ctx);
+    hue.on_released(move || {
+        if let Some(ctx) = weak.upgrade() {
+            super::theme::released(&ctx);
+        }
+    });
 }
 
 #[cfg(test)]

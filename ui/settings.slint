@@ -3,6 +3,7 @@ import { Icon, IconName, AppSwitch } from "components.slint";
 import { BottomNav } from "nav.slint";
 
 export struct SettingsView {
+    theme: string,
     language: string,
     time-format: string,
     week-start: string,
@@ -140,6 +141,8 @@ export component SettingsScreen inherits Rectangle {
                 Rectangle { height: 8px; }
                 ListTitle { text: Tr.t("settings.general"); }
                 Card {
+                    SetRow { title: Tr.t("settings.theme"); value: root.st.theme; clicked => { root.open-row(10); } }
+                    Inset { }
                     SetRow { title: Tr.t("settings.language"); value: root.st.language; clicked => { root.open-row(0); } }
                     Inset { }
                     SetRow { title: Tr.t("settings.time_format"); value: root.st.time-format; clicked => { root.open-row(1); } }

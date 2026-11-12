@@ -14,9 +14,10 @@ import { Cfg, CfgRow, CfgType, CfgStepper } from "challenge_sheets.slint";
 import { SettingsScreen, SettingsView } from "settings.slint";
 import { HistoryScreen, StatLine, BarCell, EventLine } from "history.slint";
 import { PanelSheet } from "panel.slint";
+import { Thm, ThemeScreen, ThemeTile } from "theme_screen.slint";
 export { Pal, Tr, Insets, AlarmRow, DayCell, EditorSheet, HomeSheet, SheetChoice }
 export { Ed, SoundRow, LookTile, SwatchCell, UsedChip, Cal, DateCell, Hue, Look, Rel, CheckRow }
-export { SettingsView, StatLine, BarCell, EventLine, Motion }
+export { SettingsView, StatLine, BarCell, EventLine, Motion, Thm, ThemeTile }
 export { Run, RunCell, TypeCell, ReactTarget, RunKind, Cfg, CfgRow, CfgType, CfgStepper }
 
 export component MainWindow inherits Window {
@@ -255,6 +256,8 @@ export component MainWindow inherits Window {
     }
 
     if root.screen == 4: ReliabilityScreen { }
+
+    if root.screen == 5: ThemeScreen { }
 
     if root.ed-preview: RingScreen {
         preview: true;

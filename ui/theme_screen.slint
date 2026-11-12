@@ -1,0 +1,329 @@
+import { Pal, Tr, Insets } from "theme.slint";
+import { Icon, IconName, AppSwitch } from "components.slint";
+import { ScreenHeader, RowList, Separator, PrimaryButton, Sheet } from "widgets.slint";
+import { ColourControls, SwatchGrid, SwatchCell } from "colour.slint";
+import { DayCell } from "home.slint";
+
+// One theme of the grid: what its face is made of. `both` is the one that follows the phone,
+// half dark and half light.
+export struct ThemeTile { name: string, bg: color, bg2: color, card: color, ink: color, accent: color, both: bool, selected: bool }
+
+// What the theme screen shows; Rust fills it from the settings.
+export global Thm {
+    in property <[ThemeTile]> tiles;
+    in property <bool> own-selected;
+    in property <color> own-bg;
+    in property <color> own-card;
+    in property <color> own-ink;
+    in property <bool> card-auto;
+    in property <bool> ink-auto;
+    in property <[SwatchCell]> accents;
+    in property <bool> custom-accent;
+    in property <color> custom-accent-colour;
+    in property <[DayCell]> days;
+    in property <string> weekdays;
+    // The colour sheet.
+    in property <bool> sheet-open;
+    in property <string> sheet-title;
+    in property <[SwatchCell]> sheet-swatches;
+    in property <bool> adjusted;
+    callback back();
+    callback tile-picked(int);
+    callback own-picked();
+    callback accent-picked(int);
+    callback role-open(int);
+    callback sheet-swatch-picked(int);
+    callback sheet-close();
+}
+
+component Dot inherits Rectangle {
+    in property <bool> rainbow: false;
+    width: 24px;
+    height: 24px;
+    border-radius: 12px;
+    border-width: 1px;
+    border-color: Pal.line;
+    background: root.rainbow ? @conic-gradient(#8000ff 0deg, #ff00ff 30deg, #ff0000 90deg, #ffff00 150deg, #00ff00 210deg, #00ffff 270deg, #0000ff 330deg, #8000ff 360deg) : transparent;
+}
+
+component ColourRow inherits Rectangle {
+    in property <string> title;
+    in property <string> value;
+    in property <color> colour;
+    callback clicked();
+    height: 56px;
+    HorizontalLayout {
+        padding-left: 16px;
+        padding-right: 12px;
+        spacing: 8px;
+        Text { text: root.title; font-size: 16px; color: Pal.text; vertical-alignment: center; }
+        Text { horizontal-stretch: 1; text: root.value; font-size: 14px; color: Pal.text2; horizontal-alignment: right; vertical-alignment: center; overflow: elide; }
+        Rectangle {
+            width: 24px;
+            Dot { background: root.colour; y: (parent.height - self.height) / 2; }
+        }
+        Icon { name: IconName.chevron-right; size: 14px; tint: Pal.text2; y: (parent.height - self.height) / 2; }
+    }
+    TouchArea { clicked => { root.clicked(); } }
+}
+
+// A fixed sample of the app, so a change further down the page shows up right here.
+component Preview inherits Rectangle {
+    height: 16px + 44px + 16px + 38px + 16px;
+    Rectangle {
+        x: 16px;
+        width: parent.width - 32px;
+        border-radius: 20px;
+        background: Pal.surface;
+        VerticalLayout {
+            padding: 16px;
+            spacing: 16px;
+            HorizontalLayout {
+                height: 44px;
+                spacing: 16px;
+                Text { min-width: 76px; text: "07:00"; font-size: 24px; font-weight: 500; letter-spacing: -0.3px; color: Pal.text; vertical-alignment: center; }
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    alignment: center;
+                    spacing: 5px;
+                    Text { text: Thm.weekdays; font-size: 14px; font-weight: 500; color: Pal.text; overflow: elide; }
+                    HorizontalLayout {
+                        spacing: 2px;
+                        alignment: start;
+                        for day in Thm.days: Text {
+                            text: day.letter;
+                            font-size: 12px;
+                            font-weight: day.on ? 700 : 400;
+                            color: day.on ? Pal.accent : Pal.text2;
+                        }
+                    }
+                }
+                Rectangle { width: 44px; AppSwitch { on: true; y: (parent.height - self.height) / 2; } }
+            }
+            HorizontalLayout {
+                height: 38px;
+                spacing: 16px;
+                alignment: start;
+                Rectangle {
+                    min-width: 36px + save.preferred-width;
+                    border-radius: 14px;
+                    background: Pal.accent;
+                    save := Text { text: Tr.t("action.save"); font-size: 16px; font-weight: 500; color: Pal.on-accent; }
+                }
+                Text { text: Tr.t("challenge.try"); font-size: 16px; font-weight: 500; color: Pal.accent; vertical-alignment: center; }
+            }
+        }
+    }
+}
+
+component Tile inherits Rectangle {
+    in property <ThemeTile> tile;
+    callback clicked();
+    VerticalLayout {
+        spacing: 8px;
+        Rectangle {
+            height: 64px;
+            border-radius: 14px;
+            border-width: 1px;
+            border-color: Pal.line;
+            background: root.tile.both ? @linear-gradient(135deg, root.tile.bg 50%, root.tile.bg2 50%) : root.tile.bg;
+            Rectangle {
+                x: 10px;
+                y: 12px;
+                width: parent.width - 20px;
+                height: parent.height - 24px;
+                border-radius: 8px;
+                background: root.tile.both ? transparent : root.tile.card;
+                HorizontalLayout {
+                    padding-left: 8px;
+                    padding-right: 8px;
+                    spacing: 8px;
+                    alignment: root.tile.both ? center : stretch;
+                    if !root.tile.both: Rectangle {
+                        horizontal-stretch: 1;
+                        Rectangle { y: (parent.height - 4px) / 2; height: 4px; border-radius: 2px; background: root.tile.ink; }
+                    }
+                    Rectangle {
+                        width: 12px;
+                        Rectangle { y: (parent.height - 12px) / 2; width: 12px; height: 12px; border-radius: 6px; background: root.tile.accent; }
+                    }
+                }
+            }
+            if root.tile.selected: Rectangle {
+                x: -4px;
+                y: -4px;
+                width: parent.width + 8px;
+                height: parent.height + 8px;
+                border-radius: 18px;
+                border-width: 2px;
+                border-color: Pal.accent;
+            }
+        }
+        Text {
+            height: 16px;
+            text: root.tile.name;
+            font-size: 12px;
+            font-weight: root.tile.selected ? 500 : 400;
+            color: root.tile.selected ? Pal.text : Pal.text2;
+            horizontal-alignment: center;
+            overflow: elide;
+        }
+    }
+    TouchArea { clicked => { root.clicked(); } }
+}
+
+// Choosing the colours: a theme, an accent colour for it, or a theme of one's own.
+export component ThemeScreen inherits Rectangle {
+    background: Pal.bg;
+    VerticalLayout {
+        padding-top: Insets.top;
+        padding-left: Insets.left;
+        padding-right: Insets.right;
+        ScreenHeader {
+            title: Tr.t("settings.theme");
+            back => { Thm.back(); }
+        }
+        Rectangle {
+            height: 4px;
+        }
+        Preview { }
+        Flickable {
+            vertical-stretch: 1;
+            content-height: body.preferred-height + Insets.bottom + 24px;
+            body := VerticalLayout {
+                alignment: start;
+                padding-left: 16px;
+                padding-right: 16px;
+                padding-top: 20px;
+                spacing: 16px;
+                Rectangle {
+                    height: Math.ceil(Thm.tiles.length / 3) * 88px + (Math.ceil(Thm.tiles.length / 3) - 1) * 16px;
+                    property <length> w: (self.width - 24px) / 3;
+                    for tile[i] in Thm.tiles: Tile {
+                        x: Math.mod(i, 3) * (parent.w + 12px);
+                        y: Math.floor(i / 3) * (88px + 16px);
+                        width: parent.w;
+                        height: 88px;
+                        tile: tile;
+                        clicked => { Thm.tile-picked(i); }
+                    }
+                }
+                Rectangle {
+                    height: 56px;
+                    RowList {
+                        Rectangle {
+                            height: 56px;
+                            HorizontalLayout {
+                                padding-left: 16px;
+                                padding-right: 12px;
+                                spacing: 12px;
+                                Rectangle {
+                                    width: 24px;
+                                    Dot { rainbow: true; y: (parent.height - self.height) / 2; }
+                                }
+                                Text { horizontal-stretch: 1; text: Tr.t("theme.custom"); font-size: 16px; color: Pal.text; vertical-alignment: center; overflow: elide; }
+                            }
+                            TouchArea { clicked => { Thm.own-picked(); } }
+                        }
+                    }
+                    if Thm.own-selected: Rectangle {
+                        x: -4px;
+                        y: -4px;
+                        width: parent.width + 8px;
+                        height: parent.height + 8px;
+                        border-radius: 24px;
+                        border-width: 2px;
+                        border-color: Pal.accent;
+                    }
+                }
+                if Thm.own-selected: RowList {
+                    VerticalLayout {
+                        ColourRow { title: Tr.t("theme.background"); colour: Thm.own-bg; clicked => { Thm.role-open(1); } }
+                        Separator { }
+                        ColourRow { title: Tr.t("theme.cards"); value: Thm.card-auto ? Tr.t("theme.auto") : ""; colour: Thm.own-card; clicked => { Thm.role-open(2); } }
+                        Separator { }
+                        ColourRow { title: Tr.t("theme.text"); value: Thm.ink-auto ? Tr.t("theme.auto") : ""; colour: Thm.own-ink; clicked => { Thm.role-open(3); } }
+                    }
+                }
+                Text {
+                    x: 4px;
+                    height: 16px;
+                    text: Tr.t("settings.accent");
+                    font-size: 12px;
+                    font-weight: 500;
+                    color: Pal.text2;
+                    vertical-alignment: center;
+                }
+                Rectangle {
+                    height: 2 * 44px + 12px + 8px;
+                    property <length> gap: (self.width - 40px - 5 * 44px) / 4;
+                    for swatch[i] in Thm.accents: Rectangle {
+                        x: 20px + Math.mod(i, 5) * (44px + parent.gap);
+                        y: 4px + Math.floor(i / 5) * (44px + 12px);
+                        width: 44px;
+                        height: 44px;
+                        border-radius: 22px;
+                        border-width: 1px;
+                        border-color: #80808080;
+                        background: swatch.colour;
+                        if swatch.selected: Rectangle {
+                            x: -4px;
+                            y: -4px;
+                            width: 52px;
+                            height: 52px;
+                            border-radius: 26px;
+                            border-width: 2px;
+                            border-color: Pal.text;
+                        }
+                        TouchArea { clicked => { Thm.accent-picked(i); } }
+                    }
+                    // The tenth: any colour, from the wheel.
+                    Rectangle {
+                        x: 20px + Math.mod(Thm.accents.length, 5) * (44px + parent.gap);
+                        y: 4px + Math.floor(Thm.accents.length / 5) * (44px + 12px);
+                        width: 44px;
+                        height: 44px;
+                        border-radius: 22px;
+                        border-width: 1px;
+                        border-color: #80808080;
+                        background: @conic-gradient(#8000ff 0deg, #ff00ff 30deg, #ff0000 90deg, #ffff00 150deg, #00ff00 210deg, #00ffff 270deg, #0000ff 330deg, #8000ff 360deg);
+                        if Thm.custom-accent: Rectangle {
+                            x: 10px;
+                            y: 10px;
+                            width: 22px;
+                            height: 22px;
+                            border-radius: 11px;
+                            border-width: 2px;
+                            border-color: Pal.surface;
+                            background: Thm.custom-accent-colour;
+                        }
+                        if Thm.custom-accent: Rectangle {
+                            x: -4px;
+                            y: -4px;
+                            width: 52px;
+                            height: 52px;
+                            border-radius: 26px;
+                            border-width: 2px;
+                            border-color: Pal.text;
+                        }
+                        TouchArea { clicked => { Thm.role-open(0); } }
+                    }
+                }
+            }
+        }
+    }
+    if Thm.sheet-open: Sheet {
+        title: Thm.sheet-title;
+        close => { Thm.sheet-close(); }
+        SwatchGrid { swatches: Thm.sheet-swatches; picked(i) => { Thm.sheet-swatch-picked(i); } }
+        ColourControls { }
+        if Thm.adjusted: Text {
+            text: Tr.t("theme.adjusted");
+            font-size: 12px;
+            color: Pal.text2;
+            horizontal-alignment: center;
+            wrap: word-wrap;
+        }
+        PrimaryButton { text: Tr.t("action.done"); clicked => { Thm.sheet-close(); } }
+    }
+}

@@ -32,12 +32,14 @@ mod panel;
 mod reliability;
 mod ring;
 mod settings;
+mod theme;
 mod toast;
 
 /// The screens of `MainWindow.screen`.
 const SCREEN_HISTORY: i32 = 2;
 const SCREEN_SETTINGS: i32 = 3;
 const SCREEN_RELIABILITY: i32 = 4;
+const SCREEN_THEME: i32 = 5;
 
 /// Everything the screens share. Only the UI thread touches it.
 pub struct Ctx {
@@ -61,6 +63,7 @@ pub struct Ctx {
     /// The most serious thing the phone does not allow, shown as a banner on Home.
     pub problem: Cell<Option<mobile_sentinel::health::Check>>,
     pub reliability: RefCell<reliability::State>,
+    pub theme: RefCell<theme::State>,
 }
 
 // For what comes back to the UI thread from another one.
@@ -133,6 +136,7 @@ fn back(ctx: &Rc<Ctx>) {
     match ui.get_screen() {
         1 => editor::back(ctx),
         SCREEN_RELIABILITY => reliability::leave(ctx),
+        SCREEN_THEME => theme::leave(ctx),
         // The main screens do not stack: back from them is the alarms.
         SCREEN_HISTORY | SCREEN_SETTINGS => go(ctx, 0),
         _ => mobile_sentinel::foregrounding::move_to_back(),
@@ -263,6 +267,7 @@ fn connect_editor_sheets(ctx: &Rc<Ctx>, ui: &MainWindow) {
     ));
     colour::connect(ctx, ui);
     reliability::connect(ctx, ui);
+    theme::connect(ctx, ui);
 }
 
 pub fn run() -> Result<(), slint::PlatformError> {
@@ -296,6 +301,7 @@ pub fn run() -> Result<(), slint::PlatformError> {
         ticks: Cell::new(0),
         problem: Cell::new(None),
         reliability: RefCell::new(reliability::State::default()),
+        theme: RefCell::new(theme::State::default()),
     });
     CTX.with(|slot| *slot.borrow_mut() = Rc::downgrade(&ctx));
 
@@ -312,6 +318,7 @@ pub fn run() -> Result<(), slint::PlatformError> {
     settings::apply_motion(&ctx);
     reliability::refresh_banner(&ctx);
     home::refresh(&ctx);
+    let first_run = !ctx.settings.borrow().prefs.setup_done;
 
     macro_rules! on {
         ($setter:ident, |$ctx:ident $(, $arg:ident)*| $body:expr) => {{
@@ -377,6 +384,11 @@ pub fn run() -> Result<(), slint::PlatformError> {
     challenge_sheets::connect(&ctx, &ui);
     on!(on_toast_undo, |ctx| toast::undo(&ctx));
     on!(on_toast_dismiss, |ctx| toast::dismiss(&ctx));
+
+    // The setup comes before anything else, once.
+    if first_run {
+        reliability::open(&ctx, true);
+    }
 
     // Anything the user must know about what happened while the app was away: a database that
     // had to be reset (or cannot persist) instead of a silently empty alarm list, and alarms
