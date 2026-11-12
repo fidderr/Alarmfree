@@ -52,6 +52,8 @@ pub struct Ctx {
     pub toast_timer: slint::Timer,
     pub timers: RefCell<Vec<slint::Timer>>,
     pub editor: RefCell<Option<editor::EditorState>>,
+    /// The alarms the editor was showing before another one was picked next to the list.
+    pub editor_trail: RefCell<Vec<String>>,
     pub home_sheet: RefCell<home_sheets::SheetState>,
     pub panel: RefCell<panel::PanelState>,
     pub history: history::HistoryState,
@@ -291,6 +293,7 @@ pub fn run() -> Result<(), slint::PlatformError> {
         toast_timer: slint::Timer::default(),
         timers: RefCell::new(Vec::new()),
         editor: RefCell::new(None),
+        editor_trail: RefCell::new(Vec::new()),
         home_sheet: RefCell::new(home_sheets::SheetState::default()),
         panel: RefCell::new(panel::PanelState::default()),
         history: history::HistoryState::default(),

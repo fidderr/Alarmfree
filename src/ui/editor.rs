@@ -70,6 +70,17 @@ pub struct EditorState {
 
 /// "copy-<id>" opens a new alarm prefilled from the alarm <id>.
 pub fn open(ctx: &Rc<Ctx>, id: &str) {
+    // Next to the list another alarm can be picked while one is open: the editor starts over
+    // for it, and back returns to the one before.
+    let previous = ctx.editor.borrow().as_ref().map(|ed| ed.id.clone());
+    if let Some(previous) = previous {
+        stop_preview(ctx);
+        ctx.editor_trail.borrow_mut().push(previous);
+    }
+    start(ctx, id);
+}
+
+fn start(ctx: &Rc<Ctx>, id: &str) {
     let copy_of = id.strip_prefix("copy-").map(str::to_owned);
     let for_defaults = id == "defaults";
     let is_new = id == "new" || copy_of.is_some();
@@ -620,6 +631,12 @@ fn leave(ctx: &Rc<Ctx>) {
         .borrow_mut()
         .take()
         .is_some_and(|ed| ed.for_defaults);
+    let earlier = ctx.editor_trail.borrow_mut().pop();
+    if let Some(earlier) = earlier {
+        super::home::refresh(ctx);
+        start(ctx, &earlier);
+        return;
+    }
     if let Some(ui) = ctx.ui.upgrade() {
         ui.set_ed_sheet(EditorSheet::None);
         // The defaults are opened from the settings.

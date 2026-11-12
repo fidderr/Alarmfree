@@ -138,6 +138,9 @@ export component MainWindow inherits Window {
     background: Pal.bg;
     default-font-size: 14px;
 
+    // A tablet or an unfolded foldable: the list and an alarm side by side.
+    property <bool> split: root.width >= 840px && (root.screen == 0 || root.screen == 1);
+
     // The window's bars and the soft keyboard, for every screen.
     function update-insets() {
         Insets.top = root.safe-area-insets.top;
@@ -149,7 +152,11 @@ export component MainWindow inherits Window {
     changed safe-area-insets => { update-insets(); }
     changed virtual-keyboard-size => { update-insets(); }
 
-    if root.screen == 0: HomeScreen {
+    if root.screen == 0 || (root.split && root.screen == 1): HomeScreen {
+        x: 0px;
+        y: 0px;
+        width: root.split ? 400px : parent.width;
+        height: parent.height;
         next-title: root.next-title;
         next-sub: root.next-sub;
         rows: root.rows;
@@ -177,7 +184,7 @@ export component MainWindow inherits Window {
         template(i) => { root.template(i); }
     }
 
-    if root.screen == 0: HomeSheets {
+    if root.screen == 0 || (root.split && root.screen == 1): HomeSheets {
         sheet: root.home-sheet;
         title: root.hs-title;
         choices: root.hs-choices;
@@ -228,7 +235,36 @@ export component MainWindow inherits Window {
         done => { root.pn-done-tapped(); }
     }
 
+    if root.split: Rectangle {
+        x: 400px;
+        y: 0px;
+        width: 1px;
+        height: parent.height;
+        background: Pal.line;
+    }
+
+    if root.split && root.screen == 0: Rectangle {
+        x: 401px;
+        y: 0px;
+        width: parent.width - 401px;
+        height: parent.height;
+        Text {
+            x: 32px;
+            width: parent.width - 64px;
+            text: Tr.t("home.pick");
+            font-size: 14px;
+            color: Pal.text2;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            wrap: word-wrap;
+        }
+    }
+
     if root.screen == 1: editor := EditorScreen {
+        x: root.split ? 401px : 0px;
+        y: 0px;
+        width: root.split ? parent.width - 401px : parent.width;
+        height: parent.height;
         defaults: root.ed-defaults;
         title: root.ed-title;
         deletable: root.ed-deletable;
@@ -251,6 +287,15 @@ export component MainWindow inherits Window {
         discard-confirmed => { root.ed-discard-confirmed(); }
         sheet-closed => { root.ed-sheet-closed(); }
         sheet-opened(sheet) => { root.ed-sheet-opened(sheet); }
+    }
+
+    if root.split && root.screen == 1 && root.ed-sheet != EditorSheet.none: Rectangle {
+        x: 0px;
+        y: 0px;
+        width: 401px;
+        height: parent.height;
+        background: #00000066;
+        TouchArea { }
     }
 
     if root.ringing: RingScreen {
