@@ -1,4 +1,4 @@
-import { Pal, Tr, Insets } from "theme.slint";
+import { Pal, Tr, Insets, Motion } from "theme.slint";
 import { HomeScreen, AlarmRow, DayCell } from "home.slint";
 import { Toast } from "components.slint";
 import { EditorScreen, ChoiceRow, EditorSheet } from "editor.slint";
@@ -6,7 +6,11 @@ import { RingScreen } from "ring.slint";
 import { HomeSheets, HomeSheet, SheetChoice } from "home_sheets.slint";
 import { Run, RunScreen, RunCell, TypeCell, ReactTarget, RunKind } from "challenges.slint";
 import { Cfg, CfgRow, CfgType, CfgStepper } from "challenge_sheets.slint";
+import { SettingsScreen, SettingsView } from "settings.slint";
+import { HistoryScreen, StatLine, BarCell, EventLine } from "history.slint";
+import { PanelSheet } from "panel.slint";
 export { Pal, Tr, Insets, AlarmRow, DayCell, ChoiceRow, EditorSheet, HomeSheet, SheetChoice }
+export { SettingsView, StatLine, BarCell, EventLine, Motion }
 export { Run, RunCell, TypeCell, ReactTarget, RunKind, Cfg, CfgRow, CfgType, CfgStepper }
 
 export component MainWindow inherits Window {
@@ -19,7 +23,7 @@ export component MainWindow inherits Window {
     in property <bool> banner-can-hide;
     in property <string> empty-weekdays;
     in property <string> empty-weekend;
-    // 0 alarms, 1 editor.
+    // 0 alarms, 1 editor, 2 history, 3 settings.
     in-out property <int> screen: 0;
     in property <bool> ringing;
     // The panels over the list.
@@ -31,8 +35,44 @@ export component MainWindow inherits Window {
     callback hs-picked(int);
     callback hs-pause-step(int);
     callback hs-pause-apply();
+    // The settings.
+    in property <SettingsView> st;
+    callback st-row(int);
+    callback st-toggled(int, bool);
+    // The history.
+    in property <[string]> h-periods;
+    in property <int> h-period;
+    in-out property <string> h-custom-text;
+    in property <int> h-empty;
+    in property <string> h-streak;
+    in property <string> h-time-to-stop;
+    in property <string> h-snoozes;
+    in property <[BarCell]> h-bars;
+    in property <bool> h-has-bars;
+    in property <[StatLine]> h-stats;
+    in property <[EventLine]> h-events;
+    callback h-delete-history();
+    callback h-period-picked(int);
+    callback h-custom-edited(string);
+    callback h-custom-accepted();
+    callback h-delete-event(string);
+    // The panel over the history and the settings.
+    in-out property <bool> panel-open: false;
+    in property <string> pn-title;
+    in property <string> pn-help;
+    in property <string> pn-note;
+    in property <string> pn-line;
+    in property <string> pn-done;
+    in property <[SheetChoice]> pn-choices;
+    in property <[string]> pn-chips;
+    in property <int> pn-chip-selected;
+    callback pn-close();
+    callback pn-picked(int);
+    callback pn-chip-picked(int);
+    callback pn-done-tapped();
     // The editor.
     in property <string> ed-title;
+    in property <bool> ed-defaults;
     in property <bool> ed-deletable;
     in property <string> ed-time-text;
     in property <bool> ed-twelve;
@@ -151,7 +191,50 @@ export component MainWindow inherits Window {
         pause-apply => { root.hs-pause-apply(); }
     }
 
+    if root.screen == 2: HistoryScreen {
+        periods: root.h-periods;
+        period: root.h-period;
+        custom-text <=> root.h-custom-text;
+        empty: root.h-empty;
+        streak: root.h-streak;
+        time-to-stop: root.h-time-to-stop;
+        snoozes: root.h-snoozes;
+        bars: root.h-bars;
+        has-bars: root.h-has-bars;
+        stats: root.h-stats;
+        events: root.h-events;
+        go(i) => { root.go(i); }
+        delete-history => { root.h-delete-history(); }
+        period-picked(i) => { root.h-period-picked(i); }
+        custom-edited(s) => { root.h-custom-edited(s); }
+        custom-accepted => { root.h-custom-accepted(); }
+        delete-event(id) => { root.h-delete-event(id); }
+    }
+
+    if root.screen == 3: SettingsScreen {
+        st: root.st;
+        go(i) => { root.go(i); }
+        open-row(i) => { root.st-row(i); }
+        toggled(i, on) => { root.st-toggled(i, on); }
+    }
+
+    if (root.screen == 2 || root.screen == 3) && root.panel-open: PanelSheet {
+        title: root.pn-title;
+        help: root.pn-help;
+        note: root.pn-note;
+        line: root.pn-line;
+        done-text: root.pn-done;
+        choices: root.pn-choices;
+        chips: root.pn-chips;
+        chip-selected: root.pn-chip-selected;
+        close => { root.panel-open = false; root.pn-close(); }
+        picked(i) => { root.pn-picked(i); }
+        chip-picked(i) => { root.pn-chip-picked(i); }
+        done => { root.pn-done-tapped(); }
+    }
+
     if root.screen == 1: editor := EditorScreen {
+        defaults: root.ed-defaults;
         title: root.ed-title;
         deletable: root.ed-deletable;
         time-text: root.ed-time-text;
@@ -215,7 +298,7 @@ export component MainWindow inherits Window {
         x: 16px + Insets.left;
         width: min(parent.width - 16px - Insets.left - (root.toast-error ? 16px : 88px) - Insets.right, 460px);
         // At the top while a panel has the bottom.
-        y: (root.home-sheet != HomeSheet.none || (root.screen == 1 && root.ed-sheet != EditorSheet.none)) ? Insets.top + 8px : parent.height - 64px - Insets.bottom - 16px - self.height;
+        y: (root.home-sheet != HomeSheet.none || root.panel-open || (root.screen == 1 && root.ed-sheet != EditorSheet.none)) ? Insets.top + 8px : parent.height - 64px - Insets.bottom - 16px - self.height;
         text: root.toast-text;
         error: root.toast-error;
         has-undo: root.toast-has-undo;

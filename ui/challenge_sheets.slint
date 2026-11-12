@@ -1,4 +1,4 @@
-import { Pal, Tr } from "theme.slint";
+import { Pal, Tr, Motion } from "theme.slint";
 import { Icon, IconName } from "components.slint";
 import { PrimaryButton, Sheet, Stepper } from "widgets.slint";
 
@@ -124,7 +124,7 @@ export component ChallengesSheet inherits Rectangle {
                 width: parent.width;
                 number: i + 1;
                 item: row;
-                animate y { duration: Cfg.drag-from == i ? 0ms : 150ms; easing: ease-out; }
+                animate y { duration: Cfg.drag-from == i ? 0ms : Motion.ms(150ms); easing: ease-out; }
                 open => { Cfg.open-detail(i); }
                 try-it => { Cfg.try-one(i); }
                 remove => { Cfg.remove(i); }

@@ -9,6 +9,7 @@ pub mod debug_hooks;
 pub mod feedback;
 pub mod firing_state;
 pub mod history_persistence;
+pub mod history_view;
 pub mod i18n;
 pub mod list_edit;
 pub mod models;

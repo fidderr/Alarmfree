@@ -1,0 +1,158 @@
+import { Pal, Tr, Insets } from "theme.slint";
+import { Icon, IconName, AppSwitch } from "components.slint";
+import { BottomNav } from "nav.slint";
+
+export struct SettingsView {
+    language: string,
+    time-format: string,
+    week-start: string,
+    volume: string,
+    version: string,
+    touch: bool,
+    motion: bool,
+    confetti: bool,
+    widget: bool,
+}
+
+component ListTitle inherits Rectangle {
+    in property <string> text;
+    height: 16px;
+    Text {
+        x: 4px;
+        width: parent.width - 4px;
+        text: root.text;
+        font-size: 12px;
+        font-weight: 500;
+        color: Pal.text2;
+        vertical-alignment: center;
+    }
+}
+
+// A line from where the text starts: a line across the whole card weighs more.
+component Inset inherits Rectangle {
+    height: 1px;
+    Rectangle { x: 16px; width: parent.width - 16px; background: Pal.line; }
+}
+
+component SetRow inherits Rectangle {
+    in property <string> title;
+    in property <string> value;
+    in property <bool> switch: false;
+    in property <bool> on;
+    callback clicked();
+    height: 54px;
+    HorizontalLayout {
+        padding-left: 16px;
+        padding-right: 14px;
+        spacing: 12px;
+        Text {
+            text: root.title;
+            font-size: 14px;
+            font-weight: 500;
+            color: Pal.text;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+        Text {
+            horizontal-stretch: 1;
+            text: root.value;
+            font-size: 14px;
+            color: Pal.text2;
+            horizontal-alignment: right;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+        Rectangle {
+            width: root.switch ? 44px : 14px;
+            if !root.switch: Icon { name: IconName.chevron-right; size: 14px; tint: Pal.text2; }
+            if root.switch: AppSwitch { on: root.on; }
+        }
+    }
+    TouchArea { clicked => { root.clicked(); } }
+}
+
+// Rows in one rounded card.
+component Card inherits Rectangle {
+    background: Pal.surface;
+    border-radius: 20px;
+    clip: true;
+    VerticalLayout { @children }
+}
+
+// The app-wide preferences. `row` says which row was tapped, `toggled` which switch.
+export component SettingsScreen inherits Rectangle {
+    in property <SettingsView> st;
+    callback open-row(int);
+    callback toggled(int, bool);
+    callback go(int);
+    background: Pal.bg;
+    VerticalLayout {
+        padding-top: Insets.top;
+        padding-left: Insets.left;
+        padding-right: Insets.right;
+        Rectangle {
+            height: 28px + 34px + 12px;
+            Text {
+                x: 20px;
+                y: 28px;
+                height: 34px;
+                text: Tr.t("settings.title");
+                font-size: 28px;
+                font-weight: 700;
+                color: Pal.text;
+                vertical-alignment: center;
+            }
+        }
+        Flickable {
+            vertical-stretch: 1;
+            content-height: body.preferred-height;
+            body := VerticalLayout {
+                alignment: start;
+                padding-left: 16px;
+                padding-right: 16px;
+                padding-bottom: 24px;
+                spacing: 8px;
+                Rectangle { height: 16px; }
+                ListTitle { text: Tr.t("settings.general"); }
+                Card {
+                    SetRow { title: Tr.t("settings.language"); value: root.st.language; clicked => { root.open-row(0); } }
+                    Inset { }
+                    SetRow { title: Tr.t("settings.time_format"); value: root.st.time-format; clicked => { root.open-row(1); } }
+                    Inset { }
+                    SetRow { title: Tr.t("settings.week_start"); value: root.st.week-start; clicked => { root.open-row(2); } }
+                    if root.st.widget: Inset { }
+                    if root.st.widget: SetRow { title: Tr.t("settings.add_widget"); clicked => { root.open-row(3); } }
+                }
+                Rectangle { height: 16px; }
+                ListTitle { text: Tr.t("settings.alarms"); }
+                Card {
+                    SetRow { title: Tr.t("settings.new_alarms"); clicked => { root.open-row(4); } }
+                    Inset { }
+                    SetRow { title: Tr.t("settings.min_volume"); value: root.st.volume; clicked => { root.open-row(5); } }
+                }
+                Rectangle { height: 16px; }
+                ListTitle { text: Tr.t("settings.feel"); }
+                Card {
+                    SetRow { title: Tr.t("settings.touch_feedback"); switch: true; on: root.st.touch; clicked => { root.toggled(0, !root.st.touch); } }
+                    Inset { }
+                    SetRow { title: Tr.t("settings.less_motion"); switch: true; on: root.st.motion; clicked => { root.toggled(1, !root.st.motion); } }
+                    Inset { }
+                    SetRow { title: Tr.t("settings.confetti"); switch: true; on: root.st.confetti; clicked => { root.toggled(2, !root.st.confetti); } }
+                }
+                Rectangle { height: 16px; }
+                ListTitle { text: Tr.t("settings.data"); }
+                Card {
+                    SetRow { title: Tr.t("settings.backup"); clicked => { root.open-row(6); } }
+                    Inset { }
+                    SetRow { title: Tr.t("history.delete_history"); clicked => { root.open-row(7); } }
+                    Inset { }
+                    SetRow { title: Tr.t("settings.about"); value: root.st.version; clicked => { root.open-row(8); } }
+                }
+            }
+        }
+        BottomNav {
+            current: 2;
+            go(i) => { root.go(i); }
+        }
+    }
+}

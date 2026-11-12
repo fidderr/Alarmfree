@@ -1,4 +1,4 @@
-import { Pal, Tr } from "theme.slint";
+import { Pal, Tr, Motion } from "theme.slint";
 
 export enum IconName {
     clock, chart-bar, gear, trash, check, xmark, plus, chevron-right, arrow-left, grip,
@@ -48,7 +48,7 @@ export component AppSwitch inherits Rectangle {
     height: 26px;
     border-radius: 13px;
     background: on ? Pal.accent : Pal.off;
-    animate background { duration: 150ms; }
+    animate background { duration: Motion.ms(150ms); }
     Rectangle {
         y: 3px;
         x: root.on ? 21px : 3px;
@@ -56,8 +56,8 @@ export component AppSwitch inherits Rectangle {
         height: 20px;
         border-radius: 10px;
         background: root.on ? Pal.on-accent : Pal.knob-off;
-        animate x { duration: 150ms; }
-        animate background { duration: 150ms; }
+        animate x { duration: Motion.ms(150ms); }
+        animate background { duration: Motion.ms(150ms); }
     }
 }
 

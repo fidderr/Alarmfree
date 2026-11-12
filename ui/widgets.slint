@@ -1,4 +1,4 @@
-import { Pal, Tr, Insets } from "theme.slint";
+import { Pal, Tr, Insets, Motion } from "theme.slint";
 import { Icon, IconName, AppSwitch } from "components.slint";
 
 // The screen's top bar: back arrow, title, and room for actions on the right.
@@ -136,7 +136,7 @@ export component Sheet inherits Rectangle {
         width: parent.width;
         height: min(parent.height * 0.85, 76px + body.preferred-height + Insets.bottom + 16px);
         y: root.shown ? parent.height - self.height : parent.height;
-        animate y { duration: 220ms; easing: ease-out; }
+        animate y { duration: Motion.ms(220ms); easing: ease-out; }
         background: Pal.bg;
         border-top-left-radius: 24px;
         border-top-right-radius: 24px;
@@ -256,7 +256,7 @@ export component Wheel inherits Rectangle {
         font-weight: off == 0 ? 700 : 400;
         color: off == 0 ? Pal.text : Pal.text2;
         opacity: off == 0 ? 1.0 : (off == 1 || off == -1) ? 0.8 : off == 2 || off == -2 ? 0.5 : 0.28;
-        animate y { duration: root.dragging ? 0ms : 240ms; easing: ease-out; }
+        animate y { duration: root.dragging ? 0ms : Motion.ms(240ms); easing: ease-out; }
     }
     ta := TouchArea {
         pointer-event(e) => {

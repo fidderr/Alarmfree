@@ -7,7 +7,7 @@ use std::time::Duration;
 use chrono::TimeZone;
 use slint::{ModelRc, SharedString, VecModel};
 
-use super::{ChoiceRow, Ctx, DayCell, EditorSheet};
+use super::{ChoiceRow, Ctx, DayCell, EditorSheet, SCREEN_SETTINGS};
 use crate::i18n::{t, Translations};
 use crate::models::{AlarmData, ChallengeSetup};
 use crate::{alarm_ops, schedule};
@@ -19,6 +19,8 @@ const PREVIEW_MS: u64 = 15_000;
 pub struct EditorState {
     pub id: String,
     pub is_new: bool,
+    /// Editing what new alarms start from, reached from the settings.
+    pub for_defaults: bool,
     /// What the editor starts from, once; comparing with it tells if anything changed.
     pub original: AlarmData,
     pub draft: AlarmData,
@@ -39,9 +41,10 @@ pub struct EditorState {
 /// "copy-<id>" opens a new alarm prefilled from the alarm <id>.
 pub fn open(ctx: &Rc<Ctx>, id: &str) {
     let copy_of = id.strip_prefix("copy-").map(str::to_owned);
+    let for_defaults = id == "defaults";
     let is_new = id == "new" || copy_of.is_some();
     let defaults = ctx.settings.borrow().prefs.alarm_defaults.clone();
-    let original = if id == "new" {
+    let original = if id == "new" || for_defaults {
         alarm_ops::new_alarm(defaults.as_ref())
     } else {
         let source = copy_of.as_deref().unwrap_or(id);
@@ -60,6 +63,7 @@ pub fn open(ctx: &Rc<Ctx>, id: &str) {
     *ctx.editor.borrow_mut() = Some(EditorState {
         id: id.to_owned(),
         is_new,
+        for_defaults,
         one_time: schedule::is_one_time(&original),
         date_value: start_date.clone(),
         start_date,
@@ -230,7 +234,9 @@ pub fn sync(ctx: &Ctx) {
     ui.set_ed_title(
         t(
             &tr,
-            if ed.is_new {
+            if ed.for_defaults {
+                "config.defaults_title"
+            } else if ed.is_new {
                 "alarm.create"
             } else {
                 "alarm.edit"
@@ -238,7 +244,8 @@ pub fn sync(ctx: &Ctx) {
         )
         .into(),
     );
-    ui.set_ed_deletable(!ed.is_new);
+    ui.set_ed_defaults(ed.for_defaults);
+    ui.set_ed_deletable(!ed.is_new && !ed.for_defaults);
     ui.set_ed_time_text(
         crate::text::clock(current.time_hour, current.time_minute, twenty_four).into(),
     );
@@ -586,10 +593,15 @@ pub fn add_sound(ctx: &Rc<Ctx>) {
 
 fn leave(ctx: &Rc<Ctx>) {
     stop_preview(ctx);
-    *ctx.editor.borrow_mut() = None;
+    let from_defaults = ctx
+        .editor
+        .borrow_mut()
+        .take()
+        .is_some_and(|ed| ed.for_defaults);
     if let Some(ui) = ctx.ui.upgrade() {
         ui.set_ed_sheet(EditorSheet::None);
-        ui.set_screen(0);
+        // The defaults are opened from the settings.
+        ui.set_screen(if from_defaults { SCREEN_SETTINGS } else { 0 });
     }
     super::home::refresh(ctx);
 }
@@ -641,6 +653,15 @@ pub fn save(ctx: &Rc<Ctx>) {
         };
         build(ctx, ed)
     };
+    if alarm_is_defaults(ctx) {
+        let mut defaults = alarm;
+        defaults.id = String::new();
+        ctx.settings.borrow_mut().prefs.alarm_defaults = Some(defaults);
+        crate::persistence::save_settings(&ctx.settings.borrow());
+        leave(ctx);
+        super::settings::refresh(ctx);
+        return;
+    }
     let (one_time, date_value) = {
         let editor = ctx.editor.borrow();
         let ed = editor.as_ref().expect("checked above");
@@ -675,6 +696,13 @@ pub fn save(ctx: &Rc<Ctx>) {
     if !rings.is_empty() {
         super::toast::show(ctx, rings, None);
     }
+}
+
+fn alarm_is_defaults(ctx: &Ctx) -> bool {
+    ctx.editor
+        .borrow()
+        .as_ref()
+        .is_some_and(|ed| ed.for_defaults)
 }
 
 pub fn delete(ctx: &Rc<Ctx>) {

@@ -19,11 +19,18 @@ slint::include_modules!();
 mod challenge_run;
 mod challenge_sheets;
 mod editor;
+mod history;
 mod home;
 mod home_sheets;
 mod palette;
+mod panel;
 mod ring;
+mod settings;
 mod toast;
+
+/// The screens of `MainWindow.screen`.
+const SCREEN_HISTORY: i32 = 2;
+const SCREEN_SETTINGS: i32 = 3;
 
 /// Everything the screens share. Only the UI thread touches it.
 pub struct Ctx {
@@ -37,6 +44,8 @@ pub struct Ctx {
     pub timers: RefCell<Vec<slint::Timer>>,
     pub editor: RefCell<Option<editor::EditorState>>,
     pub home_sheet: RefCell<home_sheets::SheetState>,
+    pub panel: RefCell<panel::PanelState>,
+    pub history: history::HistoryState,
     pub preview_timer: slint::Timer,
     pub ring: RefCell<Option<ring::RingState>>,
     pub run: RefCell<Option<challenge_run::RunState>>,
@@ -103,9 +112,31 @@ fn back(ctx: &Rc<Ctx>) {
         home_sheets::close(ctx);
         return;
     }
+    if ui.get_panel_open() {
+        panel::close(ctx);
+        return;
+    }
     match ui.get_screen() {
         1 => editor::back(ctx),
+        // The main screens do not stack: back from them is the alarms.
+        SCREEN_HISTORY | SCREEN_SETTINGS => go(ctx, 0),
         _ => mobile_sentinel::foregrounding::move_to_back(),
+    }
+}
+
+/// The bottom navigation: 0 alarms, 1 history, 2 settings.
+fn go(ctx: &Rc<Ctx>, index: i32) {
+    let Some(ui) = ctx.ui.upgrade() else {
+        return;
+    };
+    match index {
+        1 => history::enter(ctx),
+        2 => settings::enter(ctx),
+        _ => {
+            ui.set_panel_open(false);
+            ui.set_screen(0);
+            home::refresh(ctx);
+        }
     }
 }
 
@@ -131,6 +162,8 @@ pub fn run() -> Result<(), slint::PlatformError> {
         timers: RefCell::new(Vec::new()),
         editor: RefCell::new(None),
         home_sheet: RefCell::new(home_sheets::SheetState::default()),
+        panel: RefCell::new(panel::PanelState::default()),
+        history: history::HistoryState::default(),
         preview_timer: slint::Timer::default(),
         ring: RefCell::new(None),
         run: RefCell::new(None),
@@ -149,6 +182,7 @@ pub fn run() -> Result<(), slint::PlatformError> {
         });
     }
     apply_theme(&ctx);
+    settings::apply_motion(&ctx);
     home::refresh(&ctx);
 
     macro_rules! on {
@@ -173,6 +207,27 @@ pub fn run() -> Result<(), slint::PlatformError> {
     on!(on_hs_pause_step, |ctx, d| home_sheets::pause_step(&ctx, d));
     on!(on_hs_pause_apply, |ctx| home_sheets::pause_apply(&ctx));
     on!(on_create, |ctx| home::create(&ctx));
+    on!(on_go, |ctx, i| go(&ctx, i));
+    on!(on_st_row, |ctx, i| settings::row(&ctx, i));
+    on!(on_st_toggled, |ctx, i, on| settings::toggled(&ctx, i, on));
+    on!(on_h_delete_history, |ctx| history::open_delete(&ctx));
+    on!(on_h_period_picked, |ctx, i| history::period_picked(
+        &ctx, i as usize
+    ));
+    on!(on_h_custom_edited, |ctx, s| history::custom_edited(
+        &ctx,
+        s.as_str()
+    ));
+    on!(on_h_custom_accepted, |ctx| history::custom_accepted(&ctx));
+    on!(on_h_delete_event, |ctx, id| history::ask_delete_event(
+        &ctx,
+        id.as_str()
+    ));
+    on!(on_pn_picked, |ctx, i| panel::picked(&ctx, i as usize));
+    on!(on_pn_chip_picked, |ctx, i| panel::chip_picked(
+        &ctx, i as usize
+    ));
+    on!(on_pn_done_tapped, |ctx| panel::done(&ctx));
     on!(on_ed_back, |ctx| editor::back(&ctx));
     on!(on_ed_save, |ctx| editor::save(&ctx));
     on!(on_ed_shift, |ctx, m| editor::shift(&ctx, m));

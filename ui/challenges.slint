@@ -1,4 +1,4 @@
-import { Pal, Tr, Insets } from "theme.slint";
+import { Pal, Tr, Insets, Motion } from "theme.slint";
 import { Icon, IconName } from "components.slint";
 import { PrimaryButton, Sheet } from "widgets.slint";
 
@@ -284,14 +284,14 @@ component MemoryCell inherits Rectangle {
     in property <RunCell> cell;
     callback clicked();
     property <float> shake: cell.state == 3 ? 1.0 : 0.0;
-    animate shake { duration: 300ms; }
+    animate shake { duration: Motion.ms(300ms); }
     border-width: 2px;
     border-radius: 8px;
     border-color: cell.state == 1 ? Pal.accent : cell.state == 2 ? Pal.ok : cell.state == 3 ? Pal.danger : Pal.line;
     background: cell.state == 1 ? Pal.accent : cell.state == 2 ? Pal.ok : cell.state == 3 ? Pal.danger : Pal.surface;
-    animate background, border-color { duration: 200ms; }
+    animate background, border-color { duration: Motion.ms(200ms); }
     transform-scale: cell.state == 1 ? 1.05 : 1.0;
-    animate transform-scale { duration: 200ms; }
+    animate transform-scale { duration: Motion.ms(200ms); }
     Text {
         x: cell.state == 3 ? 6px * Math.sin(root.shake * 1080deg) * (1 - root.shake) + (parent.width - self.width) / 2 : (parent.width - self.width) / 2;
         text: cell.text;
@@ -455,15 +455,15 @@ component HoldBody inherits VerticalLayout {
             property <bool> filling: Run.hold-state == 1;
             property <float> born: 0;
             init => { self.born = 1; }
-            animate born { duration: 420ms; easing: cubic-bezier(0.34, 1.56, 0.64, 1); }
+            animate born { duration: Motion.ms(420ms); easing: cubic-bezier(0.34, 1.56, 0.64, 1); }
             width: 88px;
             height: 88px;
             x: self.safe + Run.hold-x * (area.width - 2 * self.safe) - 44px;
             y: self.safe + Run.hold-y * (area.height - 2 * self.safe) - 44px;
             transform-scale: self.popping ? 0.5 : self.filling ? 1.08 : (0.3 + 0.7 * self.born);
             opacity: self.popping ? 0.0 : min(1.0, self.born * 3);
-            animate transform-scale { duration: self.popping ? 280ms : 200ms; easing: cubic-bezier(0.34, 1.56, 0.64, 1); }
-            animate opacity { duration: self.popping ? 280ms : 100ms; }
+            animate transform-scale { duration: Motion.ms(self.popping ? 280ms : 200ms); easing: cubic-bezier(0.34, 1.56, 0.64, 1); }
+            animate opacity { duration: Motion.ms(self.popping ? 280ms : 100ms); }
             ArcRing {
                 width: 88px;
                 height: 88px;
@@ -477,7 +477,7 @@ component HoldBody inherits VerticalLayout {
                 height: 72% * parent.height;
                 border-radius: self.width / 2;
                 background: bubble.popping ? Pal.ok : Pal.accent-soft;
-                animate background { duration: 250ms; }
+                animate background { duration: Motion.ms(250ms); }
                 Icon {
                     name: bubble.popping ? IconName.check : IconName.touch;
                     size: 30px;
@@ -556,7 +556,7 @@ component ReactionBody inherits VerticalLayout {
         for t in Run.targets: Rectangle {
             visible: t.present;
             property <float> born: t.present ? 1.0 : 0.0;
-            animate born { duration: 220ms; easing: cubic-bezier(0.34, 1.56, 0.64, 1); }
+            animate born { duration: Motion.ms(220ms); easing: cubic-bezier(0.34, 1.56, 0.64, 1); }
             width: 76px;
             height: 76px;
             x: 56px + t.fx * (area.width - 112px) - 38px;
@@ -602,7 +602,7 @@ component Celebration inherits Rectangle {
     property <float> pop: 0;
     init => { self.t = 1; self.pop = 1; }
     animate t { duration: 1800ms; easing: linear; }
-    animate pop { duration: 500ms; easing: cubic-bezier(0.34, 1.56, 0.64, 1); }
+    animate pop { duration: Motion.ms(500ms); easing: cubic-bezier(0.34, 1.56, 0.64, 1); }
     property <float> shade: t < 0.1 ? t / 0.1 : t < 0.8 ? 1.0 : (1 - t) / 0.2;
     background: Colors.black.with-alpha(0.25 * shade);
     TouchArea { }

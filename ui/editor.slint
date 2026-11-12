@@ -16,6 +16,8 @@ export component EditorScreen inherits Rectangle {
     in property <bool> deletable;
     in property <string> time-text;
     in property <bool> twelve;
+    // Editing what new alarms start from: no time, no days.
+    in property <bool> defaults;
     in property <string> rings-text;
     in property <[DayCell]> days;
     in property <[string]> preset-labels;
@@ -82,7 +84,7 @@ export component EditorScreen inherits Rectangle {
                 spacing: 16px;
                 padding-bottom: 16px;
                 // The time, large, with a step either way, and when that rings.
-                VerticalLayout {
+                if !root.defaults: VerticalLayout {
                     spacing: 8px;
                     padding-left: 16px;
                     padding-right: 16px;
@@ -123,7 +125,7 @@ export component EditorScreen inherits Rectangle {
                     }
                 }
                 // Which days, or the one date.
-                VerticalLayout {
+                if !root.defaults: VerticalLayout {
                     spacing: 12px;
                     padding-left: 16px;
                     padding-right: 16px;

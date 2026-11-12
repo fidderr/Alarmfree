@@ -1,0 +1,80 @@
+import { Pal } from "theme.slint";
+import { Sheet, PrimaryButton } from "widgets.slint";
+import { SheetChoice } from "home_sheets.slint";
+
+component PanelItem inherits Rectangle {
+    in property <SheetChoice> choice;
+    callback clicked();
+    height: 52px;
+    Text {
+        x: 4px;
+        width: parent.width - 8px;
+        text: root.choice.text;
+        font-size: 16px;
+        font-weight: root.choice.selected ? 500 : 400;
+        color: root.choice.danger ? Pal.danger : root.choice.selected ? Pal.accent : Pal.text;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+    TouchArea { clicked => { root.clicked(); } }
+}
+
+// The one panel the history and the settings open over themselves: a note, choices, a row of
+// chips, a line of text and a Done button, each only when it has something to say. Rust fills
+// it and says what a tap does.
+export component PanelSheet inherits Rectangle {
+    in property <string> title;
+    in property <string> help;
+    in property <string> note;
+    in property <string> line;
+    in property <string> done-text;
+    in property <[SheetChoice]> choices;
+    in property <[string]> chips;
+    in property <int> chip-selected;
+    callback close();
+    callback picked(int);
+    callback chip-picked(int);
+    callback done();
+    Sheet {
+        title: root.title;
+        help: root.help;
+        close => { root.close(); }
+        if root.note != "": Text {
+            text: root.note;
+            font-size: 14px;
+            color: Pal.text2;
+            wrap: word-wrap;
+        }
+        for choice[i] in root.choices: PanelItem {
+            choice: choice;
+            clicked => { root.picked(i); }
+        }
+        if root.chips.length > 0: HorizontalLayout {
+            spacing: 8px;
+            for chip[i] in root.chips: Rectangle {
+                horizontal-stretch: 1;
+                min-width: 44px;
+                height: 48px;
+                border-radius: 14px;
+                background: root.chip-selected == i ? Pal.accent : Pal.surface2;
+                Text {
+                    text: chip;
+                    font-size: 14px;
+                    font-weight: 500;
+                    color: root.chip-selected == i ? Pal.on-accent : Pal.text;
+                }
+                TouchArea { clicked => { root.chip-picked(i); } }
+            }
+        }
+        if root.line != "": Text {
+            text: root.line;
+            font-size: 14px;
+            color: Pal.text;
+            wrap: word-wrap;
+        }
+        if root.done-text != "": VerticalLayout {
+            padding-top: 16px;
+            PrimaryButton { text: root.done-text; clicked => { root.done(); } }
+        }
+    }
+}

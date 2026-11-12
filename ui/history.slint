@@ -1,0 +1,318 @@
+import { Pal, Tr, Insets, Motion } from "theme.slint";
+import { Icon, IconName } from "components.slint";
+import { BottomNav } from "nav.slint";
+
+export struct StatLine { name: string, value: string }
+
+// One bar of the chart: its height in px.
+export struct BarCell { label: string, height: int, current: bool }
+
+// One alarm of the list. `flag` 1 colours its second line as danger, 2 as warning.
+export struct EventLine {
+    id: string,
+    title: string,
+    sub: string,
+    flag: int,
+    value: string,
+    details: [StatLine],
+}
+
+component StatList inherits VerticalLayout {
+    in property <[StatLine]> lines;
+    in property <length> size: 14px;
+    in property <length> gap: 6px;
+    spacing: root.gap;
+    for line in root.lines: HorizontalLayout {
+        spacing: 12px;
+        Text { horizontal-stretch: 1; text: line.name; font-size: root.size; color: Pal.text2; wrap: word-wrap; }
+        Text { text: line.value; font-size: root.size; font-weight: 500; color: Pal.text; horizontal-alignment: right; }
+    }
+}
+
+component Stat inherits VerticalLayout {
+    in property <string> value;
+    in property <string> name;
+    horizontal-stretch: 1;
+    spacing: 2px;
+    Text { text: root.value; font-size: 20px; font-weight: 500; color: Pal.text; overflow: elide; }
+    Text { text: root.name; font-size: 12px; color: Pal.text2; overflow: elide; }
+}
+
+component EventRow inherits VerticalLayout {
+    in property <EventLine> ev;
+    in property <bool> open;
+    callback toggle();
+    callback delete();
+    Rectangle {
+        min-height: 60px;
+        HorizontalLayout {
+            padding: 10px;
+            padding-left: 16px;
+            padding-right: 14px;
+            spacing: 12px;
+            VerticalLayout {
+                horizontal-stretch: 1;
+                alignment: center;
+                spacing: 2px;
+                Text { text: root.ev.title; font-size: 14px; font-weight: 500; color: Pal.text; overflow: elide; }
+                if root.ev.sub != "": Text {
+                    text: root.ev.sub;
+                    font-size: 12px;
+                    color: root.ev.flag == 1 ? Pal.danger : root.ev.flag == 2 ? Pal.warn : Pal.text2;
+                    overflow: elide;
+                }
+            }
+            Text { text: root.ev.value; font-size: 14px; font-weight: 500; color: Pal.text; vertical-alignment: center; }
+            Rectangle {
+                width: 16px;
+                Icon {
+                    name: IconName.chevron-right;
+                    size: 16px;
+                    tint: Pal.text2;
+                    transform-rotation: root.open ? 90deg : 0deg;
+                    animate transform-rotation { duration: Motion.ms(200ms); }
+                }
+            }
+        }
+        TouchArea { clicked => { root.toggle(); } }
+    }
+    if root.open: VerticalLayout {
+        padding-left: 16px;
+        padding-right: 16px;
+        padding-bottom: 8px;
+        spacing: 4px;
+        StatList { lines: root.ev.details; size: 12px; gap: 4px; }
+        Rectangle {
+            height: 44px;
+            Text {
+                x: 0px;
+                text: Tr.t("history.delete_one");
+                font-size: 14px;
+                font-weight: 500;
+                color: Pal.danger;
+                vertical-alignment: center;
+                horizontal-alignment: left;
+            }
+            TouchArea { clicked => { root.delete(); } }
+        }
+    }
+}
+
+export component HistoryScreen inherits Rectangle {
+    in property <[string]> periods;
+    in property <int> period;
+    in-out property <string> custom-text;
+    // 0 there are alarms to show, 1 nothing was ever recorded, 2 nothing in this period.
+    in property <int> empty;
+    in property <string> streak;
+    in property <string> time-to-stop;
+    in property <string> snoozes;
+    in property <[BarCell]> bars;
+    in property <bool> has-bars;
+    in property <[StatLine]> stats;
+    in property <[EventLine]> events;
+    in-out property <bool> show-all: false;
+    in-out property <string> open-id;
+    callback go(int);
+    callback delete-history();
+    callback period-picked(int);
+    callback custom-edited(string);
+    callback custom-accepted();
+    callback delete-event(string);
+    background: Pal.bg;
+    VerticalLayout {
+        padding-top: Insets.top;
+        padding-left: Insets.left;
+        padding-right: Insets.right;
+        HorizontalLayout {
+            padding-top: 28px;
+            padding-bottom: 12px;
+            padding-left: 20px;
+            padding-right: 12px;
+            Text {
+                horizontal-stretch: 1;
+                height: 34px;
+                text: Tr.t("history.title");
+                font-size: 28px;
+                font-weight: 700;
+                color: Pal.text;
+                vertical-alignment: center;
+            }
+            Rectangle {
+                width: 44px;
+                height: 44px;
+                Icon { name: IconName.trash; size: 20px; tint: Pal.text2; }
+                TouchArea { clicked => { root.delete-history(); } }
+            }
+        }
+        Flickable {
+            height: 44px;
+            content-width: chips.preferred-width;
+            interactive: chips.preferred-width > self.width;
+            chips := HorizontalLayout {
+                padding-left: 16px;
+                padding-right: 16px;
+                spacing: 8px;
+                for label[i] in root.periods: Rectangle {
+                    width: name.preferred-width + 24px;
+                    Rectangle {
+                        y: 5px;
+                        height: 34px;
+                        border-radius: 17px;
+                        background: root.period == i ? Pal.accent : Pal.surface;
+                        name := Text {
+                            text: label;
+                            font-size: 14px;
+                            font-weight: 500;
+                            color: root.period == i ? Pal.on-accent : Pal.text;
+                        }
+                    }
+                    TouchArea { clicked => { root.period-picked(i); } }
+                }
+            }
+        }
+        if root.period == 6: HorizontalLayout {
+            padding: 4px;
+            padding-left: 20px;
+            padding-right: 20px;
+            spacing: 8px;
+            Text { text: Tr.t("filter.last_prefix"); font-size: 14px; color: Pal.text2; vertical-alignment: center; }
+            Rectangle {
+                width: 88px;
+                height: 48px;
+                border-radius: 14px;
+                border-width: 1px;
+                border-color: Pal.line;
+                background: Pal.bg;
+                input := TextInput {
+                    x: 12px;
+                    width: parent.width - 24px;
+                    text <=> root.custom-text;
+                    font-size: 16px;
+                    color: Pal.text;
+                    input-type: number;
+                    vertical-alignment: center;
+                    single-line: true;
+                    edited => { root.custom-edited(self.text); }
+                    accepted => { root.custom-accepted(); }
+                    changed has-focus => { if (!self.has-focus) { root.custom-accepted(); } }
+                }
+            }
+            Text { text: Tr.t("filter.days_unit"); font-size: 14px; color: Pal.text2; vertical-alignment: center; }
+            Rectangle { horizontal-stretch: 1; }
+        }
+        Flickable {
+            vertical-stretch: 1;
+            content-height: body.preferred-height;
+            body := VerticalLayout {
+                alignment: start;
+                padding-left: 16px;
+                padding-right: 16px;
+                padding-bottom: 24px;
+                if root.empty != 0: VerticalLayout {
+                    padding: 16px;
+                    padding-top: 48px;
+                    spacing: 8px;
+                    Rectangle {
+                        height: 40px;
+                        Icon { name: IconName.chart-bar; size: 40px; tint: Pal.text2; }
+                    }
+                    Text {
+                        text: root.empty == 1 ? Tr.t("history.no_events") : Tr.t("history.none_in_period");
+                        font-size: 16px;
+                        font-weight: 500;
+                        horizontal-alignment: center;
+                        wrap: word-wrap;
+                        color: Pal.text;
+                    }
+                    if root.empty == 1: Text {
+                        text: Tr.t("history.events_subtitle");
+                        font-size: 14px;
+                        horizontal-alignment: center;
+                        wrap: word-wrap;
+                        color: Pal.text2;
+                    }
+                }
+                if root.empty == 0: VerticalLayout {
+                    padding-top: 16px;
+                    Rectangle {
+                        background: Pal.surface;
+                        border-radius: 20px;
+                        VerticalLayout {
+                            padding: 16px;
+                            padding-bottom: 4px;
+                            HorizontalLayout {
+                                spacing: 16px;
+                                Stat { value: root.streak; name: Tr.t("history.streak"); }
+                                Stat { value: root.time-to-stop; name: Tr.t("history.time_to_stop"); }
+                                Stat { value: root.snoozes; name: Tr.t("history.snoozes"); }
+                            }
+                            if root.has-bars: HorizontalLayout {
+                                height: 72px + 20px;
+                                padding-top: 20px;
+                                spacing: 6px;
+                                for bar in root.bars: Rectangle {
+                                    horizontal-stretch: 1;
+                                    Rectangle {
+                                        width: min(parent.width, 32px);
+                                        height: bar.height * 1px;
+                                        y: parent.height - 15px - self.height;
+                                        border-radius: 4px;
+                                        background: bar.current ? Pal.accent : Pal.bar-soft;
+                                    }
+                                    Text {
+                                        y: parent.height - 13px;
+                                        width: parent.width;
+                                        height: 13px;
+                                        text: bar.label;
+                                        font-size: 11px;
+                                        color: Pal.text2;
+                                        horizontal-alignment: center;
+                                    }
+                                }
+                            }
+                            if root.show-all: VerticalLayout {
+                                padding-top: 12px;
+                                StatList { lines: root.stats; }
+                            }
+                            Rectangle {
+                                height: 44px;
+                                Text {
+                                    text: root.show-all ? Tr.t("history.fewer_stats") : Tr.t("history.all_stats");
+                                    font-size: 14px;
+                                    font-weight: 500;
+                                    color: Pal.accent;
+                                }
+                                TouchArea { clicked => { root.show-all = !root.show-all; } }
+                            }
+                        }
+                    }
+                    Rectangle { height: 16px; }
+                    Rectangle {
+                        background: Pal.surface;
+                        border-radius: 20px;
+                        clip: true;
+                        VerticalLayout {
+                            for ev[i] in root.events: VerticalLayout {
+                                if i > 0: Rectangle {
+                                    height: 1px;
+                                    Rectangle { x: 16px; width: parent.width - 16px; background: Pal.line; }
+                                }
+                                EventRow {
+                                    ev: ev;
+                                    open: root.open-id == ev.id;
+                                    toggle => { root.open-id = root.open-id == ev.id ? "" : ev.id; }
+                                    delete => { root.delete-event(ev.id); }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        BottomNav {
+            current: 1;
+            go(i) => { root.go(i); }
+        }
+    }
+}

@@ -738,7 +738,7 @@ Ring screen
 - [ ] Ring look sheet: 8 live backdrop tiles, photo picker (+ other photo), colour row (Auto / dot), clock chips, Preview link
 - [ ] Ring colour sheet: live backdrop, accent swatches, ColorControls with Auto chip
 - [ ] Full-screen ring preview (tap or Back closes, fake buttons)
-- [ ] Defaults editor (no time/repeat), "Use as default" from card menu
+- [x] Defaults editor (no time/repeat), "Use as default" from card menu
 
 ### Phase 4: backdrops, themes, polish
 - [ ] Aurora backdrop (3 drifting radial blobs)
@@ -755,14 +755,14 @@ Ring screen
 - [ ] Palette derivation parity (contrast nudging, tokens) incl. system dark switching and system bar colours
 
 ### Phase 5: remaining screens
-- [ ] History: period pills (7), custom days field, empty states, summary stats, streak, bar chart (week / month / year, current highlighted), expandable all stats
-- [ ] History events: rows with outcome colours, expandable details, per-event delete confirm
-- [ ] History / Settings: Delete history sheet (30 d / 90 d / all) with confirm sheet and toast
-- [ ] Settings: reliability banner (problem count), General list (Theme, Language, Time format, Week start, Add widget when available)
-- [ ] Settings: Alarms list (defaults editor entry, minimum volume), Feel switches (touch feedback, less motion, confetti)
-- [ ] Settings sheets: Language (follow phone + 5), Time format, Week start, Volume chips (live `set_min_volume`), About
-- [ ] Settings: Backup save to Downloads / restore from picker (limit, undo, errors)
-- [ ] Settings changes call `refresh_outside_app`; language change also `set_ring_language`
+- [x] History: period pills (7), custom days field, empty states, summary stats, streak, bar chart (week / month / year, current highlighted), expandable all stats
+- [x] History events: rows with outcome colours, expandable details, per-event delete confirm
+- [x] History / Settings: Delete history sheet (30 d / 90 d / all) with confirm sheet and toast
+- [ ] Settings: reliability banner (problem count) and Theme row: left out until the Reliability and Theme screens are ported (no dead rows); General list (Language, Time format, Week start, Add widget) done
+- [x] Settings: Alarms list (defaults editor entry, minimum volume), Feel switches (touch feedback, less motion, confetti)
+- [x] Settings sheets: Language (follow phone + 5), Time format, Week start, Volume chips (live `set_min_volume`), About
+- [x] Settings: Backup save to Downloads / restore from picker (limit, undo, errors)
+- [x] Settings changes call `refresh_outside_app`; language change also `set_ring_language`
 - [ ] Reliability screen: 10 checks sorted, Fix actions per check, 1.5 s refresh, help text with last ring time, app settings, save ring record
 - [ ] Reliability test alarm: add / pending note / cancel
 - [ ] FirstRun welcome screen (large title, intro, same list, Done sets `setup_done`)
@@ -790,3 +790,17 @@ UI glue: `src/ui/challenge_run.rs`, `src/ui/challenge_sheets.rs`; Slint: `ui/cha
 Not verified: a real camera scan (the emulator has no code to scan), steps sensor, the 180 s camera limit, the time-out reset
 of Reaction was seen but the haptics are not observable, typing to completion. Differences: no autocorrect-off on the typing
 field (Slint has no such flag), the backspace key is an icon, wrong memory cells shake via a Slint animation.
+
+
+## Status: history and settings (step 2 of the port)
+Done and seen on emulator-5556: bottom navigation between Alarms, History and Settings (back from History/Settings goes to
+Alarms), History (period pills, custom days field, empty states, summary with streak, chart, all stats, event rows with
+details and per-event delete confirm, delete-history sheets with confirm and toast), Settings (Language, Time format, Week
+start, Add widget, New alarms defaults editor, Minimum volume chips, Touch feedback, Less motion, Confetti, Backup save to
+Downloads and restore through the file picker with undo toast, Delete history, About). Language, time format and week start
+change the open screens live (`Tr.rev` bump, `set_ring_language`, `refresh_outside_app`); Less motion zeroes the decorative
+animations through the `Motion` global. Logic: `src/history_view.rs` (tested); glue: `src/ui/{history,settings,panel}.rs`;
+Slint: `ui/{history,settings,panel}.slint`; the editor got a defaults mode (no time/repeat, saves to `prefs.alarm_defaults`).
+Not done: Reliability banner and Theme row (steps 3 and 4). Not verified by hand: Less motion visually, Volume chips on a
+phone, the widget row action, the custom days field typing. Rows use the original 14 px/54 px list style; the older `Row`
+widget (16 px) used by the editor is unchanged.

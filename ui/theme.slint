@@ -41,3 +41,11 @@ export global Insets {
     in-out property <length> left: 0px;
     in-out property <length> right: 0px;
 }
+
+// "Less motion" in the settings: every decorative animation takes no time.
+export global Motion {
+    in property <bool> less: false;
+    public pure function ms(normal: duration) -> duration {
+        return less ? 0ms : normal;
+    }
+}
