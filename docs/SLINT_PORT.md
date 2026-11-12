@@ -624,7 +624,7 @@ Milestones are commits on branch `slint-port`; the SDK parts are on `native-host
 - **M2** Home list, editor (time wheel sheet, -1/-5/+1/+5, days and presets, label, sound with preview and "add your own", snooze), save, delete, discard guard, ring screen (clock, date, label, note, snooze, turn off), firing poll, heartbeat, history event on dismiss, wake-up check, one-time alarms switching off.
 - **M1** Slint skeleton on a NativeActivity (`libmain.so`), `build.sh` with `build_sentinel --project`, theme from `Palette`, insets, system bars, back button, toast with undo, quick alarms, empty-state templates, alarm switch.
 
-Known gaps right now (all in the checklist below, unticked): challenges (turning off an alarm that has challenges skips them, with a warning in the log), the swipe actions on a card (the menu has the same actions) and drag to reorder, the practice entry of the menu, the reliability banner and screen, history, settings, theme editor, first run, date sheet and typed time, ring looks, widgets, wide layout, the debug command channel for `devtest/`.
+Known gaps right now: see "Gaps found by the audit" and the checklist below. Still open there: accessibility unverified (no TalkBack), the OS reduce-animations switch not seen working, Pause-all help not opened by hand, kiosk / locked-boot / guardian paths on a phone, `devtest/all.sh` and `matrix.sh` rewritten for the debug channel, the app does not follow the phone's font size.
 
 ### Comparing
 
@@ -786,7 +786,7 @@ Ring screen
 - [x] Date picker component replacing `<input type=date>` (min date support)
 - [~] Toast outcome notices and error toasts shown as in 8.5 (code is a copy; see the Phase 0 startup line for what was never triggered)
 - [~] Haptics through `feedback` (reorder 15 ms, hold 18/45/130, reaction 15/60/80/130, solve pattern, touch-feedback switch honoured) done; the wheel tick (8 ms) is MISSING; haptics are not observable on an emulator
-- [ ] Accessibility labels / roles on switches, chips (pressed), progress bar, status text; text scaling: none of the original's aria labels exist in the Slint UI (no `accessible-*` property anywhere in `ui/`)
+- [ ] Accessibility labels / roles on switches, chips (checked), progress bar, buttons: added for the shared widgets, home, settings, theme, reliability, history chart (see the gaps list); unverified without TalkBack
 
 ### Phase 6: verification
 - [~] `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test` green (model/core tests untouched): ran before each commit per the working rules, not re-run by this audit
@@ -796,14 +796,14 @@ Ring screen
 
 ### Gaps found by the audit
 Original behaviour with no line (or a wrong line) above, found by reading `2f65c82` screens against the port:
-- [ ] After a ring ends (turned off, challenge solved) the original navigated to History (Home for a hidden alarm) through `nav_intent`; the port stays on whatever screen was open under the ring
-- [ ] `mobile_sentinel::keep_event_loop_awake()` is called once at start by the original (`app.rs`); no call in the port (check whether the native host does it itself before relying on it)
-- [ ] Haptic tick (8 ms) per step on the time wheels (`time_picker.rs`)
-- [ ] "?" help text on the Sort sheet (`home.sort_note`) and the Pause-all sheet (`home.pause_note`)
-- [ ] Accessibility: aria labels for every icon button, switch role/state, chart label (`history.chart_aria`), progress label (`challenge.time_left`), reliability ok/attention icons (`reliability.ok`, `reliability.attention`), theme code and custom accent (`theme.code`, `accent.custom`); screen readers read nothing useful
-- [ ] OS "reduce animations" preference (`prefers-reduced-motion`) forced the original's animations off as well as the in-app switch; the port reads only the in-app switch
-- [ ] Less motion does not reach the card swipe snap and reorder shift in `ui/home.slint`
-- [ ] Big clocks (editor time, ring clock) are not compensated for the Android font scale
+- [x] After a ring ends (turned off, challenge solved) the port goes to History (Home for a hidden alarm) like the original (`ui/ring.rs` `finished`); seen on emulator-5556: Turn off -> History with the new row
+- [x] `mobile_sentinel::keep_event_loop_awake()`: not needed, so not called. It wakes the looper every 500 ms for the life of the process (a Dioxus/tao workaround). Tested on emulator-5556 after the system file picker closed: the picked sound arrived and was selected with no touch, and an error toast (10 s timer) disappeared on its own
+- [x] Haptic tick (8 ms) per step on the time wheels (`editor::set_hour/set_minute`); the haptics themselves are not observable on the emulator
+- [x] "?" help text on the Sort sheet (seen on emulator-5556) and the Pause-all sheet (`home.pause_note`, same code path, not opened by hand)
+- [ ] Accessibility (added in code, NOT verified: the Slint Android backend shows no accessibility tree to uiautomator, so only a phone with TalkBack can confirm; swatches of the colour grids have no names yet): aria labels for every icon button, switch role/state, chart label (`history.chart_aria`), progress label (`challenge.time_left`), reliability ok/attention icons (`reliability.ok`, `reliability.attention`), theme code and custom accent (`theme.code`, `accent.custom`); screen readers read nothing useful
+- [x] OS "reduce animations" preference: `display::animations_off()` (new, SDK native-host) is read at start and every 2 s and joins the in-app switch in `Motion.less` (not seen working by hand)
+- [x] Less motion reaches the card swipe snap and reorder shift in `ui/home.slint` (`Motion.ms`)
+- [x] Big clocks and the Android font scale: no compensation needed. Slint ignores the phone's font size (font_scale 1.5 enlarged the status bar and left the app text unchanged), so the clocks cannot grow. The flip side: the whole app does not follow the phone's font size setting. `display::font_scale()` exists in the SDK for it
 Covered by shared, unchanged logic (not gaps): `HISTORY_KEEP_DAYS` prune and ring photo prune (`ui::run`), `give_notice_to_all` and reminder taps (`platform.rs`, run by `init_platform`), home-widget refresh (`persistence::save_*` and settings call `refresh_outside_app`), sound names, notify-before, ring photo import (`ring_photos::import`, error toast `ring.photo_failed`).
 
 

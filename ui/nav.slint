@@ -6,6 +6,11 @@ component NavItem inherits Rectangle {
     in property <string> label;
     in property <bool> active;
     callback clicked();
+    accessible-role: tab;
+    accessible-label: root.label;
+    accessible-checkable: true;
+    accessible-checked: root.active;
+    accessible-action-default => { root.clicked(); }
     VerticalLayout {
         alignment: center;
         spacing: 4px;

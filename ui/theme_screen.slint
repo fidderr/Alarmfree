@@ -119,6 +119,11 @@ component Preview inherits Rectangle {
 component Tile inherits Rectangle {
     in property <ThemeTile> tile;
     callback clicked();
+    accessible-role: button;
+    accessible-label: root.tile.name;
+    accessible-checkable: true;
+    accessible-checked: root.tile.selected;
+    accessible-action-default => { root.clicked(); }
     VerticalLayout {
         spacing: 8px;
         Rectangle {
@@ -287,6 +292,11 @@ export component ThemeScreen inherits Rectangle {
                         border-width: 1px;
                         border-color: #80808080;
                         background: @conic-gradient(#8000ff 0deg, #ff00ff 30deg, #ff0000 90deg, #ffff00 150deg, #00ff00 210deg, #00ffff 270deg, #0000ff 330deg, #8000ff 360deg);
+                        accessible-role: button;
+                        accessible-label: Tr.t("accent.custom");
+                        accessible-checkable: true;
+                        accessible-checked: Thm.custom-accent;
+                        accessible-action-default => { Thm.role-open(0); }
                         if Thm.custom-accent: Rectangle {
                             x: 10px;
                             y: 10px;

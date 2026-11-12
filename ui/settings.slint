@@ -72,6 +72,18 @@ component SetRow inherits Rectangle {
             if root.switch: AppSwitch { on: root.on; }
         }
     }
+    if root.switch: Rectangle {
+        accessible-role: AccessibleRole.switch;
+        accessible-label: root.title;
+        accessible-checkable: true;
+        accessible-checked: root.on;
+        accessible-action-default => { root.clicked(); }
+    }
+    if !root.switch: Rectangle {
+        accessible-role: button;
+        accessible-label: root.title + " " + root.value;
+        accessible-action-default => { root.clicked(); }
+    }
     TouchArea { clicked => { root.clicked(); } }
 }
 

@@ -33,6 +33,8 @@ component CheckLine inherits Rectangle {
         spacing: 14px;
         Rectangle {
             width: 20px;
+            accessible-role: image;
+            accessible-label: root.check.ok ? Tr.t("reliability.ok") : Tr.t("reliability.attention");
             Icon {
                 name: root.check.ok ? IconName.check : IconName.warning;
                 size: 20px;
@@ -53,6 +55,9 @@ component CheckLine inherits Rectangle {
             y: (parent.height - self.height) / 2;
             border-radius: 14px;
             background: Pal.surface2;
+            accessible-role: button;
+            accessible-label: Tr.t("reliability.fix") + " " + root.check.title;
+            accessible-action-default => { root.fix(); }
             Text { text: Tr.t("reliability.fix"); font-size: 14px; font-weight: 500; color: Pal.text; }
             TouchArea { clicked => { root.fix(); } }
         }

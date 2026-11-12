@@ -1,4 +1,4 @@
-import { Pal, Tr, Insets } from "theme.slint";
+import { Motion, Pal, Tr, Insets } from "theme.slint";
 import { Icon, IconName, AppSwitch, RoundIconButton, SlimChip } from "components.slint";
 import { BottomNav } from "nav.slint";
 
@@ -38,6 +38,9 @@ component AlarmCard inherits Rectangle {
     property <length> face-x: clamp((opened ? -action-w : 0px) + swipe, -action-w, 0px);
     height: 76px;
     clip: !lifted;
+    accessible-role: list-item;
+    accessible-label: data.time + " " + data.label + " " + data.when;
+    accessible-action-default => { root.open(); }
 
     Rectangle {
         x: parent.width - root.action-w;
@@ -46,11 +49,17 @@ component AlarmCard inherits Rectangle {
         HorizontalLayout {
             if data.can-skip: Rectangle {
                 background: Pal.surface2;
+                accessible-role: button;
+                accessible-label: Tr.t("action.skip_next");
+                accessible-action-default => { root.skip(); }
                 Icon { name: IconName.skip; size: 20px; tint: Pal.text; }
                 TouchArea { clicked => { root.skip(); } }
             }
             Rectangle {
                 background: Pal.danger;
+                accessible-role: button;
+                accessible-label: Tr.t("action.delete");
+                accessible-action-default => { root.delete(); }
                 Icon { name: IconName.trash; size: 20px; tint: Pal.bg; }
                 TouchArea { clicked => { root.delete(); } }
             }
@@ -62,7 +71,7 @@ component AlarmCard inherits Rectangle {
         height: parent.height;
         background: root.lifted ? Pal.surface2 : Pal.surface;
         border-radius: root.lifted ? 14px : 0px;
-        animate x { duration: root.mode == 1 ? 0ms : 180ms; easing: ease-out; }
+        animate x { duration: root.mode == 1 ? 0ms : Motion.ms(180ms); easing: ease-out; }
         // The shadow of a lifted card only exists while it is lifted: a shadow on every card
         // makes each one an offscreen layer that is redrawn while the list scrolls.
         if root.lifted: Rectangle {
@@ -125,11 +134,18 @@ component AlarmCard inherits Rectangle {
             }
             Rectangle {
                 width: 32px;
+                accessible-role: button;
+                accessible-label: Tr.t("home.menu_aria");
+                accessible-action-default => { root.menu(); }
                 Icon { name: IconName.ellipsis-vertical; size: 18px; tint: Pal.text2; }
             }
             Rectangle {
                 width: 52px;
-                AppSwitch { on: data.on; }
+                AppSwitch {
+                    on: data.on;
+                    label: Tr.t("home.switch_aria") + " " + data.label;
+                    toggled => { root.toggle(); }
+                }
             }
         }
     }
@@ -252,8 +268,8 @@ export component HomeScreen inherits Rectangle {
             HorizontalLayout {
                 spacing: 8px;
                 alignment: start;
-                RoundIconButton { icon: IconName.pause; active: root.paused; clicked => { root.pause-all(); } }
-                RoundIconButton { icon: IconName.sort; clicked => { root.sort(); } }
+                RoundIconButton { icon: IconName.pause; label: Tr.t("home.pause_aria"); active: root.paused; clicked => { root.pause-all(); } }
+                RoundIconButton { icon: IconName.sort; label: Tr.t("home.sort_aria"); clicked => { root.sort(); } }
             }
         }
         if root.banner != "": Rectangle {
@@ -280,6 +296,9 @@ export component HomeScreen inherits Rectangle {
                 }
                 if root.banner-can-hide: Rectangle {
                     width: 44px;
+                    accessible-role: button;
+                    accessible-label: Tr.t("reliability.hide");
+                    accessible-action-default => { root.hide-banner(); }
                     Icon { name: IconName.xmark; size: 16px; tint: Pal.text2; }
                     TouchArea { clicked => { root.hide-banner(); } }
                 }
@@ -315,7 +334,7 @@ export component HomeScreen inherits Rectangle {
                         : i * 76px + ((root.drag-from >= 0 && root.drag-from < root.drag-to && i > root.drag-from && i <= root.drag-to) ? -76px
                         : ((root.drag-from >= 0 && root.drag-from > root.drag-to && i >= root.drag-to && i < root.drag-from) ? 76px : 0px));
                     z: i == root.drag-from ? 10 : 0;
-                    animate y { duration: i == root.drag-from ? 0ms : 150ms; easing: ease-out; }
+                    animate y { duration: i == root.drag-from ? 0ms : Motion.ms(150ms); easing: ease-out; }
                     data: row;
                     opened: root.open-id == row.id;
                     can-reorder: root.can-reorder;
@@ -401,6 +420,9 @@ export component HomeScreen inherits Rectangle {
         height: 56px;
         border-radius: 18px;
         background: Pal.accent;
+        accessible-role: button;
+        accessible-label: Tr.t("home.create_aria");
+        accessible-action-default => { root.create(); }
         Icon { name: IconName.plus; size: 24px; tint: Pal.on-accent; }
         TouchArea { clicked => { root.create(); } }
     }

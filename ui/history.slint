@@ -248,6 +248,8 @@ export component HistoryScreen inherits Rectangle {
                                 Stat { value: root.snoozes; name: Tr.t("history.snoozes"); }
                             }
                             if root.has-bars: HorizontalLayout {
+                                accessible-role: image;
+                                accessible-label: Tr.t("history.chart_aria");
                                 height: 72px + 20px;
                                 padding-top: 20px;
                                 spacing: 6px;

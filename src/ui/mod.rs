@@ -495,6 +495,7 @@ pub fn run() -> Result<(), slint::PlatformError> {
             Duration::from_secs(2),
             move || {
                 if let Some(ctx) = weak.upgrade() {
+                    settings::apply_motion(&ctx);
                     let dark = mobile_sentinel::display::system_dark();
                     if dark != ctx.system_dark.get() {
                         ctx.system_dark.set(dark);

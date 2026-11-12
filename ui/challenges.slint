@@ -692,6 +692,11 @@ export component RunScreen inherits Rectangle {
                 border-radius: 2px;
                 background: Pal.surface2;
                 clip: true;
+                accessible-role: progress-indicator;
+                accessible-label: Tr.t("challenge.time_left");
+                accessible-value: Run.idle-left;
+                accessible-value-minimum: 0;
+                accessible-value-maximum: 100;
                 Rectangle {
                     x: 0px;
                     width: parent.width * Run.idle-left / 100;

@@ -19,6 +19,10 @@ export component SwatchGrid inherits Rectangle {
         border-width: 1px;
         border-color: #80808080;
         background: swatch.colour;
+        accessible-role: button;
+        accessible-checkable: true;
+        accessible-checked: swatch.selected;
+        accessible-action-default => { root.picked(i); }
         if swatch.selected: Rectangle {
             x: -4px;
             y: -4px;
@@ -107,6 +111,7 @@ export component ColourControls inherits VerticalLayout {
         for r in [Hue.code-rev]: TextField {
             horizontal-stretch: 1;
             text: Hue.code;
+            label: Tr.t("theme.code");
             edited(s) => { Hue.code-edited(s); }
         }
         if Hue.show-auto: Rectangle {

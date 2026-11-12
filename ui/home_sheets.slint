@@ -11,6 +11,9 @@ export enum HomeSheet { none, sort, pause-all, pause-date, menu }
 component SheetItem inherits Rectangle {
     in property <SheetChoice> choice;
     callback clicked();
+    accessible-role: button;
+    accessible-label: root.choice.text;
+    accessible-action-default => { root.clicked(); }
     height: 52px;
     HorizontalLayout {
         padding-left: 4px;
@@ -38,6 +41,7 @@ export component HomeSheets inherits Rectangle {
     callback pause-apply();
     if root.sheet == HomeSheet.sort || root.sheet == HomeSheet.pause-all || root.sheet == HomeSheet.menu: Sheet {
         title: root.title;
+        help: root.sheet == HomeSheet.sort ? Tr.t("home.sort_note") : root.sheet == HomeSheet.pause-all ? Tr.t("home.pause_note") : "";
         close => { root.close(); }
         for choice[i] in root.choices: SheetItem {
             choice: choice;

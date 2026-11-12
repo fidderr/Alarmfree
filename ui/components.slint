@@ -44,6 +44,13 @@ export component Icon inherits Path {
 // The 44 x 26 switch of the list and the sheets.
 export component AppSwitch inherits Rectangle {
     in property <bool> on;
+    in property <string> label;
+    callback toggled();
+    accessible-role: switch;
+    accessible-label: root.label;
+    accessible-checkable: true;
+    accessible-checked: root.on;
+    accessible-action-default => { root.toggled(); }
     width: 44px;
     height: 26px;
     border-radius: 13px;
@@ -65,7 +72,11 @@ export component AppSwitch inherits Rectangle {
 export component RoundIconButton inherits Rectangle {
     in property <IconName> icon;
     in property <bool> active: false;
+    in property <string> label;
     callback clicked();
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-action-default => { root.clicked(); }
     width: 44px;
     height: 44px;
     border-radius: 22px;
@@ -84,6 +95,9 @@ export component RoundIconButton inherits Rectangle {
 export component SlimChip inherits Rectangle {
     in property <string> text;
     callback clicked();
+    accessible-role: button;
+    accessible-label: root.text;
+    accessible-action-default => { root.clicked(); }
     min-height: 44px;
     Rectangle {
         height: 34px;

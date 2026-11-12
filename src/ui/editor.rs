@@ -456,10 +456,12 @@ pub fn shift(ctx: &Ctx, minutes: i32) {
 }
 
 pub fn set_hour(ctx: &Ctx, hour: i32) {
+    crate::feedback::tick(8);
     edit(ctx, |ed| ed.draft.time_hour = hour.rem_euclid(24) as u8);
 }
 
 pub fn set_minute(ctx: &Ctx, minute: i32) {
+    crate::feedback::tick(8);
     edit(ctx, |ed| ed.draft.time_minute = minute.rem_euclid(60) as u8);
 }
 

@@ -352,6 +352,7 @@ pub fn solved(ctx: &Rc<Ctx>, id: &str, solves: Vec<ChallengeSolve>) {
 
 /// Everything that happens when the alarm is over, whichever way that went.
 fn finished(ctx: &Rc<Ctx>, id: &str, solves: Vec<ChallengeSolve>) {
+    let hidden = ctx.ring.borrow().as_ref().is_some_and(|ring| ring.hidden);
     if let Some(ring) = ctx.ring.borrow().as_ref() {
         if !ring.hidden {
             crate::history_persistence::record_alarm_event(&ring.times.solved_event(
@@ -365,4 +366,6 @@ fn finished(ctx: &Rc<Ctx>, id: &str, solves: Vec<ChallengeSolve>) {
     }
     finish_alarm(ctx, id);
     stop(ctx);
+    // Like the original: the history shows what just happened, a hidden alarm leaves none.
+    super::go(ctx, if hidden { 0 } else { 1 });
 }
