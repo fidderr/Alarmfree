@@ -702,26 +702,26 @@ Ring screen
 - [ ] Full-screen RingFace: date, live clock (5 s), label/fallback, note, insets, big-clock sizes with font-scale compensation
 - [ ] Clock styles Clean / Thin / Bold / Classic / Mono
 - [ ] Snooze button (text with minutes and left; hides at 0; `kit.snooze`, finish activity when no other ring)
-- [ ] Challenge hint ("N challenges" + dots) or gap; Turn off: no challenges = mark solved + dismiss; else pause + run
+- [~] Challenge hint ("N challenges" + dots) or gap; Turn off: no challenges = mark solved + dismiss; else pause + run (turn-off flow done and checked; the dots of the hint are not drawn)
 - [ ] Max-brightness handling (set / re-apply every 5 s / restore) and `note_ui_up`
 - [ ] Finish: history event, wake-check alarm, one-time switch-off, nav intent (History, or Home for hidden)
 - [ ] Liveness: event-loop round trip drives `ui_heartbeat` every second while ringing
 
 ### Phase 2: challenges
-- [ ] ChallengeRun shell: progress text, dots, Exit (practice), time-left bar (real), idle 60 s -> back to ring + resume, any touch resets
-- [ ] Idle clock also reset by shake/step sensor change (+ `note_activity`); scanner-open pauses idle; 180 s camera limit -> resume/pause
-- [ ] Celebration overlay 1800 ms (check pop, confetti 28 or 0 per setting, "i / total" label), haptic pattern on solve
-- [ ] Fallback link + confirm sheet -> 20 x 3 s holds (with back arrow), recorded as HoldButton
-- [ ] Math: keypad, auto-solve on match, max 12 digits, check key shows incorrect, 4 difficulties
-- [ ] Typing: per-character colouring, cursor, word wrap, accuracy readout, soft keyboard textarea, completion rule, incorrect state
-- [ ] Memory: 3x3 / 4x3 grid, display phase timing, input rules, 3 wrongs replay, wrong-cell shake, progress/wrong text
-- [ ] Shake: accelerometer start/stop, 200 ms poll, progress ring
-- [ ] Steps: step counter start/stop, 250 ms poll, progress ring, ACTIVITY_RECOGNITION request
-- [ ] Hold: bubble random position with safe margin, press-and-hold fill, release cancel, pop, haptics, progress
-- [ ] Reaction: countdown, 3 visible targets with spacing, replacement spawn, timer bar, time-out reset, rounds, haptics
-- [ ] Scan: camera scanner thread, states (ready / scanning / wrong / done), any-code vs expected, CAMERA request
-- [ ] Practice route and in-editor Try / Try all (no history, no AlarmKit), empty / done messages, Back = exit
-- [ ] ProgressRing component
+- [x] ChallengeRun shell: progress text, dots, Exit (practice), time-left bar (real), idle 60 s -> back to ring + resume, any touch resets
+- [x] Idle clock also reset by shake/step sensor change (+ `note_activity`); scanner-open pauses idle; 180 s camera limit -> resume/pause
+- [x] Celebration overlay 1800 ms (check pop, confetti 28 or 0 per setting, "i / total" label), haptic pattern on solve
+- [x] Fallback link + confirm sheet -> 20 x 3 s holds (with back arrow), recorded as HoldButton
+- [x] Math: keypad, auto-solve on match, max 12 digits, check key shows incorrect, 4 difficulties
+- [x] Typing: per-character colouring, cursor, word wrap, accuracy readout, soft keyboard textarea, completion rule, incorrect state
+- [x] Memory: 3x3 / 4x3 grid, display phase timing, input rules, 3 wrongs replay, wrong-cell shake, progress/wrong text
+- [x] Shake: accelerometer start/stop, 200 ms poll, progress ring
+- [~] Steps: step counter start/stop, 250 ms poll, progress ring, ACTIVITY_RECOGNITION request
+- [x] Hold: bubble random position with safe margin, press-and-hold fill, release cancel, pop, haptics, progress
+- [x] Reaction: countdown, 3 visible targets with spacing, replacement spawn, timer bar, time-out reset, rounds, haptics
+- [~] Scan: camera scanner thread, states (ready / scanning / wrong / done), any-code vs expected, CAMERA request
+- [x] Practice route and in-editor Try / Try all (no history, no AlarmKit), empty / done messages, Back = exit
+- [x] ProgressRing component
 
 ### Phase 3: editor sheets
 - [ ] Sheet base: scrim, slide-up, grab handle, title, "?" help toggle, note, top-right action slot, Back closes
@@ -731,9 +731,9 @@ Ring screen
 - [ ] Sound sheet: volume slider 0-100/5, fade-in chips (Off, 15 s, 30 s, 1, 2, 5 min)
 - [ ] Vibration sheet: Off / Pulse / Steady / Heartbeat chips with immediate preview, sound delay chips (when sound + vibration), sound_mode rules
 - [ ] Snooze sheet: interval stepper (1-60, step 1 to 10 then 5), count stepper (0-10)
-- [ ] Challenges sheet: rows with grip drag-reorder, number, name + summary, Try, remove, Try all, Add (max 10)
-- [ ] Add challenge sheet (8 types with descriptions, permission request on add)
-- [ ] Challenge detail sheet: difficulty chips + example (Math / Memory / Typing), steppers (Shake, Steps, Hold x2, Reaction x3), Scan code field + Scan now, Try, Remove, help text
+- [x] Challenges sheet: rows with grip drag-reorder, number, name + summary, Try, remove, Try all, Add (max 10)
+- [x] Add challenge sheet (8 types with descriptions, permission request on add)
+- [x] Challenge detail sheet: difficulty chips + example (Math / Memory / Typing), steppers (Shake, Steps, Hold x2, Reaction x3), Scan code field + Scan now, Try, Remove, help text
 - [ ] Ring limit (30 / 60 / 90 / 120 / Forever), Wake check (Off / 3 / 5 / 10), Notice (Off / 5 / 10 / 30 / 60) sheets
 - [ ] Ring look sheet: 8 live backdrop tiles, photo picker (+ other photo), colour row (Auto / dot), clock chips, Preview link
 - [ ] Ring colour sheet: live backdrop, accent swatches, ColorControls with Auto chip
@@ -777,3 +777,16 @@ Ring screen
 - [ ] Emulator `devtest/all.sh` scenarios pass with the new debug channel
 - [ ] Ring path on a phone: kiosk (Back / Home / Recents blocked), locked-boot backup screen, guardian restart on frozen UI
 - [ ] Tablet / fold width: split layout; rotation and font-scale changes handled in place
+
+
+## Status: challenges and practice (step 1 of the port)
+Done and seen on emulator-5556: the challenge run over the ring screen (idle bar, 60 s idle back to ringing, solve ->
+mark_solved + dismiss + history row with the Math solve), practice from the alarm menu ("Try its challenges") and from the
+editor (Try, Try all), the editor's Challenges row with the list sheet (grip drag reorder, Try, remove, Add), the Add sheet and
+the detail sheet (difficulty chips, steppers, scan code field), Math (keypad, wrong, solve), Typing (colouring, accuracy, soft
+keyboard), Memory (display, input, replay after 3 wrongs), Shake (virtual sensor), Hold (fill, pop, fallback), Reaction
+(countdown, pop, round clear), Scan screen + CAMERA prompt, celebration with confetti. Logic: `src/challenges/` (pure, tested);
+UI glue: `src/ui/challenge_run.rs`, `src/ui/challenge_sheets.rs`; Slint: `ui/challenges.slint`, `ui/challenge_sheets.slint`.
+Not verified: a real camera scan (the emulator has no code to scan), steps sensor, the 180 s camera limit, the time-out reset
+of Reaction was seen but the haptics are not observable, typing to completion. Differences: no autocorrect-off on the typing
+field (Slint has no such flag), the backspace key is an icon, wrong memory cells shake via a Slint animation.

@@ -4,7 +4,10 @@ import { Toast } from "components.slint";
 import { EditorScreen, ChoiceRow, EditorSheet } from "editor.slint";
 import { RingScreen } from "ring.slint";
 import { HomeSheets, HomeSheet, SheetChoice } from "home_sheets.slint";
+import { Run, RunScreen, RunCell, TypeCell, ReactTarget, RunKind } from "challenges.slint";
+import { Cfg, CfgRow, CfgType, CfgStepper } from "challenge_sheets.slint";
 export { Pal, Tr, Insets, AlarmRow, DayCell, ChoiceRow, EditorSheet, HomeSheet, SheetChoice }
+export { Run, RunCell, TypeCell, ReactTarget, RunKind, Cfg, CfgRow, CfgType, CfgStepper }
 
 export component MainWindow inherits Window {
     in property <string> next-title;
@@ -205,6 +208,8 @@ export component MainWindow inherits Window {
         snooze => { root.ring-snooze(); }
         turn-off => { root.ring-turn-off(); }
     }
+
+    if Run.active: RunScreen { }
 
     if root.toast-visible: Toast {
         x: 16px + Insets.left;

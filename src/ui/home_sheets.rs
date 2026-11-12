@@ -7,7 +7,7 @@ use slint::{ModelRc, VecModel};
 
 use super::{Ctx, HomeSheet, SheetChoice};
 use crate::i18n::{t, Translations};
-use crate::models::{AlarmData, SortMode};
+use crate::models::{AlarmData, ChallengeSetup, SortMode};
 use crate::{alarm_ops, schedule};
 
 /// What a row of the open panel does.
@@ -17,6 +17,7 @@ enum Act {
     PauseEnd(Option<String>),
     PauseFor(i64),
     PauseDate(Option<String>),
+    Practice(String),
     Skip {
         id: String,
         next: Option<i64>,
@@ -143,6 +144,14 @@ pub fn open_menu(ctx: &Ctx, id: &str) {
         alarm.label
     );
     let mut rows = Vec::new();
+    if !alarm.challenges.is_empty() {
+        rows.push((
+            t(&tr, "home.practice"),
+            false,
+            false,
+            Act::Practice(id.to_owned()),
+        ));
+    }
     if can_skip {
         let key = if skip_active {
             "action.undo_skip"
@@ -290,6 +299,18 @@ pub fn picked(ctx: &Rc<Ctx>, index: usize) {
             if let Some(until) = start_of_day_ms(days) {
                 pause(ctx, None, until);
             }
+        }
+        Act::Practice(id) => {
+            close(ctx);
+            let setups = ctx
+                .alarms
+                .borrow()
+                .iter()
+                .find(|a| a.id == id)
+                .map(|a| ChallengeSetup::list_from_stored(&a.challenges))
+                .unwrap_or_default();
+            super::challenge_run::start_practice(ctx, &setups);
+            return;
         }
         Act::Skip { id, next, active } => super::home::toggle_skip(ctx, &id, next, active),
         Act::Duplicate(id) => {

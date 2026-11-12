@@ -9,7 +9,7 @@ use slint::{ModelRc, SharedString, VecModel};
 
 use super::{ChoiceRow, Ctx, DayCell, EditorSheet};
 use crate::i18n::{t, Translations};
-use crate::models::AlarmData;
+use crate::models::{AlarmData, ChallengeSetup};
 use crate::{alarm_ops, schedule};
 
 /// How long trying a sound lasts.
@@ -22,6 +22,10 @@ pub struct EditorState {
     /// What the editor starts from, once; comparing with it tells if anything changed.
     pub original: AlarmData,
     pub draft: AlarmData,
+    /// Its challenges, in the order they are done.
+    pub setups: Vec<ChallengeSetup>,
+    /// The challenge whose settings are open.
+    pub detail: usize,
     /// An alarm with no weekday selected rings once, on a date.
     pub one_time: bool,
     pub date_value: String,
@@ -59,6 +63,8 @@ pub fn open(ctx: &Rc<Ctx>, id: &str) {
         one_time: schedule::is_one_time(&original),
         date_value: start_date.clone(),
         start_date,
+        setups: ChallengeSetup::list_from_stored(&original.challenges),
+        detail: 0,
         draft: original.clone(),
         original,
         error: String::new(),
@@ -81,6 +87,7 @@ fn build(ctx: &Ctx, ed: &EditorState) -> AlarmData {
     } else {
         ed.id.clone()
     };
+    alarm.challenges = ed.setups.iter().map(ChallengeSetup::to_stored).collect();
     alarm.label = crate::sanitize::sanitize_label(&alarm.label);
     alarm.note = crate::sanitize::sanitize_label(&alarm.note);
     if ed.one_time {
@@ -108,6 +115,11 @@ fn has_changes(ctx: &Ctx, ed: &EditorState) -> bool {
     now.order = then.order;
     now.enabled = then.enabled;
     now.skip_until_ms = then.skip_until_ms;
+    // Challenges in the form they are saved in, so unknown types and spelling do not count.
+    then.challenges = ChallengeSetup::list_from_stored(&then.challenges)
+        .iter()
+        .map(ChallengeSetup::to_stored)
+        .collect();
     // The date it starts out with is not a change.
     if schedule::is_one_time(&then) {
         then.date = Some(ed.start_date.clone());
@@ -329,6 +341,10 @@ pub fn sync(ctx: &Ctx) {
             .collect(),
     ));
     ui.set_ed_sounding(ed.preview != 0);
+    drop(settings);
+    drop(tr);
+    drop(editor);
+    super::challenge_sheets::sync_rows(ctx);
 }
 
 fn edit(ctx: &Ctx, apply: impl FnOnce(&mut EditorState)) {
@@ -583,10 +599,18 @@ pub fn back(ctx: &Rc<Ctx>) {
     let Some(ui) = ctx.ui.upgrade() else {
         return;
     };
-    if ui.get_ed_sheet() != EditorSheet::None {
-        ui.set_ed_sheet(EditorSheet::None);
-        stop_preview(ctx);
-        return;
+    match ui.get_ed_sheet() {
+        EditorSheet::None => {}
+        // Their back is the list of challenges.
+        EditorSheet::AddChallenge | EditorSheet::Detail => {
+            ui.set_ed_sheet(EditorSheet::Challenges);
+            return;
+        }
+        _ => {
+            ui.set_ed_sheet(EditorSheet::None);
+            stop_preview(ctx);
+            return;
+        }
     }
     let changed = ctx
         .editor

@@ -16,6 +16,8 @@ use crate::models::{AlarmData, AppSettings};
 
 slint::include_modules!();
 
+mod challenge_run;
+mod challenge_sheets;
 mod editor;
 mod home;
 mod home_sheets;
@@ -37,6 +39,7 @@ pub struct Ctx {
     pub home_sheet: RefCell<home_sheets::SheetState>,
     pub preview_timer: slint::Timer,
     pub ring: RefCell<Option<ring::RingState>>,
+    pub run: RefCell<Option<challenge_run::RunState>>,
     pub firing_watch: RefCell<crate::firing_state::FiringWatch>,
     pub ticks: Cell<u32>,
 }
@@ -90,6 +93,9 @@ fn back(ctx: &Rc<Ctx>) {
     let Some(ui) = ctx.ui.upgrade() else {
         return;
     };
+    if challenge_run::back(ctx) {
+        return;
+    }
     if ui.get_ringing() {
         return;
     }
@@ -127,6 +133,7 @@ pub fn run() -> Result<(), slint::PlatformError> {
         home_sheet: RefCell::new(home_sheets::SheetState::default()),
         preview_timer: slint::Timer::default(),
         ring: RefCell::new(None),
+        run: RefCell::new(None),
         firing_watch: RefCell::new(crate::firing_state::FiringWatch::default()),
         ticks: Cell::new(0),
     });
@@ -194,6 +201,8 @@ pub fn run() -> Result<(), slint::PlatformError> {
     on!(on_ed_sheet_closed, |ctx| editor::sheet_closed(&ctx));
     on!(on_ring_snooze, |ctx| ring::snooze(&ctx));
     on!(on_ring_turn_off, |ctx| ring::turn_off(&ctx));
+    challenge_run::connect(&ctx, &ui);
+    challenge_sheets::connect(&ctx, &ui);
     on!(on_toast_undo, |ctx| toast::undo(&ctx));
     on!(on_toast_dismiss, |ctx| toast::dismiss(&ctx));
 

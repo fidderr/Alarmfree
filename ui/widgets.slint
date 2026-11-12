@@ -120,9 +120,14 @@ export component Chip inherits Rectangle {
 export component Sheet inherits Rectangle {
     in property <string> title;
     in property <string> action-text;
+    // What a ? next to the title opens, in place.
+    in property <string> help;
+    // Set while something inside is dragged, so the panel does not scroll along.
+    in property <bool> locked;
     callback close();
     callback action();
     property <bool> shown: false;
+    property <bool> help-open: false;
     init => { shown = true; }
     background: #00000066;
     TouchArea { clicked => { root.close(); } }
@@ -148,7 +153,19 @@ export component Sheet inherits Rectangle {
             height: 52px;
             padding-left: 20px;
             padding-right: 12px;
-            Text { horizontal-stretch: 1; text: root.title; font-size: 18px; font-weight: 700; color: Pal.text; vertical-alignment: center; overflow: elide; }
+            Text { horizontal-stretch: root.help == "" ? 1 : 0; text: root.title; font-size: 18px; font-weight: 700; color: Pal.text; vertical-alignment: center; overflow: elide; }
+            if root.help != "": Rectangle {
+                width: 36px;
+                Rectangle {
+                    width: 22px;
+                    height: 22px;
+                    border-radius: 11px;
+                    background: root.help-open ? Pal.accent : Pal.accent-soft;
+                    Text { text: "?"; font-size: 13px; font-weight: 700; color: root.help-open ? Pal.on-accent : Pal.accent; }
+                }
+                TouchArea { clicked => { root.help-open = !root.help-open; } }
+            }
+            if root.help != "": Rectangle { horizontal-stretch: 1; }
             if root.action-text != "": Rectangle {
                 width: 80px;
                 Text { text: root.action-text; font-size: 14px; font-weight: 500; color: Pal.accent; }
@@ -158,12 +175,23 @@ export component Sheet inherits Rectangle {
         Flickable {
             y: 72px;
             height: parent.height - 72px;
+            interactive: !root.locked;
             content-height: body.preferred-height + Insets.bottom + 16px;
             body := VerticalLayout {
                 alignment: start;
                 padding-left: 16px;
                 padding-right: 16px;
                 spacing: 8px;
+                if root.help-open: Rectangle {
+                    border-radius: 14px;
+                    background: Pal.accent-soft;
+                    VerticalLayout {
+                        padding: 12px;
+                        padding-left: 14px;
+                        padding-right: 14px;
+                        Text { text: root.help; font-size: 14px; color: Pal.text; wrap: word-wrap; }
+                    }
+                }
                 @children
             }
         }

@@ -1,6 +1,7 @@
 //! AlarmFree library crate - exposes modules for integration testing.
 
 pub mod alarm_ops;
+pub mod challenges;
 pub mod custom_sounds;
 pub mod db;
 #[cfg(debug_assertions)]

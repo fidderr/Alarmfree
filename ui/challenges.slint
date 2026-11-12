@@ -1,0 +1,733 @@
+import { Pal, Tr, Insets } from "theme.slint";
+import { Icon, IconName } from "components.slint";
+import { PrimaryButton, Sheet } from "widgets.slint";
+
+// Which challenge is on screen. `ring` is the shared count ring of shake and steps.
+export enum RunKind { none, math, typing, memory, ring, hold, reaction, scan }
+
+export struct RunCell { text: string, state: int }
+export struct TypeCell { ch: string, col: int, row: int, state: int }
+export struct ReactTarget { present: bool, id: int, fx: float, fy: float }
+
+// What the challenge screen shows and does. Rust drives it; the rules are in `src/challenges/`.
+export global Run {
+    in property <bool> active;
+    in property <bool> practice;
+    // Practice is over (or has nothing to try): a message and Exit.
+    in property <bool> finished;
+    in property <string> message;
+    in property <string> exit-text;
+    in property <string> progress;
+    in property <int> total;
+    in property <int> index;
+    in property <int> idle-left: 100;
+    in property <bool> can-fallback;
+    in property <bool> celebrating;
+    in property <string> celebration-label;
+    in property <int> confetti;
+    in-out property <bool> asking-fallback;
+    in property <RunKind> kind;
+    // Changes with every challenge, so the body starts fresh.
+    in property <int> seq;
+    in property <string> instruction;
+    // Math.
+    in property <string> expression;
+    in property <string> typed;
+    in property <bool> wrong;
+    // Typing.
+    in property <[TypeCell]> type-cells;
+    in property <int> type-rows;
+    in property <string> accuracy-text;
+    in property <bool> accuracy-good;
+    in property <string> min-text;
+    in property <string> type-progress;
+    // Memory.
+    in property <[RunCell]> cells;
+    in property <int> cols: 3;
+    in property <string> status;
+    in property <string> hint;
+    // Shake, steps and hold progress.
+    in property <float> fraction;
+    in property <string> ring-text;
+    in property <string> unit;
+    // Scan: 0 ready, 1 scanning, 2 wrong code, 3 done.
+    in property <int> scan-state;
+    // Hold: 0 idle, 1 filling, 2 popping.
+    in property <int> hold-state;
+    in property <float> hold-x;
+    in property <float> hold-y;
+    in property <int> hold-ms: 3000;
+    in property <int> hold-seq;
+    in property <bool> can-cancel;
+    // Reaction.
+    in property <bool> counting;
+    in property <int> countdown-secs;
+    in property <[ReactTarget]> targets;
+    in property <float> time-frac: 1.0;
+    in property <bool> time-low;
+    callback touched();
+    callback exit();
+    callback fallback-confirmed();
+    callback fallback-cancelled();
+    callback math-key(string);
+    callback math-delete();
+    callback math-check();
+    callback typing-edited(string);
+    callback memory-tap(int);
+    callback hold-down();
+    callback hold-up();
+    callback reaction-hit(int);
+    callback scan-tap();
+}
+
+// A circle drawn as an arc from the top, clockwise.
+component ArcRing inherits Rectangle {
+    in property <float> value;
+    property <float> fill: root.value;
+    in property <color> track: Pal.surface2;
+    in property <color> bar: Pal.accent;
+    in property <float> thickness: 6;
+    in property <duration> fill-duration: 300ms;
+    property <angle> sweep: clamp(root.fill, 0, 0.9999) * 360deg;
+    animate fill { duration: root.fill-duration; easing: ease-out; }
+    Path {
+        width: parent.width;
+        height: parent.height;
+        viewbox-width: 100;
+        viewbox-height: 100;
+        stroke: root.track;
+        stroke-width: root.width * root.thickness / 100;
+        commands: "M50 5A45 45 0 1 1 50 95A45 45 0 1 1 50 5Z";
+    }
+    Path {
+        visible: root.fill > 0.002;
+        width: parent.width;
+        height: parent.height;
+        viewbox-width: 100;
+        viewbox-height: 100;
+        stroke: root.bar;
+        stroke-width: root.width * root.thickness / 100;
+        stroke-line-cap: round;
+        commands: "M50 5A45 45 0 " + (root.sweep > 180deg ? "1" : "0") + " 1 " + (50 + 45 * Math.sin(root.sweep)) + " " + (50 - 45 * Math.cos(root.sweep));
+    }
+}
+
+component Instruction inherits Text {
+    font-size: 14px;
+    color: Pal.text2;
+    horizontal-alignment: center;
+    wrap: word-wrap;
+}
+
+component KeyButton inherits Rectangle {
+    in property <string> text;
+    in property <color> fill: Pal.surface;
+    in property <color> ink: Pal.text;
+    callback clicked();
+    height: 64px;
+    border-radius: 20px;
+    background: ta.pressed ? fill.darker(0.15) : fill;
+    Text { text: root.text; font-size: 20px; font-weight: 500; color: root.ink; }
+    ta := TouchArea { clicked => { root.clicked(); } }
+}
+
+component MathBody inherits VerticalLayout {
+    padding-top: 24px;
+    spacing: 0px;
+    Instruction { text: Tr.t("challenge.instruction.math"); }
+    Rectangle { height: 14px; }
+    Text {
+        text: Run.expression;
+        height: 64px;
+        font-size: 56px;
+        font-weight: 500;
+        color: Pal.text;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+    Rectangle { height: 16px; }
+    Text {
+        text: Run.typed;
+        height: 64px;
+        font-size: 28px;
+        font-weight: 500;
+        color: Run.wrong ? Pal.danger : Pal.accent;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+    if Run.wrong: VerticalLayout {
+        padding-top: 8px;
+        Text { text: Tr.t("challenge.incorrect"); font-size: 14px; color: Pal.danger; horizontal-alignment: center; }
+    }
+    Rectangle { vertical-stretch: 1; min-height: 8px; }
+    GridLayout {
+        spacing: 8px;
+        Row {
+            KeyButton { text: "1"; clicked => { Run.math-key("1"); } }
+            KeyButton { text: "2"; clicked => { Run.math-key("2"); } }
+            KeyButton { text: "3"; clicked => { Run.math-key("3"); } }
+        }
+        Row {
+            KeyButton { text: "4"; clicked => { Run.math-key("4"); } }
+            KeyButton { text: "5"; clicked => { Run.math-key("5"); } }
+            KeyButton { text: "6"; clicked => { Run.math-key("6"); } }
+        }
+        Row {
+            KeyButton { text: "7"; clicked => { Run.math-key("7"); } }
+            KeyButton { text: "8"; clicked => { Run.math-key("8"); } }
+            KeyButton { text: "9"; clicked => { Run.math-key("9"); } }
+        }
+        Row {
+            KeyButton {
+                fill: Pal.surface2;
+                clicked => { Run.math-delete(); }
+                Icon { name: IconName.backspace; size: 24px; tint: Pal.text; }
+            }
+            KeyButton { text: "0"; clicked => { Run.math-key("0"); } }
+            KeyButton { text: Tr.t("action.check"); fill: Pal.accent; ink: Pal.on-accent; clicked => { Run.math-check(); } }
+        }
+    }
+}
+
+component TypingBody inherits VerticalLayout {
+    padding-top: 24px;
+    spacing: 0px;
+    property <length> cell-w: 9.6px;
+    property <length> cell-h: 27px;
+    property <bool> empty: true;
+    Instruction { text: Tr.t("challenge.instruction.typing"); }
+    Rectangle { height: 14px; }
+    Rectangle {
+        height: max(72px, min(Run.type-rows * root.cell-h + 28px, root.height * 0.4));
+        border-radius: 8px;
+        background: Pal.surface;
+        clip: true;
+        Flickable {
+            x: 14px;
+            y: 14px;
+            width: parent.width - 28px;
+            height: parent.height - 28px;
+            content-height: Run.type-rows * root.cell-h;
+            for c in Run.type-cells: Rectangle {
+                x: c.col * root.cell-w;
+                y: c.row * root.cell-h;
+                width: root.cell-w;
+                height: root.cell-h;
+                border-radius: 2px;
+                background: c.state == 3 ? Pal.accent-soft : transparent;
+                Text {
+                    text: c.ch == " " ? "\u{00A0}" : c.ch;
+                    font-family: "monospace";
+                    font-size: 16px;
+                    color: c.state == 1 ? Pal.ok : c.state == 2 ? Pal.danger : Pal.text2;
+                }
+                if c.state == 2 && c.ch != " ": Rectangle {
+                    y: parent.height - 6px;
+                    height: 1px;
+                    background: Pal.danger;
+                }
+            }
+        }
+    }
+    Rectangle { height: 12px; }
+    Rectangle {
+        min-height: 90px;
+        vertical-stretch: 0;
+        border-radius: 8px;
+        border-width: 1px;
+        border-color: Pal.line;
+        background: Pal.surface;
+        input := TextInput {
+            x: 12px;
+            y: 12px;
+            width: parent.width - 24px;
+            height: parent.height - 24px;
+            font-family: "monospace";
+            font-size: 16px;
+            color: Pal.text;
+            wrap: word-wrap;
+            single-line: false;
+            edited => {
+                root.empty = self.text == "";
+                Run.typing-edited(self.text);
+            }
+            init => { self.focus(); }
+        }
+        if root.empty: Text {
+            x: 12px;
+            y: 12px;
+            text: Tr.t("challenge.typing.placeholder");
+            font-family: "monospace";
+            font-size: 16px;
+            color: Pal.text2;
+            opacity: 0.7;
+        }
+    }
+    Rectangle { height: 8px; }
+    HorizontalLayout {
+        alignment: center;
+        Text { text: Run.accuracy-text; font-size: 14px; color: Run.accuracy-good ? Pal.ok : Pal.danger; }
+        Text { text: Run.min-text; font-size: 14px; color: Pal.text2; }
+    }
+    if Run.wrong: VerticalLayout {
+        padding-top: 8px;
+        Text { text: Tr.t("challenge.incorrect"); font-size: 14px; color: Pal.danger; horizontal-alignment: center; }
+    }
+    VerticalLayout {
+        padding-top: 12px;
+        Text { text: Run.type-progress; font-size: 12px; color: Pal.text2; horizontal-alignment: center; }
+    }
+    Rectangle { vertical-stretch: 1; }
+}
+
+component MemoryCell inherits Rectangle {
+    in property <RunCell> cell;
+    callback clicked();
+    property <float> shake: cell.state == 3 ? 1.0 : 0.0;
+    animate shake { duration: 300ms; }
+    border-width: 2px;
+    border-radius: 8px;
+    border-color: cell.state == 1 ? Pal.accent : cell.state == 2 ? Pal.ok : cell.state == 3 ? Pal.danger : Pal.line;
+    background: cell.state == 1 ? Pal.accent : cell.state == 2 ? Pal.ok : cell.state == 3 ? Pal.danger : Pal.surface;
+    animate background, border-color { duration: 200ms; }
+    transform-scale: cell.state == 1 ? 1.05 : 1.0;
+    animate transform-scale { duration: 200ms; }
+    Text {
+        x: cell.state == 3 ? 6px * Math.sin(root.shake * 1080deg) * (1 - root.shake) + (parent.width - self.width) / 2 : (parent.width - self.width) / 2;
+        text: cell.text;
+        font-size: 16px;
+        font-weight: 700;
+        color: Pal.on-accent;
+        vertical-alignment: center;
+        height: parent.height;
+    }
+    TouchArea { clicked => { root.clicked(); } }
+}
+
+component MemoryBody inherits VerticalLayout {
+    padding-top: 24px;
+    spacing: 0px;
+    property <length> grid-w: min(self.width, 300px);
+    property <length> gap: 10px;
+    property <length> cell-w: (grid-w - gap * (Run.cols - 1)) / Run.cols;
+    property <length> cell-h: Run.cols == 4 ? 64px : 80px;
+    Instruction { text: Run.instruction; }
+    Rectangle { height: 14px; }
+    Text {
+        text: Run.status;
+        min-height: 18px;
+        font-size: 12px;
+        font-weight: 500;
+        color: Pal.accent;
+        horizontal-alignment: center;
+    }
+    Rectangle { height: 12px; }
+    Rectangle {
+        height: Run.cells.length > 0 ? ((Run.cells.length / Run.cols) * (root.cell-h + root.gap) - root.gap) : 0px;
+        Rectangle {
+            width: root.grid-w;
+            for cell[i] in Run.cells: MemoryCell {
+                x: Math.mod(i, Run.cols) * (root.cell-w + root.gap);
+                y: Math.floor(i / Run.cols) * (root.cell-h + root.gap);
+                width: root.cell-w;
+                height: root.cell-h;
+                cell: cell;
+                clicked => { Run.memory-tap(i); }
+            }
+        }
+    }
+    VerticalLayout {
+        padding-top: 12px;
+        Text { text: Run.hint; font-size: 12px; color: Pal.text2; horizontal-alignment: center; }
+    }
+    Rectangle { vertical-stretch: 1; }
+}
+
+// Shake and steps: how far along, as a ring.
+component RingBody inherits VerticalLayout {
+    padding-top: 24px;
+    spacing: 0px;
+    Instruction { text: Run.instruction; }
+    Rectangle { height: 14px; }
+    VerticalLayout {
+        vertical-stretch: 1;
+        alignment: center;
+        spacing: 16px;
+        Rectangle {
+            height: 180px;
+            Rectangle {
+                width: 180px;
+                height: 180px;
+                ArcRing {
+                    width: 180px;
+                    height: 180px;
+                    value: Run.fraction;
+                }
+                Text { text: Run.ring-text; font-size: 28px; font-weight: 700; color: Pal.text; }
+            }
+        }
+        Text { text: Run.unit; font-size: 14px; color: Pal.text2; horizontal-alignment: center; }
+    }
+}
+
+component ScanBody inherits VerticalLayout {
+    padding-top: 24px;
+    spacing: 0px;
+    Instruction { text: Run.instruction; }
+    Rectangle { height: 14px; }
+    Rectangle {
+        vertical-stretch: 1;
+        VerticalLayout {
+            alignment: center;
+            spacing: 16px;
+            Rectangle {
+                height: 180px;
+                Rectangle {
+                    width: 180px;
+                    height: 180px;
+                    border-radius: 90px;
+                    border-width: 8px;
+                    border-color: Run.scan-state == 3 ? Pal.ok : Pal.surface2;
+                    if Run.scan-state == 0 || Run.scan-state == 2: Text {
+                        text: Tr.t("challenge.scan.scan_button");
+                        font-size: 28px;
+                        font-weight: 700;
+                        color: Pal.text;
+                    }
+                    if Run.scan-state == 1: Text {
+                        text: Tr.t("challenge.scan.scanning");
+                        font-size: 14px;
+                        font-weight: 700;
+                        color: Pal.text;
+                    }
+                    if Run.scan-state == 3: Icon { name: IconName.check; size: 48px; tint: Pal.ok; }
+                    if Run.scan-state == 0 || Run.scan-state == 2: TouchArea { clicked => { Run.scan-tap(); } }
+                }
+            }
+            if Run.scan-state == 2: Text {
+                text: Tr.t("challenge.scan.mismatch");
+                font-size: 14px;
+                color: Pal.danger;
+                horizontal-alignment: center;
+            }
+            Text {
+                text: Run.scan-state == 0 ? Tr.t("challenge.scan.tap_to_scan")
+                    : Run.scan-state == 1 ? Tr.t("challenge.scan.point_camera")
+                    : Run.scan-state == 2 ? Tr.t("challenge.scan.tap_retry")
+                    : Tr.t("challenge.scan.success");
+                font-size: 14px;
+                color: Pal.text2;
+                horizontal-alignment: center;
+            }
+        }
+    }
+}
+
+component HoldBody inherits VerticalLayout {
+    padding-top: 8px;
+    spacing: 0px;
+    Rectangle {
+        height: 44px + 6px;
+        Instruction {
+            x: 48px;
+            width: parent.width - 96px;
+            height: 44px;
+            vertical-alignment: center;
+            text: Run.instruction;
+        }
+        if Run.can-cancel: Rectangle {
+            x: 0px;
+            y: 0px;
+            width: 44px;
+            height: 44px;
+            Text { text: "\u{2039}"; font-size: 28px; font-weight: 700; color: Pal.text2; }
+            TouchArea { clicked => { Run.fallback-cancelled(); } }
+        }
+    }
+    area := Rectangle {
+        vertical-stretch: 1;
+        border-radius: 20px;
+        background: Pal.surface;
+        clip: true;
+        for s in [Run.hold-seq]: bubble := Rectangle {
+            property <length> safe: 64px;
+            property <bool> popping: Run.hold-state == 2;
+            property <bool> filling: Run.hold-state == 1;
+            property <float> born: 0;
+            init => { self.born = 1; }
+            animate born { duration: 420ms; easing: cubic-bezier(0.34, 1.56, 0.64, 1); }
+            width: 88px;
+            height: 88px;
+            x: self.safe + Run.hold-x * (area.width - 2 * self.safe) - 44px;
+            y: self.safe + Run.hold-y * (area.height - 2 * self.safe) - 44px;
+            transform-scale: self.popping ? 0.5 : self.filling ? 1.08 : (0.3 + 0.7 * self.born);
+            opacity: self.popping ? 0.0 : min(1.0, self.born * 3);
+            animate transform-scale { duration: self.popping ? 280ms : 200ms; easing: cubic-bezier(0.34, 1.56, 0.64, 1); }
+            animate opacity { duration: self.popping ? 280ms : 100ms; }
+            ArcRing {
+                width: 88px;
+                height: 88px;
+                thickness: 7;
+                value: (bubble.filling || bubble.popping) ? 1.0 : 0.0;
+                fill-duration: bubble.filling ? Run.hold-ms * 1ms : bubble.popping ? 0ms : 350ms;
+                bar: bubble.popping ? Pal.ok : Pal.accent;
+            }
+            Rectangle {
+                width: 72% * parent.width;
+                height: 72% * parent.height;
+                border-radius: self.width / 2;
+                background: bubble.popping ? Pal.ok : Pal.accent-soft;
+                animate background { duration: 250ms; }
+                Icon {
+                    name: bubble.popping ? IconName.check : IconName.touch;
+                    size: 30px;
+                    tint: bubble.popping ? Pal.on-accent : bubble.filling ? Pal.text : Pal.text2;
+                }
+            }
+            TouchArea {
+                pointer-event(e) => {
+                    if (e.kind == PointerEventKind.down) {
+                        Run.hold-down();
+                    } else if (e.kind == PointerEventKind.up || e.kind == PointerEventKind.cancel) {
+                        Run.hold-up();
+                    }
+                }
+            }
+        }
+    }
+    VerticalLayout {
+        padding-top: 8px;
+        Text { text: Run.ring-text; font-size: 14px; font-weight: 500; color: Pal.text2; horizontal-alignment: center; }
+    }
+}
+
+component ReactionBody inherits VerticalLayout {
+    padding-top: 8px;
+    spacing: 0px;
+    Rectangle {
+        height: 44px + 6px;
+        Instruction {
+            x: 48px;
+            width: parent.width - 96px;
+            height: 44px;
+            vertical-alignment: center;
+            text: Run.instruction;
+        }
+    }
+    Rectangle { height: 2px; }
+    Rectangle {
+        height: 8px;
+        border-radius: 4px;
+        background: Pal.surface2;
+        clip: true;
+        Rectangle {
+            x: 0px;
+            width: parent.width * Run.time-frac;
+            border-radius: 4px;
+            background: Run.time-low ? Pal.warn : Pal.accent;
+            animate width { duration: 40ms; }
+        }
+    }
+    Rectangle { height: 8px; }
+    area := Rectangle {
+        vertical-stretch: 1;
+        border-radius: 20px;
+        background: Pal.surface;
+        clip: true;
+        if Run.counting: VerticalLayout {
+            alignment: center;
+            spacing: 8px;
+            Text {
+                text: "\{Run.countdown-secs}";
+                font-size: 96px;
+                font-weight: 700;
+                color: Pal.accent;
+                horizontal-alignment: center;
+            }
+            Text {
+                text: Tr.t("challenge.reaction.get_ready").to-uppercase();
+                font-size: 14px;
+                font-weight: 500;
+                letter-spacing: 1px;
+                color: Pal.text2;
+                horizontal-alignment: center;
+            }
+        }
+        for t in Run.targets: Rectangle {
+            visible: t.present;
+            property <float> born: t.present ? 1.0 : 0.0;
+            animate born { duration: 220ms; easing: cubic-bezier(0.34, 1.56, 0.64, 1); }
+            width: 76px;
+            height: 76px;
+            x: 56px + t.fx * (area.width - 112px) - 38px;
+            y: 56px + t.fy * (area.height - 112px) - 38px;
+            border-radius: 38px;
+            background: Pal.accent-soft;
+            border-width: 2px;
+            border-color: Pal.accent;
+            transform-scale: (0.2 + 0.8 * self.born) * (hit.pressed ? 0.86 : 1.0);
+            Rectangle {
+                width: 52% * parent.width;
+                height: 52% * parent.height;
+                border-radius: self.width / 2;
+                border-width: 3px;
+                border-color: Pal.accent;
+            }
+            Rectangle {
+                width: 26% * parent.width;
+                height: 26% * parent.height;
+                border-radius: self.width / 2;
+                background: Pal.accent;
+            }
+            hit := TouchArea {
+                pointer-event(e) => {
+                    if (e.kind == PointerEventKind.down) {
+                        Run.reaction-hit(t.id);
+                    }
+                }
+            }
+        }
+    }
+    VerticalLayout {
+        padding-top: 8px;
+        Text { text: Run.ring-text; font-size: 14px; font-weight: 500; color: Pal.text2; horizontal-alignment: center; }
+    }
+}
+
+// Shown for a moment when a challenge is solved: a big check, and confetti unless it is off.
+component Celebration inherits Rectangle {
+    in property <string> label;
+    in property <int> particles;
+    property <float> t: 0;
+    property <float> pop: 0;
+    init => { self.t = 1; self.pop = 1; }
+    animate t { duration: 1800ms; easing: linear; }
+    animate pop { duration: 500ms; easing: cubic-bezier(0.34, 1.56, 0.64, 1); }
+    property <float> shade: t < 0.1 ? t / 0.1 : t < 0.8 ? 1.0 : (1 - t) / 0.2;
+    background: Colors.black.with-alpha(0.25 * shade);
+    TouchArea { }
+    for i in root.particles: Rectangle {
+        property <angle> a: i * 360deg / root.particles;
+        property <float> p: max(0.0, min(1.0, (root.t * 1800 - Math.mod(i, 6) * 30) / 1600));
+        property <float> spread: min(self.p / 0.6, 1.0);
+        property <float> fall: self.p > 0.6 ? (self.p - 0.6) / 0.4 : 0.0;
+        property <length> size: (6 + Math.mod(i, 4) * 2) * 1px;
+        width: self.size;
+        height: self.size;
+        border-radius: 2px;
+        x: root.width / 2 + Math.cos(self.a) * 220px * self.spread - self.size / 2;
+        y: root.height / 2 + Math.sin(self.a) * 220px * self.spread + self.fall * 200px - self.size / 2;
+        background: Colors.hsv(Math.mod(i * 47, 360) * 1.0, 0.67, 0.92, 1.0);
+        opacity: self.p <= 0 ? 0.0 : self.p < 0.1 ? self.p / 0.1 : self.p < 0.6 ? 1.0 : 1.0 - self.fall;
+    }
+    VerticalLayout {
+        alignment: center;
+        spacing: 16px;
+        Rectangle {
+            height: 140px;
+            Rectangle {
+                width: 140px;
+                height: 140px;
+                border-radius: 70px;
+                background: Pal.ok;
+                transform-scale: root.pop;
+                Icon { name: IconName.check; size: 80px; tint: Pal.on-accent; }
+            }
+        }
+        if root.label != "": Text {
+            text: root.label;
+            font-size: 20px;
+            font-weight: 700;
+            color: #ffffff;
+            horizontal-alignment: center;
+        }
+    }
+}
+
+// Doing the challenges one after another: the ringing alarm's, or practice.
+export component RunScreen inherits Rectangle {
+    background: Pal.bg;
+    TouchArea { clicked => { Run.touched(); } }
+    Rectangle {
+        width: min(parent.width, 560px);
+        x: (parent.width - self.width) / 2;
+        if Run.finished: VerticalLayout {
+            alignment: center;
+            spacing: 24px;
+            padding: 32px;
+            Text { text: Run.message; font-size: 16px; color: Pal.text; horizontal-alignment: center; wrap: word-wrap; }
+            PrimaryButton { text: Run.exit-text; clicked => { Run.exit(); } }
+        }
+        if !Run.finished: VerticalLayout {
+            padding-left: 20px + Insets.left;
+            padding-right: 20px + Insets.right;
+            padding-top: 40px + Insets.top;
+            padding-bottom: 16px + Insets.bottom;
+            HorizontalLayout {
+                height: 24px;
+                spacing: 8px;
+                Text { horizontal-stretch: 1; text: Run.progress; font-size: 14px; color: Pal.text2; vertical-alignment: center; overflow: elide; }
+                if Run.practice: Rectangle {
+                    min-width: 56px;
+                    Text { text: Run.exit-text; font-size: 14px; font-weight: 500; color: Pal.accent; }
+                    TouchArea { clicked => { Run.exit(); } }
+                }
+                if Run.total > 1: HorizontalLayout {
+                    spacing: 6px;
+                    alignment: center;
+                    for d[i] in Run.total: Rectangle {
+                        width: 8px;
+                        Rectangle {
+                            width: 8px;
+                            height: 8px;
+                            border-radius: 4px;
+                            background: i <= Run.index ? Pal.accent : Pal.off;
+                        }
+                    }
+                }
+            }
+            if !Run.practice: Rectangle { height: 12px; }
+            if !Run.practice: Rectangle {
+                height: 4px;
+                border-radius: 2px;
+                background: Pal.surface2;
+                clip: true;
+                Rectangle {
+                    x: 0px;
+                    width: parent.width * Run.idle-left / 100;
+                    border-radius: 2px;
+                    background: Pal.accent;
+                    animate width { duration: 1s; easing: linear; }
+                }
+            }
+            Rectangle {
+                vertical-stretch: 1;
+                for s in [Run.seq]: Rectangle {
+                    if Run.kind == RunKind.math: MathBody { width: parent.width; height: parent.height; }
+                    if Run.kind == RunKind.typing: TypingBody { width: parent.width; height: parent.height; }
+                    if Run.kind == RunKind.memory: MemoryBody { width: parent.width; height: parent.height; }
+                    if Run.kind == RunKind.ring: RingBody { width: parent.width; height: parent.height; }
+                    if Run.kind == RunKind.hold: HoldBody { width: parent.width; height: parent.height; }
+                    if Run.kind == RunKind.reaction: ReactionBody { width: parent.width; height: parent.height; }
+                    if Run.kind == RunKind.scan: ScanBody { width: parent.width; height: parent.height; }
+                }
+            }
+            if Run.can-fallback && !Run.celebrating: Rectangle {
+                height: 44px;
+                Text { text: Tr.t("challenge.fallback.link"); font-size: 14px; color: Pal.text2; }
+                TouchArea { clicked => { Run.asking-fallback = true; } }
+            }
+        }
+    }
+    if Run.celebrating: Celebration {
+        label: Run.celebration-label;
+        particles: Run.confetti;
+    }
+    if Run.asking-fallback: Sheet {
+        title: Tr.t("challenge.fallback.title");
+        close => { Run.asking-fallback = false; }
+        Text { text: Tr.t("challenge.fallback.explain"); font-size: 14px; color: Pal.text2; wrap: word-wrap; }
+        PrimaryButton { quiet: true; text: Tr.t("action.cancel"); clicked => { Run.asking-fallback = false; } }
+        PrimaryButton { text: Tr.t("challenge.fallback.confirm"); clicked => { Run.asking-fallback = false; Run.fallback-confirmed(); } }
+    }
+}

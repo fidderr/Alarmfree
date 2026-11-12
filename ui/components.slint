@@ -2,7 +2,7 @@ import { Pal, Tr } from "theme.slint";
 
 export enum IconName {
     clock, chart-bar, gear, trash, check, xmark, plus, chevron-right, arrow-left, grip,
-    ellipsis-vertical, pause, sort, warning, pencil, skip, touch, play, stop,
+    ellipsis-vertical, pause, sort, warning, pencil, skip, touch, play, stop, backspace,
 }
 
 // The app's outline icons: 24 x 24 paths drawn with a round 2 unit line.
@@ -36,6 +36,7 @@ export component Icon inherits Path {
         : name == IconName.sort ? "M4 7h16M7 12h10M10 17h4"
         : name == IconName.play ? "M7 5l12 7-12 7V5Z"
         : name == IconName.stop ? "M6 6h12v12H6V6Z"
+        : name == IconName.backspace ? "M21 5H9l-6 7 6 7h12a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1ZM17 9.5l-5 5M12 9.5l5 5"
         : name == IconName.touch ? "M9 21v-9a3 3 0 0 1 6 0v9M7 10a5 5 0 0 1 10 0M4 10a8 8 0 0 1 16 0"
         : "M12 9v4M12 17h.01M10.3 3.9 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z";
 }

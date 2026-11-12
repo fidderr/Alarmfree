@@ -1,0 +1,279 @@
+import { Pal, Tr } from "theme.slint";
+import { Icon, IconName } from "components.slint";
+import { PrimaryButton, Sheet, Stepper } from "widgets.slint";
+
+export struct CfgRow { name: string, summary: string }
+export struct CfgType { name: string, desc: string }
+export struct CfgStepper { title: string, value: string }
+
+// What the challenge sheets of the editor show; Rust fills it from the alarm being edited.
+export global Cfg {
+    // The editor row: the names of the challenges.
+    in property <string> summary;
+    in property <[CfgRow]> rows;
+    in property <bool> can-add;
+    in property <[CfgType]> types;
+    in property <string> detail-title;
+    in property <string> detail-help;
+    in property <string> detail-example;
+    // -1 when this kind of challenge has no difficulty.
+    in property <int> detail-difficulty: -1;
+    in property <[string]> difficulty-labels;
+    in property <[CfgStepper]> steppers;
+    in property <bool> detail-scan;
+    in property <string> detail-code;
+    // Changes when the code is set from outside (a scan), as a field that was typed in no
+    // longer follows its binding.
+    in property <int> code-rev;
+    // The row being dragged, and where it would land. -1 for none.
+    in-out property <int> drag-from: -1;
+    in-out property <int> drag-to: -1;
+    callback open-detail(int);
+    callback try-one(int);
+    callback try-all();
+    callback remove(int);
+    callback move(int, int);
+    callback add(int);
+    callback pick-difficulty(int);
+    callback step(int, bool);
+    callback code-edited(string);
+    callback scan-now();
+    callback remove-detail();
+    callback try-detail();
+}
+
+component TextLink inherits Rectangle {
+    in property <string> text;
+    in property <color> ink: Pal.accent;
+    callback clicked();
+    min-width: 52px;
+    min-height: 44px;
+    Text { text: root.text; font-size: 14px; font-weight: 500; color: root.ink; }
+    TouchArea { clicked => { root.clicked(); } }
+}
+
+component ChallengeRow inherits Rectangle {
+    in property <int> number;
+    in property <CfgRow> item;
+    callback open();
+    callback try-it();
+    callback remove();
+    height: 64px;
+    background: Pal.surface;
+    Rectangle {
+        y: parent.height - 1px;
+        height: 1px;
+        background: Pal.line;
+    }
+    HorizontalLayout {
+        Rectangle {
+            width: 36px;
+            Icon { name: IconName.grip; size: 18px; tint: Pal.text2; }
+        }
+        Text { width: 24px; text: "\{root.number}"; font-size: 14px; font-weight: 500; color: Pal.accent; vertical-alignment: center; }
+        Rectangle {
+            horizontal-stretch: 1;
+            VerticalLayout {
+                alignment: center;
+                spacing: 3px;
+                Text { text: root.item.name; font-size: 14px; font-weight: 500; color: Pal.text; overflow: elide; }
+                Text { text: root.item.summary; font-size: 12px; color: Pal.text2; overflow: elide; }
+            }
+            TouchArea { clicked => { root.open(); } }
+        }
+        TextLink { text: Tr.t("challenge.try"); clicked => { root.try-it(); } }
+        Rectangle {
+            width: 44px;
+            Icon { name: IconName.xmark; size: 18px; tint: Pal.text2; }
+            TouchArea { clicked => { root.remove(); } }
+        }
+    }
+}
+
+// The list of them, and how they run: drag by the grip to put one in another step.
+export component ChallengesSheet inherits Rectangle {
+    callback done();
+    callback add-open();
+    property <length> pitch: 64px;
+    function shift-of(i: int) -> int {
+        if (Cfg.drag-from < 0) {
+            return 0;
+        }
+        if (i == Cfg.drag-from) {
+            return Cfg.drag-to - Cfg.drag-from;
+        }
+        if (Cfg.drag-from < Cfg.drag-to && i > Cfg.drag-from && i <= Cfg.drag-to) {
+            return -1;
+        }
+        if (Cfg.drag-from > Cfg.drag-to && i < Cfg.drag-from && i >= Cfg.drag-to) {
+            return 1;
+        }
+        return 0;
+    }
+    Sheet {
+        title: Tr.t("config.challenges");
+        help: Tr.t("config.challenges_note");
+        action-text: Cfg.rows.length > 0 ? Tr.t("config.try_all") : "";
+        locked: Cfg.drag-from >= 0;
+        close => { root.done(); }
+        action => { Cfg.try-all(); }
+        Rectangle {
+            height: Cfg.rows.length * root.pitch;
+            for row[i] in Cfg.rows: ChallengeRow {
+                y: i * root.pitch + root.shift-of(i) * root.pitch;
+                width: parent.width;
+                number: i + 1;
+                item: row;
+                animate y { duration: Cfg.drag-from == i ? 0ms : 150ms; easing: ease-out; }
+                open => { Cfg.open-detail(i); }
+                try-it => { Cfg.try-one(i); }
+                remove => { Cfg.remove(i); }
+            }
+            // The grips, apart from the rows, so a row that moves does not move its own grip.
+            for row[i] in Cfg.rows: Rectangle {
+                x: 0px;
+                y: i * root.pitch;
+                width: 36px;
+                height: root.pitch;
+                property <length> start;
+                TouchArea {
+                    pointer-event(e) => {
+                        if (e.kind == PointerEventKind.down) {
+                            parent.start = self.mouse-y;
+                            Cfg.drag-from = i;
+                            Cfg.drag-to = i;
+                        } else if (e.kind == PointerEventKind.up || e.kind == PointerEventKind.cancel) {
+                            if (Cfg.drag-from >= 0) {
+                                if (Cfg.drag-to != Cfg.drag-from) {
+                                    Cfg.move(Cfg.drag-from, Cfg.drag-to);
+                                }
+                                Cfg.drag-from = -1;
+                                Cfg.drag-to = -1;
+                            }
+                        }
+                    }
+                    moved => {
+                        if (Cfg.drag-from == i) {
+                            Cfg.drag-to = clamp(i + Math.round((self.mouse-y - parent.start) / root.pitch), 0, Cfg.rows.length - 1);
+                        }
+                    }
+                }
+            }
+        }
+        if Cfg.can-add: PrimaryButton { quiet: true; text: Tr.t("config.add_challenge"); clicked => { root.add-open(); } }
+        PrimaryButton { text: Tr.t("action.done"); clicked => { root.done(); } }
+    }
+}
+
+// Picking a kind of challenge to add.
+export component AddChallengeSheet inherits Rectangle {
+    callback back();
+    Sheet {
+        title: Tr.t("config.select_challenge");
+        help: Tr.t("config.add_note");
+        close => { root.back(); }
+        for type[i] in Cfg.types: Rectangle {
+            height: 60px;
+            Rectangle {
+                y: parent.height - 1px;
+                height: 1px;
+                background: Pal.line;
+            }
+            VerticalLayout {
+                alignment: center;
+                spacing: 2px;
+                Text { text: type.name; font-size: 14px; font-weight: 500; color: Pal.text; }
+                Text { text: type.desc; font-size: 12px; color: Pal.text2; wrap: word-wrap; }
+            }
+            TouchArea { clicked => { Cfg.add(i); } }
+        }
+        PrimaryButton { quiet: true; text: Tr.t("challenge.config.back"); clicked => { root.back(); } }
+    }
+}
+
+component DifficultyChip inherits Rectangle {
+    in property <string> text;
+    in property <bool> on;
+    callback clicked();
+    height: 48px;
+    min-width: 44px;
+    border-radius: 14px;
+    background: root.on ? Pal.accent : Pal.surface2;
+    Text { text: root.text; font-size: 14px; font-weight: 500; color: root.on ? Pal.on-accent : Pal.text; }
+    TouchArea { clicked => { root.clicked(); } }
+}
+
+// The settings of one of them.
+export component ChallengeDetailSheet inherits Rectangle {
+    callback back();
+    Sheet {
+        title: Cfg.detail-title;
+        help: Cfg.detail-help;
+        action-text: Tr.t("challenge.try");
+        close => { root.back(); }
+        action => { Cfg.try-detail(); }
+        if Cfg.detail-difficulty >= 0: VerticalLayout {
+            spacing: 8px;
+            padding-top: 12px;
+            Text { text: Tr.t("challenge.config.difficulty"); font-size: 14px; font-weight: 500; color: Pal.text; }
+            HorizontalLayout {
+                spacing: 8px;
+                for label[i] in Cfg.difficulty-labels: DifficultyChip {
+                    horizontal-stretch: 1;
+                    text: label;
+                    on: Cfg.detail-difficulty == i;
+                    clicked => { Cfg.pick-difficulty(i); }
+                }
+            }
+            VerticalLayout {
+                padding-top: 4px;
+                Text { text: Cfg.detail-example; font-size: 14px; color: Pal.text2; horizontal-alignment: center; wrap: word-wrap; }
+            }
+        }
+        for s[i] in Cfg.steppers: Stepper {
+            title: s.title;
+            value: s.value;
+            less => { Cfg.step(i, false); }
+            more => { Cfg.step(i, true); }
+        }
+        if Cfg.detail-scan: VerticalLayout {
+            spacing: 8px;
+            padding-top: 8px;
+            Text { text: Tr.t("challenge.config.scan_value"); font-size: 14px; font-weight: 500; color: Pal.text; }
+            for r in [Cfg.code-rev]: Rectangle {
+                height: 48px;
+                border-radius: 14px;
+                border-width: 1px;
+                border-color: Pal.line;
+                background: Pal.bg;
+                code := TextInput {
+                    x: 12px;
+                    width: parent.width - 24px;
+                    text: Cfg.detail-code;
+                    font-size: 16px;
+                    color: Pal.text;
+                    single-line: true;
+                    vertical-alignment: center;
+                    edited => { Cfg.code-edited(self.text); }
+                }
+                if code.text == "": Text {
+                    x: 12px;
+                    width: parent.width - 24px;
+                    text: Tr.t("challenge.config.scan_placeholder");
+                    font-size: 16px;
+                    color: Pal.text2;
+                    opacity: 0.7;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+            }
+            PrimaryButton { quiet: true; text: Tr.t("challenge.config.scan_now"); clicked => { Cfg.scan-now(); } }
+        }
+        Rectangle {
+            height: 44px;
+            Text { text: Tr.t("config.remove_challenge"); font-size: 14px; font-weight: 500; color: Pal.danger; }
+            TouchArea { clicked => { Cfg.remove-detail(); } }
+        }
+        PrimaryButton { text: Tr.t("action.done"); clicked => { root.back(); } }
+    }
+}

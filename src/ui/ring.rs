@@ -80,7 +80,7 @@ pub struct RingState {
     bright: bool,
     snooze_minutes: u8,
     snoozes_left: u8,
-    challenges: usize,
+    setups: Vec<ChallengeSetup>,
     times: RingTimes,
     first_interaction: Option<chrono::DateTime<chrono::Utc>>,
 }
@@ -143,12 +143,13 @@ fn show_texts(ctx: &Ctx) {
             .into(),
     );
     ui.set_ring_can_snooze(ring.snoozes_left > 0);
-    ui.set_ring_challenge_count(ring.challenges as i32);
+    let challenges = ring.setups.len();
+    ui.set_ring_challenge_count(challenges as i32);
     ui.set_ring_challenges_text(
-        if ring.challenges == 1 {
+        if challenges == 1 {
             t(&tr, "ring.one_challenge")
         } else {
-            t(&tr, "ring.challenges").replace("{count}", &ring.challenges.to_string())
+            t(&tr, "ring.challenges").replace("{count}", &challenges.to_string())
         }
         .into(),
     );
@@ -158,6 +159,8 @@ fn start(ctx: &Rc<Ctx>, id: &str) {
     let Some(ui) = ctx.ui.upgrade() else {
         return;
     };
+    // Another alarm took over the screen.
+    super::challenge_run::abort(ctx);
     let alarm: Option<AlarmData> = ctx.alarms.borrow().iter().find(|a| a.id == id).cloned();
     let times = RingTimes::load(id);
     let max_snoozes = alarm.as_ref().map_or(0u8, |a| a.snooze_count);
@@ -173,9 +176,9 @@ fn start(ctx: &Rc<Ctx>, id: &str) {
         bright: alarm.as_ref().is_some_and(|a| a.max_brightness),
         snooze_minutes: alarm.as_ref().map_or(1u8, |a| a.snooze_interval),
         snoozes_left: max_snoozes.saturating_sub(times.snoozed),
-        challenges: alarm
+        setups: alarm
             .as_ref()
-            .map(|a| ChallengeSetup::list_from_stored(&a.challenges).len())
+            .map(|a| ChallengeSetup::list_from_stored(&a.challenges))
             .unwrap_or_default(),
         times,
         first_interaction: None,
@@ -196,6 +199,7 @@ fn start(ctx: &Rc<Ctx>, id: &str) {
 }
 
 fn stop(ctx: &Rc<Ctx>) {
+    super::challenge_run::abort(ctx);
     let ring = ctx.ring.borrow_mut().take();
     if ring.is_some_and(|ring| ring.bright) {
         mobile_sentinel::display::restore_brightness();
@@ -305,7 +309,7 @@ pub fn snooze(ctx: &Rc<Ctx>) {
 }
 
 pub fn turn_off(ctx: &Rc<Ctx>) {
-    let (id, challenges) = {
+    let (id, setups) = {
         let mut ring = ctx.ring.borrow_mut();
         let Some(ring) = ring.as_mut() else {
             return;
@@ -313,18 +317,29 @@ pub fn turn_off(ctx: &Rc<Ctx>) {
         if ring.first_interaction.is_none() {
             ring.first_interaction = Some(chrono::Utc::now());
         }
-        (ring.id.clone(), ring.challenges)
+        (ring.id.clone(), ring.setups.clone())
     };
-    if challenges > 0 {
-        log::warn!("[AlarmFree] challenges are not in the Slint port yet: turned off without");
+    let locale = ctx.settings.borrow().locale;
+    let prepared = crate::challenges::prepare(&setups, locale);
+    if prepared.is_empty() {
+        // No challenge, or none this version knows: the SDK refuses to dismiss a challenge
+        // alarm until it is marked solved, so mark it first or the user would be stuck in
+        // the lockdown.
+        solved(ctx, &id, Vec::new());
+    } else {
+        // The sound pauses while the challenges are done.
+        let _ = crate::platform::alarm_kit().pause(&mobile_sentinel::InstanceId::new(id.clone()));
+        super::challenge_run::start_ring(ctx, &id, prepared);
     }
+}
+
+/// The user did what it takes: the alarm is over.
+pub fn solved(ctx: &Rc<Ctx>, id: &str, solves: Vec<ChallengeSolve>) {
     let kit = crate::platform::alarm_kit();
-    let instance = mobile_sentinel::InstanceId::new(id.clone());
-    // The SDK refuses to dismiss a challenge alarm until it is marked solved, so mark it
-    // first or the user would be stuck in the lockdown.
+    let instance = mobile_sentinel::InstanceId::new(id.to_owned());
     let _ = kit.mark_solved(&instance);
     let _ = kit.dismiss(&instance);
-    finished(ctx, &id, Vec::new());
+    finished(ctx, id, solves);
 }
 
 /// Everything that happens when the alarm is over, whichever way that went.

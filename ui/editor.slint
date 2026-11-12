@@ -2,11 +2,12 @@ import { Pal, Tr, Insets } from "theme.slint";
 import { Icon, IconName } from "components.slint";
 import { ScreenHeader, Row, SwitchRow, RowList, Separator, PrimaryButton, Chip, Sheet, RadioRow, Wheel, Stepper } from "widgets.slint";
 import { DayCell } from "home.slint";
+import { Cfg, ChallengesSheet, AddChallengeSheet, ChallengeDetailSheet } from "challenge_sheets.slint";
 
 export struct ChoiceRow { text: string, selected: bool }
 
 // Which panel is open over the editor.
-export enum EditorSheet { none, time, label, sound, snooze, delete, discard }
+export enum EditorSheet { none, time, label, sound, snooze, delete, discard, challenges, add-challenge, detail }
 
 // Making and changing an alarm: the time and the days are right there; everything else is one
 // summary row that opens a sheet.
@@ -171,6 +172,8 @@ export component EditorScreen inherits Rectangle {
                         Row { title: Tr.t("config.sound"); value: root.sound-summary; clicked => { root.open(EditorSheet.sound); } }
                         Separator { }
                         Row { title: Tr.t("config.snooze"); value: root.snooze-summary; clicked => { root.open(EditorSheet.snooze); } }
+                        Separator { }
+                        Row { title: Tr.t("config.challenges"); value: Cfg.summary; clicked => { root.open(EditorSheet.challenges); } }
                     }
                 }
             }
@@ -277,5 +280,15 @@ export component EditorScreen inherits Rectangle {
         close => { root.close-sheet(); }
         PrimaryButton { text: Tr.t("config.discard"); clicked => { root.discard-confirmed(); } }
         PrimaryButton { quiet: true; text: Tr.t("config.keep_editing"); clicked => { root.close-sheet(); } }
+    }
+    if root.sheet == EditorSheet.challenges: ChallengesSheet {
+        done => { root.sheet = EditorSheet.none; }
+        add-open => { root.sheet = EditorSheet.add-challenge; }
+    }
+    if root.sheet == EditorSheet.add-challenge: AddChallengeSheet {
+        back => { root.sheet = EditorSheet.challenges; }
+    }
+    if root.sheet == EditorSheet.detail: ChallengeDetailSheet {
+        back => { root.sheet = EditorSheet.challenges; }
     }
 }
