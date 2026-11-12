@@ -1,6 +1,7 @@
 //! AlarmFree library crate - exposes modules for integration testing.
 
 pub mod alarm_ops;
+pub mod calendar;
 pub mod challenges;
 pub mod custom_sounds;
 pub mod db;
@@ -16,6 +17,7 @@ pub mod models;
 pub mod ordering;
 pub mod persistence;
 pub mod platform;
+pub mod reliability;
 pub mod ring_photos;
 pub mod sanitize;
 pub mod schedule;

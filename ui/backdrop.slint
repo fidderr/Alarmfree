@@ -1,0 +1,82 @@
+import { Pal } from "theme.slint";
+
+// The look of the ring screen being shown: Rust sets it from the alarm's ring look.
+export global Look {
+    in property <int> kind;
+    in property <color> c1: Pal.accent;
+    in property <color> c2: Pal.accent;
+    in property <color> c3: Pal.accent;
+    in property <image> photo;
+    in property <bool> has-photo;
+    // 0 clean, 1 thin, 2 bold, 3 classic, 4 mono.
+    in property <int> clock-style;
+}
+
+// What moves behind the time on the ring screen, here as the still first frame of each:
+// the tiles of the ring look sheet and its preview draw this. The animations of the real
+// ring screen build on it. `kind` is the index in `RingBackdrop::ALL`.
+export component Backdrop inherits Rectangle {
+    in property <int> kind;
+    in property <color> c1: Pal.accent;
+    in property <color> c2: Pal.accent;
+    in property <color> c3: Pal.accent;
+    in property <image> photo;
+    in property <bool> has-photo;
+    // One 'u' of the original: 1 percent of the shorter side, smaller on a tile.
+    in property <length> unit: min(self.width, self.height) / 100;
+    clip: true;
+    // Aurora
+    if root.kind == 1: Rectangle {
+        Rectangle { x: -root.width * 0.4; y: -root.height * 0.2; width: root.unit * 130; height: root.unit * 130; border-radius: root.unit * 65; opacity: 0.5; background: @radial-gradient(circle, root.c1 0%, root.c1.transparentize(1.0) 66%); }
+        Rectangle { x: root.width * 1.55 - root.unit * 130; y: root.height * 0.16; width: root.unit * 130; height: root.unit * 130; border-radius: root.unit * 65; opacity: 0.42; background: @radial-gradient(circle, root.c2 0%, root.c2.transparentize(1.0) 66%); }
+        Rectangle { x: -root.width * 0.18; y: root.height * 1.28 - root.unit * 130; width: root.unit * 130; height: root.unit * 130; border-radius: root.unit * 65; opacity: 0.38; background: @radial-gradient(circle, root.c3 0%, root.c3.transparentize(1.0) 66%); }
+    }
+    // Sunrise
+    if root.kind == 2: Rectangle {
+        Rectangle { opacity: 0.55; background: @linear-gradient(0deg, root.c1 0%, root.c3 36%, root.c3.transparentize(1.0) 76%); }
+        Rectangle { x: (root.width - self.width) / 2; y: root.height * 0.98 - self.height; width: root.unit * 120; height: root.unit * 120; border-radius: root.unit * 60; opacity: 0.85; background: @radial-gradient(circle, root.c2 0%, root.c1 30%, root.c1.transparentize(1.0) 68%); }
+    }
+    // Waves
+    if root.kind == 3: Rectangle {
+        Rectangle { x: (root.width - self.width) / 2; y: root.height * 0.56; width: root.unit * 280; height: root.unit * 280; border-radius: self.width * 0.44; opacity: 0.22; background: root.c1; }
+        Rectangle { x: (root.width - self.width) / 2; y: root.height * 0.62; width: root.unit * 280; height: root.unit * 280; border-radius: self.width * 0.42; opacity: 0.2; background: root.c2; }
+        Rectangle { x: (root.width - self.width) / 2; y: root.height * 0.68; width: root.unit * 280; height: root.unit * 280; border-radius: self.width * 0.46; opacity: 0.18; background: root.c3; }
+    }
+    // Stars
+    if root.kind == 4: Rectangle {
+        for p[i] in [[12, 9], [78, 6], [44, 31], [91, 38], [7, 56], [63, 71], [28, 88]]: Rectangle {
+            x: root.width * p[0] / 100 - self.width / 2; y: root.height * p[1] / 100 - self.height / 2;
+            width: max(2px, root.unit * 1.4); height: self.width; border-radius: self.width / 2; background: root.c1;
+        }
+        for p[i] in [[31, 4], [58, 17], [18, 36], [73, 52], [39, 64], [86, 79], [11, 93]]: Rectangle {
+            x: root.width * p[0] / 100 - self.width / 2; y: root.height * p[1] / 100 - self.height / 2;
+            width: max(2px, root.unit * 1.3); height: self.width; border-radius: self.width / 2; background: root.c2; opacity: 0.85;
+        }
+        for p[i] in [[92, 14], [5, 24], [53, 45], [24, 73], [69, 90]]: Rectangle {
+            x: root.width * p[0] / 100 - self.width / 2; y: root.height * p[1] / 100 - self.height / 2;
+            width: max(2px, root.unit * 1.2); height: self.width; border-radius: self.width / 2; background: root.c3; opacity: 0.9;
+        }
+    }
+    // Rings
+    if root.kind == 5: Rectangle {
+        for s[i] in [1.0, 1.7, 2.4, 3.1]: Rectangle {
+            x: (root.width - self.width) / 2; y: root.height * 0.22 - self.height / 2;
+            width: root.unit * 46 * s; height: root.unit * 46 * s; border-radius: self.width / 2;
+            border-width: 2px; border-color: i == 1 ? root.c2 : i == 3 ? root.c3 : root.c1;
+            opacity: [0.36, 0.26, 0.16, 0.08][i];
+        }
+    }
+    // Bubbles
+    if root.kind == 6: Rectangle {
+        for b[i] in [[6, 14, 14], [24, 66, 26], [42, 30, 9], [55, 82, 18], [74, 18, 30], [88, 56, 11], [12, 44, 20], [63, 50, 7], [34, 92, 12]]: Rectangle {
+            x: root.width * b[0] / 100; y: root.height * b[1] / 100;
+            width: root.unit * b[2]; height: root.unit * b[2]; border-radius: self.width / 2; opacity: 0.6;
+            background: @radial-gradient(circle, (Math.mod(i, 3) == 1 ? root.c2 : Math.mod(i, 3) == 2 ? root.c3 : root.c1).transparentize(1.0) 52%, Math.mod(i, 3) == 1 ? root.c2 : Math.mod(i, 3) == 2 ? root.c3 : root.c1 100%);
+        }
+    }
+    // Photo
+    if root.kind == 7 && root.has-photo: Rectangle {
+        Image { width: parent.width; height: parent.height; source: root.photo; image-fit: cover; }
+        Rectangle { background: #00000080; }
+    }
+}

@@ -194,6 +194,19 @@ pub fn duration(translations: &Translations, d: std::time::Duration) -> String {
     }
 }
 
+/// A time typed in by hand: "7", "730", "07:30", "7.30".
+pub fn parse_typed_time(text: &str) -> Option<(u8, u8)> {
+    let digits: String = text.chars().filter(char::is_ascii_digit).collect();
+    let separated = text.contains([':', '.', ' ', 'h']);
+    let (hour, minute) = match digits.len() {
+        1 | 2 if !separated => (digits.parse().ok()?, 0),
+        3 => (digits[..1].parse().ok()?, digits[1..].parse().ok()?),
+        4 => (digits[..2].parse().ok()?, digits[2..].parse().ok()?),
+        _ => return None,
+    };
+    (hour < 24 && minute < 60).then_some((hour, minute))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -213,5 +226,26 @@ mod tests {
         assert_eq!(hour_label(7, false), "7 AM");
         assert_eq!(hour_label(0, false), "12 AM");
         assert_eq!(hour_label(13, false), "1 PM");
+    }
+}
+
+#[cfg(test)]
+mod typed_time_tests {
+    use super::parse_typed_time;
+
+    #[test]
+    fn a_time_can_be_typed_in_the_ways_people_type_it() {
+        assert_eq!(parse_typed_time("7"), Some((7, 0)));
+        assert_eq!(parse_typed_time("07"), Some((7, 0)));
+        assert_eq!(parse_typed_time("730"), Some((7, 30)));
+        assert_eq!(parse_typed_time("0730"), Some((7, 30)));
+        assert_eq!(parse_typed_time("07:30"), Some((7, 30)));
+        assert_eq!(parse_typed_time("7:30"), Some((7, 30)));
+        assert_eq!(parse_typed_time("7.30"), Some((7, 30)));
+        assert_eq!(parse_typed_time("23:59"), Some((23, 59)));
+        assert_eq!(parse_typed_time("24:00"), None);
+        assert_eq!(parse_typed_time("7:75"), None);
+        assert_eq!(parse_typed_time(""), None);
+        assert_eq!(parse_typed_time("12345"), None);
     }
 }

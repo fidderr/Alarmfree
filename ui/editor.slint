@@ -1,13 +1,12 @@
 import { Pal, Tr, Insets } from "theme.slint";
 import { Icon, IconName } from "components.slint";
-import { ScreenHeader, Row, SwitchRow, RowList, Separator, PrimaryButton, Chip, Sheet, RadioRow, Wheel, Stepper } from "widgets.slint";
+import { ScreenHeader, Row, SwitchRow, RowList, Separator, PrimaryButton, Chip, Sheet } from "widgets.slint";
 import { DayCell } from "home.slint";
 import { Cfg, ChallengesSheet, AddChallengeSheet, ChallengeDetailSheet } from "challenge_sheets.slint";
-
-export struct ChoiceRow { text: string, selected: bool }
+import { Ed, TimeSheet, DateSheet, LabelSheet, SoundSheet, VibrationSheet, SnoozeSheet, OptionsSheet, RingLookSheet, RingColourSheet } from "editor_sheets.slint";
 
 // Which panel is open over the editor.
-export enum EditorSheet { none, time, label, sound, snooze, delete, discard, challenges, add-challenge, detail }
+export enum EditorSheet { none, time, date, label, sound, vibration, snooze, delete, discard, challenges, add-challenge, detail, limit, wake-check, notice, ring-look, ring-colour }
 
 // Making and changing an alarm: the time and the days are right there; everything else is one
 // summary row that opens a sheet.
@@ -25,40 +24,22 @@ export component EditorScreen inherits Rectangle {
     in property <bool> one-time;
     in property <string> once-text;
     in property <string> error;
-    in property <string> label-summary;
-    in property <string> sound-summary;
-    in property <string> label-text;
-    in property <string> snooze-summary;
-    in property <string> snooze-interval-text;
-    in property <string> snooze-count-text;
-    in property <[string]> hour-labels;
-    in property <[string]> minute-labels;
-    in-out property <int> time-hour;
-    in-out property <int> time-minute;
-    in property <[ChoiceRow]> sounds;
-    in property <bool> sound-none;
-    in property <bool> sounding;
     in-out property <EditorSheet> sheet: EditorSheet.none;
     callback back();
     callback save();
     callback shift(int);
     callback day-toggled(int);
     callback preset(int);
-    callback hour-changed(int);
-    callback minute-changed(int);
-    callback label-edited(string);
-    callback sound-picked(int);
-    callback no-sound();
-    callback sound-preview();
-    callback add-sound();
-    callback snooze-interval(bool);
-    callback snooze-count(bool);
     callback delete-confirmed();
     callback discard-confirmed();
     callback sheet-closed();
+    callback sheet-opened(EditorSheet);
     background: Pal.bg;
 
-    function open(s: EditorSheet) { root.sheet = s; }
+    function open(s: EditorSheet) {
+        root.sheet = s;
+        root.sheet-opened(s);
+    }
     public function close-sheet() {
         root.sheet = EditorSheet.none;
         root.sheet-closed();
@@ -131,7 +112,7 @@ export component EditorScreen inherits Rectangle {
                     padding-right: 16px;
                     if root.one-time: PrimaryButton {
                         text: root.once-text;
-                        clicked => { root.preset(3); }
+                        clicked => { root.open(EditorSheet.date); }
                     }
                     if !root.one-time: HorizontalLayout {
                         spacing: 6px;
@@ -169,13 +150,30 @@ export component EditorScreen inherits Rectangle {
                     padding-left: 16px;
                     padding-right: 16px;
                     RowList {
-                        Row { title: Tr.t("config.label"); value: root.label-summary; clicked => { root.open(EditorSheet.label); } }
+                        Row { title: Tr.t("config.label"); value: Ed.label-summary; clicked => { root.open(EditorSheet.label); } }
                         Separator { }
-                        Row { title: Tr.t("config.sound"); value: root.sound-summary; clicked => { root.open(EditorSheet.sound); } }
+                        Row { title: Tr.t("config.sound"); value: Ed.sound-summary; clicked => { root.open(EditorSheet.sound); } }
                         Separator { }
-                        Row { title: Tr.t("config.snooze"); value: root.snooze-summary; clicked => { root.open(EditorSheet.snooze); } }
+                        Row { title: Tr.t("config.vibration"); value: Ed.vibration-summary; clicked => { root.open(EditorSheet.vibration); } }
+                        Separator { }
+                        Row { title: Tr.t("config.snooze"); value: Ed.snooze-summary; clicked => { root.open(EditorSheet.snooze); } }
                         Separator { }
                         Row { title: Tr.t("config.challenges"); value: Cfg.summary; clicked => { root.open(EditorSheet.challenges); } }
+                    }
+                }
+                HorizontalLayout {
+                    padding-left: 16px;
+                    padding-right: 16px;
+                    RowList {
+                        Row { title: Tr.t("config.ring_look"); value: Ed.look-summary; clicked => { root.open(EditorSheet.ring-look); } }
+                        Separator { }
+                        Row { title: Tr.t("config.ring_limit"); value: Ed.limit-summary; clicked => { root.open(EditorSheet.limit); } }
+                        Separator { }
+                        Row { title: Tr.t("config.wake_check"); value: Ed.check-summary; clicked => { root.open(EditorSheet.wake-check); } }
+                        Separator { }
+                        Row { title: Tr.t("config.notice"); value: Ed.notice-summary; clicked => { root.open(EditorSheet.notice); } }
+                        Separator { }
+                        SwitchRow { title: Tr.t("config.max_brightness"); on: Ed.bright; toggled(on) => { Ed.bright-toggled(on); } }
                     }
                 }
             }
@@ -192,85 +190,29 @@ export component EditorScreen inherits Rectangle {
         }
     }
 
-    if root.sheet == EditorSheet.time: Sheet {
-        title: Tr.t("config.change_time");
-        action-text: Tr.t("action.done");
-        close => { root.close-sheet(); }
-        action => { root.close-sheet(); }
-        HorizontalLayout {
-            alignment: center;
-            spacing: 4px;
-            Wheel {
-                value: root.time-hour;
-                labels: root.hour-labels;
-                changed(v) => { root.time-hour = v; root.hour-changed(v); }
-            }
-            Text { text: ":"; font-size: 28px; font-weight: 700; color: Pal.text; vertical-alignment: center; }
-            Wheel {
-                value: root.time-minute;
-                labels: root.minute-labels;
-                changed(v) => { root.time-minute = v; root.minute-changed(v); }
-            }
-        }
+    if root.sheet == EditorSheet.time: TimeSheet { done => { root.close-sheet(); } }
+    if root.sheet == EditorSheet.date: DateSheet { done => { root.close-sheet(); } }
+    if root.sheet == EditorSheet.label: LabelSheet { done => { root.close-sheet(); } }
+    if root.sheet == EditorSheet.sound: SoundSheet { done => { root.close-sheet(); } }
+    if root.sheet == EditorSheet.vibration: VibrationSheet { done => { root.close-sheet(); } }
+    if root.sheet == EditorSheet.snooze: SnoozeSheet { done => { root.close-sheet(); } }
+    if root.sheet == EditorSheet.limit: OptionsSheet {
+        title: Tr.t("config.ring_limit");
+        help: Tr.t("config.limit_note");
+        done => { root.close-sheet(); }
     }
-    if root.sheet == EditorSheet.label: Sheet {
-        title: Tr.t("config.label");
-        action-text: Tr.t("action.done");
-        close => { root.close-sheet(); }
-        action => { root.close-sheet(); }
-        Rectangle {
-            height: 52px;
-            border-radius: 14px;
-            background: Pal.surface;
-            border-width: 1px;
-            border-color: Pal.line;
-            HorizontalLayout {
-                padding-left: 14px;
-                padding-right: 14px;
-                field := TextInput {
-                    text: root.label-text;
-                    font-size: 16px;
-                    color: Pal.text;
-                    single-line: true;
-                    vertical-alignment: center;
-                    edited => { root.label-edited(self.text); }
-                    accepted => { root.close-sheet(); }
-                    init => { self.focus(); }
-                }
-            }
-        }
+    if root.sheet == EditorSheet.wake-check: OptionsSheet {
+        title: Tr.t("config.wake_check");
+        help: Tr.t("config.wake_check_note");
+        done => { root.close-sheet(); }
     }
-    if root.sheet == EditorSheet.sound: Sheet {
-        title: Tr.t("config.sound");
-        action-text: root.sound-none ? "" : (root.sounding ? Tr.t("action.stop") : Tr.t("action.start"));
-        close => { root.close-sheet(); }
-        action => { root.sound-preview(); }
-        RadioRow { text: Tr.t("config.no_sound"); selected: root.sound-none; clicked => { root.no-sound(); } }
-        for choice[i] in root.sounds: RadioRow {
-            text: choice.text;
-            selected: choice.selected;
-            clicked => { root.sound-picked(i); }
-        }
-        PrimaryButton { quiet: true; text: Tr.t("sound.import"); clicked => { root.add-sound(); } }
+    if root.sheet == EditorSheet.notice: OptionsSheet {
+        title: Tr.t("config.notice");
+        help: Tr.t("config.notice_note");
+        done => { root.close-sheet(); }
     }
-    if root.sheet == EditorSheet.snooze: Sheet {
-        title: Tr.t("config.snooze");
-        action-text: Tr.t("action.done");
-        close => { root.close-sheet(); }
-        action => { root.close-sheet(); }
-        Stepper {
-            title: Tr.t("config.snooze_interval");
-            value: root.snooze-interval-text;
-            less => { root.snooze-interval(false); }
-            more => { root.snooze-interval(true); }
-        }
-        Stepper {
-            title: Tr.t("config.snooze_count");
-            value: root.snooze-count-text;
-            less => { root.snooze-count(false); }
-            more => { root.snooze-count(true); }
-        }
-    }
+    if root.sheet == EditorSheet.ring-look: RingLookSheet { done => { root.close-sheet(); } }
+    if root.sheet == EditorSheet.ring-colour: RingColourSheet { back => { root.open(EditorSheet.ring-look); } }
     if root.sheet == EditorSheet.delete: Sheet {
         title: Tr.t("alarm.delete_confirm");
         close => { root.close-sheet(); }

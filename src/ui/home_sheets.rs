@@ -5,6 +5,7 @@ use std::rc::Rc;
 use chrono::{Duration, TimeZone};
 use slint::{ModelRc, VecModel};
 
+use super::datepicker::{DateView, Move};
 use super::{Ctx, HomeSheet, SheetChoice};
 use crate::i18n::{t, Translations};
 use crate::models::{AlarmData, ChallengeSetup, SortMode};
@@ -33,7 +34,7 @@ pub struct SheetState {
     acts: Vec<Act>,
     /// Pausing until this date: everything, or only this alarm.
     pause_only: Option<String>,
-    pause_date: Option<chrono::NaiveDate>,
+    calendar: Option<DateView>,
 }
 
 /// Start of this day, `days` from today, in unix ms.
@@ -206,37 +207,32 @@ pub fn open_menu(ctx: &Ctx, id: &str) {
     show(ctx, HomeSheet::Menu, title, rows);
 }
 
-fn pause_text(ctx: &Ctx) -> String {
-    let state = ctx.home_sheet.borrow();
-    let tr = ctx.tr.borrow();
-    state
-        .pause_date
-        .map(|date| crate::text::short_date(&tr, date))
-        .unwrap_or_default()
-}
-
 fn show_pause_date(ctx: &Ctx, only: Option<String>) {
+    let today = chrono::Local::now().date_naive();
+    let view = DateView::new(today + Duration::days(7), today + Duration::days(1));
+    view.show(ctx);
     {
         let mut state = ctx.home_sheet.borrow_mut();
         state.pause_only = only;
-        state.pause_date = Some(chrono::Local::now().date_naive() + Duration::days(7));
+        state.calendar = Some(view);
     }
     if let Some(ui) = ctx.ui.upgrade() {
-        ui.set_hs_pause_date_text(pause_text(ctx).into());
         ui.set_home_sheet(HomeSheet::PauseDate);
     }
 }
 
-pub fn pause_step(ctx: &Ctx, days: i32) {
-    {
-        let mut state = ctx.home_sheet.borrow_mut();
-        let tomorrow = chrono::Local::now().date_naive() + Duration::days(1);
-        if let Some(date) = state.pause_date {
-            state.pause_date = Some((date + Duration::days(i64::from(days))).max(tomorrow));
+/// A tap in the month of the pause panel.
+pub fn date_action(ctx: &Rc<Ctx>, action: Move) {
+    let mut state = ctx.home_sheet.borrow_mut();
+    if let Some(view) = state.calendar.as_mut() {
+        match action {
+            Move::Prev => view.prev(),
+            Move::Next => view.next(),
+            Move::Pick(index) => {
+                view.pick(ctx, index);
+            }
         }
-    }
-    if let Some(ui) = ctx.ui.upgrade() {
-        ui.set_hs_pause_date_text(pause_text(ctx).into());
+        view.show(ctx);
     }
 }
 
@@ -245,7 +241,11 @@ pub fn pause_apply(ctx: &Rc<Ctx>) {
         let state = ctx.home_sheet.borrow();
         (
             state.pause_only.clone(),
-            state.pause_date.and_then(start_of),
+            state
+                .calendar
+                .as_ref()
+                .map(|view| view.selected)
+                .and_then(start_of),
         )
     };
     let now_ms = chrono::Local::now().timestamp_millis();

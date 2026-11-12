@@ -1,5 +1,6 @@
 import { Pal, Tr, Insets } from "theme.slint";
 import { PrimaryButton } from "widgets.slint";
+import { Backdrop, Look } from "backdrop.slint";
 
 // What shows while an alarm rings: the time, what it is, and the way to turn it off.
 export component RingScreen inherits Rectangle {
@@ -11,9 +12,20 @@ export component RingScreen inherits Rectangle {
     in property <bool> can-snooze;
     in property <string> challenges-text;
     in property <int> challenge-count;
+    // Shown from the editor: the buttons do nothing and a tap anywhere closes it.
+    in property <bool> preview;
     callback snooze();
     callback turn-off();
+    callback closed();
     background: Pal.bg;
+    Backdrop {
+        kind: Look.kind;
+        c1: Look.c1;
+        c2: Look.c2;
+        c3: Look.c3;
+        photo: Look.photo;
+        has-photo: Look.has-photo;
+    }
     VerticalLayout {
         padding: 24px;
         padding-top: 24px + Insets.top;
@@ -21,7 +33,14 @@ export component RingScreen inherits Rectangle {
         spacing: 12px;
         Rectangle { vertical-stretch: 1; }
         Text { text: root.date; font-size: 16px; color: Pal.text2; horizontal-alignment: center; }
-        Text { text: root.clock; font-size: 72px; font-weight: 700; color: Pal.text; horizontal-alignment: center; }
+        Text {
+            text: root.clock;
+            font-size: 72px;
+            font-weight: [700, 200, 800, 400, 500][Look.clock-style];
+            font-family: Look.clock-style == 3 ? "serif" : Look.clock-style == 4 ? "monospace" : "";
+            color: Pal.text;
+            horizontal-alignment: center;
+        }
         Text { text: root.label; font-size: 24px; font-weight: 500; color: Pal.text; horizontal-alignment: center; wrap: word-wrap; }
         if root.note != "": Text { text: root.note; font-size: 16px; color: Pal.text2; horizontal-alignment: center; wrap: word-wrap; }
         Rectangle { vertical-stretch: 2; }
@@ -29,4 +48,5 @@ export component RingScreen inherits Rectangle {
         if root.challenge-count > 0: Text { text: root.challenges-text; font-size: 14px; color: Pal.text2; horizontal-alignment: center; }
         PrimaryButton { text: Tr.t("ring.turn_off"); clicked => { root.turn-off(); } }
     }
+    if root.preview: TouchArea { clicked => { root.closed(); } }
 }

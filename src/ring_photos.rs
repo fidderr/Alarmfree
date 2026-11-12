@@ -67,6 +67,15 @@ pub fn data_url(name: &str) -> Option<String> {
     Some(url)
 }
 
+/// The file of a photo, if it can be read: for a view that loads from a path.
+pub fn path(name: &str) -> Option<PathBuf> {
+    if !is_bare_name(name) {
+        return None;
+    }
+    let path = dir().join(name);
+    (std::fs::metadata(&path).ok()?.len() <= MAX_BYTES).then_some(path)
+}
+
 /// Throw away the photos nothing uses any more. An alarm deleted a moment ago can still be brought
 /// back, so this is for when the app starts. With no alarms the database may just not be readable
 /// yet: then it does nothing.

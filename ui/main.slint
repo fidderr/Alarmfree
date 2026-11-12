@@ -1,7 +1,12 @@
 import { Pal, Tr, Insets, Motion } from "theme.slint";
 import { HomeScreen, AlarmRow, DayCell } from "home.slint";
 import { Toast } from "components.slint";
-import { EditorScreen, ChoiceRow, EditorSheet } from "editor.slint";
+import { EditorScreen, EditorSheet } from "editor.slint";
+import { Ed, SoundRow, LookTile, SwatchCell, UsedChip } from "editor_sheets.slint";
+import { Cal, DateCell } from "datepicker.slint";
+import { Hue } from "colour.slint";
+import { Look } from "backdrop.slint";
+import { Rel, CheckRow, ReliabilityScreen } from "reliability.slint";
 import { RingScreen } from "ring.slint";
 import { HomeSheets, HomeSheet, SheetChoice } from "home_sheets.slint";
 import { Run, RunScreen, RunCell, TypeCell, ReactTarget, RunKind } from "challenges.slint";
@@ -9,7 +14,8 @@ import { Cfg, CfgRow, CfgType, CfgStepper } from "challenge_sheets.slint";
 import { SettingsScreen, SettingsView } from "settings.slint";
 import { HistoryScreen, StatLine, BarCell, EventLine } from "history.slint";
 import { PanelSheet } from "panel.slint";
-export { Pal, Tr, Insets, AlarmRow, DayCell, ChoiceRow, EditorSheet, HomeSheet, SheetChoice }
+export { Pal, Tr, Insets, AlarmRow, DayCell, EditorSheet, HomeSheet, SheetChoice }
+export { Ed, SoundRow, LookTile, SwatchCell, UsedChip, Cal, DateCell, Hue, Look, Rel, CheckRow }
 export { SettingsView, StatLine, BarCell, EventLine, Motion }
 export { Run, RunCell, TypeCell, ReactTarget, RunKind, Cfg, CfgRow, CfgType, CfgStepper }
 
@@ -30,10 +36,8 @@ export component MainWindow inherits Window {
     in-out property <HomeSheet> home-sheet: HomeSheet.none;
     in property <string> hs-title;
     in property <[SheetChoice]> hs-choices;
-    in property <string> hs-pause-date-text;
     callback hs-close();
     callback hs-picked(int);
-    callback hs-pause-step(int);
     callback hs-pause-apply();
     // The settings.
     in property <SettingsView> st;
@@ -83,37 +87,18 @@ export component MainWindow inherits Window {
     in property <bool> ed-one-time;
     in property <string> ed-once-text;
     in property <string> ed-error;
-    in property <string> ed-label-summary;
-    in property <string> ed-sound-summary;
-    in property <string> ed-label-text;
-    in property <string> ed-snooze-summary;
-    in property <string> ed-snooze-interval-text;
-    in property <string> ed-snooze-count-text;
-    in property <[string]> ed-hour-labels;
-    in property <[string]> ed-minute-labels;
-    in-out property <int> ed-hour;
-    in-out property <int> ed-minute;
-    in property <[ChoiceRow]> ed-sounds;
-    in property <bool> ed-sound-none;
-    in property <bool> ed-sounding;
     in-out property <EditorSheet> ed-sheet: EditorSheet.none;
     callback ed-back();
     callback ed-save();
     callback ed-shift(int);
     callback ed-day-toggled(int);
     callback ed-preset(int);
-    callback ed-hour-changed(int);
-    callback ed-minute-changed(int);
-    callback ed-label-edited(string);
-    callback ed-sound-picked(int);
-    callback ed-no-sound();
-    callback ed-sound-preview();
-    callback ed-add-sound();
-    callback ed-snooze-interval(bool);
-    callback ed-snooze-count(bool);
     callback ed-delete-confirmed();
     callback ed-discard-confirmed();
     callback ed-sheet-closed();
+    callback ed-sheet-opened(EditorSheet);
+    // The ring screen from the editor, as the alarm being edited would show it.
+    in-out property <bool> ed-preview: false;
     // The ring screen.
     in property <string> ring-date;
     in property <string> ring-clock;
@@ -184,10 +169,8 @@ export component MainWindow inherits Window {
         sheet: root.home-sheet;
         title: root.hs-title;
         choices: root.hs-choices;
-        pause-date-text: root.hs-pause-date-text;
         close => { root.home-sheet = HomeSheet.none; root.hs-close(); }
         picked(i) => { root.hs-picked(i); }
-        pause-step(d) => { root.hs-pause-step(d); }
         pause-apply => { root.hs-pause-apply(); }
     }
 
@@ -246,37 +229,16 @@ export component MainWindow inherits Window {
         one-time: root.ed-one-time;
         once-text: root.ed-once-text;
         error: root.ed-error;
-        label-summary: root.ed-label-summary;
-        sound-summary: root.ed-sound-summary;
-        label-text: root.ed-label-text;
-        snooze-summary: root.ed-snooze-summary;
-        snooze-interval-text: root.ed-snooze-interval-text;
-        snooze-count-text: root.ed-snooze-count-text;
-        hour-labels: root.ed-hour-labels;
-        minute-labels: root.ed-minute-labels;
-        time-hour: root.ed-hour;
-        time-minute: root.ed-minute;
-        sounds: root.ed-sounds;
-        sound-none: root.ed-sound-none;
-        sounding: root.ed-sounding;
         sheet <=> root.ed-sheet;
         back => { root.ed-back(); }
         save => { root.ed-save(); }
         shift(m) => { root.ed-shift(m); }
         day-toggled(i) => { root.ed-day-toggled(i); }
         preset(i) => { root.ed-preset(i); }
-        hour-changed(h) => { root.ed-hour = h; root.ed-hour-changed(h); }
-        minute-changed(m) => { root.ed-minute = m; root.ed-minute-changed(m); }
-        label-edited(s) => { root.ed-label-edited(s); }
-        sound-picked(i) => { root.ed-sound-picked(i); }
-        no-sound => { root.ed-no-sound(); }
-        sound-preview => { root.ed-sound-preview(); }
-        add-sound => { root.ed-add-sound(); }
-        snooze-interval(l) => { root.ed-snooze-interval(l); }
-        snooze-count(m) => { root.ed-snooze-count(m); }
         delete-confirmed => { root.ed-delete-confirmed(); }
         discard-confirmed => { root.ed-discard-confirmed(); }
         sheet-closed => { root.ed-sheet-closed(); }
+        sheet-opened(sheet) => { root.ed-sheet-opened(sheet); }
     }
 
     if root.ringing: RingScreen {
@@ -290,6 +252,21 @@ export component MainWindow inherits Window {
         challenge-count: root.ring-challenge-count;
         snooze => { root.ring-snooze(); }
         turn-off => { root.ring-turn-off(); }
+    }
+
+    if root.screen == 4: ReliabilityScreen { }
+
+    if root.ed-preview: RingScreen {
+        preview: true;
+        date: root.ring-date;
+        clock: root.ring-clock;
+        label: root.ring-label;
+        note: root.ring-note;
+        snooze-text: root.ring-snooze-text;
+        can-snooze: root.ring-can-snooze;
+        challenges-text: Tr.t("ring.preview_hint");
+        challenge-count: 1;
+        closed => { root.ed-preview = false; }
     }
 
     if Run.active: RunScreen { }

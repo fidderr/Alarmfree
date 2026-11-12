@@ -725,19 +725,19 @@ Ring screen
 
 ### Phase 3: editor sheets
 - [ ] Sheet base: scrim, slide-up, grab handle, title, "?" help toggle, note, top-right action slot, Back closes
-- [ ] Label sheet: label + note fields (100), used-before chips
-- [ ] Sound sheet: radio list (No sound + 10 bundled + custom), Start/Stop preview (15 s auto stop), switch-while-playing
-- [ ] Sound sheet: custom sound rename (inline, empty removes), delete with inline confirm and fallback replacement everywhere, import via picker + error toasts
-- [ ] Sound sheet: volume slider 0-100/5, fade-in chips (Off, 15 s, 30 s, 1, 2, 5 min)
-- [ ] Vibration sheet: Off / Pulse / Steady / Heartbeat chips with immediate preview, sound delay chips (when sound + vibration), sound_mode rules
-- [ ] Snooze sheet: interval stepper (1-60, step 1 to 10 then 5), count stepper (0-10)
+- [x] Label sheet: label + note fields (100), used-before chips
+- [x] Sound sheet: radio list (No sound + 10 bundled + custom), Start/Stop preview (15 s auto stop), switch-while-playing
+- [x] Sound sheet: custom sound rename (inline, empty removes), delete with inline confirm and fallback replacement everywhere, import via picker + error toasts
+- [x] Sound sheet: volume slider 0-100/5, fade-in chips (Off, 15 s, 30 s, 1, 2, 5 min)
+- [x] Vibration sheet: Off / Pulse / Steady / Heartbeat chips with immediate preview, sound delay chips (when sound + vibration), sound_mode rules
+- [x] Snooze sheet: interval stepper (1-60, step 1 to 10 then 5), count stepper (0-10)
 - [x] Challenges sheet: rows with grip drag-reorder, number, name + summary, Try, remove, Try all, Add (max 10)
 - [x] Add challenge sheet (8 types with descriptions, permission request on add)
 - [x] Challenge detail sheet: difficulty chips + example (Math / Memory / Typing), steppers (Shake, Steps, Hold x2, Reaction x3), Scan code field + Scan now, Try, Remove, help text
-- [ ] Ring limit (30 / 60 / 90 / 120 / Forever), Wake check (Off / 3 / 5 / 10), Notice (Off / 5 / 10 / 30 / 60) sheets
-- [ ] Ring look sheet: 8 live backdrop tiles, photo picker (+ other photo), colour row (Auto / dot), clock chips, Preview link
-- [ ] Ring colour sheet: live backdrop, accent swatches, ColorControls with Auto chip
-- [ ] Full-screen ring preview (tap or Back closes, fake buttons)
+- [x] Ring limit (30 / 60 / 90 / 120 / Forever), Wake check (Off / 3 / 5 / 10), Notice (Off / 5 / 10 / 30 / 60) sheets
+- [x] Ring look sheet: 8 live backdrop tiles, photo picker (+ other photo), colour row (Auto / dot), clock chips, Preview link
+- [x] Ring colour sheet: live backdrop, accent swatches, ColorControls with Auto chip
+- [x] Full-screen ring preview (tap or Back closes, fake buttons)
 - [x] Defaults editor (no time/repeat), "Use as default" from card menu
 
 ### Phase 4: backdrops, themes, polish
@@ -804,3 +804,21 @@ Slint: `ui/{history,settings,panel}.slint`; the editor got a defaults mode (no t
 Not done: Reliability banner and Theme row (steps 3 and 4). Not verified by hand: Less motion visually, Volume chips on a
 phone, the widget row action, the custom days field typing. Rows use the original 14 px/54 px list style; the older `Row`
 widget (16 px) used by the editor is unchanged.
+
+## Status: editor sheets and reliability (step 3 of the port)
+Done and seen on emulator-5556: every row of the editor in the original's grouping (Label, Sound, Vibration, Snooze,
+Challenges / Alarm screen, Ring limit, Are you up?, Notice before, Full brightness) with all its sheets: label + ring note +
+labels used before, time (wheels plus typed entry, `text::parse_typed_time`), date (month grid `ui/datepicker.slint`,
+`calendar.rs`; also used by the pause-until-a-date panel, min tomorrow), sound (volume slider, fade-in, rename and delete of
+own sounds with the fallback everywhere, import with both error toasts, preview), vibration (patterns, try, sound delay),
+ring limit / wake-up check / notice, ring look (8 tiles, photo picker, colour row, clock styles), ring colour (swatches, wheel,
+brightness, code, Automatic) and the full-screen preview. A one-time alarm saved for a picked date rang on that date and the
+quiet notice posted 10 minutes before it. Reliability screen (`src/reliability.rs`, `src/ui/reliability.rs`,
+`ui/reliability.slint`): all 10 checks, Fix per check, help, test alarm and cancel, app settings; banner on Home with Fix and
+hide; Settings banner row; re-check every 1.5 s on the screen and every 15 s on Home. First-run mode exists
+(`reliability::open(ctx, true)`) but is not started at launch: that is step 4.
+Differences: the backdrops are the still first frame (`ui/backdrop.slint`, animation and text halo are step 5; the real ring
+screen already takes the look of the alarm); labels used before are put in lines by a width estimate; the date picker is a
+month grid, where the original used the system date input. Not verified: real vibration feel, sound playback of the preview,
+photo picking, Fix buttons on a phone, hiding a warning, the colour wheel by finger drag.
+

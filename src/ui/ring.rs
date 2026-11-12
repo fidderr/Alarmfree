@@ -86,7 +86,10 @@ pub struct RingState {
 }
 
 /// "Thursday 5 Nov".
-fn ring_date(tr: &crate::i18n::Translations, moment: chrono::DateTime<chrono::Local>) -> String {
+pub(super) fn ring_date(
+    tr: &crate::i18n::Translations,
+    moment: chrono::DateTime<chrono::Local>,
+) -> String {
     format!(
         "{} {} {}",
         t(
@@ -192,6 +195,10 @@ fn start(ctx: &Rc<Ctx>, id: &str) {
         mobile_sentinel::display::set_max_brightness();
     }
     ui.set_ring_label(label.into());
+    if let Some(alarm) = alarm.as_ref() {
+        let photo = super::look::load_photo(&alarm.ring_look);
+        super::look::apply(ctx, &alarm.ring_look, photo);
+    }
     ui.set_ring_note(alarm.map(|a| a.note).unwrap_or_default().into());
     *ctx.ring.borrow_mut() = Some(state);
     show_texts(ctx);

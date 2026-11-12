@@ -200,6 +200,8 @@ pub fn refresh(ctx: &Ctx) {
     };
     ui.set_empty_weekdays(template_label(&TEMPLATES[0]));
     ui.set_empty_weekend(template_label(&TEMPLATES[1]));
+    drop(tr);
+    super::reliability::show_banner(ctx);
 }
 
 fn countdown_text_with(tr: &crate::i18n::Translations, now_ms: i64, at_ms: i64) -> String {

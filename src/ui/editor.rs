@@ -2,18 +2,34 @@
 //! one summary row that opens a sheet.
 
 use std::rc::Rc;
-use std::time::Duration;
 
 use chrono::TimeZone;
-use slint::{ModelRc, SharedString, VecModel};
+use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
-use super::{ChoiceRow, Ctx, DayCell, EditorSheet, SCREEN_SETTINGS};
+use super::datepicker::{DateView, Move};
+use super::editor_sound::stop_preview;
+use super::{Ctx, DayCell, Ed, EditorSheet, SCREEN_SETTINGS};
 use crate::i18n::{t, Translations};
 use crate::models::{AlarmData, ChallengeSetup};
 use crate::{alarm_ops, schedule};
 
-/// How long trying a sound lasts.
-const PREVIEW_MS: u64 = 15_000;
+pub const FADE_SECONDS: [u16; 6] = [0, 15, 30, 60, 120, 300];
+pub const SOUND_DELAY_SECONDS: [u16; 4] = [0, 15, 30, 60];
+pub const LIMIT_MINUTES: [u32; 4] = [30, 60, 90, 120];
+pub const CHECK_MINUTES: [u8; 4] = [0, 3, 5, 10];
+pub const NOTICE_MINUTES: [u8; 5] = [0, 5, 10, 30, 60];
+
+/// Translation keys of the vibration patterns, in the order of `platform::VIBRATION_PATTERNS`.
+pub const VIBRATION_KEYS: [&str; 3] =
+    ["vibration.pulse", "vibration.steady", "vibration.heartbeat"];
+
+pub fn seconds_label(tr: &Translations, secs: u16) -> String {
+    match secs {
+        0 => t(tr, "config.fade_off"),
+        s if s < 60 => t(tr, "text.seconds").replace("{seconds}", &s.to_string()),
+        s => t(tr, "text.minutes").replace("{minutes}", &(s / 60).to_string()),
+    }
+}
 
 /// The alarm being edited, and what it started from.
 pub struct EditorState {
@@ -31,11 +47,25 @@ pub struct EditorState {
     /// An alarm with no weekday selected rings once, on a date.
     pub one_time: bool,
     pub date_value: String,
-    start_date: String,
-    error: String,
+    pub(super) start_date: String,
+    pub(super) error: String,
+    /// The month shown in the date sheet.
+    pub(super) calendar: DateView,
+    /// The user's own sound being renamed (file, name so far), or asked about deleting.
+    pub(super) renaming: Option<(String, String)>,
+    pub(super) deleting: Option<String>,
     /// The handle of the sound being tried, 0 for none.
-    preview: u64,
-    preview_token: u64,
+    pub(super) preview: u64,
+    pub(super) vibrating: bool,
+    pub(super) preview_token: u64,
+    /// Bumped to make a field or the wheels start over from the draft.
+    pub(super) time_rev: i32,
+    pub(super) label_rev: i32,
+    /// The colour sheet of the ring look.
+    pub(super) wheel: super::colour::Wheel,
+    pub(super) typed_colour: Option<String>,
+    /// The ring photo as loaded, so choosing among the looks does not decode it again.
+    pub(super) photo: Option<(String, slint::Image)>,
 }
 
 /// "copy-<id>" opens a new alarm prefilled from the alarm <id>.
@@ -65,6 +95,11 @@ pub fn open(ctx: &Rc<Ctx>, id: &str) {
         is_new,
         for_defaults,
         one_time: schedule::is_one_time(&original),
+        calendar: DateView::new(
+            chrono::NaiveDate::parse_from_str(&start_date, "%Y-%m-%d")
+                .unwrap_or_else(|_| now.date()),
+            chrono::Local::now().date_naive(),
+        ),
         date_value: start_date.clone(),
         start_date,
         setups: ChallengeSetup::list_from_stored(&original.challenges),
@@ -72,8 +107,16 @@ pub fn open(ctx: &Rc<Ctx>, id: &str) {
         draft: original.clone(),
         original,
         error: String::new(),
+        renaming: None,
+        deleting: None,
         preview: 0,
+        vibrating: false,
         preview_token: 0,
+        time_rev: 0,
+        label_rev: 0,
+        wheel: super::colour::Wheel::of(crate::models::Rgb::new(0, 0, 0)),
+        typed_colour: None,
+        photo: None,
     });
     let Some(ui) = ctx.ui.upgrade() else {
         return;
@@ -207,14 +250,7 @@ const PRESETS: [(&str, [bool; 7]); 3] = [
     ("config.every_day", [true; 7]),
 ];
 
-fn sound_ids() -> Vec<String> {
-    crate::custom_sounds::list_default_sounds()
-        .into_iter()
-        .chain(crate::custom_sounds::list_custom_sounds())
-        .collect()
-}
-
-fn model<T: Clone + 'static>(items: Vec<T>) -> ModelRc<T> {
+pub(super) fn model<T: Clone + 'static>(items: Vec<T>) -> ModelRc<T> {
     ModelRc::from(Rc::new(VecModel::from(items)))
 }
 
@@ -285,7 +321,9 @@ pub fn sync(ctx: &Ctx) {
             .into(),
     );
     ui.set_ed_error(ed.error.clone().into());
-    ui.set_ed_label_summary(
+
+    let rows = ui.global::<Ed>();
+    rows.set_label_summary(
         if current.label.is_empty() {
             t(&tr, "config.none")
         } else {
@@ -293,8 +331,18 @@ pub fn sync(ctx: &Ctx) {
         }
         .into(),
     );
-    ui.set_ed_label_text(current.label.clone().into());
-    ui.set_ed_snooze_summary(
+    rows.set_vibration_summary(
+        if current.sound_mode == 1 {
+            t(&tr, "vibration.off")
+        } else {
+            t(
+                &tr,
+                VIBRATION_KEYS[usize::from(current.vibration).min(VIBRATION_KEYS.len() - 1)],
+            )
+        }
+        .into(),
+    );
+    rows.set_snooze_summary(
         if current.snooze_count == 0 {
             t(&tr, "config.no_snooze")
         } else {
@@ -307,54 +355,80 @@ pub fn sync(ctx: &Ctx) {
         }
         .into(),
     );
-    ui.set_ed_snooze_interval_text(
+    rows.set_look_summary(t(&tr, current.ring_look.backdrop.name_key()).into());
+    rows.set_limit_summary(
+        match current.ring_limit_secs {
+            None => t(&tr, "config.limit_forever"),
+            Some(secs) => t(&tr, "text.minutes").replace("{minutes}", &(secs / 60).to_string()),
+        }
+        .into(),
+    );
+    rows.set_check_summary(
+        if current.wake_check_minutes == 0 {
+            t(&tr, "config.fade_off")
+        } else {
+            t(&tr, "config.check_after")
+                .replace("{minutes}", &current.wake_check_minutes.to_string())
+        }
+        .into(),
+    );
+    rows.set_notice_summary(
+        if current.notify_before_minutes == 0 {
+            t(&tr, "config.fade_off")
+        } else {
+            t(&tr, "text.minutes").replace("{minutes}", &current.notify_before_minutes.to_string())
+        }
+        .into(),
+    );
+    rows.set_bright(current.max_brightness);
+
+    // The sheets.
+    rows.set_snooze_interval_text(
         t(&tr, "text.minutes")
             .replace("{minutes}", &current.snooze_interval.to_string())
             .into(),
     );
-    ui.set_ed_snooze_count_text(
+    rows.set_snooze_count_text(
         crate::text::counted(&tr, "text.times", u32::from(current.snooze_count)).into(),
     );
-    ui.set_ed_sound_summary(
-        if current.sound_mode == 2 {
-            t(&tr, "config.vibration_only")
-        } else {
-            crate::custom_sounds::display_name(&current.sound, &settings.prefs.sound_names)
-        }
-        .into(),
-    );
-    ui.set_ed_hour_labels(model(
+    rows.set_hour_labels(model(
         (0..24u8)
             .map(|h| SharedString::from(crate::text::hour_label(h, twenty_four)))
             .collect(),
     ));
-    ui.set_ed_minute_labels(model(
+    rows.set_minute_labels(model(
         (0..60)
             .map(|m| SharedString::from(format!("{m:02}")))
             .collect(),
     ));
-    ui.set_ed_hour(i32::from(current.time_hour));
-    ui.set_ed_minute(i32::from(current.time_minute));
-    let vibrate_only = current.sound_mode == 2;
-    ui.set_ed_sound_none(vibrate_only);
-    ui.set_ed_sounds(model(
-        sound_ids()
-            .into_iter()
-            .map(|sound| ChoiceRow {
-                text: crate::custom_sounds::display_name(&sound, &settings.prefs.sound_names)
-                    .into(),
-                selected: !vibrate_only && sound == current.sound,
-            })
+    rows.set_hour(i32::from(current.time_hour));
+    rows.set_minute(i32::from(current.time_minute));
+    rows.set_time_rev(ed.time_rev);
+    rows.set_label_text(current.label.clone().into());
+    rows.set_note_text(current.note.clone().into());
+    rows.set_label_rev(ed.label_rev);
+    let today = chrono::Local::now().date_naive();
+    rows.set_quick_labels(model(
+        ["home.today", "home.tomorrow", "config.next_week"]
+            .iter()
+            .map(|key| SharedString::from(t(&tr, key)))
             .collect(),
     ));
-    ui.set_ed_sounding(ed.preview != 0);
+    let picked = chrono::NaiveDate::parse_from_str(&ed.date_value, "%Y-%m-%d").ok();
+    rows.set_quick_selected(
+        [0, 1, 7]
+            .iter()
+            .position(|days| picked == Some(today + chrono::Duration::days(*days)))
+            .map_or(-1, |i| i as i32),
+    );
+    super::editor_sound::sync(&ui, ed, &settings, &tr, &ctx.alarms.borrow());
     drop(settings);
     drop(tr);
     drop(editor);
     super::challenge_sheets::sync_rows(ctx);
 }
 
-fn edit(ctx: &Ctx, apply: impl FnOnce(&mut EditorState)) {
+pub(super) fn edit(ctx: &Ctx, apply: impl FnOnce(&mut EditorState)) {
     if let Some(ed) = ctx.editor.borrow_mut().as_mut() {
         apply(ed);
     }
@@ -396,7 +470,7 @@ pub fn toggle_day(ctx: &Ctx, index: usize) {
     });
 }
 
-pub fn preset(ctx: &Ctx, index: usize) {
+pub fn preset(ctx: &Rc<Ctx>, index: usize) {
     edit(ctx, |ed| {
         ed.error.clear();
         if let Some((_, days)) = PRESETS.get(index) {
@@ -416,6 +490,104 @@ pub fn preset(ctx: &Ctx, index: usize) {
         }
         ed.one_time = true;
     });
+    if index >= PRESETS.len() {
+        open_sheet(ctx, EditorSheet::Date);
+    }
+}
+
+/// Open a sheet from Rust, as a tap on its row does.
+pub(super) fn open_sheet(ctx: &Rc<Ctx>, sheet: EditorSheet) {
+    if let Some(ui) = ctx.ui.upgrade() {
+        ui.set_ed_sheet(sheet);
+    }
+    sheet_opened(ctx, sheet);
+}
+
+/// A sheet came up: fill what only it shows.
+pub fn sheet_opened(ctx: &Rc<Ctx>, sheet: EditorSheet) {
+    match sheet {
+        EditorSheet::Date => {
+            if let Some(ed) = ctx.editor.borrow_mut().as_mut() {
+                if let Ok(day) = chrono::NaiveDate::parse_from_str(&ed.date_value, "%Y-%m-%d") {
+                    ed.calendar.select(day);
+                }
+                ed.calendar.show(ctx);
+            }
+            sync(ctx);
+        }
+        EditorSheet::Limit | EditorSheet::WakeCheck | EditorSheet::Notice => {
+            super::editor_sound::sync_options(ctx, sheet)
+        }
+        EditorSheet::RingLook | EditorSheet::RingColour => {
+            super::editor_look::sheet_opened(ctx, sheet)
+        }
+        _ => {}
+    }
+}
+
+/// A tap in the date sheet's month.
+pub fn date_action(ctx: &Rc<Ctx>, action: Move) {
+    if let Some(ed) = ctx.editor.borrow_mut().as_mut() {
+        match action {
+            Move::Prev => ed.calendar.prev(),
+            Move::Next => ed.calendar.next(),
+            Move::Pick(index) => {
+                if ed.calendar.pick(ctx, index) {
+                    ed.date_value = ed.calendar.selected.format("%Y-%m-%d").to_string();
+                    ed.error.clear();
+                }
+            }
+        }
+        ed.calendar.show(ctx);
+    }
+    sync(ctx);
+}
+
+/// Today, tomorrow or a week on, in the date sheet.
+pub fn date_quick(ctx: &Rc<Ctx>, index: usize) {
+    let days = [0, 1, 7].get(index).copied().unwrap_or(0);
+    let day = chrono::Local::now().date_naive() + chrono::Duration::days(days);
+    if let Some(ed) = ctx.editor.borrow_mut().as_mut() {
+        ed.date_value = day.format("%Y-%m-%d").to_string();
+        ed.error.clear();
+        ed.calendar.select(day);
+        ed.calendar.show(ctx);
+    }
+    sync(ctx);
+}
+
+/// The time typed in the time sheet: the wheels follow it as soon as it is a time.
+pub fn time_typed(ctx: &Rc<Ctx>, text: &str) {
+    let Some((hour, minute)) = crate::text::parse_typed_time(text) else {
+        return;
+    };
+    edit(ctx, |ed| {
+        ed.draft.time_hour = hour;
+        ed.draft.time_minute = minute;
+        ed.time_rev += 1;
+    });
+}
+
+pub fn set_note(ctx: &Ctx, note: &str) {
+    // No `sync`: it would replace what is being typed.
+    if let Some(ed) = ctx.editor.borrow_mut().as_mut() {
+        ed.draft.note = note.to_owned();
+    }
+}
+
+/// A label used before, picked in the label sheet.
+pub fn use_label(ctx: &Ctx, index: usize) {
+    let label = super::editor_sound::used_labels(ctx).get(index).cloned();
+    if let Some(label) = label {
+        edit(ctx, |ed| {
+            ed.draft.label = label;
+            ed.label_rev += 1;
+        });
+    }
+}
+
+pub fn set_max_brightness(ctx: &Ctx, on: bool) {
+    edit(ctx, |ed| ed.draft.max_brightness = on);
 }
 
 pub fn set_label(ctx: &Ctx, label: &str) {
@@ -427,7 +599,7 @@ pub fn set_label(ctx: &Ctx, label: &str) {
         let editor = ctx.editor.borrow();
         if let Some(ed) = editor.as_ref() {
             let tr = ctx.tr.borrow();
-            ui.set_ed_label_summary(
+            ui.global::<Ed>().set_label_summary(
                 if ed.draft.label.is_empty() {
                     t(&tr, "config.none")
                 } else {
@@ -437,156 +609,6 @@ pub fn set_label(ctx: &Ctx, label: &str) {
             );
         }
     }
-}
-
-// ---- Sounds -------------------------------------------------------------------------------
-
-fn stop_handle(handle: u64) {
-    if handle != 0 {
-        let handle = mobile_sentinel::PlaybackHandle::from_id(handle);
-        let _ = mobile_sentinel::audio::stop(&handle);
-    }
-}
-
-/// Play a sound as the alarm will sound, and also with the media volume at zero. Round and
-/// round, as it would ring: a short sound still lasts as long as the preview.
-fn play_handle(sound: &str) -> u64 {
-    let Some(path) = crate::custom_sounds::get_playback_path(sound) else {
-        log::warn!("[AlarmFree] No playback path found for: {sound}");
-        return 0;
-    };
-    match mobile_sentinel::audio::play_as_alarm(&path.to_string_lossy(), true) {
-        Ok(handle) => handle.id(),
-        Err(e) => {
-            log::warn!("[AlarmFree] Preview play failed: {e}");
-            0
-        }
-    }
-}
-
-/// Stop whatever is being tried, also when the editor goes away.
-pub fn stop_preview(ctx: &Ctx) {
-    ctx.preview_timer.stop();
-    if let Some(ed) = ctx.editor.borrow_mut().as_mut() {
-        stop_handle(ed.preview);
-        ed.preview = 0;
-        ed.preview_token += 1;
-    }
-    sync(ctx);
-}
-
-fn start_preview(ctx: &Rc<Ctx>) {
-    stop_preview(ctx);
-    let sound = ctx
-        .editor
-        .borrow()
-        .as_ref()
-        .map(|ed| ed.draft.sound.clone());
-    let Some(sound) = sound else {
-        return;
-    };
-    let handle = play_handle(&sound);
-    let token = {
-        let mut editor = ctx.editor.borrow_mut();
-        let Some(ed) = editor.as_mut() else {
-            return;
-        };
-        ed.preview = handle;
-        ed.preview_token
-    };
-    let weak = Rc::downgrade(ctx);
-    ctx.preview_timer.start(
-        slint::TimerMode::SingleShot,
-        Duration::from_millis(PREVIEW_MS),
-        move || {
-            if let Some(ctx) = weak.upgrade() {
-                let same = ctx
-                    .editor
-                    .borrow()
-                    .as_ref()
-                    .is_some_and(|ed| ed.preview_token == token);
-                if same {
-                    stop_preview(&ctx);
-                }
-            }
-        },
-    );
-    sync(ctx);
-}
-
-pub fn pick_sound(ctx: &Rc<Ctx>, index: usize) {
-    let Some(sound) = sound_ids().get(index).cloned() else {
-        return;
-    };
-    let playing = ctx
-        .editor
-        .borrow()
-        .as_ref()
-        .is_some_and(|ed| ed.preview != 0);
-    edit(ctx, |ed| {
-        ed.draft.sound = sound;
-        if ed.draft.sound_mode == 2 {
-            ed.draft.sound_mode = 0;
-        }
-    });
-    // Only a tap on Start makes a sound. While one plays, the sound picked takes over.
-    if playing {
-        start_preview(ctx);
-    }
-}
-
-pub fn no_sound(ctx: &Rc<Ctx>) {
-    stop_preview(ctx);
-    edit(ctx, |ed| ed.draft.sound_mode = 2);
-}
-
-pub fn toggle_preview(ctx: &Rc<Ctx>) {
-    let playing = ctx
-        .editor
-        .borrow()
-        .as_ref()
-        .is_some_and(|ed| ed.preview != 0);
-    if playing {
-        stop_preview(ctx);
-    } else {
-        start_preview(ctx);
-    }
-}
-
-/// The system's file picker, off the UI thread because it waits for the user.
-pub fn add_sound(ctx: &Rc<Ctx>) {
-    stop_preview(ctx);
-    std::thread::spawn(|| {
-        let picked = crate::custom_sounds::pick_audio_file_native();
-        let _ = slint::invoke_from_event_loop(move || {
-            super::with_ctx(|ctx| match picked {
-                Ok(Some(imported)) => {
-                    ctx.settings
-                        .borrow_mut()
-                        .prefs
-                        .sound_names
-                        .insert(imported.file.clone(), imported.name);
-                    crate::persistence::save_settings(&ctx.settings.borrow());
-                    edit(ctx, |ed| {
-                        ed.draft.sound = imported.file;
-                        if ed.draft.sound_mode == 2 {
-                            ed.draft.sound_mode = 0;
-                        }
-                    });
-                }
-                Ok(None) => {}
-                Err(e) => {
-                    log::warn!("[AlarmFree] adding a sound failed: {e}");
-                    let message = if e.contains("not a sound") {
-                        t(&ctx.tr.borrow(), "sound.not_a_sound")
-                    } else {
-                        e
-                    };
-                    super::toast::error(ctx, message);
-                }
-            });
-        });
-    });
 }
 
 // ---- Leaving ------------------------------------------------------------------------------
@@ -616,6 +638,11 @@ pub fn back(ctx: &Rc<Ctx>) {
         // Their back is the list of challenges.
         EditorSheet::AddChallenge | EditorSheet::Detail => {
             ui.set_ed_sheet(EditorSheet::Challenges);
+            return;
+        }
+        // The colour came from the look.
+        EditorSheet::RingColour => {
+            open_sheet(ctx, EditorSheet::RingLook);
             return;
         }
         _ => {

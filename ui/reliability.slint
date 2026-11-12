@@ -1,0 +1,178 @@
+import { Pal, Tr, Insets } from "theme.slint";
+import { Icon, IconName } from "components.slint";
+import { ScreenHeader, RowList, Separator, PrimaryButton } from "widgets.slint";
+
+export struct CheckRow { title: string, note: string, ok: bool, fixable: bool }
+
+// What the reliability screen shows; Rust fills it from the phone's report.
+export global Rel {
+    in property <bool> first-run;
+    in property <[CheckRow]> checks;
+    // The help behind the ?: what this is, the test note and how fast the last ring was.
+    in property <string> help;
+    in property <bool> has-record;
+    in property <bool> test-pending;
+    callback back();
+    callback fix(int);
+    callback app-settings();
+    callback save-record();
+    callback test();
+    callback cancel-test();
+    callback done();
+}
+
+component CheckLine inherits Rectangle {
+    in property <CheckRow> check;
+    callback fix();
+    height: max(56px, body.preferred-height);
+    body := HorizontalLayout {
+        padding-left: 16px;
+        padding-right: 14px;
+        padding-top: 12px;
+        padding-bottom: 12px;
+        spacing: 14px;
+        Rectangle {
+            width: 20px;
+            Icon {
+                name: root.check.ok ? IconName.check : IconName.warning;
+                size: 20px;
+                tint: root.check.ok ? Pal.ok : Pal.warn;
+                y: (parent.height - self.height) / 2;
+            }
+        }
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: center;
+            spacing: 2px;
+            Text { text: root.check.title; font-size: 14px; font-weight: 500; color: Pal.text; wrap: word-wrap; }
+            if !root.check.ok: Text { text: root.check.note; font-size: 12px; color: Pal.text2; wrap: word-wrap; }
+        }
+        if root.check.fixable: Rectangle {
+            min-width: 60px;
+            height: 44px;
+            y: (parent.height - self.height) / 2;
+            border-radius: 14px;
+            background: Pal.surface2;
+            Text { text: Tr.t("reliability.fix"); font-size: 14px; font-weight: 500; color: Pal.text; }
+            TouchArea { clicked => { root.fix(); } }
+        }
+    }
+}
+
+component PlainRow inherits Rectangle {
+    in property <string> title;
+    callback clicked();
+    height: 54px;
+    HorizontalLayout {
+        padding-left: 16px;
+        padding-right: 14px;
+        spacing: 12px;
+        Text { horizontal-stretch: 1; text: root.title; font-size: 14px; font-weight: 500; color: Pal.text; vertical-alignment: center; overflow: elide; }
+        Icon { name: IconName.chevron-right; size: 14px; tint: Pal.text2; y: (parent.height - self.height) / 2; }
+    }
+    TouchArea { clicked => { root.clicked(); } }
+}
+
+// What the phone has to allow for alarms to ring on time, how to change it, and the one check
+// that holds on any phone: a real alarm. Also the first-run setup, which is this list with a
+// word of welcome.
+export component ReliabilityScreen inherits Rectangle {
+    background: Pal.bg;
+    property <bool> help-open: false;
+    VerticalLayout {
+        padding-top: Insets.top;
+        padding-left: Insets.left;
+        padding-right: Insets.right;
+        if Rel.first-run: Rectangle {
+            height: 36px + 34px;
+            Text {
+                x: 20px;
+                y: 36px;
+                height: 34px;
+                text: Tr.t("setup.title");
+                font-size: 28px;
+                font-weight: 700;
+                color: Pal.text;
+                vertical-alignment: center;
+            }
+        }
+        if !Rel.first-run: ScreenHeader {
+            title: Tr.t("reliability.title");
+            back => { Rel.back(); }
+            Rectangle {
+                width: 44px;
+                Rectangle {
+                    width: 22px;
+                    height: 22px;
+                    border-radius: 11px;
+                    background: root.help-open ? Pal.accent : Pal.accent-soft;
+                    Text { text: "?"; font-size: 13px; font-weight: 700; color: root.help-open ? Pal.on-accent : Pal.accent; }
+                }
+                TouchArea { clicked => { root.help-open = !root.help-open; } }
+            }
+        }
+        if root.help-open && !Rel.first-run: Rectangle {
+            height: help-text.preferred-height + 24px + 8px;
+            Rectangle {
+                x: 16px;
+                width: parent.width - 32px;
+                height: parent.height - 8px;
+                border-radius: 14px;
+                background: Pal.accent-soft;
+                help-text := Text {
+                    x: 14px;
+                    y: 12px;
+                    width: parent.width - 28px;
+                    text: Rel.help;
+                    font-size: 14px;
+                    color: Pal.text;
+                    wrap: word-wrap;
+                }
+            }
+        }
+        Flickable {
+            vertical-stretch: 1;
+            content-height: body.preferred-height + 16px;
+            body := VerticalLayout {
+                alignment: start;
+                spacing: 16px;
+                padding-left: 16px;
+                padding-right: 16px;
+                padding-top: 8px;
+                if Rel.first-run: Text {
+                    x: 4px;
+                    text: Tr.t("setup.intro");
+                    font-size: 14px;
+                    color: Pal.text2;
+                    wrap: word-wrap;
+                }
+                RowList {
+                    VerticalLayout {
+                        for check[i] in Rel.checks: VerticalLayout {
+                            if i > 0: Separator { }
+                            CheckLine { check: check; fix => { Rel.fix(i); } }
+                        }
+                    }
+                }
+                RowList {
+                    VerticalLayout {
+                        PlainRow { title: Tr.t("reliability.app_settings"); clicked => { Rel.app-settings(); } }
+                        if Rel.has-record: Separator { }
+                        if Rel.has-record: PlainRow { title: Tr.t("reliability.save_record"); clicked => { Rel.save-record(); } }
+                    }
+                }
+            }
+        }
+        VerticalLayout {
+            padding: 12px;
+            padding-left: 16px;
+            padding-right: 16px;
+            padding-bottom: 16px + Insets.bottom;
+            spacing: 8px;
+            if Rel.first-run: PrimaryButton { text: Tr.t("setup.done"); clicked => { Rel.done(); } }
+            if !Rel.first-run && Rel.test-pending: Text { x: 4px; text: Tr.t("reliability.test_set"); font-size: 12px; color: Pal.text2; wrap: word-wrap; }
+            if !Rel.first-run && Rel.test-pending: PrimaryButton { quiet: true; text: Tr.t("reliability.test_cancel"); clicked => { Rel.cancel-test(); } }
+            if !Rel.first-run && !Rel.test-pending: PrimaryButton { text: Tr.t("reliability.test"); clicked => { Rel.test(); } }
+        }
+    }
+}

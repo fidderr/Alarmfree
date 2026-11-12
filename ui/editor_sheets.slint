@@ -1,0 +1,493 @@
+import { Pal, Tr, Insets } from "theme.slint";
+import { Icon, IconName } from "components.slint";
+import { Sheet, RadioRow, Wheel, Stepper, PrimaryButton, AppSlider, ChoiceChips, GroupTitle, LinkButton, TextField } from "widgets.slint";
+import { DatePicker } from "datepicker.slint";
+import { ColourControls } from "colour.slint";
+import { Backdrop } from "backdrop.slint";
+
+// state 0: a row to pick, 1: being renamed, 2: asking whether to delete it.
+export struct SoundRow { text: string, selected: bool, custom: bool, state: int }
+export struct LookTile { name: string, kind: int, selected: bool, add: bool, c1: color, c2: color, c3: color, photo: image, has-photo: bool }
+export struct SwatchCell { colour: color, selected: bool }
+export struct UsedChip { text: string, line: int, selected: bool }
+
+// What the sheets of the editor show; Rust fills it from the alarm being edited.
+export global Ed {
+    // The summaries on the rows of the editor.
+    in property <string> label-summary;
+    in property <string> sound-summary;
+    in property <string> vibration-summary;
+    in property <string> snooze-summary;
+    in property <string> look-summary;
+    in property <string> limit-summary;
+    in property <string> check-summary;
+    in property <string> notice-summary;
+    in property <bool> bright;
+    callback bright-toggled(bool);
+    // Time
+    in property <[string]> hour-labels;
+    in property <[string]> minute-labels;
+    in-out property <int> hour;
+    in-out property <int> minute;
+    // Changes when the time is set from the typed entry, so the wheels start over.
+    in property <int> time-rev;
+    callback hour-changed(int);
+    callback minute-changed(int);
+    callback time-typed(string);
+    // Date
+    in property <[string]> quick-labels;
+    in property <int> quick-selected: -1;
+    callback date-quick(int);
+    // Label and note
+    in property <string> label-text;
+    in property <string> note-text;
+    in property <[UsedChip]> used;
+    in property <int> used-lines;
+    in property <int> label-rev;
+    callback label-edited(string);
+    callback note-edited(string);
+    callback used-picked(int);
+    // Sound
+    in property <[SoundRow]> sound-rows;
+    in property <bool> sound-none;
+    in property <bool> sounding;
+    in property <string> rename-text;
+    in property <int> volume;
+    in property <[string]> fade-labels;
+    in property <int> fade-selected: -1;
+    callback sound-picked(int);
+    callback no-sound();
+    callback sound-preview();
+    callback add-sound();
+    callback rename-start(int);
+    callback rename-edited(string);
+    callback rename-done();
+    callback delete-ask(int);
+    callback delete-confirm(int);
+    callback delete-cancel();
+    callback volume-changed(int);
+    callback fade-picked(int);
+    // Snooze
+    in property <string> snooze-interval-text;
+    in property <string> snooze-count-text;
+    callback snooze-interval(bool);
+    callback snooze-count(bool);
+    // Vibration
+    in property <[string]> vib-labels;
+    in property <int> vib-selected: -1;
+    in property <bool> vibrating;
+    // False when vibration is off: nothing to try.
+    in property <bool> vib-can-try;
+    in property <bool> delay-visible;
+    in property <[string]> delay-labels;
+    in property <int> delay-selected: -1;
+    callback vib-picked(int);
+    callback vib-preview();
+    callback delay-picked(int);
+    // The sheets with one row of choices: ring limit, wake-up check, notice.
+    in property <[string]> opt-labels;
+    in property <int> opt-selected: -1;
+    callback opt-picked(int);
+    // Ring look
+    in property <[LookTile]> tiles;
+    in property <bool> photo-link;
+    in property <bool> colour-row;
+    in property <bool> colour-auto;
+    in property <color> colour-dot: #ffffff;
+    in property <[string]> clock-labels;
+    in property <int> clock-selected: -1;
+    in property <LookTile> live;
+    in property <[SwatchCell]> swatches;
+    callback tile-picked(int);
+    callback photo-other();
+    callback colour-open();
+    callback clock-picked(int);
+    callback look-preview();
+    callback swatch-picked(int);
+}
+
+component FieldLabel inherits VerticalLayout {
+    in property <string> text;
+    spacing: 8px;
+    padding-top: 8px;
+    Text { text: root.text; font-size: 14px; font-weight: 500; color: Pal.text; }
+    @children
+}
+
+component IconButton inherits Rectangle {
+    in property <IconName> icon;
+    in property <color> tint: Pal.text2;
+    callback clicked();
+    width: 44px;
+    height: 44px;
+    Icon { name: root.icon; size: 16px; tint: root.tint; }
+    TouchArea { clicked => { root.clicked(); } }
+}
+
+// The time, on wheels or typed in.
+export component TimeSheet inherits Rectangle {
+    callback done();
+    Sheet {
+        title: Tr.t("config.time");
+        close => { root.done(); }
+        for r in [Ed.time-rev]: HorizontalLayout {
+            alignment: center;
+            spacing: 4px;
+            Wheel {
+                value: Ed.hour;
+                labels: Ed.hour-labels;
+                changed(v) => { Ed.hour = v; Ed.hour-changed(v); }
+            }
+            Text { text: ":"; font-size: 28px; font-weight: 700; color: Pal.text; vertical-alignment: center; }
+            Wheel {
+                value: Ed.minute;
+                labels: Ed.minute-labels;
+                changed(v) => { Ed.minute = v; Ed.minute-changed(v); }
+            }
+        }
+        FieldLabel {
+            text: Tr.t("config.time_type");
+            TextField {
+                placeholder: "07:00";
+                input-type: InputType.number;
+                edited(s) => { Ed.time-typed(s); }
+            }
+        }
+        PrimaryButton { text: Tr.t("action.done"); clicked => { root.done(); } }
+    }
+}
+
+// The date of an alarm that rings once.
+export component DateSheet inherits Rectangle {
+    callback done();
+    Sheet {
+        title: Tr.t("config.date_title");
+        help: Tr.t("config.date_note");
+        close => { root.done(); }
+        DatePicker { }
+        GroupTitle { text: Tr.t("config.quick"); }
+        ChoiceChips { labels: Ed.quick-labels; selected: Ed.quick-selected; picked(i) => { Ed.date-quick(i); } }
+        PrimaryButton { text: Tr.t("action.done"); clicked => { root.done(); } }
+    }
+}
+
+// Its name, and the note shown while it rings.
+export component LabelSheet inherits Rectangle {
+    callback done();
+    Sheet {
+        title: Tr.t("config.label");
+        help: Tr.t("config.label_note");
+        close => { root.done(); }
+        for r in [Ed.label-rev]: FieldLabel {
+            text: Tr.t("config.label_name");
+            TextField {
+                text: Ed.label-text;
+                placeholder: Tr.t("config.label_placeholder");
+                focus-on-show: true;
+                edited(s) => { Ed.label-edited(s); }
+                accepted => { root.done(); }
+            }
+        }
+        FieldLabel {
+            text: Tr.t("config.note");
+            TextField {
+                text: Ed.note-text;
+                placeholder: Tr.t("config.note_placeholder");
+                edited(s) => { Ed.note-edited(s); }
+                accepted => { root.done(); }
+            }
+        }
+        if Ed.used.length > 0: VerticalLayout {
+            spacing: 8px;
+            padding-top: 12px;
+            GroupTitle { text: Tr.t("config.used_before"); }
+            for line in Ed.used-lines: HorizontalLayout {
+                spacing: 8px;
+                alignment: start;
+                for chip[i] in Ed.used: Rectangle {
+                    visible: chip.line == line;
+                    width: chip.line == line ? max(52px, chip-text.preferred-width + 28px) : 0px;
+                    height: chip.line == line ? 48px : 0px;
+                    border-radius: 14px;
+                    background: chip.selected ? Pal.accent : Pal.surface2;
+                    chip-text := Text {
+                        x: 14px;
+                        text: chip.text;
+                        font-size: 14px;
+                        font-weight: 500;
+                        color: chip.selected ? Pal.on-accent : Pal.text;
+                        vertical-alignment: center;
+                    }
+                    TouchArea { clicked => { Ed.used-picked(i); } }
+                }
+            }
+        }
+        PrimaryButton { text: Tr.t("action.done"); clicked => { root.done(); } }
+    }
+}
+
+// Which sound, how loud, and how it starts.
+export component SoundSheet inherits Rectangle {
+    callback done();
+    Sheet {
+        title: Tr.t("config.sound");
+        help: Tr.t("config.sound_note");
+        action-text: Ed.sound-none ? "" : (Ed.sounding ? Tr.t("action.stop") : Tr.t("action.start"));
+        close => { root.done(); }
+        action => { Ed.sound-preview(); }
+        RadioRow { text: Tr.t("config.no_sound"); selected: Ed.sound-none; clicked => { Ed.no-sound(); } }
+        for row[i] in Ed.sound-rows: Rectangle {
+            height: 52px;
+            if row.state == 1: HorizontalLayout {
+                spacing: 4px;
+                TextField {
+                    horizontal-stretch: 1;
+                    text: Ed.rename-text;
+                    focus-on-show: true;
+                    edited(s) => { Ed.rename-edited(s); }
+                    accepted => { Ed.rename-done(); }
+                }
+                IconButton { icon: IconName.check; tint: Pal.accent; clicked => { Ed.rename-done(); } }
+            }
+            if row.state != 1: HorizontalLayout {
+                RadioRow {
+                    horizontal-stretch: 1;
+                    text: row.text;
+                    selected: row.selected;
+                    clicked => { Ed.sound-picked(i); }
+                }
+                if row.state == 2: LinkButton {
+                    text: Tr.t("action.delete");
+                    ink: Pal.danger;
+                    clicked => { Ed.delete-confirm(i); }
+                }
+                if row.state == 2: IconButton { icon: IconName.xmark; clicked => { Ed.delete-cancel(); } }
+                if row.state == 0 && row.custom: IconButton { icon: IconName.pencil; clicked => { Ed.rename-start(i); } }
+                if row.state == 0 && row.custom: IconButton { icon: IconName.xmark; clicked => { Ed.delete-ask(i); } }
+            }
+        }
+        PrimaryButton { quiet: true; text: Tr.t("sound.import"); clicked => { Ed.add-sound(); } }
+        HorizontalLayout {
+            spacing: 12px;
+            padding-top: 4px;
+            Text { text: Tr.t("config.volume"); font-size: 14px; font-weight: 500; color: Pal.text; vertical-alignment: center; }
+            AppSlider {
+                horizontal-stretch: 1;
+                step: 5;
+                value: Ed.volume;
+                changed(v) => { Ed.volume-changed(v); }
+            }
+            Text { min-width: 40px; text: "\{Ed.volume}%"; font-size: 14px; font-weight: 500; color: Pal.text; horizontal-alignment: right; vertical-alignment: center; }
+        }
+        GroupTitle { text: Tr.t("config.fade_in"); }
+        ChoiceChips { labels: Ed.fade-labels; selected: Ed.fade-selected; picked(i) => { Ed.fade-picked(i); } }
+        PrimaryButton { text: Tr.t("action.done"); clicked => { root.done(); } }
+    }
+}
+
+// How it vibrates, and whether the sound waits for that.
+export component VibrationSheet inherits Rectangle {
+    callback done();
+    Sheet {
+        title: Tr.t("config.vibration");
+        help: Tr.t("config.vibration_note");
+        action-text: Ed.vib-can-try ? (Ed.vibrating ? Tr.t("action.stop") : Tr.t("action.start")) : "";
+        close => { root.done(); }
+        action => { Ed.vib-preview(); }
+        ChoiceChips { labels: Ed.vib-labels; selected: Ed.vib-selected; picked(i) => { Ed.vib-picked(i); } }
+        if Ed.delay-visible: VerticalLayout {
+            spacing: 8px;
+            padding-top: 12px;
+            GroupTitle { text: Tr.t("config.sound_delay"); }
+            ChoiceChips { labels: Ed.delay-labels; selected: Ed.delay-selected; picked(i) => { Ed.delay-picked(i); } }
+        }
+        PrimaryButton { text: Tr.t("action.done"); clicked => { root.done(); } }
+    }
+}
+
+// How long and how often it can be snoozed.
+export component SnoozeSheet inherits Rectangle {
+    callback done();
+    Sheet {
+        title: Tr.t("config.snooze");
+        help: Tr.t("config.snooze_note");
+        close => { root.done(); }
+        Stepper {
+            title: Tr.t("config.snooze_interval");
+            value: Ed.snooze-interval-text;
+            less => { Ed.snooze-interval(false); }
+            more => { Ed.snooze-interval(true); }
+        }
+        Stepper {
+            title: Tr.t("config.snooze_count");
+            value: Ed.snooze-count-text;
+            less => { Ed.snooze-count(false); }
+            more => { Ed.snooze-count(true); }
+        }
+        PrimaryButton { text: Tr.t("action.done"); clicked => { root.done(); } }
+    }
+}
+
+// One row of choices: the ring limit, the wake-up check, the notice before.
+export component OptionsSheet inherits Rectangle {
+    in property <string> title;
+    in property <string> help;
+    callback done();
+    Sheet {
+        title: root.title;
+        help: root.help;
+        close => { root.done(); }
+        ChoiceChips { labels: Ed.opt-labels; selected: Ed.opt-selected; picked(i) => { Ed.opt-picked(i); } }
+        PrimaryButton { text: Tr.t("action.done"); clicked => { root.done(); } }
+    }
+}
+
+component LookTileView inherits Rectangle {
+    in property <LookTile> tile;
+    callback clicked();
+    height: 76px + 6px + 16px;
+    Rectangle {
+        y: 0px;
+        height: 76px;
+        border-radius: 14px;
+        border-width: 1px;
+        border-color: Pal.line;
+        background: Pal.bg;
+        clip: true;
+        Backdrop {
+            kind: root.tile.kind;
+            c1: root.tile.c1;
+            c2: root.tile.c2;
+            c3: root.tile.c3;
+            photo: root.tile.photo;
+            has-photo: root.tile.has-photo;
+            unit: 1.2px;
+        }
+        if root.tile.add: Icon { name: IconName.plus; size: 20px; tint: Pal.text2; }
+    }
+    if root.tile.selected: Rectangle {
+        x: -3px;
+        y: -3px;
+        width: parent.width + 6px;
+        height: 76px + 6px;
+        border-radius: 17px;
+        border-width: 2px;
+        border-color: Pal.accent;
+    }
+    Text {
+        y: 82px;
+        width: parent.width;
+        text: root.tile.name;
+        font-size: 12px;
+        font-weight: root.tile.selected ? 500 : 400;
+        color: root.tile.selected ? Pal.text : Pal.text2;
+        horizontal-alignment: center;
+        overflow: elide;
+    }
+    TouchArea { clicked => { root.clicked(); } }
+}
+
+// The background, its colour and the style of the clock.
+export component RingLookSheet inherits Rectangle {
+    callback done();
+    Sheet {
+        title: Tr.t("config.ring_look");
+        help: Tr.t("config.ring_look_note");
+        action-text: Tr.t("ring.preview");
+        close => { root.done(); }
+        action => { Ed.look-preview(); }
+        Rectangle {
+            height: 2 * 98px + 14px + 8px;
+            property <length> tile-w: (self.width - 30px) / 4;
+            for tile[i] in Ed.tiles: LookTileView {
+                x: Math.mod(i, 4) * (parent.tile-w + 10px);
+                y: 8px + Math.floor(i / 4) * (98px + 14px);
+                width: parent.tile-w;
+                tile: tile;
+                clicked => { Ed.tile-picked(i); }
+            }
+        }
+        if Ed.photo-link: Rectangle {
+            height: 44px;
+            Text { text: Tr.t("ring.photo_other"); font-size: 14px; font-weight: 500; color: Pal.accent; }
+            TouchArea { clicked => { Ed.photo-other(); } }
+        }
+        if Ed.colour-row: Rectangle {
+            height: 52px;
+            HorizontalLayout {
+                spacing: 10px;
+                Text { text: Tr.t("config.ring_colour"); font-size: 14px; color: Pal.text; vertical-alignment: center; }
+                Rectangle { horizontal-stretch: 1; }
+                if Ed.colour-auto: Text { text: Tr.t("theme.auto"); font-size: 14px; color: Pal.text2; vertical-alignment: center; }
+                Rectangle {
+                    width: 24px;
+                    Rectangle {
+                        width: 24px;
+                        height: 24px;
+                        border-radius: 12px;
+                        border-width: 1px;
+                        border-color: Pal.line;
+                        background: Ed.colour-dot;
+                    }
+                }
+                Icon { name: IconName.chevron-right; size: 16px; tint: Pal.text2; y: (parent.height - self.height) / 2; }
+            }
+            TouchArea { clicked => { Ed.colour-open(); } }
+        }
+        GroupTitle { text: Tr.t("config.ring_clock"); }
+        ChoiceChips { labels: Ed.clock-labels; selected: Ed.clock-selected; picked(i) => { Ed.clock-picked(i); } }
+        PrimaryButton { text: Tr.t("action.done"); clicked => { root.done(); } }
+    }
+}
+
+// The colour the background moves in: it shows what it does while choosing.
+export component RingColourSheet inherits Rectangle {
+    callback back();
+    Sheet {
+        title: Tr.t("config.ring_colour");
+        action-text: Tr.t("ring.preview");
+        close => { root.back(); }
+        action => { Ed.look-preview(); }
+        Rectangle {
+            height: 56px;
+            border-radius: 14px;
+            border-width: 1px;
+            border-color: Pal.line;
+            background: Pal.bg;
+            clip: true;
+            Backdrop {
+                kind: Ed.live.kind;
+                c1: Ed.live.c1;
+                c2: Ed.live.c2;
+                c3: Ed.live.c3;
+                unit: 1.2px;
+            }
+        }
+        Rectangle {
+            height: 2 * 44px + 12px + 8px;
+            property <length> gap: (self.width - 5 * 44px) / 4;
+            for swatch[i] in Ed.swatches: Rectangle {
+                x: Math.mod(i, 5) * (44px + parent.gap);
+                y: 4px + Math.floor(i / 5) * (44px + 12px);
+                width: 44px;
+                height: 44px;
+                border-radius: 22px;
+                border-width: 1px;
+                border-color: #80808080;
+                background: swatch.colour;
+                if swatch.selected: Rectangle {
+                    x: -4px;
+                    y: -4px;
+                    width: 52px;
+                    height: 52px;
+                    border-radius: 26px;
+                    border-width: 2px;
+                    border-color: Pal.text;
+                }
+                TouchArea { clicked => { Ed.swatch-picked(i); } }
+            }
+        }
+        ColourControls { }
+        PrimaryButton { text: Tr.t("action.done"); clicked => { root.back(); } }
+    }
+}

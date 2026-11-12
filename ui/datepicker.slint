@@ -1,0 +1,74 @@
+import { Pal } from "theme.slint";
+import { Icon, IconName } from "components.slint";
+
+export struct DateCell { text: string, enabled: bool, selected: bool, today: bool }
+
+// The month the date picker shows. Rust fills it for whichever panel is asking.
+export global Cal {
+    in property <string> title;
+    in property <[string]> weekdays;
+    in property <[DateCell]> cells;
+    in property <bool> can-prev: true;
+    callback prev();
+    callback next();
+    callback picked(int);
+}
+
+component MonthButton inherits Rectangle {
+    in property <bool> forward;
+    in property <bool> enabled: true;
+    callback clicked();
+    width: 44px;
+    height: 44px;
+    Icon { name: root.forward ? IconName.chevron-right : IconName.arrow-left; size: 20px; tint: root.enabled ? Pal.text : Pal.off; }
+    TouchArea { enabled: root.enabled; clicked => { root.clicked(); } }
+}
+
+// A month to pick a day from.
+export component DatePicker inherits Rectangle {
+    height: 44px + 28px + 6 * 44px;
+    VerticalLayout {
+        HorizontalLayout {
+            height: 44px;
+            MonthButton { enabled: Cal.can-prev; clicked => { Cal.prev(); } }
+            Text { horizontal-stretch: 1; text: Cal.title; font-size: 16px; font-weight: 500; color: Pal.text; horizontal-alignment: center; vertical-alignment: center; }
+            MonthButton { forward: true; clicked => { Cal.next(); } }
+        }
+        HorizontalLayout {
+            height: 28px;
+            for letter in Cal.weekdays: Text {
+                horizontal-stretch: 1;
+                text: letter;
+                font-size: 12px;
+                font-weight: 500;
+                color: Pal.text2;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+        Rectangle {
+            height: 6 * 44px;
+            for cell[i] in Cal.cells: Rectangle {
+                x: Math.mod(i, 7) * (parent.width / 7);
+                y: Math.floor(i / 7) * 44px;
+                width: parent.width / 7;
+                height: 44px;
+                if cell.text != "": Rectangle {
+                    width: 40px;
+                    height: 40px;
+                    border-radius: 20px;
+                    background: cell.selected ? Pal.accent : transparent;
+                    border-width: cell.today && !cell.selected ? 1px : 0px;
+                    border-color: Pal.accent;
+                    Text {
+                        text: cell.text;
+                        font-size: 15px;
+                        font-weight: cell.selected || cell.today ? 700 : 400;
+                        color: cell.selected ? Pal.on-accent : cell.enabled ? Pal.text : Pal.off;
+                    }
+                    TouchArea { enabled: cell.enabled; clicked => { Cal.picked(i); } }
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,90 @@
+import { Pal, Tr } from "theme.slint";
+import { AppSlider, TextField } from "widgets.slint";
+
+// Choosing any colour: a wheel, how bright, and its code. What it is a colour for is up to
+// the panel around it. Rust keeps hue, saturation and brightness and the code; this draws
+// them and reports touches.
+export global Hue {
+    // Where the thumb sits, in px from the wheel's corner.
+    in property <length> thumb-x: 100px;
+    in property <length> thumb-y: 100px;
+    in property <color> shown: #ffffff;
+    in property <float> dim: 0;
+    in property <int> brightness: 100;
+    in property <string> code;
+    // Changes when the code is set from outside, as a field that was typed in no longer
+    // follows its binding.
+    in property <int> code-rev;
+    in property <bool> auto-on;
+    in property <bool> show-auto: false;
+    callback touch(length, length);
+    callback released();
+    callback brightness-changed(int);
+    callback code-edited(string);
+    callback auto-picked();
+}
+
+export component ColourControls inherits VerticalLayout {
+    spacing: 8px;
+    Rectangle {
+        height: 216px;
+        Rectangle {
+            width: 200px;
+            height: 200px;
+            border-radius: 100px;
+            clip: true;
+            background: @conic-gradient(#8000ff 0deg, #ff00ff 30deg, #ff0000 90deg, #ffff00 150deg, #00ff00 210deg, #00ffff 270deg, #0000ff 330deg, #8000ff 360deg);
+            Rectangle { background: @radial-gradient(circle, #ffffff 0%, #ffffff00 70.7%); }
+            Rectangle { background: #000000; opacity: Hue.dim; }
+            Rectangle {
+                x: Hue.thumb-x - 13px;
+                y: Hue.thumb-y - 13px;
+                width: 26px;
+                height: 26px;
+                border-radius: 13px;
+                border-width: 3px;
+                border-color: #ffffff;
+                background: Hue.shown;
+            }
+            TouchArea {
+                pointer-event(e) => {
+                    if (e.kind == PointerEventKind.down) {
+                        Hue.touch(self.mouse-x, self.mouse-y);
+                    } else if (e.kind == PointerEventKind.up || e.kind == PointerEventKind.cancel) {
+                        Hue.released();
+                    }
+                }
+                moved => {
+                    if (self.pressed) {
+                        Hue.touch(self.mouse-x, self.mouse-y);
+                    }
+                }
+            }
+        }
+    }
+    HorizontalLayout {
+        spacing: 12px;
+        Text { text: Tr.t("theme.brightness"); font-size: 14px; font-weight: 500; color: Pal.text; vertical-alignment: center; }
+        AppSlider {
+            horizontal-stretch: 1;
+            value: Hue.brightness;
+            changed(v) => { Hue.brightness-changed(v); }
+        }
+    }
+    HorizontalLayout {
+        spacing: 8px;
+        for r in [Hue.code-rev]: TextField {
+            horizontal-stretch: 1;
+            text: Hue.code;
+            edited(s) => { Hue.code-edited(s); }
+        }
+        if Hue.show-auto: Rectangle {
+            min-width: 88px;
+            height: 48px;
+            border-radius: 14px;
+            background: Hue.auto-on ? Pal.accent : Pal.surface2;
+            Text { text: Tr.t("theme.auto"); font-size: 14px; font-weight: 500; color: Hue.auto-on ? Pal.on-accent : Pal.text; }
+            TouchArea { clicked => { Hue.auto-picked(); } }
+        }
+    }
+}

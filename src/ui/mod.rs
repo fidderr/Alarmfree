@@ -18,12 +18,18 @@ slint::include_modules!();
 
 mod challenge_run;
 mod challenge_sheets;
+mod colour;
+mod datepicker;
 mod editor;
+mod editor_look;
+mod editor_sound;
 mod history;
 mod home;
 mod home_sheets;
+mod look;
 mod palette;
 mod panel;
+mod reliability;
 mod ring;
 mod settings;
 mod toast;
@@ -31,6 +37,7 @@ mod toast;
 /// The screens of `MainWindow.screen`.
 const SCREEN_HISTORY: i32 = 2;
 const SCREEN_SETTINGS: i32 = 3;
+const SCREEN_RELIABILITY: i32 = 4;
 
 /// Everything the screens share. Only the UI thread touches it.
 pub struct Ctx {
@@ -51,6 +58,9 @@ pub struct Ctx {
     pub run: RefCell<Option<challenge_run::RunState>>,
     pub firing_watch: RefCell<crate::firing_state::FiringWatch>,
     pub ticks: Cell<u32>,
+    /// The most serious thing the phone does not allow, shown as a banner on Home.
+    pub problem: Cell<Option<mobile_sentinel::health::Check>>,
+    pub reliability: RefCell<reliability::State>,
 }
 
 // For what comes back to the UI thread from another one.
@@ -116,8 +126,13 @@ fn back(ctx: &Rc<Ctx>) {
         panel::close(ctx);
         return;
     }
+    if ui.get_ed_preview() {
+        ui.set_ed_preview(false);
+        return;
+    }
     match ui.get_screen() {
         1 => editor::back(ctx),
+        SCREEN_RELIABILITY => reliability::leave(ctx),
         // The main screens do not stack: back from them is the alarms.
         SCREEN_HISTORY | SCREEN_SETTINGS => go(ctx, 0),
         _ => mobile_sentinel::foregrounding::move_to_back(),
@@ -138,6 +153,116 @@ fn go(ctx: &Rc<Ctx>, index: i32) {
             home::refresh(ctx);
         }
     }
+}
+
+/// The callbacks of the editor's sheets.
+fn connect_editor_sheets(ctx: &Rc<Ctx>, ui: &MainWindow) {
+    macro_rules! on {
+        ($global:ty, $setter:ident, |$ctx:ident $(, $arg:ident)*| $body:expr) => {{
+            let weak = Rc::downgrade(ctx);
+            ui.global::<$global>().$setter(move |$($arg),*| {
+                if let Some($ctx) = weak.upgrade() {
+                    $body
+                }
+            });
+        }};
+    }
+    on!(Ed, on_hour_changed, |ctx, h| editor::set_hour(&ctx, h));
+    on!(Ed, on_minute_changed, |ctx, m| editor::set_minute(&ctx, m));
+    on!(Ed, on_time_typed, |ctx, s| editor::time_typed(
+        &ctx,
+        s.as_str()
+    ));
+    on!(Ed, on_date_quick, |ctx, i| editor::date_quick(
+        &ctx, i as usize
+    ));
+    on!(Ed, on_label_edited, |ctx, s| editor::set_label(
+        &ctx,
+        s.as_str()
+    ));
+    on!(Ed, on_note_edited, |ctx, s| editor::set_note(
+        &ctx,
+        s.as_str()
+    ));
+    on!(Ed, on_used_picked, |ctx, i| editor::use_label(
+        &ctx, i as usize
+    ));
+    on!(Ed, on_bright_toggled, |ctx, on| editor::set_max_brightness(
+        &ctx, on
+    ));
+    on!(Ed, on_sound_picked, |ctx, i| editor_sound::pick_sound(
+        &ctx, i as usize
+    ));
+    on!(Ed, on_no_sound, |ctx| editor_sound::no_sound(&ctx));
+    on!(Ed, on_sound_preview, |ctx| editor_sound::toggle_preview(
+        &ctx
+    ));
+    on!(Ed, on_add_sound, |ctx| editor_sound::add_sound(&ctx));
+    on!(Ed, on_rename_start, |ctx, i| editor_sound::rename_start(
+        &ctx, i as usize
+    ));
+    on!(Ed, on_rename_edited, |ctx, s| editor_sound::rename_edited(
+        &ctx,
+        s.as_str()
+    ));
+    on!(Ed, on_rename_done, |ctx| editor_sound::rename_done(&ctx));
+    on!(Ed, on_delete_ask, |ctx, i| editor_sound::delete_ask(
+        &ctx, i as usize
+    ));
+    on!(
+        Ed,
+        on_delete_confirm,
+        |ctx, i| editor_sound::delete_confirm(&ctx, i as usize)
+    );
+    on!(Ed, on_delete_cancel, |ctx| editor_sound::delete_cancel(
+        &ctx
+    ));
+    on!(Ed, on_volume_changed, |ctx, v| editor_sound::set_volume(
+        &ctx, v
+    ));
+    on!(Ed, on_fade_picked, |ctx, i| editor_sound::pick_fade(
+        &ctx, i as usize
+    ));
+    on!(Ed, on_snooze_interval, |ctx, l| editor::snooze_interval(
+        &ctx, l
+    ));
+    on!(Ed, on_snooze_count, |ctx, m| editor::snooze_count(&ctx, m));
+    on!(Ed, on_vib_picked, |ctx, i| editor_sound::vib_picked(
+        &ctx, i as usize
+    ));
+    on!(Ed, on_vib_preview, |ctx| editor_sound::vib_preview(&ctx));
+    on!(Ed, on_delay_picked, |ctx, i| editor_sound::delay_picked(
+        &ctx, i as usize
+    ));
+    on!(Ed, on_opt_picked, |ctx, i| editor_sound::opt_picked(
+        &ctx, i as usize
+    ));
+    on!(Ed, on_tile_picked, |ctx, i| editor_look::tile_picked(
+        &ctx, i as usize
+    ));
+    on!(Ed, on_photo_other, |ctx| editor_look::pick_photo(&ctx));
+    on!(Ed, on_colour_open, |ctx| editor_look::colour_open(&ctx));
+    on!(Ed, on_clock_picked, |ctx, i| editor_look::clock_picked(
+        &ctx, i as usize
+    ));
+    on!(Ed, on_look_preview, |ctx| editor_look::preview(&ctx));
+    on!(Ed, on_swatch_picked, |ctx, i| editor_look::swatch_picked(
+        &ctx, i as usize
+    ));
+    on!(Cal, on_prev, |ctx| datepicker::route(
+        &ctx,
+        datepicker::Move::Prev
+    ));
+    on!(Cal, on_next, |ctx| datepicker::route(
+        &ctx,
+        datepicker::Move::Next
+    ));
+    on!(Cal, on_picked, |ctx, i| datepicker::route(
+        &ctx,
+        datepicker::Move::Pick(i as usize)
+    ));
+    colour::connect(ctx, ui);
+    reliability::connect(ctx, ui);
 }
 
 pub fn run() -> Result<(), slint::PlatformError> {
@@ -169,6 +294,8 @@ pub fn run() -> Result<(), slint::PlatformError> {
         run: RefCell::new(None),
         firing_watch: RefCell::new(crate::firing_state::FiringWatch::default()),
         ticks: Cell::new(0),
+        problem: Cell::new(None),
+        reliability: RefCell::new(reliability::State::default()),
     });
     CTX.with(|slot| *slot.borrow_mut() = Rc::downgrade(&ctx));
 
@@ -183,6 +310,7 @@ pub fn run() -> Result<(), slint::PlatformError> {
     }
     apply_theme(&ctx);
     settings::apply_motion(&ctx);
+    reliability::refresh_banner(&ctx);
     home::refresh(&ctx);
 
     macro_rules! on {
@@ -204,9 +332,10 @@ pub fn run() -> Result<(), slint::PlatformError> {
     on!(on_menu, |ctx, id| home_sheets::open_menu(&ctx, id.as_str()));
     on!(on_hs_close, |ctx| home_sheets::close(&ctx));
     on!(on_hs_picked, |ctx, i| home_sheets::picked(&ctx, i as usize));
-    on!(on_hs_pause_step, |ctx, d| home_sheets::pause_step(&ctx, d));
     on!(on_hs_pause_apply, |ctx| home_sheets::pause_apply(&ctx));
     on!(on_create, |ctx| home::create(&ctx));
+    on!(on_open_banner, |ctx| reliability::open(&ctx, false));
+    on!(on_hide_banner, |ctx| reliability::hide_banner(&ctx));
     on!(on_go, |ctx, i| go(&ctx, i));
     on!(on_st_row, |ctx, i| settings::row(&ctx, i));
     on!(on_st_toggled, |ctx, i, on| settings::toggled(&ctx, i, on));
@@ -235,22 +364,10 @@ pub fn run() -> Result<(), slint::PlatformError> {
         &ctx, i as usize
     ));
     on!(on_ed_preset, |ctx, i| editor::preset(&ctx, i as usize));
-    on!(on_ed_hour_changed, |ctx, h| editor::set_hour(&ctx, h));
-    on!(on_ed_minute_changed, |ctx, m| editor::set_minute(&ctx, m));
-    on!(on_ed_label_edited, |ctx, s| editor::set_label(
-        &ctx,
-        s.as_str()
+    on!(on_ed_sheet_opened, |ctx, sheet| editor::sheet_opened(
+        &ctx, sheet
     ));
-    on!(on_ed_sound_picked, |ctx, i| editor::pick_sound(
-        &ctx, i as usize
-    ));
-    on!(on_ed_no_sound, |ctx| editor::no_sound(&ctx));
-    on!(on_ed_sound_preview, |ctx| editor::toggle_preview(&ctx));
-    on!(on_ed_snooze_interval, |ctx, l| editor::snooze_interval(
-        &ctx, l
-    ));
-    on!(on_ed_snooze_count, |ctx, m| editor::snooze_count(&ctx, m));
-    on!(on_ed_add_sound, |ctx| editor::add_sound(&ctx));
+    connect_editor_sheets(&ctx, &ui);
     on!(on_ed_delete_confirmed, |ctx| editor::delete(&ctx));
     on!(on_ed_discard_confirmed, |ctx| editor::discard(&ctx));
     on!(on_ed_sheet_closed, |ctx| editor::sheet_closed(&ctx));
@@ -315,6 +432,7 @@ pub fn run() -> Result<(), slint::PlatformError> {
             Duration::from_secs(15),
             move || {
                 if let Some(ctx) = weak.upgrade() {
+                    reliability::refresh_banner(&ctx);
                     home::refresh(&ctx);
                 }
             },
@@ -326,6 +444,7 @@ pub fn run() -> Result<(), slint::PlatformError> {
             Duration::from_millis(1500),
             move || {
                 if let Some(ctx) = weak.upgrade() {
+                    reliability::refresh_banner(&ctx);
                     home::refresh(&ctx);
                 }
             },

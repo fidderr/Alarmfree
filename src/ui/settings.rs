@@ -43,6 +43,15 @@ fn volume_name(percent: u8, tr: &Translations) -> String {
     }
 }
 
+/// What the Reliability banner says under its title.
+fn reliability_line(tr: &Translations, problems: usize) -> String {
+    match problems {
+        0 => t(tr, "settings.reliability_fine"),
+        1 => t(tr, "settings.reliability_one"),
+        n => t(tr, "settings.reliability_many").replace("{count}", &n.to_string()),
+    }
+}
+
 fn language_name(settings: &AppSettings, tr: &Translations) -> String {
     if settings.prefs.language_follows_phone {
         t(tr, "settings.follow_phone")
@@ -67,6 +76,7 @@ pub fn refresh(ctx: &Ctx) {
     };
     let settings = ctx.settings.borrow();
     let tr = ctx.tr.borrow();
+    let problems = crate::reliability::report().problems().len();
     ui.set_st(SettingsView {
         language: language_name(&settings, &tr).into(),
         time_format: format_name(settings.prefs.time_format, &tr).into(),
@@ -77,6 +87,8 @@ pub fn refresh(ctx: &Ctx) {
         motion: settings.prefs.less_motion,
         confetti: settings.prefs.confetti,
         widget: mobile_sentinel::home_widget::can_add(),
+        reliability: reliability_line(&tr, problems).into(),
+        problems: problems > 0,
     });
 }
 
@@ -152,6 +164,7 @@ pub fn row(ctx: &Rc<Ctx>, index: i32) {
         6 => open_backup(ctx),
         7 => super::history::open_delete(ctx),
         8 => open_about(ctx),
+        9 => super::reliability::open(ctx, false),
         _ => {}
     }
 }

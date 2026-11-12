@@ -341,3 +341,141 @@ export component Stepper inherits Rectangle {
         }
     }
 }
+
+// A slider: drag along the track, in steps.
+export component AppSlider inherits Rectangle {
+    in property <int> minimum: 0;
+    in property <int> maximum: 100;
+    in property <int> step: 1;
+    in property <int> value;
+    callback changed(int);
+    height: 44px;
+    property <length> travel: self.width - 24px;
+    property <float> fraction: (root.value - root.minimum) / (root.maximum - root.minimum);
+    Rectangle {
+        x: 12px;
+        width: root.travel;
+        height: 4px;
+        border-radius: 2px;
+        background: Pal.off;
+    }
+    Rectangle {
+        x: 12px;
+        width: root.travel * root.fraction;
+        height: 4px;
+        border-radius: 2px;
+        background: Pal.accent;
+    }
+    Rectangle {
+        x: root.travel * root.fraction;
+        width: 24px;
+        height: 24px;
+        border-radius: 12px;
+        background: Pal.accent;
+    }
+    TouchArea {
+        pointer-event(e) => {
+            if (e.kind == PointerEventKind.down) {
+                root.pick(self.mouse-x);
+            }
+        }
+        moved => {
+            if (self.pressed) {
+                root.pick(self.mouse-x);
+            }
+        }
+    }
+    function pick(x: length) {
+        // Whole steps between the ends.
+        root.changed(root.minimum + root.step * Math.round(clamp((x - 12px) / root.travel, 0, 1) * (root.maximum - root.minimum) / root.step));
+    }
+}
+
+// A row of choices, equally wide: the one picked is filled.
+export component ChoiceChips inherits Rectangle {
+    in property <[string]> labels;
+    in property <int> selected: -1;
+    callback picked(int);
+    height: 48px;
+    HorizontalLayout {
+        spacing: 8px;
+        for label[i] in root.labels: Rectangle {
+            horizontal-stretch: 1;
+            min-width: 44px;
+            border-radius: 14px;
+            background: root.selected == i ? Pal.accent : Pal.surface2;
+            Text {
+                x: 4px;
+                width: parent.width - 8px;
+                text: label;
+                font-size: 14px;
+                font-weight: 500;
+                color: root.selected == i ? Pal.on-accent : Pal.text;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+            TouchArea { clicked => { root.picked(i); } }
+        }
+    }
+}
+
+// A small heading above a group in a sheet.
+export component GroupTitle inherits Text {
+    font-size: 14px;
+    font-weight: 500;
+    color: Pal.text;
+}
+
+// A text button without a background.
+export component LinkButton inherits Rectangle {
+    in property <string> text;
+    in property <color> ink: Pal.accent;
+    callback clicked();
+    min-width: 44px;
+    height: 44px;
+    HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 8px;
+        Text { text: root.text; font-size: 14px; font-weight: 500; color: root.ink; vertical-alignment: center; }
+    }
+    TouchArea { clicked => { root.clicked(); } }
+}
+
+// A single-line text field as the sheets show it.
+export component TextField inherits Rectangle {
+    in property <string> text;
+    in property <string> placeholder;
+    in property <bool> focus-on-show: false;
+    in property <InputType> input-type: InputType.text;
+    callback edited(string);
+    callback accepted();
+    height: 48px;
+    border-radius: 14px;
+    border-width: 1px;
+    border-color: Pal.line;
+    background: Pal.bg;
+    field := TextInput {
+        x: 12px;
+        width: parent.width - 24px;
+        text: root.text;
+        font-size: 16px;
+        color: Pal.text;
+        single-line: true;
+        input-type: root.input-type;
+        vertical-alignment: center;
+        edited => { root.edited(self.text); }
+        accepted => { root.accepted(); }
+        init => { if (root.focus-on-show) { self.focus(); } }
+    }
+    if field.text == "": Text {
+        x: 12px;
+        width: parent.width - 24px;
+        text: root.placeholder;
+        font-size: 16px;
+        color: Pal.text2;
+        opacity: 0.7;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+}
