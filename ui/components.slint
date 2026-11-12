@@ -1,0 +1,139 @@
+import { Pal, Tr } from "theme.slint";
+
+export enum IconName {
+    clock, chart-bar, gear, trash, check, xmark, plus, chevron-right, arrow-left, grip,
+    ellipsis-vertical, pause, sort, warning, pencil, skip, touch, play, stop,
+}
+
+// The app's outline icons: 24 x 24 paths drawn with a round 2 unit line.
+export component Icon inherits Path {
+    in property <IconName> name: IconName.clock;
+    in property <length> size: 16px;
+    in property <color> tint: Pal.text;
+    width: size;
+    height: size;
+    viewbox-width: 24;
+    viewbox-height: 24;
+    fit: contain;
+    stroke: tint;
+    stroke-width: (name == IconName.ellipsis-vertical ? 3px : 2px) * (size / 24px);
+    stroke-line-cap: round;
+    stroke-line-join: round;
+    commands: name == IconName.clock ? "M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0ZM12 7v5l3 2"
+        : name == IconName.chart-bar ? "M4 20V10M10 20V4M16 20v-7M21 20H3"
+        : name == IconName.gear ? "M4 7h10M18 7h2M4 17h2M10 17h10M18 7a2 2 0 1 1-4 0 2 2 0 0 1 4 0ZM10 17a2 2 0 1 1-4 0 2 2 0 0 1 4 0Z"
+        : name == IconName.trash ? "M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"
+        : name == IconName.check ? "M5 12.5 10 17.5 19 7"
+        : name == IconName.xmark ? "M6 6l12 12M18 6 6 18"
+        : name == IconName.pencil ? "M4 20h4L19 9l-4-4L4 16v4ZM13.5 6.5l4 4"
+        : name == IconName.skip ? "M5 5l10 7-10 7V5ZM19 5v14"
+        : name == IconName.plus ? "M12 5v14M5 12h14"
+        : name == IconName.chevron-right ? "m9 5 7 7-7 7"
+        : name == IconName.arrow-left ? "m15 5-7 7 7 7"
+        : name == IconName.grip ? "M5 9h14M5 15h14"
+        : name == IconName.ellipsis-vertical ? "M12 5h.01M12 12h.01M12 19h.01"
+        : name == IconName.pause ? "M9 5v14M15 5v14"
+        : name == IconName.sort ? "M4 7h16M7 12h10M10 17h4"
+        : name == IconName.play ? "M7 5l12 7-12 7V5Z"
+        : name == IconName.stop ? "M6 6h12v12H6V6Z"
+        : name == IconName.touch ? "M9 21v-9a3 3 0 0 1 6 0v9M7 10a5 5 0 0 1 10 0M4 10a8 8 0 0 1 16 0"
+        : "M12 9v4M12 17h.01M10.3 3.9 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z";
+}
+
+// The 44 x 26 switch of the list and the sheets.
+export component AppSwitch inherits Rectangle {
+    in property <bool> on;
+    width: 44px;
+    height: 26px;
+    border-radius: 13px;
+    background: on ? Pal.accent : Pal.off;
+    animate background { duration: 150ms; }
+    Rectangle {
+        y: 3px;
+        x: root.on ? 21px : 3px;
+        width: 20px;
+        height: 20px;
+        border-radius: 10px;
+        background: root.on ? Pal.on-accent : Pal.knob-off;
+        animate x { duration: 150ms; }
+        animate background { duration: 150ms; }
+    }
+}
+
+// A round 44 px button with an icon.
+export component RoundIconButton inherits Rectangle {
+    in property <IconName> icon;
+    in property <bool> active: false;
+    callback clicked();
+    width: 44px;
+    height: 44px;
+    border-radius: 22px;
+    background: active ? Pal.accent-soft : Pal.surface;
+    Icon {
+        name: root.icon;
+        size: 20px;
+        tint: root.active ? Pal.accent : Pal.text;
+    }
+    TouchArea {
+        clicked => { root.clicked(); }
+    }
+}
+
+// The slim pill of the quick row: 34 px drawn, 44 px to hit.
+export component SlimChip inherits Rectangle {
+    in property <string> text;
+    callback clicked();
+    min-height: 44px;
+    Rectangle {
+        height: 34px;
+        border-radius: 17px;
+        background: Pal.surface;
+        Text {
+            text: root.text;
+            color: Pal.text;
+            font-size: 14px;
+            font-weight: 500;
+        }
+    }
+    TouchArea {
+        clicked => { root.clicked(); }
+    }
+}
+
+// A message at the bottom of the screen, with Undo when the change can be taken back.
+export component Toast inherits Rectangle {
+    in property <string> text;
+    in property <bool> error;
+    in property <bool> has-undo;
+    callback undo();
+    callback dismiss();
+    height: max(48px, label.preferred-height + (root.error ? 16px : 8px));
+    border-radius: 14px;
+    background: Pal.inverse;
+    TouchArea { clicked => { root.dismiss(); } }
+    HorizontalLayout {
+        padding-left: 14px;
+        padding-right: 4px;
+        padding-top: root.error ? 8px : 4px;
+        padding-bottom: root.error ? 8px : 4px;
+        spacing: 8px;
+        label := Text {
+            horizontal-stretch: 1;
+            vertical-alignment: center;
+            text: root.text;
+            wrap: word-wrap;
+            font-size: 14px;
+            color: Pal.on-inverse;
+        }
+        if root.has-undo: Rectangle {
+            min-width: 64px;
+            Text {
+                text: Tr.t("action.undo");
+                font-size: 14px;
+                font-weight: 700;
+                color: Pal.on-inverse;
+            }
+            TouchArea { clicked => { root.undo(); } }
+        }
+    }
+}

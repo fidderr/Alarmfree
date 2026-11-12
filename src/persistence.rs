@@ -9,8 +9,8 @@ use std::sync::Arc;
 
 use std::sync::LazyLock;
 
-use crate::app::AlarmData;
 use crate::db::Database;
+use crate::models::AlarmData;
 use crate::models::{AppSettings, Locale};
 
 /// What happened when the database was opened at startup.

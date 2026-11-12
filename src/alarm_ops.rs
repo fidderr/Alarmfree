@@ -3,7 +3,7 @@
 
 use chrono::{Duration, NaiveDateTime, Timelike};
 
-use crate::app::AlarmData;
+use crate::models::AlarmData;
 
 /// The most alarms the list takes.
 pub const MAX_ALARMS: usize = 50;

@@ -6,7 +6,7 @@
 
 use chrono::{Duration, NaiveDate, NaiveDateTime};
 
-use crate::app::AlarmData;
+use crate::models::AlarmData;
 
 const DATE_FORMAT: &str = "%Y-%m-%d";
 

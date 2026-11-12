@@ -1,0 +1,240 @@
+import { Pal, Tr, Insets } from "theme.slint";
+import { Icon, IconName, AppSwitch, RoundIconButton, SlimChip } from "components.slint";
+import { BottomNav } from "nav.slint";
+
+export struct DayCell { letter: string, on: bool }
+
+export struct AlarmRow {
+    id: string,
+    time: string,
+    twelve: bool,
+    label: string,
+    when: string,
+    days: [DayCell],
+    on: bool,
+    can-skip: bool,
+    skip-active: bool,
+}
+
+component AlarmCard inherits Rectangle {
+    in property <AlarmRow> data;
+    callback open();
+    callback menu();
+    callback toggle();
+    height: 76px;
+    HorizontalLayout {
+        padding-right: 6px;
+        Rectangle {
+            horizontal-stretch: 1;
+            HorizontalLayout {
+                padding-left: 16px;
+                padding-top: 8px;
+                padding-bottom: 8px;
+                spacing: 16px;
+                Text {
+                    min-width: data.twelve ? 104px : 76px;
+                    text: data.time;
+                    font-size: data.twelve ? 20px : 24px;
+                    font-weight: 500;
+                    letter-spacing: data.twelve ? 0px : -0.3px;
+                    color: data.on ? Pal.text : Pal.text2;
+                    vertical-alignment: center;
+                }
+                VerticalLayout {
+                    alignment: center;
+                    spacing: 5px;
+                    horizontal-stretch: 1;
+                    if data.label != "": Text {
+                        text: data.label;
+                        font-size: 14px;
+                        font-weight: 500;
+                        overflow: elide;
+                        color: data.on ? Pal.text : Pal.text2;
+                    }
+                    if data.when != "": Text {
+                        text: data.when;
+                        font-size: 12px;
+                        color: Pal.text2;
+                        overflow: elide;
+                    }
+                    if data.when == "": HorizontalLayout {
+                        spacing: 2px;
+                        alignment: start;
+                        for day in data.days: Text {
+                            text: day.letter;
+                            font-size: 12px;
+                            font-weight: (day.on && data.on) ? 700 : 400;
+                            color: (day.on && data.on) ? Pal.accent : Pal.text2;
+                        }
+                    }
+                }
+            }
+            TouchArea { clicked => { root.open(); } }
+        }
+        Rectangle {
+            width: 32px;
+            Icon { name: IconName.ellipsis-vertical; size: 18px; tint: Pal.text2; }
+            TouchArea { clicked => { root.menu(); } }
+        }
+        Rectangle {
+            width: 52px;
+            AppSwitch { on: data.on; }
+            TouchArea { clicked => { root.toggle(); } }
+        }
+    }
+}
+
+export component HomeScreen inherits Rectangle {
+    in property <string> next-title;
+    in property <string> next-sub;
+    in property <[AlarmRow]> rows;
+    in property <bool> paused;
+    in property <[string]> quick-labels;
+    in property <string> banner;
+    in property <bool> banner-can-hide;
+    in property <string> empty-weekdays;
+    in property <string> empty-weekend;
+    callback open(string);
+    callback menu(string);
+    callback toggle(string);
+    callback quick(int);
+    callback create();
+    callback pause-all();
+    callback sort();
+    callback go(int);
+    callback open-banner();
+    callback hide-banner();
+    callback template(int);
+    background: Pal.bg;
+
+    VerticalLayout {
+        padding-top: Insets.top;
+        padding-left: Insets.left;
+        padding-right: Insets.right;
+        HorizontalLayout {
+            padding: 20px;
+            padding-top: 28px;
+            padding-bottom: 16px;
+            spacing: 8px;
+            VerticalLayout {
+                horizontal-stretch: 1;
+                alignment: start;
+                Text { text: Tr.t("home.next_label"); font-size: 12px; font-weight: 500; color: Pal.text2; }
+                Text { text: root.next-title; font-size: 28px; font-weight: 700; color: Pal.text; overflow: elide; }
+                if root.next-sub != "": Text { text: root.next-sub; font-size: 14px; color: Pal.text2; }
+            }
+            HorizontalLayout {
+                spacing: 8px;
+                alignment: start;
+                RoundIconButton { icon: IconName.pause; active: root.paused; clicked => { root.pause-all(); } }
+                RoundIconButton { icon: IconName.sort; clicked => { root.sort(); } }
+            }
+        }
+        if root.banner != "": Rectangle {
+            height: 60px;
+            HorizontalLayout {
+                padding-left: 16px;
+                padding-right: 16px;
+                padding-bottom: 16px;
+                spacing: 4px;
+                Rectangle {
+                    horizontal-stretch: 1;
+                    border-radius: 14px;
+                    background: Pal.warn-soft;
+                    HorizontalLayout {
+                        padding: 10px;
+                        padding-left: 12px;
+                        padding-right: 12px;
+                        spacing: 10px;
+                        Icon { name: IconName.warning; size: 18px; tint: Pal.warn; y: (parent.height - self.height) / 2; }
+                        Text { text: root.banner; horizontal-stretch: 1; font-size: 14px; color: Pal.text; overflow: elide; vertical-alignment: center; }
+                        Text { text: Tr.t("reliability.fix"); font-size: 14px; font-weight: 500; color: Pal.warn; vertical-alignment: center; }
+                    }
+                    TouchArea { clicked => { root.open-banner(); } }
+                }
+                if root.banner-can-hide: Rectangle {
+                    width: 44px;
+                    Icon { name: IconName.xmark; size: 16px; tint: Pal.text2; }
+                    TouchArea { clicked => { root.hide-banner(); } }
+                }
+            }
+        }
+        HorizontalLayout {
+            padding-left: 16px;
+            padding-right: 16px;
+            padding-bottom: 4px;
+            spacing: 8px;
+            Text { text: Tr.t("home.quick"); font-size: 12px; color: Pal.text2; vertical-alignment: center; }
+            for label[i] in root.quick-labels: SlimChip {
+                horizontal-stretch: 1;
+                text: label;
+                clicked => { root.quick(i); }
+            }
+        }
+        Flickable {
+            vertical-stretch: 1;
+            content-height: max(self.height, 12px + root.rows.length * 76px + 120px + Insets.bottom);
+            Rectangle {
+                x: 16px;
+                y: 12px;
+                width: parent.width - 32px;
+                height: root.rows.length * 76px;
+                border-radius: 20px;
+                clip: true;
+                background: Pal.surface;
+                visible: root.rows.length > 0;
+                for row[i] in root.rows: Rectangle {
+                    y: i * 76px;
+                    height: 76px;
+                    AlarmCard {
+                        data: row;
+                        open => { root.open(row.id); }
+                        menu => { root.menu(row.id); }
+                        toggle => { root.toggle(row.id); }
+                    }
+                }
+            }
+            if root.rows.length == 0: VerticalLayout {
+                padding: 32px;
+                padding-top: 48px;
+                spacing: 8px;
+                alignment: start;
+                Rectangle {
+                    height: 72px;
+                    Rectangle {
+                        width: 72px;
+                        height: 72px;
+                        border-radius: 36px;
+                        background: Pal.surface;
+                        Icon { name: IconName.clock; size: 40px; tint: Pal.text2; }
+                    }
+                }
+                Text { text: Tr.t("alarm.no_alarms"); font-size: 16px; font-weight: 500; horizontal-alignment: center; color: Pal.text; }
+                Text { text: Tr.t("alarm.tap_to_create"); font-size: 14px; horizontal-alignment: center; wrap: word-wrap; color: Pal.text2; }
+                Rectangle { height: 8px; }
+                for label[i] in [root.empty-weekdays, root.empty-weekend]: Rectangle {
+                    height: 48px;
+                    border-radius: 14px;
+                    background: Pal.surface;
+                    Text { text: label; font-size: 14px; font-weight: 500; color: Pal.text; }
+                    TouchArea { clicked => { root.template(i); } }
+                }
+            }
+        }
+        BottomNav {
+            current: 0;
+            go(i) => { root.go(i); }
+        }
+    }
+
+    Rectangle {
+        x: parent.width - 56px - 16px - Insets.right;
+        y: parent.height - 64px - Insets.bottom - 16px - 56px;
+        width: 56px;
+        height: 56px;
+        border-radius: 18px;
+        background: Pal.accent;
+        Icon { name: IconName.plus; size: 24px; tint: Pal.on-accent; }
+        TouchArea { clicked => { root.create(); } }
+    }
+}

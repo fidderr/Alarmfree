@@ -4,8 +4,8 @@
 
 use chrono::{Datelike, NaiveDate, TimeZone};
 
-use crate::app::{t, AlarmData, Translations};
-use crate::models::{AppSettings, TimeFormat};
+use crate::i18n::{t, Translations};
+use crate::models::{AlarmData, AppSettings, TimeFormat};
 use crate::schedule;
 
 pub const DAY_KEYS: [&str; 7] = [

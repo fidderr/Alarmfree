@@ -4,22 +4,18 @@
 //! The harness writes `<files>/debug_action.txt`, and the file goes once it was seen:
 //!
 //!   `snooze:<id>`, `dismiss:<id>`: the same calls as the screens make.
-//!   `js:<script>`: run in the page, the result is left in `debug_script_result.txt`.
-//!     It is how the scenarios press buttons and read the screen on any phone size.
 //!   `hang_ui`: freeze the UI thread, to exercise the guardian.
 //!
 //! `<files>/debug_<name>.txt` holds a number to use instead of a wait that takes too long
 //! for a test, see [`crate::platform::shortened`].
 
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Mutex, PoisonError};
 
 use mobile_sentinel::InstanceId;
 
 use crate::platform::alarm_kit_optional;
 
 static HANG_UI: AtomicBool = AtomicBool::new(false);
-static SCRIPT: Mutex<Option<String>> = Mutex::new(None);
 
 /// Watch for what the harness writes.
 pub fn start() {
@@ -41,8 +37,6 @@ pub fn start() {
             if let Err(e) = kit.dismiss(&InstanceId::new(id.to_owned())) {
                 log::warn!("[AlarmFree] DEBUG dismiss({id}) failed: {e:?}");
             }
-        } else if let Some(script) = contents.strip_prefix("js:") {
-            *SCRIPT.lock().unwrap_or_else(PoisonError::into_inner) = Some(script.to_owned());
         } else if contents == "hang_ui" {
             HANG_UI.store(true, Ordering::SeqCst);
         }
@@ -54,34 +48,6 @@ pub fn start() {
 pub fn test_value(name: &str) -> Option<u32> {
     let path = mobile_sentinel::app_files_dir().join(format!("debug_{name}.txt"));
     std::fs::read_to_string(path).ok()?.trim().parse().ok()
-}
-
-/// Run what the harness sent in the page.
-pub async fn script_loop() {
-    loop {
-        crate::timer::sleep_ms(30).await;
-        let script = SCRIPT.lock().unwrap_or_else(PoisonError::into_inner).take();
-        let Some(script) = script else {
-            continue;
-        };
-        let mut eval = dioxus::document::eval(&format!(
-            "try {{ dioxus.send(String((function () {{ {script} }})())); }} \
-             catch (e) {{ dioxus.send('error: ' + e); }}"
-        ));
-        // An answer can get lost while the page is away: the next script must still run.
-        let result = tokio::time::timeout(std::time::Duration::from_secs(2), eval.recv::<String>())
-            .await
-            .map_or_else(
-                |_| "error: no answer".to_owned(),
-                |answer| answer.unwrap_or_default(),
-            );
-        // In one go: the harness reads it as soon as it is there.
-        let dir = mobile_sentinel::app_files_dir();
-        let unfinished = dir.join("debug_script_result.tmp");
-        if std::fs::write(&unfinished, format!("={result}")).is_ok() {
-            let _ = std::fs::rename(unfinished, dir.join("debug_script_result.txt"));
-        }
-    }
 }
 
 /// Freeze the calling thread, the UI's, if `hang_ui` asked for it.

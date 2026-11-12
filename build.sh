@@ -1,262 +1,97 @@
 #!/bin/bash
-# AlarmFree — single build command (standalone project).
-# Use this when mobile-sentinel is a published crates.io dependency.
-# Builds the APK (or AAB for Play): Rust .so → wire Kotlin + copy assets/icon → Gradle.
+# AlarmFree Slint: the copy of AlarmFree whose UI is Slint, with no WebView.
+# Cargo builds libalarmfree.so, then mobile-sentinel's build_sentinel wires the SDK's Kotlin,
+# manifest parts and assets into the Gradle project in android/ and Gradle builds the APK.
 #
-# Default behavior uses the published `mobile-sentinel` crate from crates.io.
-# This exercises the exact same flow that consumers of the crate will use
-# when they depend on it in their own Cargo.toml (the "real" validated path).
+# Usage:
+#   ./build.sh                      debug APK
+#   ./build.sh install [serial]     debug APK, installed on the device
+#   ./build.sh release [install]    release APK (signed with the debug key, so it installs)
 #
-# For local development inside this workspace (when you want to test changes
-# to the mobile-sentinel source at the same time), prefix with the `workspace`
-# flag:
+# Phones are arm64. An emulator needs another ABI:
+#   TARGET=x86_64-linux-android ./build.sh install emulator-5556
 #
-#   ./build.sh workspace ...     # use local sibling mobile-sentinel/ source instead of crates.io
-#
-# Usage (default = published crate — the "real" flow):
-#   ./build.sh                    # build debug APK only
-#   ./build.sh install            # build debug + install on connected device
-#   ./build.sh install <serial>   # build debug + install on specific device
-#   ./build.sh release            # build release APK (unsigned by default)
-#   ./build.sh aab                # build release AAB (then run ./sign-aab.sh)
-#
-#   For internal testing on Play Console:
-#     ./build.sh aab
-#     ./sign-aab.sh
-#     # then copy the file from the release/ folder
-#
-#   Note: "install" is only supported for debug builds. Release/AAB builds are
-#         unsigned by default and will not install via adb.
-#
-# Usage (local workspace source):
-#   ./build.sh workspace
-#   ./build.sh workspace install
-#   ./build.sh workspace aab
-#   ./build.sh workspace release
-#   (same signing flow: after aab run ./sign-aab.sh)
-#
-# Package name is controlled by Dioxus.toml under [bundle] identifier (or [android] identifier).
-# Current: com.fidderr.alarmfree
+# The SDK is the mobile-sentinel worktree beside this folder (see Cargo.toml).
+set -euo pipefail
 
-set -e
-
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PROJECT_ROOT="$SCRIPT_DIR"
-# Phones are arm64. Emulators need another ABI: TARGET=x86_64-linux-android ./build.sh ...
+cd "$(dirname "$0")"
+SDK_HOME="${ANDROID_HOME:-$LOCALAPPDATA/Android/Sdk}"
+export PATH="$PATH:$HOME/.cargo/bin:$SDK_HOME/platform-tools"
+export ANDROID_HOME="$SDK_HOME"
+# Slint's prebuilt Skia needs NDK r30.
+export ANDROID_NDK_ROOT="$SDK_HOME/ndk/30.0.16248370" ANDROID_NDK_HOME="$SDK_HOME/ndk/30.0.16248370"
+export JAVA_HOME="${JAVA_HOME:-C:/Program Files/Microsoft/jdk-17.0.21.21-hotspot}"
+NDK_BIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/windows-x86_64/bin"
+# What C code in dependencies (SQLite) is compiled with.
+for triple in aarch64-linux-android x86_64-linux-android; do
+  var="${triple//-/_}"
+  export "CC_$var=$NDK_BIN/${triple}31-clang.cmd" "CXX_$var=$NDK_BIN/${triple}31-clang++.cmd" "AR_$var=$NDK_BIN/llvm-ar.exe"
+done
 TARGET="${TARGET:-aarch64-linux-android}"
-ADB="${LOCALAPPDATA}/Android/Sdk/platform-tools/adb.exe"
+SENTINEL_MANIFEST="${SENTINEL_MANIFEST:-../vp-work/ms-native/Cargo.toml}"
 
-cd "$SCRIPT_DIR"
-
-# Workspace flag: if present as the first argument, use the local
-# mobile-sentinel/ sibling via `cargo run` instead of the published crate.
-# This replaces the old separate build-workspace.sh script.
-USE_WORKSPACE=false
-if [ "${1:-}" = "workspace" ] || [ "${1:-}" = "--workspace" ]; then
-  USE_WORKSPACE=true
+MODE=debug
+CARGO_FLAGS=()
+SENTINEL_FLAGS=()
+if [ "${1:-}" = "release" ]; then
+  MODE=release
+  CARGO_FLAGS=(--release)
+  SENTINEL_FLAGS=(--release)
   shift
 fi
-
-# Determine mode from (remaining) first argument. Supported: (nothing)=debug, release, aab.
-# "install" as first arg implies debug + install (backward compat).
-MODE="debug"
-if [ "${1:-}" = "release" ]; then
-    MODE="release"
-elif [ "${1:-}" = "aab" ]; then
-    MODE="aab"
+INSTALL=false
+SERIAL=""
+if [ "${1:-}" = "install" ]; then
+  INSTALL=true
+  SERIAL="${2:-}"
 fi
 
-DX_RELEASE=""
-SENTINEL_FLAGS=""
-ARTIFACT_NAME="APK"
-OUT_REL="apk/debug/app-debug.apk"
+case "$TARGET" in
+  aarch64-linux-android) ABI=arm64-v8a ;;
+  x86_64-linux-android) ABI=x86_64 ;;
+  *) echo "ERROR: TARGET must be aarch64-linux-android or x86_64-linux-android"; exit 1 ;;
+esac
 
-if [ "$MODE" = "release" ]; then
-    DX_RELEASE="--release"
-    SENTINEL_FLAGS="--release"
-    ARTIFACT_NAME="release APK"
-    OUT_REL="apk/release/app-release-unsigned.apk"
-elif [ "$MODE" = "aab" ]; then
-    DX_RELEASE="--release"
-    SENTINEL_FLAGS="--release --aab"
-    ARTIFACT_NAME="AAB"
-    OUT_REL="bundle/release/app-release.aab"
-fi
+echo "=== [1/3] Building libalarmfree.so ($TARGET, $MODE) ==="
+cargo build --lib --target "$TARGET" ${CARGO_FLAGS[@]+"${CARGO_FLAGS[@]}"}
 
-# A release the test scenarios (devtest/) can drive: the same R8 and optimisation as the
-# real thing, because R8 can strip what a debug build keeps, but debuggable, signed with
-# the debug key, and with the debug hooks in. RELEASE_TEST=1 ./build.sh workspace release
-if [ -n "${RELEASE_TEST:-}" ]; then
-    export CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true
-    export CARGO_PROFILE_ANDROID_RELEASE_DEBUG_ASSERTIONS=true
-    OUT_REL="apk/release/app-release.apk"
-fi
+# The Gradle project takes the native library from build/jniLibs, the Java source from
+# android/src/java, and the manifest and theme from app/src/main.
+rm -rf build/jniLibs
+mkdir -p "build/jniLibs/$ABI" android/app/src/main/res/values
+cp "target/$TARGET/$MODE/libalarmfree.so" "build/jniLibs/$ABI/libalarmfree.so"
+cp android/src/AndroidManifest.template.xml android/app/src/main/AndroidManifest.xml
+cp android/src/res/values/styles.xml android/app/src/main/res/values/styles.xml
 
-echo "=== [1/2] Building Rust .so (dx build) ==="
-dx build --platform android --target "$TARGET" --package alarmfree $DX_RELEASE
+# build_sentinel writes this machine's SDK paths into these two files; put them back after.
+mkdir -p build
+cp android/settings.gradle build/settings.gradle.orig
+cp android/app/build.gradle.kts build/app.build.gradle.kts.orig
+restore() {
+  cp build/settings.gradle.orig android/settings.gradle
+  cp build/app.build.gradle.kts.orig android/app/build.gradle.kts
+}
+trap restore EXIT
 
-# Patch the generated Gradle for release/AAB (Play Store) builds.
-# - Force a good, monotonically increasing versionCode (dx currently hardcodes low values like 1
-#   even when you bump the Cargo version; Play requires unique + increasing codes).
-# - Include full native debug symbols for the Rust .so (addresses the "upload debug symbols" note).
-#
-# Version code derivation (unless you pin an explicit one):
-#   We read the [package] version from Cargo.toml and use the standard scheme:
-#     versionCode = major*10000 + minor*100 + patch
-#   Examples: 0.1.0 → 100, 0.1.1 → 101, 0.2.0 → 200, 1.0.0 → 10000
-#   This makes every semver bump produce a new valid higher code for Play.
-#
-# You can also force a specific (higher) code by adding to Dioxus.toml:
-#   [android]
-#   version_code = 12346
-#   (Use this + rebuild if you hit the "can't rollout... upgrade" error because a prior build used e.g. 12345. Set it > the max versionCode you've ever uploaded for this package.)
-if [ "$MODE" = "release" ] || [ "$MODE" = "aab" ]; then
-  GRADLE_FILE="target/dx/alarmfree/release/android/app/app/build.gradle.kts"
-  if [ -f "$GRADLE_FILE" ]; then
-    VC=""
-    # Prefer explicit pin from Dioxus.toml if the user added version_code = NNN (ignore comments)
-    if [ -f "Dioxus.toml" ]; then
-      # Take the number right after `version_code =` (not the last `=` on the
-      # line — a trailing comment containing "=" once made this read 0).
-      VC=$(sed -nE 's/^[[:space:]]*version_code[[:space:]]*=[[:space:]]*([0-9]+).*/\1/p' Dioxus.toml | head -1)
-    fi
-    if [ -n "$VC" ] && [ "$VC" -lt 1 ]; then
-      echo "ERROR: version_code in Dioxus.toml must be a positive integer (got $VC)." >&2
-      exit 1
-    fi
-    if [ -z "$VC" ]; then
-      # Derive from Cargo.toml semver (the source of truth for versionName too)
-      VER=$(grep -E '^version *=' Cargo.toml | head -1 | sed -E 's/.*"([0-9]+)\.([0-9]+)\.([0-9]+)".*/\1 \2 \3/' || echo "0 1 0")
-      read -r MA MI PA <<<"$VER"
-      VC=$(( MA * 10000 + MI * 100 + PA ))
-      [ "$VC" -lt 1 ] && VC=1
-    fi
+echo "=== [2/3] Wiring mobile-sentinel + assets + icon, and Gradle ==="
+cargo run --quiet --manifest-path "$SENTINEL_MANIFEST" --bin build_sentinel -- \
+  --project android ${SENTINEL_FLAGS[@]+"${SENTINEL_FLAGS[@]}"}
 
-    # Replace the versionCode line that dx emitted (usually "1")
-    sed -i -E "s/^( *versionCode *= *).*/\1$VC/" "$GRADLE_FILE" || true
-
-    echo "  [play] Using versionCode=$VC (versionName will be $(grep '^version =' Cargo.toml | head -1 | sed -E 's/.*"([^"]+)".*/\1/')) for this AAB. Make sure this is higher than any previously uploaded versionCode for the app, or Play will block rollout with an 'upgrade' error."
-
-    # Add ndk debug symbols config inside the release block (only if missing)
-    if ! grep -q "debugSymbolLevel" "$GRADLE_FILE" 2>/dev/null; then
-      sed -i '/getByName("release") {/a\            ndk {\n                debugSymbolLevel = "FULL"\n            }' "$GRADLE_FILE" || true
-    fi
-
-    # Ship a stripped libmain.so. dx adds `jniLibs.keepDebugSymbols` for every
-    # ABI, which stops AGP from stripping, so users downloaded the full symbol
-    # table (libmain.so 21 MB vs 12.6 MB stripped). Without it AGP strips the
-    # packaged .so, while debugSymbolLevel=FULL above still puts the symbols in
-    # the AAB's metadata for Play crash reports.
-    sed -i '/jniLibs.keepDebugSymbols.add/d' "$GRADLE_FILE" || true
-    # AGP strips with its *default* NDK version unless told otherwise; when
-    # that exact NDK isn't installed it logs "Unable to strip ... libmain.so"
-    # and ships it unstripped. Point it at the NDK dx just built with.
-    NDK_VER="$(basename "${ANDROID_NDK_HOME:-${NDK_HOME:-}}")"
-    if [ -n "$NDK_VER" ] && ! grep -q "ndkVersion" "$GRADLE_FILE"; then
-      sed -i "s/^android {/android {\n    ndkVersion = \"$NDK_VER\"/" "$GRADLE_FILE" || true
-    fi
-
-    if [ -n "${RELEASE_TEST:-}" ] && ! grep -q "isDebuggable = true" <(sed -n '/getByName("release")/,$p' "$GRADLE_FILE"); then
-      sed -i '/getByName("release") {/a\            isDebuggable = true\n            signingConfig = signingConfigs.getByName("debug")' "$GRADLE_FILE"
-    fi
-
-    echo "  [play] Patched Gradle for release: versionCode=$VC , debugSymbolLevel=FULL (see message above for upgrade warning)"
-  fi
-fi
-
-echo ""
-echo "=== [2/2] Wiring mobile-sentinel + assets + icon + $ARTIFACT_NAME ==="
-
-if $USE_WORKSPACE; then
-  # Local development mode: run directly from the sibling source tree.
-  # No crates.io install.
-  WORKSPACE_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-  if [ ! -f "$WORKSPACE_ROOT/mobile-sentinel/Cargo.toml" ]; then
-    echo "ERROR: 'workspace' flag given, but no mobile-sentinel/ directory found as a sibling."
-    echo "       This mode is only intended when developing inside the combined workspace"
-    echo "       (alarmfree/ next to mobile-sentinel/)."
-    exit 1
-  fi
-  echo "Using LOCAL workspace mobile-sentinel (via cargo run --bin build_sentinel)"
-  # Always pass --app so the bin reliably finds the dx output under this layout.
-  # shellcheck disable=SC2086
-  cargo run --manifest-path "$WORKSPACE_ROOT/mobile-sentinel/Cargo.toml" \
-            --bin build_sentinel -- --app alarmfree $SENTINEL_FLAGS
+if [ "$MODE" = debug ]; then
+  OUT_REL=android/app/build/outputs/apk/debug/app-debug.apk
 else
-  # Default: the real published-crate flow that end users of mobile-sentinel will experience.
-  # build_sentinel ships as a binary in the published mobile-sentinel crate.
-  # The tool has to be the version the app is built with: an older one wires an older
-  # Kotlin side to this Rust side. The lock file says which that is.
-  SENTINEL_VERSION=$(awk '/^name = "mobile-sentinel"$/ { getline; sub(/^version = "/, ""); sub(/"$/, ""); print; exit }' Cargo.lock)
-  [ -n "$SENTINEL_VERSION" ] || { echo "ERROR: mobile-sentinel is not in Cargo.lock"; exit 1; }
-  if ! cargo install --list | grep -q "mobile-sentinel v${SENTINEL_VERSION}"; then
-      echo "Installing build_sentinel ${SENTINEL_VERSION} from crates.io (required for release/aab)..."
-      if ! cargo install mobile-sentinel --version "$SENTINEL_VERSION" --force; then
-          echo "WARNING: Could not install exact v${SENTINEL_VERSION} from crates.io yet."
-          echo "         Publish the updated mobile-sentinel crate first, or pre-install with:"
-          echo "         cargo install --path ../mobile-sentinel --force"
-          echo "         Then re-run this script. Proceeding with whatever build_sentinel is in PATH..."
-      fi
+  OUT_REL=android/app/build/outputs/apk/release/app-release.apk
+  [ -f "$OUT_REL" ] || OUT_REL=android/app/build/outputs/apk/release/app-release-unsigned.apk
+fi
+mkdir -p build
+cp "$OUT_REL" "build/alarmfree-slint-$MODE.apk"
+echo "built build/alarmfree-slint-$MODE.apk ($(du -h "build/alarmfree-slint-$MODE.apk" | cut -f1))"
+
+if $INSTALL; then
+  echo "=== [3/3] Installing ==="
+  if [ -n "$SERIAL" ]; then
+    adb -s "$SERIAL" install -r "build/alarmfree-slint-$MODE.apk"
+  else
+    adb install -r "build/alarmfree-slint-$MODE.apk"
   fi
-
-  # shellcheck disable=SC2086
-  build_sentinel $SENTINEL_FLAGS
-fi
-
-if [ "$MODE" = "debug" ]; then
-    OUT="$PROJECT_ROOT/target/dx/alarmfree/debug/android/app/app/build/outputs/apk/debug/app-debug.apk"
-else
-    OUT="$PROJECT_ROOT/target/dx/alarmfree/release/android/app/app/build/outputs/$OUT_REL"
-fi
-
-# Note: the build_sentinel binary (whether invoked via cargo run in workspace mode
-# or the installed binary) already prints the final artifact path. We avoid printing
-# it a second time here to prevent duplicate "ready" messages.
-
-# For AAB (Play Store), automatically offer to sign it for internal testing
-# if the signer script exists.
-if [ "$MODE" = "aab" ]; then
-    if [ -x "./sign-aab.sh" ]; then
-        echo ""
-        echo "=== Play Store AAB ready (unsigned) ==="
-        echo "To produce a signed AAB ready to upload for internal testing, run:"
-        echo "  ./sign-aab.sh"
-        echo ""
-        echo "This will create a timestamped signed file in the release/ folder"
-        echo "that you can directly copy to Google Play Console → Internal testing."
-        echo ""
-        echo "For ALL future releases: keep using the same upload-keystore.jks"
-        echo "(the script will automatically reuse it; do not create a new one)."
-    else
-        echo ""
-        echo "AAB built. It is unsigned."
-        echo "See README.md (Release / Google Play Store section) for signing instructions"
-        echo "or run ./sign-aab.sh (create it if missing)."
-    fi
-fi
-
-# Install step is only supported for debug builds.
-# Release and AAB artifacts are unsigned by default and will fail to install.
-if [ "${1:-}" = "install" ] || [ "${2:-}" = "install" ]; then
-    if [ "$MODE" != "debug" ]; then
-        echo ""
-        echo "Install was requested, but this is a $MODE build."
-        echo "Release/AAB artifacts are unsigned by default (INSTALL_PARSE_FAILED_NO_CERTIFICATES)."
-        echo "Sign the APK/AAB first (or build a debug version) if you want to sideload via adb."
-        echo "You can still run adb manually against a signed artifact if you have one."
-    else
-        DEVICE=""
-        if [ "${1:-}" = "install" ]; then
-            DEVICE="${2:-}"
-        else
-            DEVICE="${3:-}"
-        fi
-        if [ -n "$DEVICE" ]; then
-            echo "=== Installing on $DEVICE ==="
-            "$ADB" -s "$DEVICE" install -r "$OUT"
-        else
-            echo "=== Installing on default device ==="
-            "$ADB" install -r "$OUT"
-        fi
-    fi
 fi

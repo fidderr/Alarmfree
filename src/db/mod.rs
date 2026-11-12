@@ -10,7 +10,7 @@ use std::time::Duration;
 use chrono::{DateTime, Datelike, Local, NaiveDate, Utc};
 use rusqlite::{params, Connection};
 
-use crate::app::AlarmData;
+use crate::models::AlarmData;
 use crate::models::*;
 
 /// Database wrapper providing CRUD operations.
@@ -515,7 +515,7 @@ mod tests {
             )
             .unwrap();
         }
-        let good = crate::app::AlarmData {
+        let good = crate::models::AlarmData {
             id: "good".to_owned(),
             time_hour: 7,
             time_minute: 0,

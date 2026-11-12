@@ -24,3 +24,6 @@ dist/
 
 # On-device test output
 devtest-out/
+
+# Native libraries staged for Gradle by build.sh
+build/

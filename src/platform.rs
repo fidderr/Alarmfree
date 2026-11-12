@@ -11,12 +11,12 @@ use mobile_sentinel::recipes::alarm_class::AlarmClassConfig;
 use mobile_sentinel::{AlarmKit, AlarmSpec, InstanceId, ReminderButton, ReminderTap};
 use std::sync::OnceLock;
 
-use crate::app::AlarmData;
+use crate::models::AlarmData;
 use crate::models::{AlarmOutcome, Locale};
 
-/// Fully-qualified name of the Dioxus mobile entry activity. The same value is in
+/// Fully-qualified name of the entry activity (a NativeActivity). The same value is in
 /// `sentinel.toml`, for the Android manifest.
-const ALARMFREE_ACTIVITY_FQCN: &str = "dev.dioxus.main.MainActivity";
+const ALARMFREE_ACTIVITY_FQCN: &str = "com.fidderr.alarmfree.slint.MainActivity";
 
 /// Notification channel id for the firing FGS notification.
 pub const FOREGROUND_CHANNEL_ID: &str = "alarmfree_firing";

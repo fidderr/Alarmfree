@@ -1,0 +1,51 @@
+import { Pal, Tr, Insets } from "theme.slint";
+import { Icon, IconName } from "components.slint";
+
+component NavItem inherits Rectangle {
+    in property <IconName> icon;
+    in property <string> label;
+    in property <bool> active;
+    callback clicked();
+    VerticalLayout {
+        alignment: center;
+        spacing: 4px;
+        Rectangle {
+            height: 30px;
+            Rectangle {
+                width: 64px;
+                height: 30px;
+                border-radius: 15px;
+                background: root.active ? Pal.accent-soft : transparent;
+                Icon {
+                    name: root.icon;
+                    size: 22px;
+                    tint: root.active ? Pal.accent : Pal.text2;
+                }
+            }
+        }
+        Text {
+            text: root.label;
+            horizontal-alignment: center;
+            font-size: 12px;
+            font-weight: root.active ? 500 : 400;
+            color: root.active ? Pal.accent : Pal.text2;
+        }
+    }
+    TouchArea {
+        clicked => { root.clicked(); }
+    }
+}
+
+// The three main screens. 0 alarms, 1 history, 2 settings.
+export component BottomNav inherits Rectangle {
+    in property <int> current;
+    callback go(int);
+    height: 64px + Insets.bottom;
+    background: Pal.surface;
+    HorizontalLayout {
+        padding-bottom: Insets.bottom;
+        NavItem { icon: IconName.clock; label: Tr.t("nav.alarms"); active: root.current == 0; clicked => { root.go(0); } }
+        NavItem { icon: IconName.chart-bar; label: Tr.t("nav.history"); active: root.current == 1; clicked => { root.go(1); } }
+        NavItem { icon: IconName.gear; label: Tr.t("nav.settings"); active: root.current == 2; clicked => { root.go(2); } }
+    }
+}

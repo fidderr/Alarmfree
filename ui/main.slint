@@ -1,0 +1,82 @@
+import { Pal, Tr, Insets } from "theme.slint";
+import { HomeScreen, AlarmRow, DayCell } from "home.slint";
+import { Toast } from "components.slint";
+export { Pal, Tr, Insets, AlarmRow, DayCell }
+
+export component MainWindow inherits Window {
+    in property <string> next-title;
+    in property <string> next-sub;
+    in property <[AlarmRow]> rows;
+    in property <bool> paused;
+    in property <[string]> quick-labels;
+    in property <string> banner;
+    in property <bool> banner-can-hide;
+    in property <string> empty-weekdays;
+    in property <string> empty-weekend;
+    in-out property <int> screen: 0;
+    callback open(string);
+    callback menu(string);
+    callback toggle(string);
+    callback quick(int);
+    callback create();
+    callback pause-all();
+    callback sort();
+    callback go(int);
+    callback open-banner();
+    callback hide-banner();
+    callback template(int);
+    callback back();
+    in property <bool> toast-visible;
+    in property <string> toast-text;
+    in property <bool> toast-error;
+    in property <bool> toast-has-undo;
+    callback toast-undo();
+    callback toast-dismiss();
+    background: Pal.bg;
+    default-font-size: 14px;
+
+    // The window's bars and the soft keyboard, for every screen.
+    function update-insets() {
+        Insets.top = root.safe-area-insets.top;
+        Insets.left = root.safe-area-insets.left;
+        Insets.right = root.safe-area-insets.right;
+        Insets.bottom = max(root.safe-area-insets.bottom, root.virtual-keyboard-size.height);
+    }
+    init => { update-insets(); }
+    changed safe-area-insets => { update-insets(); }
+    changed virtual-keyboard-size => { update-insets(); }
+
+    HomeScreen {
+        next-title: root.next-title;
+        next-sub: root.next-sub;
+        rows: root.rows;
+        paused: root.paused;
+        quick-labels: root.quick-labels;
+        banner: root.banner;
+        banner-can-hide: root.banner-can-hide;
+        empty-weekdays: root.empty-weekdays;
+        empty-weekend: root.empty-weekend;
+        open(id) => { root.open(id); }
+        menu(id) => { root.menu(id); }
+        toggle(id) => { root.toggle(id); }
+        quick(i) => { root.quick(i); }
+        create => { root.create(); }
+        pause-all => { root.pause-all(); }
+        sort => { root.sort(); }
+        go(i) => { root.go(i); }
+        open-banner => { root.open-banner(); }
+        hide-banner => { root.hide-banner(); }
+        template(i) => { root.template(i); }
+    }
+
+    if root.toast-visible: Toast {
+        x: 16px + Insets.left;
+        width: min(parent.width - 16px - Insets.left - (root.toast-error ? 16px : 88px) - Insets.right, 460px);
+        y: parent.height - 64px - Insets.bottom - 16px - self.height;
+        text: root.toast-text;
+        error: root.toast-error;
+        has-undo: root.toast-has-undo;
+        undo => { root.toast-undo(); }
+        dismiss => { root.toast-dismiss(); }
+    }
+}

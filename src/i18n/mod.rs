@@ -7,6 +7,17 @@ use crate::models::Locale;
 /// Type alias for translation maps (key -> translated string).
 pub type TranslationMap = HashMap<String, String>;
 
+/// The translations a screen reads.
+pub type Translations = TranslationMap;
+
+/// A translation by key. Returns the key itself if not found.
+pub fn t(translations: &Translations, key: &str) -> String {
+    translations
+        .get(key)
+        .cloned()
+        .unwrap_or_else(|| key.to_string())
+}
+
 /// Load translations for a given locale.
 pub fn load_translations(locale: Locale) -> TranslationMap {
     let json = match locale {

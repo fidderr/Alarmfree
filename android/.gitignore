@@ -1,0 +1,7 @@
+.gradle/
+build/
+sentinel-build/
+local.properties
+# Staged by build.sh and extended by build_sentinel on every build
+app/build/
+app/src/main/

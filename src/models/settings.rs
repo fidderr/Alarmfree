@@ -2,11 +2,11 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::app::AlarmData;
 use crate::models::theme::{
     BaseColours, CustomTheme, Palette, Rgb, BLACK_THEME, DARK, FOREST, LIGHT, MIDNIGHT, MIST, PLUM,
     SAND,
 };
+use crate::models::AlarmData;
 
 /// Visual theme for the app. Persisted via serde directly. A theme that no longer exists
 /// reads as the default.

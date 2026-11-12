@@ -1,22 +1,18 @@
 # AlarmFree — mobile-sentinel build configuration
 # Used by: build_sentinel (run via ./build.sh, with optional "workspace" flag for local dev)
 #
-# The app's package name (for Play Store) is set in Dioxus.toml under:
-#   [bundle]
-#   identifier = "com.fidderr.alarmfree"
-# or
-#   [android]
-#   identifier = "com.fidderr.alarmfree"
-# This controls applicationId / namespace in the generated Gradle project.
-# It must be unique and never change after publishing to Google Play.
+# The app's package name is set in android/app/build.gradle.kts (applicationId
+# com.fidderr.alarmfree.slint): this copy installs next to the original, never to Play.
 
 [android]
-activity = "dev.dioxus.main.MainActivity"
+activity = "com.fidderr.alarmfree.slint.MainActivity"
+# The hand-made Gradle project of this app (a NativeActivity that Slint draws in).
+project = "android"
 icon = "assets/icon.webp"
 # The picture's own background, so launchers can give it any shape without a box in it.
 icon_background = "F7F7F7"
-# Until the page has painted, the window and the splash screen: the light and dark `--bg` of
-# style.css, following the phone's dark mode as the default theme does. Without them Android
+# Until the UI has painted, the window and the splash screen: the light and dark background of
+# the default theme, following the phone's dark mode as the default theme does. Without them Android
 # shows white, and a dark app flashed.
 window_background = "F5F6F9"
 window_background_dark = "101218"

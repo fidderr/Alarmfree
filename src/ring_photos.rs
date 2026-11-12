@@ -4,7 +4,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-use crate::app::AlarmData;
+use crate::models::AlarmData;
 
 /// Plenty for a phone's screen, and a few hundred kilobytes.
 const LONGEST_SIDE: u32 = 1600;

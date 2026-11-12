@@ -5,7 +5,7 @@
 //! keep the familiar by-time order. Dragging an alarm numbers all of them
 //! 1..n in the new sequence.
 
-use crate::app::AlarmData;
+use crate::models::AlarmData;
 
 /// The alarms in display order.
 pub fn sorted_for_display(alarms: &[AlarmData]) -> Vec<AlarmData> {
