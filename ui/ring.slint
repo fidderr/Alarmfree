@@ -2,10 +2,62 @@ import { Pal, Tr, Insets } from "theme.slint";
 import { PrimaryButton } from "widgets.slint";
 import { Backdrop, Look } from "backdrop.slint";
 
+// Text with the halo the original gives it over a moving background: copies of it in the
+// background colour around the letters keep them readable.
+component HaloText inherits Rectangle {
+    in property <string> text;
+    in property <length> font-size;
+    in property <int> font-weight: 400;
+    in property <string> font-family;
+    in property <length> letter-spacing: 0px;
+    in property <color> fg;
+    in property <bool> on;
+    in property <color> halo;
+    in property <length> reach: 4px;
+    in property <TextWrap> wrap: no-wrap;
+    in property <TextHorizontalAlignment> horizontal-alignment: center;
+    in property <TextVerticalAlignment> vertical-alignment: top;
+    preferred-height: main.preferred-height;
+    cache-rendering-hint: true;
+    if root.on: Rectangle {
+        for k in [[1, 0], [-1, 0], [0, 1], [0, -1], [0.7, 0.7], [-0.7, 0.7], [0.7, -0.7], [-0.7, -0.7]]: Rectangle {
+            for ring in [[0.35, 0.9], [0.8, 0.5], [1.4, 0.25]]: Text {
+                x: k[0] * ring[0] * root.reach;
+                y: k[1] * ring[0] * root.reach;
+                width: root.width;
+                height: root.height;
+                text: root.text;
+                font-size: root.font-size;
+                font-weight: root.font-weight;
+                font-family: root.font-family;
+                letter-spacing: root.letter-spacing;
+                color: root.halo.with-alpha(ring[1]);
+                wrap: root.wrap;
+                overflow: root.wrap == TextWrap.no-wrap ? TextOverflow.elide : TextOverflow.clip;
+                horizontal-alignment: root.horizontal-alignment;
+                vertical-alignment: root.vertical-alignment;
+            }
+        }
+    }
+    main := Text {
+        text: root.text;
+        font-size: root.font-size;
+        font-weight: root.font-weight;
+        font-family: root.font-family;
+        letter-spacing: root.letter-spacing;
+        color: root.fg;
+        wrap: root.wrap;
+        overflow: root.wrap == TextWrap.no-wrap ? TextOverflow.elide : TextOverflow.clip;
+        horizontal-alignment: root.horizontal-alignment;
+        vertical-alignment: root.vertical-alignment;
+    }
+}
+
 // What shows while an alarm rings: the time, what it is, and the way to turn it off.
 export component RingScreen inherits Rectangle {
     in property <string> date;
     in property <string> clock;
+    in property <bool> twenty-four: true;
     in property <string> label;
     in property <string> note;
     in property <string> snooze-text;
@@ -17,6 +69,13 @@ export component RingScreen inherits Rectangle {
     callback snooze();
     callback turn-off();
     callback closed();
+    // A photo can be anything: the same words on it whatever the theme.
+    property <bool> on-photo: Look.kind == 7 && Look.has-photo;
+    property <bool> dressed: (Look.kind >= 1 && Look.kind <= 6) || root.on-photo;
+    property <color> text: root.on-photo ? #ffffff : Pal.text;
+    property <color> text2: root.on-photo ? #ffffffe0 : Pal.text2;
+    property <color> halo: root.on-photo ? #000000 : Pal.bg;
+    property <int> style: Look.clock-style;
     background: Pal.bg;
     Backdrop {
         kind: Look.kind;
@@ -25,28 +84,117 @@ export component RingScreen inherits Rectangle {
         c3: Look.c3;
         photo: Look.photo;
         has-photo: Look.has-photo;
+        animated: true;
+        star-mask: true;
     }
     VerticalLayout {
-        padding: 24px;
-        padding-top: 24px + Insets.top;
+        padding-left: 20px + Insets.left;
+        padding-right: 20px + Insets.right;
+        padding-top: 56px + Insets.top;
         padding-bottom: 24px + Insets.bottom;
-        spacing: 12px;
-        Rectangle { vertical-stretch: 1; }
-        Text { text: root.date; font-size: 16px; color: Pal.text2; horizontal-alignment: center; }
-        Text {
-            text: root.clock;
-            font-size: 72px;
-            font-weight: [700, 200, 800, 400, 500][Look.clock-style];
-            font-family: Look.clock-style == 3 ? "serif" : Look.clock-style == 4 ? "monospace" : "";
-            color: Pal.text;
-            horizontal-alignment: center;
+        spacing: 0px;
+        HaloText {
+            on: root.dressed;
+            halo: root.halo;
+            height: 20px;
+            reach: 2.5px;
+            text: root.date;
+            font-size: 16px;
+            fg: root.text2;
+            vertical-alignment: center;
         }
-        Text { text: root.label; font-size: 24px; font-weight: 500; color: Pal.text; horizontal-alignment: center; wrap: word-wrap; }
-        if root.note != "": Text { text: root.note; font-size: 16px; color: Pal.text2; horizontal-alignment: center; wrap: word-wrap; }
-        Rectangle { vertical-stretch: 2; }
-        if root.can-snooze: PrimaryButton { quiet: true; text: root.snooze-text; clicked => { root.snooze(); } }
-        if root.challenge-count > 0: Text { text: root.challenges-text; font-size: 14px; color: Pal.text2; horizontal-alignment: center; }
-        PrimaryButton { text: Tr.t("ring.turn_off"); clicked => { root.turn-off(); } }
+        Rectangle { height: 4px; }
+        HaloText {
+            on: root.dressed;
+            halo: root.halo;
+            height: 110px;
+            reach: 5px;
+            text: root.clock;
+            font-size: root.twenty-four ? 96px : 64px;
+            font-weight: [500, 200, 800, 400, 500][root.style];
+            font-family: root.style == 3 ? "Noto Serif" : root.style == 4 ? "Droid Sans Mono" : "";
+            letter-spacing: [-2px, -1px, -3px, -1px, root.twenty-four ? -6px : -4px][root.style];
+            fg: root.text;
+            vertical-alignment: center;
+        }
+        Rectangle { height: 16px; }
+        HaloText {
+            on: root.dressed;
+            halo: root.halo;
+            reach: 3.5px;
+            text: root.label;
+            font-size: 28px;
+            font-weight: 700;
+            fg: root.text;
+            wrap: word-wrap;
+        }
+        if root.note != "": Rectangle { height: 8px; }
+        if root.note != "": HaloText {
+            on: root.dressed;
+            halo: root.halo;
+            reach: 2.5px;
+            text: root.note;
+            font-size: 16px;
+            fg: root.text2;
+            wrap: word-wrap;
+        }
+        Rectangle { vertical-stretch: 1; }
+        if root.can-snooze: Rectangle {
+            height: 52px;
+            border-radius: 20px;
+            background: root.on-photo ? #00000080 : Pal.surface2;
+            Text {
+                text: root.snooze-text;
+                font-size: 16px;
+                font-weight: 500;
+                color: root.on-photo ? #ffffff : Pal.text;
+            }
+            TouchArea { clicked => { root.snooze(); } }
+        }
+        if root.challenge-count > 0: Rectangle { height: 48px; }
+        if root.challenge-count > 0: HorizontalLayout {
+            alignment: center;
+            spacing: 8px;
+            height: 24px;
+            HaloText {
+                on: root.dressed;
+                halo: root.halo;
+                reach: 2.5px;
+                text: root.challenges-text;
+                font-size: 16px;
+                fg: root.dressed ? root.text : root.text2;
+                vertical-alignment: center;
+                width: self.preferred-width;
+            }
+            // One dot after "1 challenge" would only look like a stray full stop.
+            if root.challenge-count > 1: HorizontalLayout {
+                spacing: 6px;
+                alignment: center;
+                for n in root.challenge-count: VerticalLayout {
+                    alignment: center;
+                    Rectangle {
+                        width: 8px;
+                        height: 8px;
+                        border-radius: 4px;
+                        background: Pal.off;
+                    }
+                }
+            }
+        }
+        if root.challenge-count > 0: Rectangle { height: 12px; }
+        if root.challenge-count == 0: Rectangle { height: 48px; }
+        Rectangle {
+            height: 72px;
+            border-radius: 20px;
+            background: Pal.accent;
+            Text {
+                text: Tr.t("ring.turn_off");
+                font-size: 20px;
+                font-weight: 500;
+                color: Pal.on-accent;
+            }
+            TouchArea { clicked => { root.turn-off(); } }
+        }
     }
     if root.preview: TouchArea { clicked => { root.closed(); } }
 }

@@ -741,14 +741,14 @@ Ring screen
 - [x] Defaults editor (no time/repeat), "Use as default" from card menu
 
 ### Phase 4: backdrops, themes, polish
-- [ ] Aurora backdrop (3 drifting radial blobs)
-- [ ] Sunrise backdrop (45 s sky + sun rise, orange default)
-- [ ] Waves backdrop (3 rotating rounded squares)
-- [ ] Stars backdrop (3 twinkling dot layers, text-band mask on ring screen)
-- [ ] Rings backdrop (4 expanding rings)
-- [ ] Bubbles backdrop (9 rising bubbles)
+- [x] Aurora backdrop (3 drifting radial blobs)
+- [x] Sunrise backdrop (45 s sky + sun rise, orange default)
+- [x] Waves backdrop (3 rotating rounded squares)
+- [x] Stars backdrop (3 twinkling dot layers, text-band mask on ring screen)
+- [x] Rings backdrop (4 expanding rings)
+- [x] Bubbles backdrop (9 rising bubbles)
 - [ ] Photo backdrop (cover, slow zoom, scrim, forced white text) with unreadable-file fallback
-- [ ] Ring colour triad (+-35 deg neighbours, olive avoidance, sunrise exception) and halo text-shadow on dressed screens
+- [x] Ring colour triad (+-35 deg neighbours, olive avoidance, sunrise exception) and halo text-shadow on dressed screens
 - [ ] Less-motion switch honoured by every animation (functional timers exempt)
 - [ ] ThemeScreen: preview card, 9 theme tiles (System diagonal split), Your own row, Background / Cards / Text rows with Auto, accent swatches + wheel swatch
 - [ ] Colour editor: wheel (conic + radial, dim overlay, thumb), brightness slider, hex field, swatch presets, adjusted-contrast note, save on release
@@ -817,8 +817,7 @@ quiet notice posted 10 minutes before it. Reliability screen (`src/reliability.r
 `ui/reliability.slint`): all 10 checks, Fix per check, help, test alarm and cancel, app settings; banner on Home with Fix and
 hide; Settings banner row; re-check every 1.5 s on the screen and every 15 s on Home. First-run mode exists
 (`reliability::open(ctx, true)`) but is not started at launch: that is step 4.
-Differences: the backdrops are the still first frame (`ui/backdrop.slint`, animation and text halo are step 5; the real ring
-screen already takes the look of the alarm); labels used before are put in lines by a width estimate; the date picker is a
+Differences: labels used before are put in lines by a width estimate; the date picker is a
 month grid, where the original used the system date input. Not verified: real vibration feel, sound playback of the preview,
 photo picking, Fix buttons on a phone, hiding a warning, the colour wheel by finger drag.
 
@@ -835,3 +834,20 @@ is open, else to the editor's ring colour sheet. First run: started at launch wh
 and challenges, which are ported. Language: after switching to German all of Settings, Theme, Home, editor and History re-read
 and nothing clipped, except the Home banner text ("Akkusparen: Wecker koennten zu ..." elides). Not checked: fr/es/nl screenshots of
 every screen, finger drag on the wheel (tapped only), the original's hard-coded colours in challenge screens (white text on photo).
+
+## Status: ring screen and animated backdrops (step 5a of the port)
+Done and seen on emulator-5556 (editor preview, one screenshot per backdrop and per clock style, and a real ring with Aurora, Mono and
+two challenges): `ui/ring.slint` follows the original's `RingFace` (padding 56/20/24 plus insets, date 16, clock 96 or 64 for 12 h with
+the five clock styles, label 28 bold, note, snooze, "N challenges" hint with one dot per challenge when more than one, 48 px gap when
+none, 72 px Turn off). Dressed screens (Aurora to Bubbles, Photo) get the text halo, drawn as copies of the text in the background colour
+(Slint has no text shadow). `ui/backdrop.slint`: the keyframes of the ring screen (aurora-one/two/three, sunrise-sky/sun, wave-turn,
+stars-twinkle, ring-out, bubble-up, photo-drift) driven by one 50 ms `Timer` in `Backdrop` that only runs while a moving backdrop shows,
+not with less motion, and not on the still tiles. The sunrise takes 45 s from when it appears. Stars now repeat the half-height pattern
+twice like the original and keep out of the band behind the time on the ring screen and its preview. Less motion shows the still first
+frame (sunrise: its end state, as the original's 0.01 ms animation). The preview and the real ring use the same `RingScreen`.
+CPU on the x86 emulator (debug build, software GL): Aurora about 40 % of one core on the ring, near 0 once the app is not on screen
+(snooze, or the ring left). With animation at the screen rate it was 100 %, hence the 20 frames a second.
+Differences: easing is smoothstep / quadratic ease-out instead of CSS cubic-bezier; the Classic and Mono clock use the Android fonts
+`Noto Serif` and `Droid Sans Mono` by name (the generic names did not resolve); the tiles in the ring look sheet stay still while the live
+colour preview animates; the clock is not divided by the system font scale. Not verified: the Photo backdrop (needs the picker) and its
+forced white text, less motion on a device, a phone.

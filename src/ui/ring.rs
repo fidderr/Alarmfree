@@ -138,6 +138,7 @@ fn show_texts(ctx: &Ctx) {
     ui.set_ring_clock(
         crate::text::clock(moment.hour() as u8, moment.minute() as u8, twenty_four).into(),
     );
+    ui.set_ring_twenty_four(twenty_four);
     ui.set_ring_date(ring_date(&tr, moment).into());
     ui.set_ring_snooze_text(
         t(&tr, "ring.snooze")

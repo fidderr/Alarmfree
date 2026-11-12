@@ -103,6 +103,7 @@ export component MainWindow inherits Window {
     // The ring screen.
     in property <string> ring-date;
     in property <string> ring-clock;
+    in property <bool> ring-twenty-four: true;
     in property <string> ring-label;
     in property <string> ring-note;
     in property <string> ring-snooze-text;
@@ -245,6 +246,7 @@ export component MainWindow inherits Window {
     if root.ringing: RingScreen {
         date: root.ring-date;
         clock: root.ring-clock;
+        twenty-four: root.ring-twenty-four;
         label: root.ring-label;
         note: root.ring-note;
         snooze-text: root.ring-snooze-text;
@@ -263,6 +265,7 @@ export component MainWindow inherits Window {
         preview: true;
         date: root.ring-date;
         clock: root.ring-clock;
+        twenty-four: root.ring-twenty-four;
         label: root.ring-label;
         note: root.ring-note;
         snooze-text: root.ring-snooze-text;

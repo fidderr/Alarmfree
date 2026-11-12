@@ -1,4 +1,4 @@
-import { Pal } from "theme.slint";
+import { Pal, Motion } from "theme.slint";
 
 // The look of the ring screen being shown: Rust sets it from the alarm's ring look.
 export global Look {
@@ -12,9 +12,122 @@ export global Look {
     in property <int> clock-style;
 }
 
-// What moves behind the time on the ring screen, here as the still first frame of each:
-// the tiles of the ring look sheet and its preview draw this. The animations of the real
-// ring screen build on it. `kind` is the index in `RingBackdrop::ALL`.
+// The curves of the original's keyframes. `ease-in-out` is the smoothstep, close to the CSS one.
+global Ease {
+    public pure function smooth(x: float) -> float {
+        return x * x * (3 - 2 * x);
+    }
+    public pure function out(x: float) -> float {
+        return 1 - (1 - x) * (1 - x);
+    }
+    // 0 to 1 and back, one way per `dur`: `animation-direction: alternate`.
+    public pure function alt(t: float, dur: float) -> float {
+        return smooth(Math.abs(Math.mod(t / dur, 2) - 1) * -1 + 1);
+    }
+    // 0 to 1 again and again: `linear infinite`.
+    public pure function cycle(t: float, dur: float) -> float {
+        return Math.mod(t / dur, 1);
+    }
+    // The vertical mask that keeps stars from the words (percent of the height).
+    public pure function words-mask(fy: float) -> float {
+        if (fy < 7) {
+            return 1;
+        }
+        if (fy < 10) {
+            return 1 - (fy - 7) / 3;
+        }
+        if (fy < 44) {
+            return 0;
+        }
+        if (fy < 49) {
+            return (fy - 44) / 5;
+        }
+        return 1;
+    }
+}
+
+struct Star {
+    x: float,
+    y: float,
+    r: float,
+}
+
+// A drifting, growing glow of the Aurora.
+component Blob inherits Rectangle {
+    in property <color> tint;
+    in property <length> size;
+    in property <length> cx;
+    in property <length> cy;
+    in property <length> dx;
+    in property <length> dy;
+    in property <float> scale-to;
+    in property <float> e;
+    property <length> side: root.size * (1 + (root.scale-to - 1) * root.e);
+    x: root.cx + root.dx * root.e - root.side / 2;
+    y: root.cy + root.dy * root.e - root.side / 2;
+    width: root.side;
+    height: root.side;
+    border-radius: root.side / 2;
+    background: @radial-gradient(circle, root.tint 0%, root.tint.transparentize(1.0) 66%);
+}
+
+// One layer of stars. The original tiles a half-height pattern twice, so each star shows twice.
+component StarLayer inherits Rectangle {
+    in property <[Star]> stars;
+    in property <color> tint;
+    in property <float> base;
+    in property <float> dur;
+    in property <float> delay;
+    in property <bool> reverse;
+    in property <float> t;
+    in property <length> unit;
+    in property <bool> mask;
+    property <float> e: root.t < root.delay ? 0 : (root.reverse ? 1 - Ease.alt(root.t - root.delay, root.dur) : Ease.alt(root.t - root.delay, root.dur));
+    for s[i] in root.stars: Rectangle {
+        for pass in [0, 1]: Rectangle {
+            property <length> d: max(2px, (2 * s.r + 0.16) * root.unit);
+            x: root.width * s.x / 100 - self.d / 2;
+            y: root.height * (pass * 50 + s.y / 2) / 100 - 3 * root.unit * root.e - self.d / 2;
+            width: self.d;
+            height: self.d;
+            border-radius: self.d / 2;
+            background: root.tint;
+            opacity: (root.base + (0.2 - root.base) * root.e) * (root.mask ? Ease.words-mask((self.y + self.d / 2) / root.height * 100) : 1);
+        }
+    }
+}
+
+// The sky and the sun come up over 45 seconds from the moment this shows, and then stay up.
+component Sunrise inherits Rectangle {
+    in property <bool> animated;
+    in property <float> t;
+    in property <color> c1;
+    in property <color> c2;
+    in property <color> c3;
+    in property <length> unit;
+    property <float> start;
+    property <float> p: root.animated && !Motion.less ? Ease.out(min(1.0, (root.t - root.start) / 45)) : 1;
+    init => {
+        root.start = root.t;
+    }
+    Rectangle {
+        opacity: 0.08 + 0.47 * root.p;
+        background: @linear-gradient(0deg, root.c1 0%, root.c3 36%, root.c3.transparentize(1.0) 76%);
+    }
+    Rectangle {
+        x: (root.width - self.width) / 2;
+        y: root.height * 0.98 - self.height + root.height * 0.34 * (1 - root.p);
+        width: root.unit * 120;
+        height: root.unit * 120;
+        border-radius: root.unit * 60;
+        opacity: 0.2 + 0.65 * root.p;
+        background: @radial-gradient(circle, root.c2 0%, root.c1 30%, root.c1.transparentize(1.0) 68%);
+    }
+}
+
+// What moves behind the time on the ring screen. `kind` is the index in `RingBackdrop::ALL`. Still
+// when not `animated` (the tiles of the ring look sheet) and with less motion: the first frame.
+// The moving ones run on a timer that only runs while one of them is shown.
 export component Backdrop inherits Rectangle {
     in property <int> kind;
     in property <color> c1: Pal.accent;
@@ -22,61 +135,115 @@ export component Backdrop inherits Rectangle {
     in property <color> c3: Pal.accent;
     in property <image> photo;
     in property <bool> has-photo;
+    in property <bool> animated: false;
+    // Keep stars from behind the words (the real ring screen and its preview).
+    in property <bool> star-mask: false;
     // One 'u' of the original: 1 percent of the shorter side, smaller on a tile.
     in property <length> unit: min(self.width, self.height) / 100;
+    // Seconds of motion so far, in steps of 50 ms: the drifts are slow, so 20 frames a second
+    // look smooth and cost a third of drawing at the screen's rate.
+    property <bool> moving: root.animated && !Motion.less && root.kind != 0;
+    property <float> clock: 0.01;
+    property <float> t: root.moving ? root.clock : 0;
+    Timer {
+        interval: 50ms;
+        running: root.moving;
+        triggered => { root.clock += 0.05; }
+    }
     clip: true;
     // Aurora
     if root.kind == 1: Rectangle {
-        Rectangle { x: -root.width * 0.4; y: -root.height * 0.2; width: root.unit * 130; height: root.unit * 130; border-radius: root.unit * 65; opacity: 0.5; background: @radial-gradient(circle, root.c1 0%, root.c1.transparentize(1.0) 66%); }
-        Rectangle { x: root.width * 1.55 - root.unit * 130; y: root.height * 0.16; width: root.unit * 130; height: root.unit * 130; border-radius: root.unit * 65; opacity: 0.42; background: @radial-gradient(circle, root.c2 0%, root.c2.transparentize(1.0) 66%); }
-        Rectangle { x: -root.width * 0.18; y: root.height * 1.28 - root.unit * 130; width: root.unit * 130; height: root.unit * 130; border-radius: root.unit * 65; opacity: 0.38; background: @radial-gradient(circle, root.c3 0%, root.c3.transparentize(1.0) 66%); }
+        Blob {
+            tint: root.c1; opacity: 0.5; size: root.unit * 130;
+            cx: -root.width * 0.4 + root.unit * 65; cy: -root.height * 0.2 + root.unit * 65;
+            dx: root.unit * 36; dy: root.unit * 26; scale-to: 1.2; e: Ease.alt(root.t, 19);
+        }
+        Blob {
+            tint: root.c2; opacity: 0.42; size: root.unit * 130;
+            cx: root.width * 1.55 - root.unit * 65; cy: root.height * 0.16 + root.unit * 65;
+            dx: -root.unit * 40; dy: root.unit * 34; scale-to: 0.85; e: Ease.alt(root.t, 25);
+        }
+        Blob {
+            tint: root.c3; opacity: 0.38; size: root.unit * 130;
+            cx: -root.width * 0.18 + root.unit * 65; cy: root.height * 1.28 - root.unit * 65;
+            dx: root.unit * 28; dy: -root.unit * 44; scale-to: 1.15; e: Ease.alt(root.t, 31);
+        }
     }
     // Sunrise
-    if root.kind == 2: Rectangle {
-        Rectangle { opacity: 0.55; background: @linear-gradient(0deg, root.c1 0%, root.c3 36%, root.c3.transparentize(1.0) 76%); }
-        Rectangle { x: (root.width - self.width) / 2; y: root.height * 0.98 - self.height; width: root.unit * 120; height: root.unit * 120; border-radius: root.unit * 60; opacity: 0.85; background: @radial-gradient(circle, root.c2 0%, root.c1 30%, root.c1.transparentize(1.0) 68%); }
+    if root.kind == 2: Sunrise {
+        animated: root.animated;
+        t: root.t;
+        c1: root.c1;
+        c2: root.c2;
+        c3: root.c3;
+        unit: root.unit;
     }
     // Waves
     if root.kind == 3: Rectangle {
-        Rectangle { x: (root.width - self.width) / 2; y: root.height * 0.56; width: root.unit * 280; height: root.unit * 280; border-radius: self.width * 0.44; opacity: 0.22; background: root.c1; }
-        Rectangle { x: (root.width - self.width) / 2; y: root.height * 0.62; width: root.unit * 280; height: root.unit * 280; border-radius: self.width * 0.42; opacity: 0.2; background: root.c2; }
-        Rectangle { x: (root.width - self.width) / 2; y: root.height * 0.68; width: root.unit * 280; height: root.unit * 280; border-radius: self.width * 0.46; opacity: 0.18; background: root.c3; }
+        Rectangle {
+            x: (root.width - self.width) / 2; y: root.height * 0.56; width: root.unit * 280; height: root.unit * 280;
+            border-radius: self.width * 0.44; opacity: 0.22; background: root.c1;
+            transform-rotation: Ease.cycle(root.t, 23) * 360deg;
+        }
+        Rectangle {
+            x: (root.width - self.width) / 2; y: root.height * 0.62; width: root.unit * 280; height: root.unit * 280;
+            border-radius: self.width * 0.42; opacity: 0.2; background: root.c2;
+            transform-rotation: (1 - Ease.cycle(root.t, 31)) * 360deg;
+        }
+        Rectangle {
+            x: (root.width - self.width) / 2; y: root.height * 0.68; width: root.unit * 280; height: root.unit * 280;
+            border-radius: self.width * 0.46; opacity: 0.18; background: root.c3;
+            transform-rotation: Ease.cycle(root.t, 41) * 360deg;
+        }
     }
     // Stars
     if root.kind == 4: Rectangle {
-        for p[i] in [[12, 9], [78, 6], [44, 31], [91, 38], [7, 56], [63, 71], [28, 88]]: Rectangle {
-            x: root.width * p[0] / 100 - self.width / 2; y: root.height * p[1] / 100 - self.height / 2;
-            width: max(2px, root.unit * 1.4); height: self.width; border-radius: self.width / 2; background: root.c1;
+        StarLayer {
+            tint: root.c1; base: 1; dur: 5; delay: 0; reverse: false; t: root.t; unit: root.unit; mask: root.star-mask;
+            stars: [{x: 12, y: 9, r: 0.64}, {x: 78, y: 6, r: 0.48}, {x: 44, y: 31, r: 0.72}, {x: 91, y: 38, r: 0.48}, {x: 7, y: 56, r: 0.64}, {x: 63, y: 71, r: 0.48}, {x: 28, y: 88, r: 0.72}];
         }
-        for p[i] in [[31, 4], [58, 17], [18, 36], [73, 52], [39, 64], [86, 79], [11, 93]]: Rectangle {
-            x: root.width * p[0] / 100 - self.width / 2; y: root.height * p[1] / 100 - self.height / 2;
-            width: max(2px, root.unit * 1.3); height: self.width; border-radius: self.width / 2; background: root.c2; opacity: 0.85;
+        StarLayer {
+            tint: root.c2; base: 0.85; dur: 7; delay: 1; reverse: true; t: root.t; unit: root.unit; mask: root.star-mask;
+            stars: [{x: 31, y: 4, r: 0.48}, {x: 58, y: 17, r: 0.64}, {x: 18, y: 36, r: 0.48}, {x: 73, y: 52, r: 0.8}, {x: 39, y: 64, r: 0.48}, {x: 86, y: 79, r: 0.64}, {x: 11, y: 93, r: 0.48}];
         }
-        for p[i] in [[92, 14], [5, 24], [53, 45], [24, 73], [69, 90]]: Rectangle {
-            x: root.width * p[0] / 100 - self.width / 2; y: root.height * p[1] / 100 - self.height / 2;
-            width: max(2px, root.unit * 1.2); height: self.width; border-radius: self.width / 2; background: root.c3; opacity: 0.9;
+        StarLayer {
+            tint: root.c3; base: 0.9; dur: 11; delay: 2; reverse: false; t: root.t; unit: root.unit; mask: root.star-mask;
+            stars: [{x: 92, y: 14, r: 0.64}, {x: 5, y: 24, r: 0.48}, {x: 53, y: 45, r: 0.48}, {x: 24, y: 73, r: 0.64}, {x: 69, y: 90, r: 0.48}];
         }
     }
-    // Rings
+    // Rings: each starts a quarter of the cycle after the one before (-2.25 s of 9 s).
     if root.kind == 5: Rectangle {
-        for s[i] in [1.0, 1.7, 2.4, 3.1]: Rectangle {
-            x: (root.width - self.width) / 2; y: root.height * 0.22 - self.height / 2;
-            width: root.unit * 46 * s; height: root.unit * 46 * s; border-radius: self.width / 2;
-            border-width: 2px; border-color: i == 1 ? root.c2 : i == 3 ? root.c3 : root.c1;
-            opacity: [0.36, 0.26, 0.16, 0.08][i];
+        for k[i] in [0, 1, 2, 3]: Rectangle {
+            property <float> p: Ease.out(Ease.cycle(root.t + 2.25 * i, 9));
+            property <float> s: root.t == 0 ? [1.0, 1.7, 2.4, 3.1][i] : 0.6 + 3.4 * self.p;
+            x: root.width / 2 - self.width / 2; y: root.height * 0.22 - self.height / 2;
+            width: root.unit * 46 * self.s; height: root.unit * 46 * self.s; border-radius: self.width / 2;
+            border-width: 2px * self.s; border-color: i == 1 ? root.c2 : i == 3 ? root.c3 : root.c1;
+            opacity: root.t == 0 ? [0.36, 0.26, 0.16, 0.08][i] : 0.6 * (1 - self.p);
         }
     }
-    // Bubbles
+    // Bubbles: left, top, size (u), seconds for a rise, seconds already risen.
     if root.kind == 6: Rectangle {
-        for b[i] in [[6, 14, 14], [24, 66, 26], [42, 30, 9], [55, 82, 18], [74, 18, 30], [88, 56, 11], [12, 44, 20], [63, 50, 7], [34, 92, 12]]: Rectangle {
-            x: root.width * b[0] / 100; y: root.height * b[1] / 100;
+        for b[i] in [[6, 14, 14, 24, 3], [24, 66, 26, 33, 19], [42, 30, 9, 21, 8], [55, 82, 18, 28, 14], [74, 18, 30, 37, 27], [88, 56, 11, 23, 11], [12, 44, 20, 30, 23], [63, 50, 7, 19, 6], [34, 92, 12, 26, 17]]: Rectangle {
+            property <float> q: root.t == 0 ? 0 : Ease.cycle(root.t + b[4], b[3]);
+            property <color> tint: Math.mod(i, 3) == 1 ? root.c2 : Math.mod(i, 3) == 2 ? root.c3 : root.c1;
+            x: root.width * b[0] / 100 + (root.t == 0 ? 0px : 4 * root.unit * (self.q < 0.5 ? 2 * self.q : 2 - 2 * self.q));
+            y: root.height * b[1] / 100 + (root.t == 0 ? 0px : (self.q < 0.5 ? root.height * (1 - 2 * self.q) : -root.height * (2 * self.q - 1)));
             width: root.unit * b[2]; height: root.unit * b[2]; border-radius: self.width / 2; opacity: 0.6;
-            background: @radial-gradient(circle, (Math.mod(i, 3) == 1 ? root.c2 : Math.mod(i, 3) == 2 ? root.c3 : root.c1).transparentize(1.0) 52%, Math.mod(i, 3) == 1 ? root.c2 : Math.mod(i, 3) == 2 ? root.c3 : root.c1 100%);
+            background: @radial-gradient(circle, self.tint.transparentize(1.0) 52%, self.tint 100%);
         }
     }
-    // Photo
+    // Photo: a slow zoom to 1.09 and back over 80 seconds, under a half black scrim.
     if root.kind == 7 && root.has-photo: Rectangle {
-        Image { width: parent.width; height: parent.height; source: root.photo; image-fit: cover; }
+        property <float> zoom: 1 + 0.09 * Ease.alt(root.t, 40);
+        Image {
+            x: -root.width * (parent.zoom - 1) / 2;
+            y: -root.height * (parent.zoom - 1) / 2;
+            width: root.width * parent.zoom;
+            height: root.height * parent.zoom;
+            source: root.photo;
+            image-fit: cover;
+        }
         Rectangle { background: #00000080; }
     }
 }

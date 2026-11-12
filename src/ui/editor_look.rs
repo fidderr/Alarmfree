@@ -292,6 +292,7 @@ pub fn preview(ctx: &Rc<Ctx>) {
     super::look::apply(ctx, &alarm.ring_look, photo);
     let tr = ctx.tr.borrow();
     let twenty_four = crate::text::uses_24_hours(&ctx.settings.borrow());
+    ui.set_ring_twenty_four(twenty_four);
     ui.set_ring_date(super::ring::ring_date(&tr, chrono::Local::now()).into());
     ui.set_ring_clock(crate::text::clock(alarm.time_hour, alarm.time_minute, twenty_four).into());
     ui.set_ring_label(
