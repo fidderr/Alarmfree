@@ -1,0 +1,34 @@
+device: bb741d88 (arm64-v8a, Android 16), 1080x2376 at 480 dpi, 7 cold starts each
+display: renderFrameRate 120.00001
+measuring the original...
+  pixel at the button:   27  30  39
+  idle pids: 22040 22757 22694 
+  quick pill at 723 px (241 dp)
+  quick pill at 783 px (261 dp)
+  layer: com.fidderr.alarmfree/dev.dioxus.main.MainActivity#11151
+measuring the Slint copy...
+  pixel at the button:   34  45  63
+  idle pids: 26371 26949 
+  quick pill at 642 px (214 dp)
+  quick pill at 693 px (231 dp)
+  layer: com.fidderr.alarmfree.slint/com.fidderr.alarmfree.slint.MainActivity#11460
+
+                                                          AlarmFree (WebView)        AlarmFree Slint
+APK size (MB)                                                            18.6                   44.1
+Cold start, median of 7 (ms, am start -W)                                 152                    101
+  the runs (ms)                                        152 159 151 153 152 155 151  85 106 110 94 97 104 101 
+PSS after start, main process (MB)                                        110                     68
+PSS after opening the editor, main process (MB)                           123                     74
+WebView processes started by the app (PSS, MB)                             58                      0
+PSS of all the app's own processes (MB)                                   129                     80
+PSS app processes + WebView after the editor (MB)                         187                     80
+Idle CPU, 60 s on the home list (% of one core)                          0.37                   0.20
+Vsync period while scrolling (ms)                                       11.11                  16.67
+Frames seen while scrolling (SurfaceFlinger)                             1239                    803
+Janky frames (> 1.5 x vsync period apart)                            3 (0.2%)              13 (1.6%)
+Time between frames p50 / p90 (ms)                                11.1 / 11.1            16.6 / 16.6
+Time between frames p95 / p99 (ms)                                11.1 / 11.1            16.6 / 49.7
+gfxinfo: frames / janky (see notes)                                 1202 / 11                  0 / 0
+
+alarms still scheduled by the two apps (must print nothing):
+raw: devtest-out/phone/run9 (cold start times per run: *.starts, frame deltas: *.frames, gfxinfo: *.gfxinfo, processes: *.procs-after-editor, cpu: *.cpuinfo *.top)
