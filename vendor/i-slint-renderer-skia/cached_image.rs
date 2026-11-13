@@ -27,6 +27,7 @@ impl OpaqueImage for SkiaCachedImage {
     }
 }
 
+#[cfg_attr(not(feature = "svg"), allow(unused_variables))]
 pub(crate) fn as_skia_image(
     image: Image,
     target_size_fn: &dyn Fn() -> LogicalSize,
