@@ -45,8 +45,9 @@ slint-build = "=1.18.1"
 default = []
 
 # Release builds. Size-first: the .so is the biggest thing users download. No `strip` here: the Android Gradle
-# plugin strips the shipped .so and keeps symbols for Play crash reports. No
-# `panic = "abort"`: a panic would turn into a silent process exit.
+# plugin strips the shipped .so and keeps symbols for Play crash reports.
+# `panic = "abort"`: -1.9 MB of unwind tables, and a panic is a crash with a tombstone, not a silent
+# process exit. Nothing here catches a panic (the SDK's wake hook does, and no longer can).
 # `lto = "thin"`, not "fat": dx 0.7.10 on Windows writes its linker response
 # file with unescaped backslashes, and fat LTO's short argument list hits that
 # (clang: "no such file C:GitAlarmfree..."). Thin LTO links and keeps most of
@@ -55,6 +56,7 @@ default = []
 opt-level = "s"
 lto = "thin"
 codegen-units = 1
+panic = "abort"
 
 [dev-dependencies]
 tempfile = "3"
