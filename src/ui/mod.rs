@@ -287,6 +287,10 @@ fn connect_editor_sheets(ctx: &Rc<Ctx>, ui: &MainWindow) {
 pub fn run() -> Result<(), slint::PlatformError> {
     // First, so the alarm list below already reflects one-time alarms it switched off.
     crate::platform::init_platform();
+    // A native window may stay at 60 Hz otherwise; the original's WebView gets the fast rate itself.
+    mobile_sentinel::display::set_preferred_frame_rate(
+        mobile_sentinel::display::PreferredFrameRate::Highest,
+    );
 
     let settings = crate::persistence::load_settings();
     let alarms = crate::persistence::load_alarms();
