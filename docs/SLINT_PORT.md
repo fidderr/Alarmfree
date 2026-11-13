@@ -1045,6 +1045,57 @@ the wheel's neighbours sit 40 dp apart where the original's perspective makes th
 system font, so on another font a chip can be a few dp narrower or wider than the text wants (text is then cut with an ellipsis);
 preset chips differ by a few dp in width from the original's real measurements.
 
+#### Round 3: ring screen, challenges, settings, history, theme, toasts
+
+Checked on the phone (Dutch, default theme, light theme where noted), both apps in the same state. Captures come from `devtest/r3.sh`
+(`fin_a`, `fin_b`, plus the ring look preview, a real ring with two challenges in each app and a real ring without challenges).
+`before/<screen>.jpg` is the earlier Slint capture of the design review (taken before round 1: round 3 had no separate "before"
+state for screens that rounds 1 and 2 left alone), `after/<screen>-orig-slint.jpg` is original left, Slint right.
+
+Shared pieces:
+- `TabularText` (`ui/components.slint`, `Glyphs.split` in `src/ui/chipflow.rs`): every digit of a time sits in a cell as wide as the
+  widest digit, like `font-variant-numeric: tabular-nums` of the original (Slint has no such feature). Used by the ring clock, the
+  editor time, the alarm card time and the theme preview. The ring clock styles pass their own weight and spacing.
+- Screen titles wrap over two lines instead of an ellipsis ("Settings for new alarms"), the bottom bar has three equal thirds,
+  toasts wrap like the original and are 52 dp high with Undo, the Undo button has its 10 dp padding.
+- `TextField` can centre its text (the colour sheet's hex field).
+
+Per screen:
+- Ring screen: the dark halo around the digits is gone (the original's `text-shadow` is a faint glow); it stays only on a photo.
+  The hint under the snooze button ("2 challenges to turn it off" with dots, or the preview hint) is 14 px and 16 dp high like the
+  original, so snooze and turn-off sit at the same height. Clock styles use the phone's serif and monospace families (the previous
+  family names did not exist on the phone, so the serif and monospace styles drew in a wrong weight). `before/ring-hint.jpg`, `after/ring-hint-orig-slint.jpg`;
+  backdrops `after/ring-aurora-orig-slint.jpg`, `ring-sunrise`, `ring-stars`, `ring-rings`, `ring-bubbles`, `ring-waves`;
+  clock styles `after/ring-clock-thin-orig-slint.jpg`, `ring-clock-bold`, `ring-clock-classic`, `ring-clock-mono`
+- Challenge screens: the practice header is 44 dp high with the Stoppen link (24 dp in a real run), the "Can't solve this?" link has
+  its 8 dp margin, the memory grid its 8 dp margin, hold and reaction their 8 dp gap above the field, the typing field shows the
+  accent focus ring, the add-challenge list has no gaps between rows (60 dp, like the original), the "Can't solve this?" sheet has a
+  plain Cancel item. `before/practice-math.jpg`, `after/practice-math-orig-slint.jpg`; `after/practice-typing`, `practice-memory`,
+  `practice-reaction`, `practice-hold`, `practice-shake`, `practice-end`, `cantsolve-sheet` (all `-orig-slint.jpg`)
+- Settings: unchanged rows and sections (they already matched); the backup sheet's note is behind the `?` like the original, the
+  "Settings for new alarms" title wraps. `before/settings1.jpg`, `after/settings1-orig-slint.jpg`, `after/settings2-orig-slint.jpg`;
+  `before/backup-sheet.jpg`, `after/backup-sheet-orig-slint.jpg`; `before/new-alarms.jpg`, `after/new-alarms-orig-slint.jpg`
+- History: title centred in its 44 dp row. Data, stats, detail and the delete sheet match. `before/history.jpg`,
+  `after/history-orig-slint.jpg`; `before/history-stats.jpg`, `after/history-stats-orig-slint.jpg`; `before/history-detail.jpg`,
+  `after/history-detail-orig-slint.jpg`; `before/history-delete-sheet.jpg`, `after/history-delete-sheet-orig-slint.jpg`
+- Theme screen: tiles in rows that stretch with a wrapping label (a long name wraps over two lines), 54 dp rows with 14 px titles,
+  the accent circles spread over the full width, "Accent colour" title spacing, the preview card with the original's time weight,
+  day spacing and 33 dp pills. The preview card stays pinned: the original's `.theme-preview` sits outside its scroll area too (I
+  checked it on the phone with an own theme, where the page scrolls), so it does not scroll away in either app. Own-theme colour
+  sheet: hex field centred, 8 dp more room above Done. `before/theme.jpg`, `after/theme-orig-slint.jpg`;
+  `before/theme-own.jpg`, `after/theme-own-orig-slint.jpg`; `before/colour-sheet.jpg`, `after/colour-sheet-orig-slint.jpg`
+- Reliability: the last row ("This app in the phone's settings") wraps like the original. `before/reliability.jpg`,
+  `after/reliability-orig-slint.jpg`; `before/reliability2.jpg`, `after/reliability2-orig-slint.jpg`
+- Toasts: `before/toast-undo.jpg`, `after/toast-undo-orig-slint.jpg`
+- Light theme: `before/light-home.jpg`, `after/light-home-orig-slint.jpg`; `before/light-editor.jpg`, `after/light-editor-orig-slint.jpg`;
+  `after/light-settings-orig-slint.jpg`. A custom theme was only looked at in the theme screen and its colour sheet.
+
+Still different after round 3: the colour sheet's brightness slider has a bigger thumb in Slint; the monospace clock style shows
+the default sans in Slint (the phone's monospace family is not found by name); typing passages and sums are random, so those pairs
+show different text; the reliability rows are a few dp taller or shorter per row than the original's; the original's hold and reaction
+instruction line sits 4 dp higher; the animated backdrops show another moment of their animation; the home header "Fr 11:26" is
+not tabular (only the clocks and cards are); the dark colour sheet is 17 dp lower than the original's.
+
 ### Stability, design comparison, test yourself
 
 Not done yet. The phone was locked (keyguard showing) when the stability and design part was about to start, and only the user can
