@@ -983,10 +983,67 @@ Per screen:
 - Editor (shared rows only): 54 dp rows with 14 px titles and inset dividers; days, time, presets are round 2. `before/editor-top.jpg`, `after/editor-top-orig-slint.jpg`
 - Snooze sheet: sheet look and stepper. `before/snooze-sheet.jpg`, `after/snooze-sheet-orig-slint.jpg`
 
-Still different after this round: the editor's days, preset chips, time digits and Save bar; the alarm card (time weight, weekday
+Still different after round 1 (round 2 below fixed these): the editor's days, preset chips, time digits and Save bar; the alarm card (time weight, weekday
 letter spacing, row dividers); the time wheel, sound, vibration and ring-limit chips (the original wraps chips over rows, Slint has
 one row); the Label sheet focuses its field at once and opens the keyboard (the original waits for a tap); the toast's wrapping;
 the original's text is a little lighter on dark in some places by antialiasing only.
+
+#### Round 2: the alarm list and the editor with its sheets
+
+Checked on the phone (Dutch, default theme), both apps with the same three alarms (06:20 once tomorrow, 07:00 "Werk" on weekdays,
+08:40 on the weekend). Each line: the Slint capture before (`docs/phone/design/before/<screen>.jpg`, from before round 1) and the pair
+after (original left, Slint right, `docs/phone/design/after/<screen>-orig-slint.jpg`). Captures come from `devtest/r2.sh` (`capset o|s`).
+
+Shared pieces (`ui/widgets.slint`, `components.slint`, `src/ui/chipflow.rs`):
+- Chips wrap like the original's `.chips` flex row: `ChoiceChips` asks Rust (`ChipLayout.positions`, `chipflow.rs`) for the line, x and
+  width of each chip. A line takes chips while the next one fits, and the room left on a line is shared out equally (`flex: 1 1 auto`,
+  min 44 dp, 12 dp padding, 8 dp gap). Text widths come from the advances of the phone's system font at weight 500 (a table of 352 values;
+  Slint has no way to measure text before layout). `small` is the editor's repeat presets (12 px text in a 30 dp pill inside a 44 dp touch
+  place, 6 dp gap). The ring limit sheet now wraps "Forever" onto a second row, vibration, fade, ring clock, quick date, notice,
+  wake-up check and the challenge difficulty chips use the same component. Unit tests in `chipflow.rs`.
+- `Sheet` has a pinned main button (`done-text`, `finish`, `done-quiet`) that stays at the bottom while the rest scrolls, the same 52 dp
+  button for every sheet; the action top right takes a filled play or stop icon (`action-icon`), `GroupTitle` has the original's 20 dp
+  top margin, `PrimaryButton` has a `compact` form (48 dp, 14 px) for the buttons under a list.
+- Radio rows: 14 px text (500 when picked), 20 dp mark with a 2 dp ring, picked has a 6 dp accent ring, 52 dp rows without gaps.
+- Wheel: 96 dp wide panel on `--surface2`, 44 dp capsule in `--accent-soft`, the number picked in the accent colour at 28 px bold,
+  neighbours 20 px, fading out at the top and bottom over 26 percent of the height (an overlay in the sheet colour instead of the
+  original's CSS mask).
+- Date picker: the month in a field like the others (page colour, thin line, radius 14), today with the soft accent, the day picked
+  filled, with the "Date" label above like the original's date field; the pause-until-date sheet uses the same and a pinned button.
+- Backdrop tiles: the sunrise on a tile starts at its dimmest, like the original's 45 second animation does when the sheet opens.
+
+Per screen:
+- Home, alarm card: dividers between cards from where the text starts, weekday letters 11 px in 13.2 dp cells, time digits a little
+  lighter and wider (weight 450, +1.1 px: the original draws tabular digits), the pause and sort buttons on the right edge, the quick
+  chips equally wide, 88 dp room under the list (was 120 plus the gesture bar). The snoozed card is unchanged: its text rule was
+  already the original's `when_text` (label and state line both). `before/home-alarms.jpg`, `after/home-alarms-orig-slint.jpg`;
+  swiped open `before/home-swipe.jpg`, `after/home-swipe-orig-slint.jpg`; a switched-off card `after/home-off-orig-slint.jpg`
+- Home list scrolled to the end: 88 dp under the last card like the original, the + clear of it. `before/home-bottom.jpg`, `after/home-bottom-orig-slint.jpg`
+- Alarm menu: unchanged since round 1, verified at the same spot. `before/alarm-menu.jpg`, `after/alarm-menu-orig-slint.jpg`
+- Editor: 56 by 36 dp step pills, 64 px time (44 px in 12 hour) at weight 450, round 38 dp day buttons in 44 dp touch places,
+  44 dp "once" button, repeat chips, 20 and 16 dp gaps between the parts, Save bar 12 dp above and 16 dp below the button on the page
+  colour. `before/editor-top.jpg`, `after/editor-top-orig-slint.jpg`; `before/editor-bottom.jpg`, `after/editor-bottom-orig-slint.jpg`
+- Time sheet: the wheel, `Type it` field. `before/time-sheet.jpg`, `after/time-sheet-orig-slint.jpg`
+- Label sheet: the name field no longer takes focus by itself (a tap opens the keyboard, as in the original; the "used before" chips
+  and Done stay in reach). `before/label-sheet.jpg`, `after/label-sheet-orig-slint.jpg`
+- Sound sheet: Start with a play icon, 52 dp rows, pinned Done, compact import button. `before/sound-sheet.jpg`, `after/sound-sheet-orig-slint.jpg`
+- Vibration sheet: "Right away" fits, play icon. `before/vibration-sheet.jpg`, `after/vibration-sheet-orig-slint.jpg`
+- Snooze, ring limit, wake-up check and notice sheets: chips wrap, pinned Done. `before/snooze-sheet.jpg`, `after/snooze-sheet-orig-slint.jpg`;
+  `before/limit-sheet.jpg`, `after/limit-sheet-orig-slint.jpg`; `before/wake-sheet.jpg`, `after/wake-sheet-orig-slint.jpg`;
+  `before/notice-sheet.jpg`, `after/notice-sheet-orig-slint.jpg`
+- Discard and delete sheets: a red plain item and the pinned button, like the original. `after/discard-sheet-orig-slint.jpg`
+- Challenges sheets: pinned Done, compact add button, rows with dividers and room for a wrapping description, Back pinned above the
+  gesture bar, difficulty chips wrap. `before/challenges-sheet.jpg`, `after/challenges-sheet-orig-slint.jpg`;
+  `before/challenges-sheet-filled.jpg`, `after/challenges-sheet-filled-orig-slint.jpg`; `before/add-challenge-sheet.jpg`,
+  `after/add-challenge-sheet-orig-slint.jpg`; `before/challenge-detail.jpg`, `after/challenge-detail-orig-slint.jpg`
+- Ring look sheet: muted sunrise tile, smaller tiles. `before/ringlook-sheet.jpg`, `after/ringlook-sheet-orig-slint.jpg`
+- Date sheet: see the date picker above. `before/date-sheet.jpg`, `after/date-sheet-orig-slint.jpg`
+
+Still different after round 2: the date sheet shows a calendar where the original has the system date field (kept on purpose);
+the animated tiles of the ring look sheet (Rings, Bubbles, Stars, Waves) show another moment of their animation than the original's;
+the wheel's neighbours sit 40 dp apart where the original's perspective makes them about 43; chip widths are estimated from the
+system font, so on another font a chip can be a few dp narrower or wider than the text wants (text is then cut with an ellipsis);
+preset chips differ by a few dp in width from the original's real measurements.
 
 ### Stability, design comparison, test yourself
 
