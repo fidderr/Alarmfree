@@ -1,5 +1,10 @@
 # AlarmFree: Dioxus to Slint port inventory
 
+> Status: AlarmFree's `main` branch is now the Slint app. The Dioxus (WebView) version, up to 0.4.1, is on branch
+> `dioxus`. This file is the inventory the port was measured against; it is kept as history and as the list of what is
+> still open (the checklist in section 9 and the "Known gaps" under Status). It names `C:/Git/alarmfree-slint`, the
+> working copy the port was made in before it became `main`. For how to build and test today, see the README.
+
 Feature checklist the Slint port (Slint 1.18.1, `.slint` + Rust glue) is measured against. Derived from the code in
 `C:/Git/alarmfree-slint` (a copy of AlarmFree 0.4.x, Rust + Dioxus 0.7 in an Android WebView). Section 9 is the
 checklist. Everything the Rust core already does (alarm_ops, schedule, ordering, persistence, db, models, platform,

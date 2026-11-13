@@ -9,9 +9,10 @@ No accounts, no tracking, no ads. Everything ships in the APK. Needs Android 12 
 64-bit phone.
 
 It is written in Rust on top of [mobile-sentinel](https://github.com/fidderr/mobile-sentinel),
-a separate generic SDK. The UI is [Dioxus](https://dioxuslabs.com) in Android's WebView. The
-app has no Kotlin of its own: what Android needs is the SDK's, and the SDK only ships what
-`Cargo.toml` asks for.
+a separate generic SDK. The UI is [Slint](https://slint.dev), drawn natively on the GPU by Skia
+in a NativeActivity: no WebView. The app has no Kotlin of its own: what Android needs is the
+SDK's, and the SDK only ships what `Cargo.toml` asks for. The earlier Dioxus/WebView version
+(up to 0.4.1, the one on Play) lives on the branch [`dioxus`](https://github.com/fidderr/Alarmfree/tree/dioxus).
 
 - [What it does](#what-it-does)
 - [The challenges](#the-challenges)
@@ -35,7 +36,7 @@ all until a date, duplicate, drag into your own order, or sort by time or next r
 the alarm will. Fade in up to 5 minutes, a minimum volume per alarm or for all, three vibration
 patterns, vibrate first with the sound after a delay, or vibration only.
 
-**Ringing.** Up to 10 challenges per alarm, in your order or at random, each one to try
+**Ringing.** Up to 10 challenges per alarm, in your order, each one to try
 out first. 0 to 10 snoozes of 1 to 60 minutes. A ring limit of 30
 minutes to forever. An optional wake-up check a few minutes later. Optional full brightness.
 
@@ -43,7 +44,7 @@ minutes to forever. An optional wake-up check a few minutes later. Optional full
 and a test alarm that goes through the whole real ring path. History with outcomes (solved,
 missed, stopped at the limit, phone restarted), a streak, a chart and timings per challenge.
 
-**The rest.** System, dark, light, pure black and colorblind themes with five accent colours.
+**The rest.** System, light, dark and pure black themes, more colour themes, or your own colours.
 Five languages. 12 or 24 hours, and which day a week starts on. A home-screen widget with the
 next alarm. An optional quiet notification before an alarm. Alarms to a file and back. Undo on
 what can be undone. Works on tablets and foldables, with the list and an alarm side by side.
@@ -72,9 +73,9 @@ Nothing here waits for the UI, because the process it lives in is usually dead a
 setAlarmClock, carrying a ring plan Rust wrote when it armed the alarm
   -> SentinelAlarmReceiver in :sentinel
        marks the job active, arms a watchdog, starts the ring service
-  -> SentinelForegroundService in :sentinel (no Rust, no WebView)
+  -> SentinelForegroundService in :sentinel (no Rust, no UI)
        foreground notification, sound and vibration from the plan
-  -> MAIN comes up: the state machine runs, and the screen with it
+  -> MAIN comes up: the ring screen
   -> SentinelJobGuardian in :sentinel keeps it that way
 ```
 
@@ -93,7 +94,7 @@ Policy stays in Rust, in `src/platform.rs` and the SDK's AlarmKit; Kotlin only e
 | The UI process is killed | Sound goes on, the screen comes back. |
 | The ring process is killed | Android or the watchdog alarm brings it back within seconds. |
 | Both killed, as a swipe does on some phones | The same, and a provider in the new `:sentinel` starts guarding again. |
-| The UI freezes | A heartbeat through the page stops, the guardian restarts it. After two failures a native backup screen takes over: 20 holds of 3 seconds end the ring. |
+| The UI freezes | A heartbeat from the UI stops, the guardian restarts it. After two failures a native backup screen takes over: 20 holds of 3 seconds end the ring. |
 | A dark-mode switch, font change, rotation or fold | Handled in place, no restart. |
 | A sound that cannot play | The next one: the system default, then a bundled one, then vibration. |
 | Restart in the middle of a ring | Counts as dismissed, with a notice. |
@@ -105,62 +106,71 @@ Policy stays in Rust, in `src/platform.rs` and the SDK's AlarmKit; Kotlin only e
 ## Project layout
 
 ```
-Cargo.toml        the SDK features this app uses: all it gets
-sentinel.toml     icon, assets, direct boot, orientation for build_sentinel
-build.sh          dx build + build_sentinel; see below
+Cargo.toml        the SDK features this app uses (all it gets), the Slint dependency
+sentinel.toml     application id, icon, assets, direct boot, orientation for build_sentinel
+build.rs          compiles ui/main.slint
+build.sh          cargo build + build_sentinel; see below
 sign-aab.sh       signs a Play bundle
-assets/           icon, style.css (compiled in), sounds/default
+assets/           icon, sounds
+ui/               the screens, sheets and widgets, as .slint files (main.slint is the root)
+vendor/           three patched Slint crates; see vendor/README.md
 devtest/          scenarios on a device or emulator; see Tests
 src/
-  app.rs          root component, routes, the back and firing watchers, AlarmData
+  lib.rs          android_main: the NativeActivity loads libalarmfree.so and calls it
+  main.rs         the same UI on a desktop, for working on the screens
+  ui/             the Rust side of each .slint file: home, editor, ring, history, settings,
+                  theme, reliability, challenge_run, toast, palette
   platform.rs     what AlarmFree wants of the SDK, and an alarm as an AlarmSpec
   alarm_ops.rs    new alarms, quick alarms, wake-up checks, pausing, backups
   schedule.rs     one-time dates, next ring, countdowns
   persistence.rs  alarms and settings, a database that cannot be read
-  history_persistence.rs, db/    history and the SQLite schema
-  custom_sounds.rs   bundled and imported sounds
+  history_persistence.rs, history_view.rs, db/    history and the SQLite schema
+  custom_sounds.rs, ring_photos.rs   bundled and imported sounds, the ring screen's photo
   firing_state.rs    which alarm rings, from the SDK's records
-  back.rs            Back, the same on every Android version
-  feedback.rs, text.rs, timer.rs, sanitize.rs, ordering.rs, list_edit.rs, reorder.rs/.js
-  debug_hooks.rs     what devtest drives the app with; not in a build for users
-  models/         alarm, challenge, history, settings, what a challenge is set to
-  screens/        home/, alarm_config/, settings/ (screen and sheets), alarm_firing,
-                  challenge_run, history, practice, reliability
-  components/     challenges/, ui (Sheet, Row, Chips...), time_picker, toast, icon, celebration
-  i18n/           en, nl, es, fr, de
+  challenges/, models/, i18n/ (en, nl, es, fr, de), reliability.rs, calendar.rs, text.rs, ...
+  debug_hooks.rs     what devtest drives the app with; debug builds only
 ```
 
 ## Build and install
 
-You need Rust with the Android targets, the Android SDK and NDK (`ANDROID_HOME`,
-`ANDROID_NDK_HOME`), a JDK 17, and `cargo install dioxus-cli --version 0.7.x`.
+`Cargo.toml` takes the SDK from `../mobile-sentinel`: clone
+[mobile-sentinel](https://github.com/fidderr/mobile-sentinel) (branch `main`) next to this folder.
+It is not on crates.io for now; CI checks it out the same way.
+
+You need Rust with the Android targets, the Android SDK, a JDK 17, and the NDK that
+`build.sh` names (Slint's prebuilt Skia needs NDK r30; adjust the paths at the top of
+`build.sh` to your machine). `build.sh` is written for Windows with Git Bash.
 
 ```bash
-./build.sh                 # debug APK, with the published mobile-sentinel
+./build.sh                 # debug APK
 ./build.sh install         # and install it
-./build.sh release         # release APK, unsigned
+./build.sh release         # release APK, signed with the debug key so it installs
+./build.sh fast install    # release profile without LTO: a changed file builds in seconds
 ./build.sh aab             # Play bundle, unsigned; then ./sign-aab.sh
-
-./build.sh workspace ...   # the same, with mobile-sentinel from a sibling folder
 ```
 
-For `workspace`, also add this to `Cargo.toml`, and do not commit it:
+`TARGET=x86_64-linux-android ./build.sh ...` builds for an emulator. The result is
+`build/alarmfree-slint-<mode>.apk`. `cargo build --lib` makes `libalarmfree.so`, and the SDK's
+`build_sentinel` writes the whole Gradle project into `target/sentinel-android/` and runs Gradle:
+the app keeps no `android/` folder. `sentinel.toml` gives this build the application id
+`com.fidderr.alarmfree.slint` and the label "AlarmFree Slint", so it installs next to the Play
+version and is not what goes to Play yet.
 
-```toml
-[patch.crates-io]
-mobile-sentinel = { path = "../mobile-sentinel" }
-```
+`cargo run` starts the UI on a desktop.
 
-`TARGET=x86_64-linux-android ./build.sh ...` builds for an emulator. `RELEASE_TEST=1 ./build.sh
-workspace release` builds what the scenarios need of a release: R8 and the optimisation of the
-real thing, but debuggable, signed with the debug key, and with the debug hooks in.
+### Patched Slint
 
-`dx` generates the Android project on every run, so `build_sentinel` always runs after it.
+`[patch.crates-io]` in `Cargo.toml` points three Slint 1.18.1 crates at `vendor/`: without the
+ICU line-break dictionaries (Thai, Lao, Khmer, Burmese, Chinese, Japanese) and the SVG stack,
+which AlarmFree does not use, `libmain.so` is about 5.6 MB smaller. A change to Slint that makes both
+optional is upstream as [slint-ui/slint#14947](https://github.com/slint-ui/slint/pull/14947);
+the patches go away when it is in a release. Details in [vendor/README.md](vendor/README.md).
 
 ## Tests
 
 `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings` and `cargo test` run with no
-device. They also check that every translation has every key and placeholder, and that every
+device, and so does CI (`.github/workflows/ci.yml`: those three on Linux, and a clippy
+cross-check for `aarch64-linux-android`, with mobile-sentinel checked out beside the app). They also check that every translation has every key and placeholder, and that every
 key the code names exists.
 
 `devtest/` drives a real app over adb and judges only what can be seen from outside: is the
@@ -171,6 +181,10 @@ SERIAL=emulator-5554 devtest/matrix.sh            # every scenario on one device
 SERIAL=emulator-5554 devtest/matrix.sh s01 s07    # just these
 bash devtest/all.sh                               # Android 16 and 12 at once, 16 also on big screens
 ```
+
+Note: the scenarios of `matrix.sh` and `all.sh` still drive the old WebView page and have not
+been rewritten for the Slint UI yet. `devtest/slint_smoke.sh` is the check that does (make an alarm,
+ring it, snooze, turn it off). Of the text below, the part about `matrix.sh` describes the Dioxus line.
 
 All of it takes about 15 to 20 minutes on two emulators, and no scenario over a minute apart from
 the tour of every panel: the summary names the ones that do. An emulator's clock moves instead of a scenario waiting for the
@@ -214,21 +228,15 @@ a `Locale` variant, and an arm in `load_translations`.
 - **Policy in Rust, Kotlin executes.** A capability the app needs goes into mobile-sentinel,
   without knowing about this app, and is enabled here. The SDK has a test that it stays generic.
 - **No free way out of a ring.** Whatever ends one without the user is recorded and told.
-- **No `<input type="file">`, CDN fonts or remote anything** in the page. Icons are inline SVG.
-- `INTERNET` stays in the manifest: Dioxus talks to its page over a socket on the phone itself,
-  and without it the page stays blank. Nothing else uses it, and nothing leaves the phone.
-- WebView 91 is the oldest there is (Android 12): no `color-mix` or `:has` in the CSS.
-- Classes set from JavaScript do not show up in Rust: see `reorder.js` before removing CSS.
-- The page applies changes at once, not in an animation frame (`WINDOW_WATCH` in `app.rs`): the
-  UI's tasks wait for the last change, and a WebView that is not drawing has no frames.
-- `App` keeps the event loop awake (`keep_event_loop_awake` in the SDK): tao on Android can lose a
-  wake when another screen closes, and everything in the UI waits for one.
+- **The UI is `.slint` files plus thin Rust glue** in `src/ui/`. State and rules stay in the Rust modules
+  next to it, which do not know about Slint.
+- **Nothing leaves the phone.** There is no WebView and no remote content.
 
 ## Releasing
 
-1. Publish mobile-sentinel first if this release needs a newer one, and bump the version here
-   and `SENTINEL_VERSION` in `build.sh`.
-2. Bump `version` in `Cargo.toml` and `version_code` in `Dioxus.toml` (higher than any upload).
+1. Make sure mobile-sentinel `main` has what this release needs.
+2. Bump `version` in `Cargo.toml` and `version_name` / `version_code` in `sentinel.toml`
+   (`version_code` higher than any upload). Play still has the Dioxus 0.4.1 line.
 3. `./build.sh aab && ./sign-aab.sh`. The result is in `release/`. The upload keystore is not in
    this repository, and every release needs the same one; `sign-aab.sh` says what to do when
    there is none.
