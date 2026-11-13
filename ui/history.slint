@@ -1,4 +1,4 @@
-import { Pal, Tr, Insets, Motion } from "theme.slint";
+import { Pal, Tr, Insets, Motion, Zoom } from "theme.slint";
 import { Icon, IconName } from "components.slint";
 import { BottomNav } from "nav.slint";
 
@@ -24,8 +24,8 @@ component StatList inherits VerticalLayout {
     spacing: root.gap;
     for line in root.lines: HorizontalLayout {
         spacing: 12px;
-        Text { horizontal-stretch: 1; text: line.name; font-size: root.size; color: Pal.text2; wrap: word-wrap; }
-        Text { text: line.value; font-size: root.size; font-weight: 500; color: Pal.text; horizontal-alignment: right; }
+        Text { horizontal-stretch: 1; text: line.name; font-size: root.size * Zoom.scale; color: Pal.text2; wrap: word-wrap; }
+        Text { text: line.value; font-size: root.size * Zoom.scale; font-weight: 500; color: Pal.text; horizontal-alignment: right; }
     }
 }
 
@@ -34,8 +34,8 @@ component Stat inherits VerticalLayout {
     in property <string> name;
     horizontal-stretch: 1;
     spacing: 2px;
-    Text { text: root.value; font-size: 20px; font-weight: 500; color: Pal.text; overflow: elide; }
-    Text { text: root.name; font-size: 12px; color: Pal.text2; overflow: elide; }
+    Text { text: root.value; font-size: 20px * Zoom.scale; font-weight: 500; color: Pal.text; overflow: elide; }
+    Text { text: root.name; font-size: 12px * Zoom.scale; color: Pal.text2; overflow: elide; }
 }
 
 component EventRow inherits VerticalLayout {
@@ -54,15 +54,15 @@ component EventRow inherits VerticalLayout {
                 horizontal-stretch: 1;
                 alignment: center;
                 spacing: 2px;
-                Text { text: root.ev.title; font-size: 14px; font-weight: 500; color: Pal.text; overflow: elide; }
+                Text { text: root.ev.title; font-size: 14px * Zoom.scale; font-weight: 500; color: Pal.text; overflow: elide; }
                 if root.ev.sub != "": Text {
                     text: root.ev.sub;
-                    font-size: 12px;
+                    font-size: 12px * Zoom.scale;
                     color: root.ev.flag == 1 ? Pal.danger : root.ev.flag == 2 ? Pal.warn : Pal.text2;
                     overflow: elide;
                 }
             }
-            Text { text: root.ev.value; font-size: 14px; font-weight: 500; color: Pal.text; vertical-alignment: center; }
+            Text { text: root.ev.value; font-size: 14px * Zoom.scale; font-weight: 500; color: Pal.text; vertical-alignment: center; }
             Rectangle {
                 width: 16px;
                 Icon {
@@ -87,7 +87,7 @@ component EventRow inherits VerticalLayout {
             Text {
                 x: 0px;
                 text: Tr.t("history.delete_one");
-                font-size: 14px;
+                font-size: 14px * Zoom.scale;
                 font-weight: 500;
                 color: Pal.danger;
                 vertical-alignment: center;
@@ -133,7 +133,7 @@ export component HistoryScreen inherits Rectangle {
                 horizontal-stretch: 1;
                 height: 44px;
                 text: Tr.t("history.title");
-                font-size: 28px;
+                font-size: 28px * Zoom.scale;
                 font-weight: 700;
                 color: Pal.text;
                 vertical-alignment: center;
@@ -162,7 +162,7 @@ export component HistoryScreen inherits Rectangle {
                         background: root.period == i ? Pal.accent : Pal.surface;
                         name := Text {
                             text: label;
-                            font-size: 14px;
+                            font-size: 14px * Zoom.scale;
                             font-weight: 500;
                             color: root.period == i ? Pal.on-accent : Pal.text;
                         }
@@ -176,7 +176,7 @@ export component HistoryScreen inherits Rectangle {
             padding-left: 20px;
             padding-right: 20px;
             spacing: 8px;
-            Text { text: Tr.t("filter.last_prefix"); font-size: 14px; color: Pal.text2; vertical-alignment: center; }
+            Text { text: Tr.t("filter.last_prefix"); font-size: 14px * Zoom.scale; color: Pal.text2; vertical-alignment: center; }
             Rectangle {
                 width: 88px;
                 height: 48px;
@@ -188,7 +188,7 @@ export component HistoryScreen inherits Rectangle {
                     x: 12px;
                     width: parent.width - 24px;
                     text <=> root.custom-text;
-                    font-size: 16px;
+                    font-size: 16px * Zoom.scale;
                     color: Pal.text;
                     input-type: number;
                     vertical-alignment: center;
@@ -198,7 +198,7 @@ export component HistoryScreen inherits Rectangle {
                     changed has-focus => { if (!self.has-focus) { root.custom-accepted(); } }
                 }
             }
-            Text { text: Tr.t("filter.days_unit"); font-size: 14px; color: Pal.text2; vertical-alignment: center; }
+            Text { text: Tr.t("filter.days_unit"); font-size: 14px * Zoom.scale; color: Pal.text2; vertical-alignment: center; }
             Rectangle { horizontal-stretch: 1; }
         }
         Flickable {
@@ -219,7 +219,7 @@ export component HistoryScreen inherits Rectangle {
                     }
                     Text {
                         text: root.empty == 1 ? Tr.t("history.no_events") : Tr.t("history.none_in_period");
-                        font-size: 16px;
+                        font-size: 16px * Zoom.scale;
                         font-weight: 500;
                         horizontal-alignment: center;
                         wrap: word-wrap;
@@ -227,7 +227,7 @@ export component HistoryScreen inherits Rectangle {
                     }
                     if root.empty == 1: Text {
                         text: Tr.t("history.events_subtitle");
-                        font-size: 14px;
+                        font-size: 14px * Zoom.scale;
                         horizontal-alignment: center;
                         wrap: word-wrap;
                         color: Pal.text2;
@@ -267,7 +267,7 @@ export component HistoryScreen inherits Rectangle {
                                         width: parent.width;
                                         height: 13px;
                                         text: bar.label;
-                                        font-size: 11px;
+                                        font-size: 11px * Zoom.scale;
                                         color: Pal.text2;
                                         horizontal-alignment: center;
                                     }
@@ -281,7 +281,7 @@ export component HistoryScreen inherits Rectangle {
                                 height: 44px;
                                 Text {
                                     text: root.show-all ? Tr.t("history.fewer_stats") : Tr.t("history.all_stats");
-                                    font-size: 14px;
+                                    font-size: 14px * Zoom.scale;
                                     font-weight: 500;
                                     color: Pal.accent;
                                 }

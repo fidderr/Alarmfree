@@ -1,4 +1,4 @@
-import { Pal, Tr, Motion } from "theme.slint";
+import { Pal, Tr, Motion, Zoom } from "theme.slint";
 import { Icon, IconName } from "components.slint";
 import { PrimaryButton, Sheet, Stepper, ChoiceChips, GroupTitle } from "widgets.slint";
 
@@ -48,7 +48,7 @@ component TextLink inherits Rectangle {
     callback clicked();
     min-width: 52px;
     min-height: 44px;
-    Text { text: root.text; font-size: 14px; font-weight: 500; color: root.ink; }
+    Text { text: root.text; font-size: 14px * Zoom.scale; font-weight: 500; color: root.ink; }
     TouchArea { clicked => { root.clicked(); } }
 }
 
@@ -70,14 +70,14 @@ component ChallengeRow inherits Rectangle {
             width: 36px;
             Icon { name: IconName.grip; size: 18px; tint: Pal.text2; }
         }
-        Text { width: 24px; text: "\{root.number}"; font-size: 14px; font-weight: 500; color: Pal.accent; vertical-alignment: center; }
+        Text { width: 24px; text: "\{root.number}"; font-size: 14px * Zoom.scale; font-weight: 500; color: Pal.accent; vertical-alignment: center; }
         Rectangle {
             horizontal-stretch: 1;
             VerticalLayout {
                 alignment: center;
                 spacing: 3px;
-                Text { text: root.item.name; font-size: 14px; font-weight: 500; color: Pal.text; overflow: elide; }
-                Text { text: root.item.summary; font-size: 12px; color: Pal.text2; overflow: elide; }
+                Text { text: root.item.name; font-size: 14px * Zoom.scale; font-weight: 500; color: Pal.text; overflow: elide; }
+                Text { text: root.item.summary; font-size: 12px * Zoom.scale; color: Pal.text2; overflow: elide; }
             }
             TouchArea { clicked => { root.open(); } }
         }
@@ -194,8 +194,8 @@ export component AddChallengeSheet inherits Rectangle {
                     padding-bottom: 8px;
                     alignment: center;
                     spacing: 2px;
-                    Text { text: type.name; font-size: 14px; font-weight: 500; color: Pal.text; }
-                    Text { text: type.desc; font-size: 12px; line-height-factor: 1.14; color: Pal.text2; wrap: word-wrap; }
+                    Text { text: type.name; font-size: 14px * Zoom.scale; font-weight: 500; color: Pal.text; }
+                    Text { text: type.desc; font-size: 12px * Zoom.scale; line-height-factor: 1.14; color: Pal.text2; wrap: word-wrap; }
                 }
                 TouchArea { clicked => { Cfg.add(i); } }
             }
@@ -220,7 +220,7 @@ export component ChallengeDetailSheet inherits Rectangle {
             ChoiceChips { labels: Cfg.difficulty-labels; selected: Cfg.detail-difficulty; picked(i) => { Cfg.pick-difficulty(i); } }
             VerticalLayout {
                 padding-top: 4px;
-                Text { text: Cfg.detail-example; font-size: 14px; color: Pal.text2; horizontal-alignment: center; wrap: word-wrap; }
+                Text { text: Cfg.detail-example; font-size: 14px * Zoom.scale; color: Pal.text2; horizontal-alignment: center; wrap: word-wrap; }
             }
         }
         for s[i] in Cfg.steppers: Stepper {
@@ -232,7 +232,7 @@ export component ChallengeDetailSheet inherits Rectangle {
         if Cfg.detail-scan: VerticalLayout {
             spacing: 8px;
             padding-top: 8px;
-            Text { text: Tr.t("challenge.config.scan_value"); font-size: 14px; font-weight: 500; color: Pal.text; }
+            Text { text: Tr.t("challenge.config.scan_value"); font-size: 14px * Zoom.scale; font-weight: 500; color: Pal.text; }
             for r in [Cfg.code-rev]: Rectangle {
                 height: 48px;
                 border-radius: 14px;
@@ -243,7 +243,7 @@ export component ChallengeDetailSheet inherits Rectangle {
                     x: 12px;
                     width: parent.width - 24px;
                     text: Cfg.detail-code;
-                    font-size: 16px;
+                    font-size: 16px * Zoom.scale;
                     color: Pal.text;
                     single-line: true;
                     vertical-alignment: center;
@@ -253,7 +253,7 @@ export component ChallengeDetailSheet inherits Rectangle {
                     x: 12px;
                     width: parent.width - 24px;
                     text: Tr.t("challenge.config.scan_placeholder");
-                    font-size: 16px;
+                    font-size: 16px * Zoom.scale;
                     color: Pal.text2;
                     opacity: 0.7;
                     vertical-alignment: center;
@@ -269,7 +269,7 @@ export component ChallengeDetailSheet inherits Rectangle {
             padding-top: 4px;
             Rectangle {
                 height: 44px;
-                Text { text: Tr.t("config.remove_challenge"); font-size: 14px; font-weight: 500; color: Pal.danger; }
+                Text { text: Tr.t("config.remove_challenge"); font-size: 14px * Zoom.scale; font-weight: 500; color: Pal.danger; }
                 TouchArea { clicked => { Cfg.remove-detail(); } }
             }
         }

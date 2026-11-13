@@ -1,4 +1,4 @@
-import { Pal, Tr, Insets, Motion } from "theme.slint";
+import { Pal, Tr, Insets, Motion, Zoom } from "theme.slint";
 import { ChipLayout, ChipPos } from "widgets.slint";
 import { HomeScreen, AlarmRow, DayCell } from "home.slint";
 import { Toast, Glyphs, Glyph } from "components.slint";
@@ -19,7 +19,7 @@ import { Thm, ThemeScreen, ThemeTile } from "theme_screen.slint";
 export { Pal, Tr, Insets, AlarmRow, DayCell, EditorSheet, HomeSheet, SheetChoice }
 export { Ed, SoundRow, LookTile, SwatchCell, UsedChip, Cal, DateCell, Hue, Look, Rel, CheckRow }
 export { ChipLayout, ChipPos, Glyphs, Glyph }
-export { SettingsView, StatLine, BarCell, EventLine, Motion, Thm, ThemeTile }
+export { SettingsView, StatLine, BarCell, EventLine, Motion, Zoom, Thm, ThemeTile }
 export { Run, RunCell, TypeCell, ReactTarget, RunKind, Cfg, CfgRow, CfgType, CfgStepper }
 
 export component MainWindow inherits Window {
@@ -139,7 +139,7 @@ export component MainWindow inherits Window {
     callback toast-undo();
     callback toast-dismiss();
     background: Pal.bg;
-    default-font-size: 14px;
+    default-font-size: 14px * Zoom.scale;
     // What the original's WebView draws on this phone: the system font (Roboto is not a family
     // of its own there). Where it does not exist Slint takes its own default.
     default-font-family: "OPPO Sans 4.0 EN";
@@ -259,7 +259,7 @@ export component MainWindow inherits Window {
             x: 32px;
             width: parent.width - 64px;
             text: Tr.t("home.pick");
-            font-size: 14px;
+            font-size: 14px * Zoom.scale;
             color: Pal.text2;
             horizontal-alignment: center;
             vertical-alignment: center;

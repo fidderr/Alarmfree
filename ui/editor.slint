@@ -1,4 +1,4 @@
-import { Pal, Tr, Insets } from "theme.slint";
+import { Pal, Tr, Insets, Zoom } from "theme.slint";
 import { Icon, IconName, TabularText } from "components.slint";
 import { ScreenHeader, Row, SwitchRow, RowList, Separator, PrimaryButton, ChoiceChips, Sheet } from "widgets.slint";
 import { DayCell } from "home.slint";
@@ -15,7 +15,7 @@ component TimeShift inherits Rectangle {
     height: 36px;
     border-radius: 18px;
     background: Pal.surface;
-    Text { text: root.text; font-size: 14px; font-weight: 500; color: Pal.text; }
+    Text { text: root.text; font-size: 14px * Zoom.scale; font-weight: 500; color: Pal.text; }
     TouchArea { clicked => { root.clicked(); } }
 }
 
@@ -27,7 +27,7 @@ component DangerItem inherits Rectangle {
     accessible-label: root.text;
     accessible-action-default => { root.clicked(); }
     height: 52px;
-    Text { x: 0px; text: root.text; font-size: 16px; color: Pal.danger; vertical-alignment: center; }
+    Text { x: 0px; text: root.text; font-size: 16px * Zoom.scale; color: Pal.danger; vertical-alignment: center; }
     TouchArea { clicked => { root.clicked(); } }
 }
 
@@ -127,7 +127,7 @@ export component EditorScreen inherits Rectangle {
                         padding-top: 8px;
                         Text {
                             text: root.rings-text;
-                            font-size: 14px;
+                            font-size: 14px * Zoom.scale;
                             color: Pal.text2;
                             horizontal-alignment: center;
                             wrap: word-wrap;
@@ -146,7 +146,7 @@ export component EditorScreen inherits Rectangle {
                         accessible-role: button;
                         accessible-label: root.once-text;
                         accessible-action-default => { root.open(EditorSheet.date); }
-                        Text { text: root.once-text; font-size: 14px; font-weight: 500; color: Pal.on-accent; }
+                        Text { text: root.once-text; font-size: 14px * Zoom.scale; font-weight: 500; color: Pal.on-accent; }
                         TouchArea { clicked => { root.open(EditorSheet.date); } }
                     }
                     if !root.one-time: Rectangle {
@@ -170,7 +170,7 @@ export component EditorScreen inherits Rectangle {
                                     background: day.on ? Pal.accent : Pal.surface;
                                     Text {
                                         text: day.letter;
-                                        font-size: 14px;
+                                        font-size: 14px * Zoom.scale;
                                         font-weight: 500;
                                         color: day.on ? Pal.on-accent : Pal.text2;
                                     }
@@ -192,7 +192,7 @@ export component EditorScreen inherits Rectangle {
                         padding-top: 8px;
                         Text {
                             text: root.error;
-                            font-size: 12px;
+                            font-size: 12px * Zoom.scale;
                             color: Pal.danger;
                             wrap: word-wrap;
                         }

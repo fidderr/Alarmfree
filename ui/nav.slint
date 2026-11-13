@@ -1,4 +1,4 @@
-import { Pal, Tr, Insets } from "theme.slint";
+import { Pal, Tr, Insets, Zoom } from "theme.slint";
 import { Icon, IconName } from "components.slint";
 
 component NavItem inherits Rectangle {
@@ -34,7 +34,7 @@ component NavItem inherits Rectangle {
         Text {
             text: root.label;
             horizontal-alignment: center;
-            font-size: 12px;
+            font-size: 12px * Zoom.scale;
             font-weight: root.active ? 500 : 400;
             color: root.active ? Pal.accent : Pal.text2;
         }

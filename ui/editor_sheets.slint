@@ -1,4 +1,4 @@
-import { Pal, Tr, Insets } from "theme.slint";
+import { Pal, Tr, Insets, Zoom } from "theme.slint";
 import { Icon, IconName } from "components.slint";
 import { Sheet, RadioRow, Wheel, Stepper, PrimaryButton, AppSlider, ChoiceChips, GroupTitle, LinkButton, TextField } from "widgets.slint";
 import { DatePicker } from "datepicker.slint";
@@ -112,7 +112,7 @@ component FieldLabel inherits VerticalLayout {
     in property <bool> first: false;
     spacing: 8px;
     padding-top: root.first ? 16px : 8px;
-    Text { text: root.text; font-size: 14px; font-weight: 500; color: Pal.text; }
+    Text { text: root.text; font-size: 14px * Zoom.scale; font-weight: 500; color: Pal.text; }
     @children
 }
 
@@ -144,7 +144,7 @@ export component TimeSheet inherits Rectangle {
                 labels: Ed.hour-labels;
                 changed(v) => { Ed.hour = v; Ed.hour-changed(v); }
             }
-            Text { text: ":"; font-size: 28px; font-weight: 700; color: Pal.text; vertical-alignment: center; y: -2px; }
+            Text { text: ":"; font-size: 28px * Zoom.scale; font-weight: 700; color: Pal.text; vertical-alignment: center; y: -2px; }
             Wheel {
                 value: Ed.minute;
                 labels: Ed.minute-labels;
@@ -224,7 +224,7 @@ export component LabelSheet inherits Rectangle {
                     chip-text := Text {
                         x: 14px;
                         text: chip.text;
-                        font-size: 14px;
+                        font-size: 14px * Zoom.scale;
                         font-weight: 500;
                         color: chip.selected ? Pal.on-accent : Pal.text;
                         vertical-alignment: center;
@@ -289,14 +289,14 @@ export component SoundSheet inherits Rectangle {
         HorizontalLayout {
             spacing: 12px;
             padding-top: 4px;
-            Text { text: Tr.t("config.volume"); font-size: 14px; font-weight: 500; color: Pal.text; vertical-alignment: center; }
+            Text { text: Tr.t("config.volume"); font-size: 14px * Zoom.scale; font-weight: 500; color: Pal.text; vertical-alignment: center; }
             AppSlider {
                 horizontal-stretch: 1;
                 step: 5;
                 value: Ed.volume;
                 changed(v) => { Ed.volume-changed(v); }
             }
-            Text { min-width: 40px; text: "\{Ed.volume}%"; font-size: 14px; font-weight: 500; color: Pal.text; horizontal-alignment: right; vertical-alignment: center; }
+            Text { min-width: 40px; text: "\{Ed.volume}%"; font-size: 14px * Zoom.scale; font-weight: 500; color: Pal.text; horizontal-alignment: right; vertical-alignment: center; }
         }
         GroupTitle { text: Tr.t("config.fade_in"); }
         ChoiceChips { labels: Ed.fade-labels; selected: Ed.fade-selected; picked(i) => { Ed.fade-picked(i); } }
@@ -401,7 +401,7 @@ component LookTileView inherits Rectangle {
         y: 82px;
         width: parent.width;
         text: root.tile.name;
-        font-size: 12px;
+        font-size: 12px * Zoom.scale;
         font-weight: root.tile.selected ? 500 : 400;
         color: root.tile.selected ? Pal.text : Pal.text2;
         horizontal-alignment: center;
@@ -434,16 +434,16 @@ export component RingLookSheet inherits Rectangle {
         }
         if Ed.photo-link: Rectangle {
             height: 44px;
-            Text { text: Tr.t("ring.photo_other"); font-size: 14px; font-weight: 500; color: Pal.accent; }
+            Text { text: Tr.t("ring.photo_other"); font-size: 14px * Zoom.scale; font-weight: 500; color: Pal.accent; }
             TouchArea { clicked => { Ed.photo-other(); } }
         }
         if Ed.colour-row: Rectangle {
             height: 52px;
             HorizontalLayout {
                 spacing: 10px;
-                Text { text: Tr.t("config.ring_colour"); font-size: 14px; color: Pal.text; vertical-alignment: center; }
+                Text { text: Tr.t("config.ring_colour"); font-size: 14px * Zoom.scale; color: Pal.text; vertical-alignment: center; }
                 Rectangle { horizontal-stretch: 1; }
-                if Ed.colour-auto: Text { text: Tr.t("theme.auto"); font-size: 14px; color: Pal.text2; vertical-alignment: center; }
+                if Ed.colour-auto: Text { text: Tr.t("theme.auto"); font-size: 14px * Zoom.scale; color: Pal.text2; vertical-alignment: center; }
                 Rectangle {
                     width: 24px;
                     Rectangle {

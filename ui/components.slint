@@ -1,4 +1,4 @@
-import { Pal, Tr, Motion } from "theme.slint";
+import { Pal, Tr, Motion, Zoom } from "theme.slint";
 
 export enum IconName {
     clock, chart-bar, gear, trash, check, xmark, plus, chevron-right, arrow-left, grip,
@@ -112,7 +112,7 @@ export component SlimChip inherits Rectangle {
         Text {
             text: root.text;
             color: Pal.text;
-            font-size: 14px;
+            font-size: 14px * Zoom.scale;
             font-weight: 500;
         }
     }
@@ -143,14 +143,14 @@ export component Toast inherits Rectangle {
             vertical-alignment: center;
             text: root.text;
             wrap: word-wrap;
-            font-size: 14px;
+            font-size: 14px * Zoom.scale;
             color: Pal.on-inverse;
         }
         if root.has-undo: Rectangle {
             min-width: undo-text.preferred-width + 20px;
             undo-text := Text {
                 text: Tr.t("action.undo");
-                font-size: 14px;
+                font-size: 14px * Zoom.scale;
                 font-weight: 700;
                 color: Pal.on-inverse;
             }

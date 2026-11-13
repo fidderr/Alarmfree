@@ -1,4 +1,4 @@
-import { Pal, Tr } from "theme.slint";
+import { Pal, Tr, Zoom } from "theme.slint";
 import { Icon, IconName } from "components.slint";
 import { Sheet } from "widgets.slint";
 import { DatePicker } from "datepicker.slint";
@@ -19,7 +19,7 @@ component SheetItem inherits Rectangle {
         Text {
             horizontal-stretch: 1;
             text: root.choice.text;
-            font-size: 16px;
+            font-size: 16px * Zoom.scale;
             font-weight: root.choice.selected ? 500 : 400;
             color: root.choice.danger ? Pal.danger : root.choice.selected ? Pal.accent : Pal.text;
             vertical-alignment: center;

@@ -143,13 +143,16 @@ pub fn toggled(ctx: &Ctx, index: i32, on: bool) {
     }
 }
 
-/// The animations take no time when the user asked for less motion.
+/// The animations take no time when the user asked for less motion; the texts follow the phone's font size.
 pub fn apply_motion(ctx: &Ctx) {
     if let Some(ui) = ctx.ui.upgrade() {
         // The phone's own "remove animations" option counts as well.
         let less =
             ctx.settings.borrow().prefs.less_motion || mobile_sentinel::display::animations_off();
         ui.global::<super::Motion>().set_less(less);
+        // The phone's font size, like the original's text zoom (the big clocks stay as they are).
+        ui.global::<super::Zoom>()
+            .set_scale(mobile_sentinel::display::font_scale().clamp(0.8, 2.0));
     }
 }
 

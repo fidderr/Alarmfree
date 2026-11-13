@@ -1,5 +1,5 @@
 import { AboutSlint } from "std-widgets.slint";
-import { Pal } from "theme.slint";
+import { Pal, Zoom } from "theme.slint";
 import { Sheet, PrimaryButton } from "widgets.slint";
 import { SheetChoice } from "home_sheets.slint";
 
@@ -10,7 +10,7 @@ component PanelItem inherits Rectangle {
     Text {
         width: parent.width;
         text: root.choice.text;
-        font-size: 16px;
+        font-size: 16px * Zoom.scale;
         font-weight: root.choice.selected ? 500 : 400;
         color: root.choice.danger ? Pal.danger : root.choice.selected ? Pal.accent : Pal.text;
         vertical-alignment: center;
@@ -43,7 +43,7 @@ export component PanelSheet inherits Rectangle {
         close => { root.close(); }
         if root.note != "": Text {
             text: root.note;
-            font-size: 14px;
+            font-size: 14px * Zoom.scale;
             line-height-factor: 1.22;
             color: Pal.text2;
             wrap: word-wrap;
@@ -64,7 +64,7 @@ export component PanelSheet inherits Rectangle {
                 background: root.chip-selected == i ? Pal.accent : Pal.surface2;
                 Text {
                     text: chip;
-                    font-size: 14px;
+                    font-size: 14px * Zoom.scale;
                     font-weight: 500;
                     color: root.chip-selected == i ? Pal.on-accent : Pal.text;
                 }
@@ -73,7 +73,7 @@ export component PanelSheet inherits Rectangle {
         }
         if root.line != "": Text {
             text: root.line;
-            font-size: 14px;
+            font-size: 14px * Zoom.scale;
             color: Pal.text;
             wrap: word-wrap;
         }
@@ -82,7 +82,7 @@ export component PanelSheet inherits Rectangle {
             AboutSlint { height: 120px; }
             Text {
                 text: "Made with Slint (slint.dev), used under the Slint Royalty-Free license.";
-                font-size: 12px;
+                font-size: 12px * Zoom.scale;
                 color: Pal.text2;
                 wrap: word-wrap;
                 horizontal-alignment: center;

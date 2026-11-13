@@ -49,3 +49,9 @@ export global Motion {
         return less ? 0ms : normal;
     }
 }
+
+// The phone's font size setting, as a factor. Texts multiply their size by it; the big clocks do not,
+// like the original, which divided them by the same factor.
+export global Zoom {
+    in property <float> scale: 1;
+}
