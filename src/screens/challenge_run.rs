@@ -146,9 +146,10 @@ fn prepare_one(engine: &mut ChallengeEngine, setup: &ChallengeSetup) -> Challeng
 /// ringing again.
 const IDLE_LIMIT_SECS: u32 = 60;
 
-/// The camera may be up this long before the alarm rings again, camera or no camera. Getting to a
-/// code in another room takes a while, but opening it and going back to sleep is no way out.
-const SCAN_QUIET_SECS: u32 = 180;
+/// The camera stays up at most this long, then closes itself and the scan challenge's screen is
+/// back, where the idle limit runs again: a tap on Scan in time opens it once more. Opening the
+/// camera and going back to sleep is no way out.
+pub(crate) const SCAN_CAMERA_SECS: u32 = IDLE_LIMIT_SECS;
 
 /// A solved challenge stays on screen this long before the next one starts.
 const CELEBRATION_MS: u64 = 1800;
@@ -160,9 +161,6 @@ const FALLBACK_HOLD_MS: u32 = 3000;
 
 /// Runs `challenges` one after another and calls `on_solved` with what it took.
 ///
-/// `on_long_scan` is told when the camera has been up too long (`true`) and when it closed after
-/// that (`false`).
-///
 /// `on_idle` makes it the real thing: a clock runs that restarts on every touch and
 /// sensor change, and ends in `on_idle`. `on_exit` makes it practice: there is an Exit
 /// button instead, and the header says nothing is recorded.
@@ -171,7 +169,6 @@ pub fn ChallengeRun(
     challenges: Vec<ChallengeToRun>,
     on_solved: EventHandler<Vec<ChallengeSolve>>,
     #[props(default)] on_idle: Option<EventHandler<()>>,
-    #[props(default)] on_long_scan: Option<EventHandler<bool>>,
     #[props(default)] on_exit: Option<EventHandler<()>>,
 ) -> Element {
     let translations = use_context::<Translations>();
@@ -187,7 +184,6 @@ pub fn ChallengeRun(
     let mut fallback = use_signal(|| false);
     let mut asking_fallback = use_signal(|| false);
     let idle_limit = use_hook(|| crate::platform::shortened("idle_secs", IDLE_LIMIT_SECS));
-    let scan_quiet = use_hook(|| crate::platform::shortened("scan_quiet_secs", SCAN_QUIET_SECS));
 
     use_future(move || async move {
         let Some(on_idle) = on_idle else {
@@ -195,25 +191,13 @@ pub fn ChallengeRun(
         };
         let mut last_shake = mobile_sentinel::sensors::shake_count();
         let mut last_steps = mobile_sentinel::sensors::step_count();
-        let mut scanning_secs = 0;
         loop {
             crate::timer::sleep_ms(1000).await;
+            // The camera keeps its own limit and closes itself; the idle limit starts again after.
             if crate::components::challenges::scanner_open() {
                 idle_secs.set(0);
-                scanning_secs += 1;
-                if scanning_secs == scan_quiet {
-                    if let Some(on_long_scan) = on_long_scan {
-                        on_long_scan.call(true);
-                    }
-                }
                 continue;
             }
-            if scanning_secs >= scan_quiet {
-                if let Some(on_long_scan) = on_long_scan {
-                    on_long_scan.call(false);
-                }
-            }
-            scanning_secs = 0;
             let shakes = mobile_sentinel::sensors::shake_count();
             let steps = mobile_sentinel::sensors::step_count();
             if shakes != last_shake || steps != last_steps {

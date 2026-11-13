@@ -45,10 +45,16 @@ pub fn ScanChallenge(
         state.set(ScanState::Scanning);
         spawn(async move {
             let (tx, rx) = futures_channel::oneshot::channel();
-            // Blocks until the scanner is done.
+            let limit = crate::platform::shortened(
+                "scan_camera_secs",
+                crate::screens::challenge_run::SCAN_CAMERA_SECS,
+            );
+            // Blocks until the scanner is done: a code, Back, or its time limit.
             std::thread::spawn(move || {
                 SCANNER_OPEN.store(true, Ordering::Relaxed);
-                let result = mobile_sentinel::scanner::scan();
+                let result = mobile_sentinel::scanner::scan_for(std::time::Duration::from_secs(
+                    limit.into(),
+                ));
                 SCANNER_OPEN.store(false, Ordering::Relaxed);
                 let _ = tx.send(result);
             });

@@ -2425,16 +2425,17 @@ s56() {
     fi
 }
 
-# A scan challenge during a real ring, with the lock on. The camera stays up past when a frozen
-# screen would be restarted. It is quiet, but not for ever: that would be a way out. Closing it is
-# quiet again, Home does not get away from it, and what it scans turns the alarm off.
+# A scan challenge during a real ring, with the lock on. The camera is quiet, but not for ever:
+# after the challenge's time limit it closes itself, and with no new tap on Scan the alarm rings
+# again. Closing it by hand is quiet too, Home does not get away from it, and a code turns it off.
 s55() {
     scenario s55_scan_during_a_ring
     fresh
     # Shorter than the camera stays up, and longer than a cold start takes: Android 12 takes the
     # task away on Home and the app comes back from nothing, which on a busy emulator is 6 s.
     shorten ui_timeout_ms 10000
-    shorten scan_quiet_secs 8
+    shorten scan_camera_secs 8
+    shorten idle_secs 8
     next_minute
     seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null air 0 0 3 1 '[["challenge.scan","{}"]]')"
     arm a
@@ -2448,16 +2449,25 @@ s55() {
     local p0 problems=""
     p0=$(main_pid)
     scanner_on_top() { focused_window | grep -q SentinelScannerActivity; }
+    scanner_gone() { ! scanner_on_top; }
     click .scan-button 0 0.3
     if ! wait_for 8 scanner_on_top; then
         fail "the camera does not open: $(focused_window)"
         return
     fi
     wait_for 3 sound_off || problems="$problems; loud with the camera just opened"
-    wait_for 14 sound_on || problems="$problems; silent under the camera for good, a way out"
-    sleep 1
-    scanner_on_top || problems="$problems; pushed off the screen: $(focused_window)"
+    # The camera closes itself on time: back on the challenge, still quiet.
+    wait_for 14 scanner_gone || problems="$problems; the camera stays up past its limit, a way out"
+    on_screen button.scan-button 6 || problems="$problems; not back on the challenge: $(focused_window)"
+    sound_off || problems="$problems; loud right after the camera closed itself"
     [ "$(main_pid)" = "$p0" ] || problems="$problems; the app was restarted under the camera"
+    # Nobody taps Scan again: the challenge's own limit brings the alarm back.
+    wait_for 14 sound_on || problems="$problems; silent for good after the camera closed, a way out"
+    on_screen '.ring-off, button.scan-button' 10
+    is_there .ring-off && click .ring-off 0 0.3
+    on_screen button.scan-button 8 || problems="$problems; no scan button after the alarm came back"
+    click .scan-button 0 0.3
+    wait_for 8 scanner_on_top || problems="$problems; the camera does not open after the alarm came back"
     press_back
     on_screen button.scan-button 8 || problems="$problems; not back from the camera"
     wait_for 5 sound_off || problems="$problems; still loud with the camera closed"
@@ -2479,7 +2489,7 @@ s55() {
     wait_for 8 ended || problems="$problems; the code did not turn it off: state=$(state a) sound=$(sound_on && echo on || echo off)"
     wait_for 5 scanner_on_top && press_back
     if [ -z "$problems" ]; then
-        pass "quiet, then loud again under the camera, no way out by Home, and a code turns it off"
+        pass "quiet under the camera, it closes itself on time and the alarm comes back, no way out by Home, and a code turns it off"
     else
         fail "${problems#; }"
     fi
