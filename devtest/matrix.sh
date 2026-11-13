@@ -1063,6 +1063,14 @@ s31() {
     fi
 }
 
+# The trash can in the editor's header: a picture with no name, at the right end of the header.
+tap_trash() {
+    local w s
+    read -r w _ s <<< "$(window_size)"
+    dev input tap "$(awk -v w="$w" -v s="$s" 'BEGIN { printf "%d", w - 22 * s }')" "$(awk -v s="$s" 'BEGIN { printf "%d", 56 * s }')"
+    sleep 0.5
+}
+
 # The new-alarm button, until the editor is there (it takes touches only once it has settled).
 open_new_editor() {
     local i=0
@@ -1770,7 +1778,11 @@ s48() {
         wait_for 20 own_sound_there || problems="$problems; own sound not listed: $names"
         [ -n "$(as_app "ls files/sounds/custom")" ] || problems="$problems; not copied"
     else
-        problems="$problems; the picker never showed the file"
+        problems="$problems; the picker never showed the file ($(focused_window | grep -o '[A-Za-z.]*/[A-Za-z.]*' | head -1))"
+        dev uiautomator dump /sdcard/af_ui.xml > /dev/null 2>&1
+        note "picker shows: $(dev cat /sdcard/af_ui.xml | tr '>' '
+' | grep -oE '(text|content-desc)="[^"]+"' | cut -c1-40 | head -20 | tr '
+' ' ')"
         press_back
     fi
     dev am force-stop "$PKG"
@@ -1854,7 +1866,9 @@ s49() {
         [ "$free" = "$before" ]
     }
     wait_for 5 room_back || problems="$problems; no room given back: $before, now $free"
-    # The challenge. It has to show the passage and the box together.
+    # The challenge. It has to show the passage and the box together. (The first Back closed the
+    # keyboard, the second the panel, a third asks about the change.)
+    press_back
     wait_for 4 editor_sheet_open
     tap Discard 0 0.5
     on_home 4 || problems="$problems; not back on Home"
@@ -1868,8 +1882,12 @@ s49() {
     screenshot s49_typing
     read -r x y <<< "$(field_xy)"
     [ "${y:-9999}" -le "$free" ] || problems="$problems; the box is under the keyboard ($y, free $free)"
-    dev input text "$(sn type_passage | sed 's/ /%s/g')"
-    finished() { [ "$(sn run_active)" != true ]; }
+    # The keyboard shows the first word of it arriving (a phone's own typing drops what comes after
+    # a space on this emulator), the rest goes in as keys of the window.
+    dev input text "$(sn type_passage | cut -d' ' -f1)"
+    sleep 0.3
+    type_field 0 "$(sn type_passage)"
+    finished() { [ "$(ui inputs)" = "[]" ]; }
     wait_for 10 finished || problems="$problems; typing it all did not finish: '$(ui inputs)'"
     if [ -z "$problems" ]; then
         pass "room made and given back, text arrives, challenge done by typing"
@@ -1879,11 +1897,17 @@ s49() {
 }
 
 done_sheet() {
-    tap Done 0 0.3
-    wait_for 3 editor_sheet_closed
+    local i=0
+    while [ "$i" -lt 3 ]; do
+        tap_in Done L 0.3
+        wait_for 2 editor_sheet_closed && return 0
+        i=$((i + 1))
+    done
+    return 1
 }
 # Open a row of the editor, and wait for its panel.
 open_row() {
+    has_there "$1" || sheet_scroll
     tap_has "$1" 0 0.4
     wait_for 4 editor_sheet_open
 }
@@ -1922,8 +1946,8 @@ s50() {
     tap_in "15 s"
     done_sheet
     open_row Snooze
-    tap_in More 0
-    tap_in More 1
+    tap_scrolling "More How often"
+    tap_scrolling "More How long"
     done_sheet
     open_row Challenges
     # Math and Steps, each through Add and its own sheet.
@@ -1935,15 +1959,17 @@ s50() {
         is_there Difficulty && done_sheet_inner
     done
     done_sheet
+    sheet_scroll
     open_row 'Ring limit'
-    tap_in "60 min"
+    tap_scrolling "60 min" || note "no 60 min: sheet=$(sn ed_sheet) screen=$(screen_no) $(texts_of | tail -c 400)"
     done_sheet
     open_row 'Are you up?'
-    tap_in "3 min"
+    tap_scrolling "3 min"
     done_sheet
     open_row 'Notice before'
-    tap_in "10 min"
+    tap_scrolling "10 min"
     done_sheet
+    has_there "Full brightness" || sheet_scroll
     tap "Full brightness" 0 0.3
     screenshot s50_set
     tap Save 0 0.5
@@ -1964,12 +1990,15 @@ s50() {
     press open "$id" 0.8
     on_editor
     rows=$(texts_of)
+    sheet_scroll
+    rows="$rows|$(texts_of)"
     for shown in Morning Funk Steady '6 min, 4' Math '60 min' 'After 3 min' '10 min'; do
         has "$rows" "$shown"
     done
     has "$(sn ed_time_text)" ':10'
     # Off the list from here too, after asking.
-    tap "Delete alarm" 0 0.5
+    sheet_scroll_up
+    tap_trash
     wait_for 3 editor_sheet_open || problems="$problems; delete does not ask"
     tap Delete 0 0.5
     [ "$(alarm_count)" = 0 ] || problems="$problems; not deleted"
@@ -1993,10 +2022,11 @@ s51() {
     go_tab Settings
     wait_for 5 on_screen_no 3
     pick() { # row, then the choice of what it opens
-        tap_has "$1" 0 0.5
+        tap_has "$1" 0 0.5 || note "no row $1 on: $(texts_of | cut -c1-300)"
         wait_for 3 panel_up
         tap_in "$2" "${3:-}" 0.3
-        panel_up && press_back
+        # A choice closes its panel; one that does not is closed by Back.
+        wait_for 2 panel_down || press_back
         wait_for 3 panel_down
     }
     tap_has Theme 0 0.5
@@ -2011,9 +2041,12 @@ s51() {
     tap_in "75%" 0 0.3
     tap Done 0 0.3
     wait_for 3 panel_down
+    # The last rows sit under the bottom bar until the screen is scrolled.
+    sheet_scroll
     tap "Touch feedback" 0 0.3
     tap "Less motion" 0 0.3
     tap Confetti 0 0.3
+    sheet_scroll_up
     pick Language Nederlands
     sleep 0.2
     dev am force-stop "$PKG"
@@ -2153,6 +2186,7 @@ s53() {
     tap_has "$(row_time)" L 0.6
     on_editor || problems="$problems; the alarm from a template opens no editor"
     # Typed, then a tap on the wheel: the row under the middle is one more.
+    note "s53: Typed, then a tap on the wheel: the row under the middle i @$SECONDS"
     tap ":" 0 0.6
     tap "Type it" 0 0.4
     set_field 0 835
@@ -2163,11 +2197,13 @@ s53() {
     done_sheet
     has "$(sn ed_time_text)" ':36'
     # One date.
+    note "s53: One date. @$SECONDS"
     tap "One date" 0 0.5
     on_screen Tomorrow 4
     tap Tomorrow 0 0.3
     done_sheet
     # A challenge with a setting, and one taken away again.
+    note "s53: A challenge with a setting, and one taken away again. @$SECONDS"
     open_row Challenges
     tap "Add a challenge" 0 0.4
     tap_in Math L 0.5
@@ -2182,6 +2218,7 @@ s53() {
     all_texts | grep -q '^Shake$' && problems="$problems; not taken away: $(texts_of)"
     done_sheet
     # A sound of one's own: asks first, then it is gone.
+    note "s53: A sound of one's own: asks first, then it is gone. @$SECONDS"
     open_row Sound
     has "$(texts_of)" mytune
     press sound-delete "$(($(radio_index mytune) - 1))" 0.4
@@ -2202,6 +2239,7 @@ s53() {
         *challenge.shake*) problems="$problems; the taken away challenge was saved" ;;
     esac
     # The history over your own number of days: only the one within them.
+    note "s53: The history over your own number of days: only the one wit @$SECONDS"
     go_tab History
     wait_for 5 on_screen_no 2
     tap "Your own days" 0 0.5
@@ -2209,22 +2247,28 @@ s53() {
     press h-custom-accepted "" 0.3
     sleep 0.4
     local rows
-    rows=$(all_texts | grep -c -E '^a$')
+    rows=$(all_texts | grep -c -E ' a$')
     [ "$rows" = 1 ] || problems="$problems; $rows rows in the last 7 days: $(texts_of)"
     # The reliability screen's buttons leave for the phone's own screens, and come back.
+    note "s53: The reliability screen's buttons leave for the phone's own @$SECONDS"
     open_reliability || problems="$problems; no reliability screen"
     local i=0 n
     n=$(all_texts | grep -c -E '^Fix .')
     # Another app has the keys. A system screen can take a while to start, and Back goes nowhere
+    note "s53: Another app has the keys. A system screen can take a while @$SECONDS"
     # until it has.
+    note "s53: until it has. @$SECONDS"
     away() { focused_window | grep -v null | grep -qv "$PKG/"; }
     # And a second Back in the middle of the change closes the screen it comes back to.
+    note "s53: And a second Back in the middle of the change closes the s @$SECONDS"
     back_in_app() {
         press_back
         wait_for 4 focus_in_app
     }
     # A moment between two of the phone's screens: asked for the same one again at once, a slow
+    note "s53: A moment between two of the phone's screens: asked for the @$SECONDS"
     # device's Settings can freeze, and that is its own trouble.
+    note "s53: device's Settings can freeze, and that is its own trouble. @$SECONDS"
     while [ "$i" -lt "${n:-0}" ] 2> /dev/null; do
         tap_has "Fix " "$i" 0.3
         wait_for 15 away || problems="$problems; fix button $i stays in the app"
@@ -2432,15 +2476,18 @@ s56() {
 }
 
 # A scan challenge during a real ring, with the lock on. The camera stays up past when a frozen
-# screen would be restarted. It is quiet, but not for ever: that would be a way out. Closing it is
-# quiet again, Home does not get away from it, and what it scans turns the alarm off.
+# screen would be restarted. It is quiet, but not for ever: that would be a way out. Here the
+# camera closes itself after the challenge's limit (shortened to 8 s), the challenge is quiet again,
+# and with no new tap on Scan the alarm rings again. Home does not get away from it, and what it
+# scans turns the alarm off.
 s55() {
     scenario s55_scan_during_a_ring
     fresh
     # Shorter than the camera stays up, and longer than a cold start takes: Android 12 takes the
     # task away on Home and the app comes back from nothing, which on a busy emulator is 6 s.
     shorten ui_timeout_ms 10000
-    shorten scan_quiet_secs 8
+    shorten scan_camera_secs 8
+    shorten idle_secs 8
     next_minute
     seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null air 0 0 3 1 '[["challenge.scan","{}"]]')"
     arm a
@@ -2460,13 +2507,17 @@ s55() {
         return
     fi
     wait_for 3 sound_off || problems="$problems; loud with the camera just opened"
-    wait_for 14 sound_on || problems="$problems; silent under the camera for good, a way out"
     sleep 1
     scanner_on_top || problems="$problems; pushed off the screen: $(focused_window)"
     [ "$(main_pid)" = "$p0" ] || problems="$problems; the app was restarted under the camera"
-    press_back
-    on_screen SCAN 8 || problems="$problems; not back from the camera"
-    wait_for 5 sound_off || problems="$problems; still loud with the camera closed"
+    scanner_gone() { ! scanner_on_top && [ "$(sn scan_state)" = 0 ]; }
+    wait_for 16 scanner_gone || problems="$problems; the camera did not close itself after its limit"
+    wait_for 3 sound_off || problems="$problems; loud with the camera closed"
+    # No new tap on Scan: it is no way out, and rings again.
+    wait_for 16 sound_on || problems="$problems; silent for good after the camera, a way out"
+    wait_for 10 scan_or_ring
+    is_there "Turn off" && tap "Turn off" 0 0.3
+    on_screen SCAN 8 || problems="$problems; no scan button again"
     tap SCAN 0 0.3
     wait_for 8 scanner_on_top || problems="$problems; the camera does not open again"
     # Past the moment the lock stands aside for an activity of its own to come up.
@@ -2480,12 +2531,12 @@ s55() {
     tap SCAN 0 0.3
     wait_for 8 scanner_on_top || problems="$problems; the camera does not open after Home"
     # What the scanner does with a code, without a code to show an emulator's camera.
-    as_app "echo a-code > /data/user/0/$PKG/files/sentinel_scan_result.txt"
+    as_app "echo a-code > /data/user/0/$PKG/files/sentinel_scan_result.txt; echo a-code > $DATA/files/sentinel_scan_result.txt"
     ended() { state_is a scheduled && sound_off; }
     wait_for 8 ended || problems="$problems; the code did not turn it off: state=$(state a) sound=$(sound_on && echo on || echo off)"
     wait_for 5 scanner_on_top && press_back
     if [ -z "$problems" ]; then
-        pass "quiet, then loud again under the camera, no way out by Home, and a code turns it off"
+        pass "quiet under the camera, it closes itself and the alarm rings again, no way out by Home, and a code turns it off"
     else
         fail "${problems#; }"
     fi

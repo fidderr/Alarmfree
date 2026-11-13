@@ -375,7 +375,7 @@ s57() {
         panel_problem "the minute buttons do not move the time a minute and back"
     tap ":" 0 0.4
     panel_open editor_time
-    tap "Delete alarm" 0 0.4
+    tap_trash
     panel_open editor_delete
     # Each row of the editor.
     for name in Label Sound Vibration Snooze 'Alarm screen' 'Ring limit' 'Are you up?' 'Notice before'; do

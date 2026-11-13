@@ -174,27 +174,38 @@ cross-check for `aarch64-linux-android`, with mobile-sentinel checked out beside
 key the code names exists.
 
 `devtest/` drives a real app over adb and judges only what can be seen from outside: is the
-sound on, what is on screen, what is armed, what is saved.
+sound on, what is on screen, what is armed, what is saved. The app is the debug APK of `./build.sh`
+(`TARGET=x86_64-linux-android ./build.sh` for an emulator): it is built with the cargo feature
+`devtest`, which adds a test channel (`src/debug_hooks.rs`, `src/ui/debug.rs`,
+`src/ui/debug_elements.rs`). The harness writes a command to `files/debug_action.txt` and reads the
+answer: the texts on screen with their places (`ui:texts`, from Slint's element tree, which also
+carries each control's role and on/off state), a snapshot of the window's state, a tap or typed text
+at a place, and the callbacks of the window by name for the few buttons that are only a picture.
+Touches are real (`adb input`) wherever a finger matters (taps, swipes, hold and drag, the keyboard).
+Neither the feature nor the channel is in a release: `./build.sh release|fast|aab` never pass it, and
+`debug_hooks` is `cfg(debug_assertions)` only.
 
 ```bash
-SERIAL=emulator-5554 devtest/matrix.sh            # every scenario on one device
-SERIAL=emulator-5554 devtest/matrix.sh s01 s07    # just these
-bash devtest/all.sh                               # Android 16 and 12 at once, 16 also on big screens
+SERIAL=emulator-5556 AVD=af31 devtest/matrix.sh        # every scenario on one device
+SERIAL=emulator-5556 devtest/matrix.sh s01 s07         # just these
+bash devtest/all.sh                                    # Android 16 and 12 at once, 16 also on big screens
+SERIAL=emulator-5556 bash devtest/dump.sh 'tap Settings'  # what the window shows, to write a scenario
+SERIAL=emulator-5556 bash devtest/slint_smoke.sh       # the short check: make, ring, snooze, turn off
 ```
 
-Note: the scenarios of `matrix.sh` and `all.sh` still drive the old WebView page and have not
-been rewritten for the Slint UI yet. `devtest/slint_smoke.sh` is the check that does (make an alarm,
-ring it, snooze, turn it off). Of the text below, the part about `matrix.sh` describes the Dioxus line.
+`all.sh` uses AVDs `af36` (port 5554) and `af31` (5556); `AVD_NEW=af36tab PORT_NEW=5562` picks other
+ones for the newest Android. The scenarios keep their numbers from the Dioxus suite (s01 to s63,
+`big_screens`, and the phone-only `s60p_*` and `s62p`); only how they press and read the screen changed.
 
 All of it takes about 15 to 20 minutes on two emulators, and no scenario over a minute apart from
 the tour of every panel: the summary names the ones that do. An emulator's clock moves instead of a scenario waiting for the
 time to pass, what can be asked is asked until it is true, what can happen during the same ring
 or restart does, and two shells on the device stay open instead of starting adb for every call.
 
-`s57` goes to every screen and panel by clicking what a person clicks and scrolls by touch. It
-checks each stop for text that is cut off, sticks out or lies under something else, tries the
-choices, and leaves a picture of each stop in `<run>/panels/`: looking at those finds what no check
-does. `s56` tries to get out of a ringing alarm and out of its challenge in every way there is.
+`s57` goes to every screen and panel by touching what a person touches and scrolls by touch. It
+checks each stop for text that sticks out of the window, tries the choices, and leaves a picture of
+each stop in `<run>/panels/`: looking at those finds what no check does. `s56` tries to get out of a
+ringing alarm and out of its challenge in every way there is.
 
 On a real phone: `NO_LOCK=1` for a phone with a PIN (nothing here sets or asks for one), and
 `PHONE_SQLITE=<path>` for a `sqlite3` pushed to it. A phone's clock is left alone, so there the

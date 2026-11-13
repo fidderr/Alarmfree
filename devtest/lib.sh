@@ -878,12 +878,32 @@ history_row() { # id days_ago
 history_count() { printf "SELECT count(*) FROM alarm_events;\n" | sql; }
 
 # The bottom bar: Alarms, History or Settings.
-go_tab() { # Alarms / History / Settings
-    tap "$1" L 0.3
+go_tab() { # Alarms / History / Settings; a touch in the first seconds of the window can be lost: again
+    local want i=0
+    case "$1" in
+        Alarms) want=0 ;;
+        History) want=2 ;;
+        *) want=3 ;;
+    esac
+    while [ "$i" -lt 3 ]; do
+        tap "$1" L 0.3
+        wait_for 2 on_screen_no "$want" && return 0
+        i=$((i + 1))
+    done
+    return 1
 }
 
 # Scroll the panel on top (or the screen) up by about a screen, as a finger does.
 sheet_scroll() {
     dev input swipe 540 1800 540 700 400
+    sleep 0.8
+}
+# Tap what the text names, scrolling the panel up first when it is not on screen yet.
+tap_scrolling() { # text
+    wait_for 2 has_there "$1" || { sheet_scroll; wait_for 2 has_there "$1"; }
+    tap_has "$1" 0 0.3
+}
+sheet_scroll_up() {
+    dev input swipe 540 700 540 1800 400
     sleep 0.8
 }

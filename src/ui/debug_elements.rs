@@ -88,6 +88,8 @@ fn inputs(ui: &MainWindow) -> Vec<(ElementHandle, Seen)> {
         })
         .collect();
     found.sort_by_key(|a| (a.1.y as i32, a.1.x as i32));
+    let mut known = std::collections::HashSet::new();
+    found.retain(|(_, s)| known.insert((s.x as i32, s.y as i32)));
     found
 }
 
