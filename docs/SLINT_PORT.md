@@ -1217,3 +1217,23 @@ thumb, the monospace clock style falling back to the default sans, the home head
 Test yourself on the phone: how smooth scrolling feels at 120 Hz, the feel of the time wheel and reorder, haptics (wheel ticks,
 challenges), alarm sound and fade, the camera scan and step challenges (the step permission was never granted during the tests),
 TalkBack (roles and labels exist but only TalkBack can confirm them), the lock-screen unlock path, and whether the OPPO Sans text feels right.
+
+## Emulator suite (devtest) on Slint, status 2026-11-14
+
+Branch `slint-devtest`. `devtest/matrix.sh`, `all.sh`, `panels.sh` and `lib.sh` now drive the Slint app: the debug
+build made by `./build.sh` carries the cargo feature `devtest` (`src/ui/debug_elements.rs`: texts with places,
+roles and on/off state from Slint's element tree via `i-slint-backend-testing`, typed keys, in-window taps, boxes of a
+component) next to the existing `ui:` commands (`src/ui/debug.rs`: snapshot with palette, look, insets; more
+callbacks by name for buttons that are only pictures: the sound rename and delete, accent swatches, the trash can,
+the history's delete, challenge removal). Real touches are `adb input`. See README "Tests" for the use and for which
+scenarios passed on the last run. Findings:
+
+- The suite found no app bug so far. Script-side things it taught: the last rows of Settings sit under the bottom bar
+  until scrolled, the editor and its panels scroll, a panel slides in and takes touches only once it holds still,
+  the icon-only buttons have no accessible label, the first touch in the first seconds after a start can be lost,
+  and a text typed with `adb input text` loses what follows a space on this emulator.
+- Open: s56d/s56e (screen off during a challenge: afterwards the lock screen has the focus, not the ring screen;
+  the Dioxus line was not compared, so it is not yet known whether this is the script or the app), s55 (rewritten
+  for the camera that closes itself, not yet run), s58, s48.
+- Never run: s13 to s13d (PIN restart), s33, s57, s60 to s63, `big_screens`, s60p_*, s62p, and a timed full `all.sh`.
+- `release` and `fast` builds do not pass the feature; `debug_hooks` is `cfg(debug_assertions)` only.

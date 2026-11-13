@@ -207,6 +207,14 @@ checks each stop for text that sticks out of the window, tries the choices, and 
 each stop in `<run>/panels/`: looking at those finds what no check does. `s56` tries to get out of a
 ringing alarm and out of its challenge in every way there is.
 
+**Status of the port (2026-11-14, one emulator, AVD af31 / Android 12):** every scenario is ported, none
+dropped. Last seen passing: s01 s03 s04 s05 s06 s07 s10 s14 s15 s16 s16b s17 s19 (with s20 s21 s23d s35)
+s22 s22b s23a s25 s28 s29 s30 s31 s32 s34 s36 s37 s38 s39 s40 s42 s43 s44 s45 s46 s47 s50 s51 s52 s53 s54
+s56a-c s59, and `slint_smoke.sh`. Ported but not seen passing yet: s23b s23c s26 (not rerun after the port),
+s48 (the phone's file picker is not found by the script), s49 (typing the challenge's passage), s55 and s56d/e
+(see docs/SLINT_PORT.md), s58, s33 s60 s61 s62 s63 s57 `big_screens` and the PIN restarts s13 to s13d (not run
+yet), and the phone-only s60p_* and s62p (no phone was used). No full `all.sh` run has been timed on Slint yet.
+
 On a real phone: `NO_LOCK=1` for a phone with a PIN (nothing here sets or asks for one), and
 `PHONE_SQLITE=<path>` for a `sqlite3` pushed to it. A phone's clock is left alone, so there the
 time has to pass, and it only gets what needs no restart and changes none of its settings. Some
