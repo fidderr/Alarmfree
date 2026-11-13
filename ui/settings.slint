@@ -1,4 +1,4 @@
-import { Pal, Tr, Insets } from "theme.slint";
+import { Pal, Tr, Insets, Zoom } from "theme.slint";
 import { Icon, IconName, AppSwitch } from "components.slint";
 import { BottomNav } from "nav.slint";
 
@@ -25,7 +25,7 @@ component ListTitle inherits Rectangle {
         x: 4px;
         width: parent.width - 4px;
         text: root.text;
-        font-size: 12px;
+        font-size: 12px * Zoom.scale;
         font-weight: 500;
         color: Pal.text2;
         vertical-alignment: center;
@@ -51,7 +51,7 @@ component SetRow inherits Rectangle {
         spacing: 12px;
         Text {
             text: root.title;
-            font-size: 14px;
+            font-size: 14px * Zoom.scale;
             font-weight: 500;
             color: Pal.text;
             vertical-alignment: center;
@@ -60,7 +60,7 @@ component SetRow inherits Rectangle {
         Text {
             horizontal-stretch: 1;
             text: root.value;
-            font-size: 14px;
+            font-size: 14px * Zoom.scale;
             color: Pal.text2;
             horizontal-alignment: right;
             vertical-alignment: center;
@@ -113,7 +113,7 @@ export component SettingsScreen inherits Rectangle {
                 y: 28px;
                 height: 34px;
                 text: Tr.t("settings.title");
-                font-size: 28px;
+                font-size: 28px * Zoom.scale;
                 font-weight: 700;
                 color: Pal.text;
                 vertical-alignment: center;
@@ -140,12 +140,12 @@ export component SettingsScreen inherits Rectangle {
                         VerticalLayout {
                             horizontal-stretch: 1;
                             alignment: center;
-                            Text { text: Tr.t("reliability.title"); font-size: 14px; font-weight: 500; color: Pal.text; }
-                            Text { text: root.st.reliability; font-size: 12px; color: Pal.text2; overflow: elide; }
+                            Text { text: Tr.t("reliability.title"); font-size: 14px * Zoom.scale; font-weight: 500; color: Pal.text; }
+                            Text { text: root.st.reliability; font-size: 12px * Zoom.scale; color: Pal.text2; overflow: elide; }
                         }
                         Rectangle {
                             width: root.st.problems ? 56px : 14px;
-                            if root.st.problems: Text { text: Tr.t("settings.check"); font-size: 14px; font-weight: 500; color: Pal.warn; }
+                            if root.st.problems: Text { text: Tr.t("settings.check"); font-size: 14px * Zoom.scale; font-weight: 500; color: Pal.warn; }
                             if !root.st.problems: Icon { name: IconName.chevron-right; size: 14px; tint: Pal.text2; }
                         }
                     }

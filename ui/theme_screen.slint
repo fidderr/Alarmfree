@@ -1,4 +1,4 @@
-import { Pal, Tr, Insets } from "theme.slint";
+import { Pal, Tr, Insets, Zoom } from "theme.slint";
 import { Icon, IconName, AppSwitch, TabularText } from "components.slint";
 import { ScreenHeader, RowList, Separator, PrimaryButton, Sheet } from "widgets.slint";
 import { ColourControls, SwatchGrid, SwatchCell } from "colour.slint";
@@ -56,8 +56,8 @@ component ColourRow inherits Rectangle {
         padding-left: 16px;
         padding-right: 14px;
         spacing: 12px;
-        Text { text: root.title; font-size: 14px; font-weight: 500; color: Pal.text; vertical-alignment: center; }
-        Text { horizontal-stretch: 1; text: root.value; font-size: 14px; color: Pal.text2; horizontal-alignment: right; vertical-alignment: center; overflow: elide; }
+        Text { text: root.title; font-size: 14px * Zoom.scale; font-weight: 500; color: Pal.text; vertical-alignment: center; }
+        Text { horizontal-stretch: 1; text: root.value; font-size: 14px * Zoom.scale; color: Pal.text2; horizontal-alignment: right; vertical-alignment: center; overflow: elide; }
         Rectangle {
             width: 24px;
             Dot { background: root.colour; y: (parent.height - self.height) / 2; }
@@ -81,12 +81,12 @@ component Preview inherits Rectangle {
             HorizontalLayout {
                 height: 33px;
                 spacing: 16px;
-                TabularText { min-width: 76px; horizontal-stretch: 0; text: "07:00"; font-size: 24px; font-weight: 450; letter-spacing: -0.3px; ink: Pal.text; horizontal-alignment: left; }
+                TabularText { min-width: 76px; horizontal-stretch: 0; text: "07:00"; font-size: 24px * Zoom.scale; font-weight: 450; letter-spacing: -0.3px; ink: Pal.text; horizontal-alignment: left; }
                 VerticalLayout {
                     horizontal-stretch: 1;
                     alignment: center;
                     spacing: 5px;
-                    Text { text: Thm.weekdays; font-size: 14px; font-weight: 500; color: Pal.text; overflow: elide; }
+                    Text { text: Thm.weekdays; font-size: 14px * Zoom.scale; font-weight: 500; color: Pal.text; overflow: elide; }
                     HorizontalLayout {
                         spacing: 2px;
                         alignment: start;
@@ -94,7 +94,7 @@ component Preview inherits Rectangle {
                             width: 13.2px;
                             horizontal-alignment: center;
                             text: day.letter;
-                            font-size: 11px;
+                            font-size: 11px * Zoom.scale;
                             font-weight: day.on ? 700 : 400;
                             color: day.on ? Pal.accent : Pal.text2;
                         }
@@ -110,9 +110,9 @@ component Preview inherits Rectangle {
                     min-width: 36px + save.preferred-width;
                     border-radius: 14px;
                     background: Pal.accent;
-                    save := Text { text: Tr.t("action.save"); font-size: 14px; font-weight: 500; color: Pal.on-accent; }
+                    save := Text { text: Tr.t("action.save"); font-size: 14px * Zoom.scale; font-weight: 500; color: Pal.on-accent; }
                 }
-                Text { text: Tr.t("challenge.try"); font-size: 14px; font-weight: 500; color: Pal.accent; vertical-alignment: center; }
+                Text { text: Tr.t("challenge.try"); font-size: 14px * Zoom.scale; font-weight: 500; color: Pal.accent; vertical-alignment: center; }
             }
         }
     }
@@ -172,7 +172,7 @@ component Tile inherits Rectangle {
         }
         label := Text {
             text: root.tile.name;
-            font-size: 12px;
+            font-size: 12px * Zoom.scale;
             font-weight: root.tile.selected ? 500 : 400;
             color: root.tile.selected ? Pal.text : Pal.text2;
             horizontal-alignment: center;
@@ -231,7 +231,7 @@ export component ThemeScreen inherits Rectangle {
                                     width: 24px;
                                     Dot { rainbow: true; y: (parent.height - self.height) / 2; }
                                 }
-                                Text { horizontal-stretch: 1; text: Tr.t("theme.custom"); font-size: 14px; font-weight: 500; color: Pal.text; vertical-alignment: center; overflow: elide; }
+                                Text { horizontal-stretch: 1; text: Tr.t("theme.custom"); font-size: 14px * Zoom.scale; font-weight: 500; color: Pal.text; vertical-alignment: center; overflow: elide; }
                             }
                             TouchArea { clicked => { Thm.own-picked(); } }
                         }
@@ -262,7 +262,7 @@ export component ThemeScreen inherits Rectangle {
                         y: 4px;
                         height: 16px;
                         text: Tr.t("settings.accent");
-                        font-size: 12px;
+                        font-size: 12px * Zoom.scale;
                         font-weight: 500;
                         color: Pal.text2;
                         vertical-alignment: center;
@@ -338,7 +338,7 @@ export component ThemeScreen inherits Rectangle {
         ColourControls { }
         if Thm.adjusted: Text {
             text: Tr.t("theme.adjusted");
-            font-size: 12px;
+            font-size: 12px * Zoom.scale;
             color: Pal.text2;
             horizontal-alignment: center;
             wrap: word-wrap;

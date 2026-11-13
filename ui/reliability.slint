@@ -1,4 +1,4 @@
-import { Pal, Tr, Insets } from "theme.slint";
+import { Pal, Tr, Insets, Zoom } from "theme.slint";
 import { Icon, IconName } from "components.slint";
 import { ScreenHeader, RowList, Separator, PrimaryButton } from "widgets.slint";
 
@@ -46,8 +46,8 @@ component CheckLine inherits Rectangle {
             horizontal-stretch: 1;
             alignment: center;
             spacing: 2px;
-            Text { text: root.check.title; font-size: 14px; font-weight: 500; color: Pal.text; wrap: word-wrap; }
-            if !root.check.ok: Text { text: root.check.note; font-size: 12px; line-height-factor: 1.14; color: Pal.text2; wrap: word-wrap; }
+            Text { text: root.check.title; font-size: 14px * Zoom.scale; font-weight: 500; color: Pal.text; wrap: word-wrap; }
+            if !root.check.ok: Text { text: root.check.note; font-size: 12px * Zoom.scale; line-height-factor: 1.14; color: Pal.text2; wrap: word-wrap; }
         }
         if root.check.fixable: Rectangle {
             min-width: fix-label.preferred-width + 28px;
@@ -58,7 +58,7 @@ component CheckLine inherits Rectangle {
             accessible-role: button;
             accessible-label: Tr.t("reliability.fix") + " " + root.check.title;
             accessible-action-default => { root.fix(); }
-            fix-label := Text { x: 14px; text: Tr.t("reliability.fix"); font-size: 14px; font-weight: 500; color: Pal.text; }
+            fix-label := Text { x: 14px; text: Tr.t("reliability.fix"); font-size: 14px * Zoom.scale; font-weight: 500; color: Pal.text; }
             TouchArea { clicked => { root.fix(); } }
         }
     }
@@ -72,7 +72,7 @@ component PlainRow inherits Rectangle {
         padding-left: 16px;
         padding-right: 14px;
         spacing: 12px;
-        Text { horizontal-stretch: 1; text: root.title; font-size: 14px; font-weight: 500; color: Pal.text; vertical-alignment: center; wrap: word-wrap; }
+        Text { horizontal-stretch: 1; text: root.title; font-size: 14px * Zoom.scale; font-weight: 500; color: Pal.text; vertical-alignment: center; wrap: word-wrap; }
         Rectangle { width: 48px; }
         Icon { name: IconName.chevron-right; size: 14px; tint: Pal.text2; y: (parent.height - self.height) / 2; }
     }
@@ -96,7 +96,7 @@ export component ReliabilityScreen inherits Rectangle {
                 y: 36px;
                 height: 34px;
                 text: Tr.t("setup.title");
-                font-size: 28px;
+                font-size: 28px * Zoom.scale;
                 font-weight: 700;
                 color: Pal.text;
                 vertical-alignment: center;
@@ -113,7 +113,7 @@ export component ReliabilityScreen inherits Rectangle {
                     height: 22px;
                     border-radius: 11px;
                     background: root.help-open ? Pal.accent : Pal.accent-soft;
-                    Text { text: "?"; font-size: 13px; font-weight: 700; color: root.help-open ? Pal.on-accent : Pal.accent; }
+                    Text { text: "?"; font-size: 13px * Zoom.scale; font-weight: 700; color: root.help-open ? Pal.on-accent : Pal.accent; }
                 }
                 TouchArea { clicked => { root.help-open = !root.help-open; } }
             }
@@ -132,7 +132,7 @@ export component ReliabilityScreen inherits Rectangle {
                     y: 12px;
                     width: parent.width - 28px;
                     text: Rel.help;
-                    font-size: 14px;
+                    font-size: 14px * Zoom.scale;
                     line-height-factor: 1.22;
                     color: Pal.text;
                     wrap: word-wrap;
@@ -151,7 +151,7 @@ export component ReliabilityScreen inherits Rectangle {
                 if Rel.first-run: VerticalLayout {
                     padding-left: 4px;
                     padding-right: 4px;
-                    Text { text: Tr.t("setup.intro"); font-size: 14px; line-height-factor: 1.22; color: Pal.text2; wrap: word-wrap; }
+                    Text { text: Tr.t("setup.intro"); font-size: 14px * Zoom.scale; line-height-factor: 1.22; color: Pal.text2; wrap: word-wrap; }
                 }
                 RowList {
                     VerticalLayout {
@@ -180,7 +180,7 @@ export component ReliabilityScreen inherits Rectangle {
             if !Rel.first-run && Rel.test-pending: VerticalLayout {
                 padding-left: 4px;
                 padding-right: 4px;
-                Text { text: Tr.t("reliability.test_set"); font-size: 12px; line-height-factor: 1.14; color: Pal.text2; wrap: word-wrap; }
+                Text { text: Tr.t("reliability.test_set"); font-size: 12px * Zoom.scale; line-height-factor: 1.14; color: Pal.text2; wrap: word-wrap; }
             }
             if !Rel.first-run && Rel.test-pending: PrimaryButton { quiet: true; text: Tr.t("reliability.test_cancel"); clicked => { Rel.cancel-test(); } }
             if !Rel.first-run && !Rel.test-pending: PrimaryButton { text: Tr.t("reliability.test"); clicked => { Rel.test(); } }

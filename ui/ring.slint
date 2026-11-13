@@ -1,4 +1,4 @@
-import { Pal, Tr, Insets } from "theme.slint";
+import { Pal, Tr, Insets, Zoom } from "theme.slint";
 import { PrimaryButton } from "widgets.slint";
 import { Backdrop, Look } from "backdrop.slint";
 import { TabularText } from "components.slint";
@@ -126,7 +126,7 @@ export component RingScreen inherits Rectangle {
             height: 20px;
             reach: 2.5px;
             text: root.date;
-            font-size: 16px;
+            font-size: 16px * Zoom.scale;
             fg: root.text2;
             vertical-alignment: center;
         }
@@ -151,7 +151,7 @@ export component RingScreen inherits Rectangle {
             halo: root.halo;
             reach: 3.5px;
             text: root.label;
-            font-size: 28px;
+            font-size: 28px * Zoom.scale;
             font-weight: 700;
             fg: root.text;
             wrap: word-wrap;
@@ -162,7 +162,7 @@ export component RingScreen inherits Rectangle {
             halo: root.halo;
             reach: 2.5px;
             text: root.note;
-            font-size: 16px;
+            font-size: 16px * Zoom.scale;
             fg: root.text2;
             wrap: word-wrap;
         }
@@ -173,7 +173,7 @@ export component RingScreen inherits Rectangle {
             background: root.on-photo ? #00000080 : Pal.surface2;
             Text {
                 text: root.snooze-text;
-                font-size: 16px;
+                font-size: 16px * Zoom.scale;
                 font-weight: 500;
                 color: root.on-photo ? #ffffff : Pal.text;
             }
@@ -189,7 +189,7 @@ export component RingScreen inherits Rectangle {
                 halo: root.halo;
                 reach: 2.5px;
                 text: root.challenges-text;
-                font-size: 14px;
+                font-size: 14px * Zoom.scale;
                 fg: root.dressed ? root.text : root.text2;
                 vertical-alignment: center;
                 width: self.preferred-width;
@@ -217,7 +217,7 @@ export component RingScreen inherits Rectangle {
             background: Pal.accent;
             Text {
                 text: Tr.t("ring.turn_off");
-                font-size: 20px;
+                font-size: 20px * Zoom.scale;
                 font-weight: 500;
                 color: Pal.on-accent;
             }

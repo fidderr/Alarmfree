@@ -629,7 +629,7 @@ Milestones are commits on branch `slint-port`; the SDK parts are on `native-host
 - **M2** Home list, editor (time wheel sheet, -1/-5/+1/+5, days and presets, label, sound with preview and "add your own", snooze), save, delete, discard guard, ring screen (clock, date, label, note, snooze, turn off), firing poll, heartbeat, history event on dismiss, wake-up check, one-time alarms switching off.
 - **M1** Slint skeleton on a NativeActivity (`libmain.so`), `build.sh` with `build_sentinel` (at that time on the hand-made `android/` project, see "Generated host" below), theme from `Palette`, insets, system bars, back button, toast with undo, quick alarms, empty-state templates, alarm switch.
 
-Known gaps right now: see "Gaps found by the audit" and the checklist below. Still open there: accessibility unverified (no TalkBack), the OS reduce-animations switch not seen working, Pause-all help not opened by hand, kiosk / locked-boot / guardian paths on a phone, `devtest/all.sh` and `matrix.sh` rewritten for the debug channel, the app does not follow the phone's font size.
+Known gaps right now: see "Gaps found by the audit" and the checklist below. Still open there: accessibility unverified (no TalkBack), the OS reduce-animations switch not seen working, kiosk / locked-boot / guardian paths on a phone, `devtest/all.sh` and `matrix.sh` rewritten for the debug channel.
 
 ### Comparing
 
@@ -693,7 +693,7 @@ only compile-checked or not tried (the note says what); `[ ]` missing. Audited a
 - [x] `AppCore/Store` loads/saves alarms and settings through the existing `persistence` (no format change)
 - [x] Translator: JSON locales en/nl/es/fr/de, `t(key)` pushed to Slint, language switch live (no `@tr`) (German checked on all screens, step 4)
 - [x] `Palette` global (`Pal`) with all 20 derived tokens from `AppSettings.palette(system_dark)`; light/dark/system bar colours set
-- [~] Insets global (top/bottom/left/right/keyboard) done; font-scale (`text-zoom`) global NOT ported: the original divided the big clocks by the measured Android font scale (`--text-zoom`); Slint text is not scaled by the system font size and no compensation exists (unverified with a large font setting)
+- [x] Insets global done; font scale: `Zoom.scale` (from `display::font_scale()`, read at start and every 2 s in `settings::apply_motion`) multiplies every text size in `ui/*.slint`; the big clocks (editor time, ring clock) are left unscaled, which is what the original's division by `--text-zoom` came to; seen on the OnePlus at font_scale 1.3 (texts larger, clock unchanged); wide preset chips elide a bit more
 - [x] Navigator with push / replace / go_back and the three-tab rule; first-run redirect when `!setup_done` (screen index + `editor_trail`; first run seen in step 4)
 - [x] BackDispatcher (SDK `on_back` to UI thread): top handler first, else route rule, Home = move to background, ignored while ringing (`ui::back`)
 - [x] Wide two-pane layout at >= 840 dp (list 400 + detail, empty-pane text), editor restarts per picked alarm (seen with a size override, no tablet AVD)
@@ -718,7 +718,7 @@ Home
 Editor basics
 - [x] Editor modes new / existing / copy-<id> (label "(copy)") / defaults (copy from the alarm menu "Duplicate")
 - [x] Big time button + -1 -5 +1 +5 steps with wrap; "rings in" line
-- [~] Time sheet: two drum wheels (drag, tap neighbours, wrap, 12 h AM/PM) and typed-time field (`text::parse_typed_time`, tested); the haptic tick (8 ms) per wheel step of the original is MISSING; wheel finger drag only tried with the emulator mouse
+- [~] Time sheet: two drum wheels (drag, tap neighbours, wrap, 12 h AM/PM) and typed-time field (`text::parse_typed_time`, tested); haptic tick (8 ms) per wheel step through `feedback::tick`; wheel finger drag only tried with the emulator mouse
 - [x] Day chips in week-start order, presets Weekdays / Weekend / Every day, "One date" mode with Date sheet and quick chips (the date sheet is a month grid, the original used the system date input)
 - [~] Validation errors (select a day, date in the past), Save builds alarm (sanitize, order, enabled, skip cleared) and toasts "rings in": save was exercised, the two error texts were never triggered by hand (code is a copy of the original)
 - [x] Unsaved-changes guard: Discard sheet on back / arrow / system Back
@@ -730,7 +730,7 @@ Ring screen
 - [x] Snooze button (text with minutes and left; hides at 0; `kit.snooze`, finish activity when no other ring) (snooze in `devtest/slint_smoke.sh`)
 - [x] Challenge hint ("N challenges" + one dot per challenge when more than one) or 48 px gap; Turn off: no challenges = mark solved + dismiss; else pause + run (step 5a)
 - [~] Max-brightness handling (set / re-apply every 5 s / restore) and `note_ui_up`: written like the original (`ring::start`, `ring::poll`, `ring::stop`), the brightness itself was not observed on the emulator
-- [~] Finish: history event, wake-check alarm, one-time switch-off done and seen; the navigation afterwards is MISSING: the original opened History (Home for a hidden alarm) once the ring ended, the port stays on the screen that was open under the ring
+- [~] Finish: history event, wake-check alarm, one-time switch-off done and seen; afterwards History (Home for a hidden alarm) opens like the original
 - [~] Liveness: `ui_heartbeat` is called on the UI thread every 500 ms poll while ringing (the original did a JS round trip every 1 s); `hang_ui` (guardian restart on a frozen UI) was not run
 
 ### Phase 2: challenges
@@ -775,7 +775,7 @@ Ring screen
 - [x] Bubbles backdrop (9 rising bubbles)
 - [~] Photo backdrop (cover, slow zoom, scrim, forced white text) with unreadable-file fallback: written (`look::load_photo`, `photo-drift`), never shown because the picker was not used
 - [x] Ring colour triad (+-35 deg neighbours, olive avoidance, sunrise exception) and halo text-shadow on dressed screens
-- [~] Less-motion switch honoured by every animation (functional timers exempt): backdrops, wheels, sheets, switches, celebration use `Motion`; the card swipe snap (180 ms) and the reorder shift (150 ms) in `ui/home.slint` do not; the OS "reduce animations" preference (`prefers-reduced-motion` in the original) is not read; not checked visually
+- [~] Less-motion switch honoured by every animation (functional timers exempt): backdrops, wheels, sheets, switches, celebration use `Motion`; the card swipe snap (180 ms) and the reorder shift (150 ms) in `ui/home.slint` do not; the OS "reduce animations" preference is read (`display::animations_off()`), not checked visually
 - [x] ThemeScreen: preview card, 9 theme tiles (System diagonal split), Your own row, Background / Cards / Text rows with Auto, accent swatches + wheel swatch
 - [~] Colour editor: wheel (conic + radial, dim overlay, thumb), brightness slider, hex field, swatch presets, adjusted-contrast note, save on release (finger drag on the wheel not tried, only taps)
 - [~] Palette derivation parity (contrast nudging, tokens) incl. system dark switching and system bar colours: derivation is the unchanged `models` code and bars were checked on Mist, Sand and a custom pink; the live switch when the phone goes dark (2 s timer in `ui::run`) was not tried
@@ -792,10 +792,10 @@ Ring screen
 - [x] Reliability screen: 10 checks sorted, Fix actions per check, 1.5 s refresh, help text with last ring time, app settings, save ring record (Fix buttons not tried on a phone)
 - [x] Reliability test alarm: add / pending note / cancel
 - [x] FirstRun welcome screen (large title, intro, same list, Done sets `setup_done`)
-- [~] Home sheets: Sort (3), PauseAll (end / tomorrow / week / date), PauseDate, AlarmMenu (Practice, Skip, Duplicate, Pause, Make default, Delete) all done and seen; the "?" help of the Sort and Pause-all sheets (`home.sort_note`, `home.pause_note`) is MISSING (only the pause-date sheet has its note)
+- [~] Home sheets: Sort (3), PauseAll (end / tomorrow / week / date), PauseDate, AlarmMenu (Practice, Skip, Duplicate, Pause, Make default, Delete) all done and seen; the "?" help of the Sort, Pause-all and pause-date sheets is there
 - [x] Date picker component replacing `<input type=date>` (min date support)
 - [~] Toast outcome notices and error toasts shown as in 8.5 (code is a copy; see the Phase 0 startup line for what was never triggered)
-- [~] Haptics through `feedback` (reorder 15 ms, hold 18/45/130, reaction 15/60/80/130, solve pattern, touch-feedback switch honoured) done; the wheel tick (8 ms) is MISSING; haptics are not observable on an emulator
+- [~] Haptics through `feedback` (reorder 15 ms, hold 18/45/130, reaction 15/60/80/130, solve pattern, touch-feedback switch honoured) done; the wheel tick (8 ms) is there; haptics are not observable on an emulator
 - [ ] Accessibility labels / roles on switches, chips (checked), progress bar, buttons: added for the shared widgets, home, settings, theme, reliability, history chart (see the gaps list); unverified without TalkBack
 
 ### Phase 6: verification
@@ -813,7 +813,7 @@ Original behaviour with no line (or a wrong line) above, found by reading `2f65c
 - [ ] Accessibility (added in code, NOT verified: the Slint Android backend shows no accessibility tree to uiautomator, so only a phone with TalkBack can confirm; swatches of the colour grids have no names yet): aria labels for every icon button, switch role/state, chart label (`history.chart_aria`), progress label (`challenge.time_left`), reliability ok/attention icons (`reliability.ok`, `reliability.attention`), theme code and custom accent (`theme.code`, `accent.custom`); screen readers read nothing useful
 - [x] OS "reduce animations" preference: `display::animations_off()` (new, SDK native-host) is read at start and every 2 s and joins the in-app switch in `Motion.less` (not seen working by hand)
 - [x] Less motion reaches the card swipe snap and reorder shift in `ui/home.slint` (`Motion.ms`)
-- [x] Big clocks and the Android font scale: no compensation needed. Slint ignores the phone's font size (font_scale 1.5 enlarged the status bar and left the app text unchanged), so the clocks cannot grow. The flip side: the whole app does not follow the phone's font size setting. `display::font_scale()` exists in the SDK for it
+- [x] Font scale: the app follows the phone's font size (`Zoom.scale`, see Phase 0); the big clocks stay fixed
 Covered by shared, unchanged logic (not gaps): `HISTORY_KEEP_DAYS` prune and ring photo prune (`ui::run`), `give_notice_to_all` and reminder taps (`platform.rs`, run by `init_platform`), home-widget refresh (`persistence::save_*` and settings call `refresh_outside_app`), sound names, notify-before, ring photo import (`ring_photos::import`, error toast `ring.photo_failed`).
 
 

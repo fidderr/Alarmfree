@@ -1,4 +1,4 @@
-import { Pal, Tr, Insets, Motion } from "theme.slint";
+import { Pal, Tr, Insets, Motion, Zoom } from "theme.slint";
 import { Icon, IconName, AppSwitch } from "components.slint";
 
 // The screen's top bar: back arrow, title, and room for actions on the right.
@@ -23,7 +23,7 @@ export component ScreenHeader inherits Rectangle {
         Text {
             horizontal-stretch: root.title-stretch ? 1 : 0;
             text: root.title;
-            font-size: 20px;
+            font-size: 20px * Zoom.scale;
             font-weight: 500;
             color: Pal.text;
             vertical-alignment: center;
@@ -46,11 +46,11 @@ export component Row inherits Rectangle {
         padding-left: 16px;
         padding-right: 14px;
         spacing: 12px;
-        Text { text: root.title; font-size: 14px; font-weight: 500; color: Pal.text; vertical-alignment: center; }
+        Text { text: root.title; font-size: 14px * Zoom.scale; font-weight: 500; color: Pal.text; vertical-alignment: center; }
         Text {
             horizontal-stretch: 1;
             text: root.value;
-            font-size: 14px;
+            font-size: 14px * Zoom.scale;
             color: Pal.text2;
             horizontal-alignment: right;
             vertical-alignment: center;
@@ -74,7 +74,7 @@ export component SwitchRow inherits Rectangle {
     HorizontalLayout {
         padding-left: 16px;
         padding-right: 14px;
-        Text { horizontal-stretch: 1; text: root.title; font-size: 14px; font-weight: 500; color: Pal.text; vertical-alignment: center; }
+        Text { horizontal-stretch: 1; text: root.title; font-size: 14px * Zoom.scale; font-weight: 500; color: Pal.text; vertical-alignment: center; }
         Rectangle { width: 44px; AppSwitch { on: root.on; } }
     }
     TouchArea { clicked => { root.toggled(!root.on); } }
@@ -110,7 +110,7 @@ export component PrimaryButton inherits Rectangle {
     background: quiet ? Pal.surface2 : Pal.accent;
     Text {
         text: root.text;
-        font-size: root.compact ? 14px : 16px;
+        font-size: (root.compact ? 14px : 16px) * Zoom.scale;
         font-weight: 500;
         color: root.quiet ? Pal.text : Pal.on-accent;
     }
@@ -164,7 +164,7 @@ export component Sheet inherits Rectangle {
             height: 44px;
             padding-left: 20px;
             padding-right: 12px;
-            Text { horizontal-stretch: root.help == "" ? 1 : 0; text: root.title; font-size: 20px; font-weight: 500; color: Pal.text; vertical-alignment: center; overflow: elide; }
+            Text { horizontal-stretch: root.help == "" ? 1 : 0; text: root.title; font-size: 20px * Zoom.scale; font-weight: 500; color: Pal.text; vertical-alignment: center; overflow: elide; }
             if root.help != "": Rectangle {
                 width: 36px;
                 accessible-role: button;
@@ -177,7 +177,7 @@ export component Sheet inherits Rectangle {
                     height: 22px;
                     border-radius: 11px;
                     background: root.help-open ? Pal.accent : Pal.accent-soft;
-                    Text { text: "?"; font-size: 13px; font-weight: 700; color: root.help-open ? Pal.on-accent : Pal.accent; }
+                    Text { text: "?"; font-size: 13px * Zoom.scale; font-weight: 700; color: root.help-open ? Pal.on-accent : Pal.accent; }
                 }
                 TouchArea { clicked => { root.help-open = !root.help-open; } }
             }
@@ -194,7 +194,7 @@ export component Sheet inherits Rectangle {
                         width: 14px;
                         Icon { name: root.action-icon; size: 14px; tint: Pal.accent; filled: true; }
                     }
-                    Text { text: root.action-text; font-size: 14px; font-weight: 500; color: Pal.accent; vertical-alignment: center; }
+                    Text { text: root.action-text; font-size: 14px * Zoom.scale; font-weight: 500; color: Pal.accent; vertical-alignment: center; }
                 }
                 TouchArea { clicked => { root.action(); } }
             }
@@ -218,7 +218,7 @@ export component Sheet inherits Rectangle {
                             padding: 12px;
                             padding-left: 14px;
                             padding-right: 14px;
-                            Text { text: root.help; font-size: 14px; line-height-factor: 1.22; color: Pal.text; wrap: word-wrap; }
+                            Text { text: root.help; font-size: 14px * Zoom.scale; line-height-factor: 1.22; color: Pal.text; wrap: word-wrap; }
                         }
                     }
                 }
@@ -235,7 +235,7 @@ export component Sheet inherits Rectangle {
             accessible-role: button;
             accessible-label: root.done-text;
             accessible-action-default => { root.finish(); }
-            Text { text: root.done-text; font-size: 16px; font-weight: 500; color: root.done-quiet ? Pal.text : Pal.on-accent; }
+            Text { text: root.done-text; font-size: 16px * Zoom.scale; font-weight: 500; color: root.done-quiet ? Pal.text : Pal.on-accent; }
             TouchArea { clicked => { root.finish(); } }
         }
     }
@@ -266,7 +266,7 @@ export component RadioRow inherits Rectangle {
                 border-color: root.selected ? Pal.accent : Pal.text2;
             }
         }
-        Text { horizontal-stretch: 1; text: root.text; font-size: 14px; font-weight: root.selected ? 500 : 400; color: Pal.text; vertical-alignment: center; overflow: elide; }
+        Text { horizontal-stretch: 1; text: root.text; font-size: 14px * Zoom.scale; font-weight: root.selected ? 500 : 400; color: Pal.text; vertical-alignment: center; overflow: elide; }
     }
     TouchArea { clicked => { root.clicked(); } }
 }
@@ -305,7 +305,7 @@ export component Wheel inherits Rectangle {
         horizontal-alignment: center;
         vertical-alignment: center;
         text: root.labels[Math.mod(root.value + off + root.modulus * 2, root.modulus)];
-        font-size: off == 0 ? 28px : (off == 1 || off == -1) ? 20px : off == 2 || off == -2 ? 16px : 14px;
+        font-size: (off == 0 ? 28px : (off == 1 || off == -1) ? 20px : off == 2 || off == -2 ? 16px : 14px) * Zoom.scale;
         font-weight: off == 0 ? 700 : (off == 1 || off == -1) ? 500 : 400;
         color: off == 0 ? Pal.accent : (off == 1 || off == -1) ? Pal.text : Pal.text2;
         opacity: off == 0 ? 1.0 : (off == 1 || off == -1) ? 0.8 : off == 2 || off == -2 ? 0.5 : 0.28;
@@ -387,7 +387,7 @@ export component Stepper inherits Rectangle {
     height: 64px;
     HorizontalLayout {
         spacing: 4px;
-        Text { horizontal-stretch: 1; text: root.title; font-size: 14px; font-weight: 500; color: Pal.text; vertical-alignment: center; }
+        Text { horizontal-stretch: 1; text: root.title; font-size: 14px * Zoom.scale; font-weight: 500; color: Pal.text; vertical-alignment: center; }
         Rectangle {
             width: 44px;
             height: 44px;
@@ -397,10 +397,10 @@ export component Stepper inherits Rectangle {
             accessible-role: button;
             accessible-label: Tr.t("action.decrease") + " " + root.title;
             accessible-action-default => { root.less(); }
-            Text { text: "\u{2212}"; font-size: 20px; color: Pal.text; }
+            Text { text: "\u{2212}"; font-size: 20px * Zoom.scale; color: Pal.text; }
             TouchArea { clicked => { root.less(); } }
         }
-        Text { min-width: 76px; text: root.value; font-size: 16px; font-weight: 500; color: Pal.text; horizontal-alignment: center; vertical-alignment: center; }
+        Text { min-width: 76px; text: root.value; font-size: 16px * Zoom.scale; font-weight: 500; color: Pal.text; horizontal-alignment: center; vertical-alignment: center; }
         Rectangle {
             width: 44px;
             height: 44px;
@@ -410,7 +410,7 @@ export component Stepper inherits Rectangle {
             accessible-role: button;
             accessible-label: Tr.t("action.increase") + " " + root.title;
             accessible-action-default => { root.more(); }
-            Text { text: "+"; font-size: 20px; color: Pal.text; }
+            Text { text: "+"; font-size: 20px * Zoom.scale; color: Pal.text; }
             TouchArea { clicked => { root.more(); } }
         }
     }
@@ -503,7 +503,7 @@ export component ChoiceChips inherits Rectangle {
                 x: 6px;
                 width: parent.width - 12px;
                 text: label;
-                font-size: root.small ? 12px : 14px;
+                font-size: (root.small ? 12px : 14px) * Zoom.scale;
                 font-weight: 500;
                 color: root.small ? (root.selected == i ? Pal.accent : Pal.text) : (root.selected == i ? Pal.on-accent : Pal.text);
                 horizontal-alignment: center;
@@ -519,7 +519,7 @@ export component ChoiceChips inherits Rectangle {
 export component GroupTitle inherits VerticalLayout {
     in property <string> text;
     padding-top: 12px;
-    Text { text: root.text; font-size: 14px; font-weight: 500; color: Pal.text; }
+    Text { text: root.text; font-size: 14px * Zoom.scale; font-weight: 500; color: Pal.text; }
 }
 
 // A text button without a background.
@@ -532,7 +532,7 @@ export component LinkButton inherits Rectangle {
     HorizontalLayout {
         padding-left: 8px;
         padding-right: 8px;
-        Text { text: root.text; font-size: 14px; font-weight: 500; color: root.ink; vertical-alignment: center; }
+        Text { text: root.text; font-size: 14px * Zoom.scale; font-weight: 500; color: root.ink; vertical-alignment: center; }
     }
     TouchArea { clicked => { root.clicked(); } }
 }
@@ -566,7 +566,7 @@ export component TextField inherits Rectangle {
         x: 12px;
         width: parent.width - 24px;
         text: root.text;
-        font-size: 16px;
+        font-size: 16px * Zoom.scale;
         color: Pal.text;
         single-line: true;
         input-type: root.input-type;
@@ -580,7 +580,7 @@ export component TextField inherits Rectangle {
         x: 12px;
         width: parent.width - 24px;
         text: root.placeholder;
-        font-size: 16px;
+        font-size: 16px * Zoom.scale;
         color: Pal.text2;
         opacity: 0.7;
         horizontal-alignment: root.align;

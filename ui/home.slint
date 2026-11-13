@@ -1,4 +1,4 @@
-import { Motion, Pal, Tr, Insets } from "theme.slint";
+import { Motion, Pal, Tr, Insets, Zoom } from "theme.slint";
 import { Icon, IconName, AppSwitch, RoundIconButton, SlimChip, TabularText } from "components.slint";
 import { BottomNav } from "nav.slint";
 
@@ -99,7 +99,7 @@ component AlarmCard inherits Rectangle {
                         min-width: data.twelve ? 104px : 76px;
                         horizontal-stretch: 0;
                         text: data.time;
-                        font-size: data.twelve ? 20px : 24px;
+                        font-size: (data.twelve ? 20px : 24px) * Zoom.scale;
                         font-weight: 450;
                         letter-spacing: data.twelve ? 0px : -0.3px;
                         ink: data.on ? Pal.text : Pal.text2;
@@ -111,14 +111,14 @@ component AlarmCard inherits Rectangle {
                         horizontal-stretch: 1;
                         if data.label != "": Text {
                             text: data.label;
-                            font-size: 14px;
+                            font-size: 14px * Zoom.scale;
                             font-weight: 500;
                             overflow: elide;
                             color: data.on ? Pal.text : Pal.text2;
                         }
                         if data.when != "": Text {
                             text: data.when;
-                            font-size: 12px;
+                            font-size: 12px * Zoom.scale;
                             color: Pal.text2;
                             overflow: elide;
                         }
@@ -129,7 +129,7 @@ component AlarmCard inherits Rectangle {
                                 width: 13.2px;
                                 horizontal-alignment: center;
                                 text: day.letter;
-                                font-size: 11px;
+                                font-size: 11px * Zoom.scale;
                                 font-weight: (day.on && data.on) ? 700 : 400;
                                 color: (day.on && data.on) ? Pal.accent : Pal.text2;
                             }
@@ -273,11 +273,11 @@ export component HomeScreen inherits Rectangle {
             VerticalLayout {
                 horizontal-stretch: 1;
                 alignment: start;
-                Text { text: Tr.t("home.next_label"); font-size: 12px; font-weight: 500; color: Pal.text2; }
-                Text { text: root.next-title; font-size: 28px; font-weight: 700; line-height-factor: 1.036; color: Pal.text; overflow: elide; }
+                Text { text: Tr.t("home.next_label"); font-size: 12px * Zoom.scale; font-weight: 500; color: Pal.text2; }
+                Text { text: root.next-title; font-size: 28px * Zoom.scale; font-weight: 700; line-height-factor: 1.036; color: Pal.text; overflow: elide; }
                 if root.next-sub != "": VerticalLayout {
                     padding-top: 4px;
-                    Text { text: root.next-sub; font-size: 14px; color: Pal.text2; }
+                    Text { text: root.next-sub; font-size: 14px * Zoom.scale; color: Pal.text2; }
                 }
             }
             HorizontalLayout {
@@ -312,7 +312,7 @@ export component HomeScreen inherits Rectangle {
                     x: parent.width - (root.banner-can-hide ? 56px : 12px) - self.width;
                     y: (parent.height - self.height) / 2;
                     text: Tr.t("reliability.fix");
-                    font-size: 14px;
+                    font-size: 14px * Zoom.scale;
                     font-weight: 500;
                     color: Pal.warn;
                 }
@@ -321,7 +321,7 @@ export component HomeScreen inherits Rectangle {
                     y: (parent.height - self.height) / 2;
                     width: banner-fix.x - 10px - 40px;
                     text: root.banner;
-                    font-size: 14px;
+                    font-size: 14px * Zoom.scale;
                     color: Pal.text;
                     wrap: word-wrap;
                 }
@@ -332,7 +332,7 @@ export component HomeScreen inherits Rectangle {
             padding-right: 16px;
             padding-bottom: 4px;
             spacing: 8px;
-            Text { text: Tr.t("home.quick"); font-size: 12px; font-weight: 500; color: Pal.text2; vertical-alignment: center; }
+            Text { text: Tr.t("home.quick"); font-size: 12px * Zoom.scale; font-weight: 500; color: Pal.text2; vertical-alignment: center; }
             for label[i] in root.quick-labels: SlimChip {
                 horizontal-stretch: 1;
                 text: label;
@@ -395,14 +395,14 @@ export component HomeScreen inherits Rectangle {
                     height: 40px;
                     Icon { name: IconName.clock; size: 40px; tint: Pal.text2; }
                 }
-                Text { text: Tr.t("alarm.no_alarms"); font-size: 16px; font-weight: 500; horizontal-alignment: center; color: Pal.text; }
-                Text { text: Tr.t("alarm.tap_to_create"); font-size: 14px; horizontal-alignment: center; wrap: word-wrap; color: Pal.text2; }
+                Text { text: Tr.t("alarm.no_alarms"); font-size: 16px * Zoom.scale; font-weight: 500; horizontal-alignment: center; color: Pal.text; }
+                Text { text: Tr.t("alarm.tap_to_create"); font-size: 14px * Zoom.scale; horizontal-alignment: center; wrap: word-wrap; color: Pal.text2; }
                 Rectangle { height: 0px; }
                 for label[i] in [root.empty-weekdays, root.empty-weekend]: Rectangle {
                     height: 44px;
                     border-radius: 14px;
                     background: Pal.surface;
-                    Text { text: label; font-size: 14px; font-weight: 500; color: Pal.text; }
+                    Text { text: label; font-size: 14px * Zoom.scale; font-weight: 500; color: Pal.text; }
                     TouchArea { clicked => { root.template(i); } }
                 }
             }

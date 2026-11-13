@@ -1,4 +1,4 @@
-import { Pal, Tr } from "theme.slint";
+import { Pal, Tr, Zoom } from "theme.slint";
 import { AppSlider, TextField } from "widgets.slint";
 
 export struct SwatchCell { colour: color, selected: bool }
@@ -99,7 +99,7 @@ export component ColourControls inherits VerticalLayout {
     }
     HorizontalLayout {
         spacing: 12px;
-        Text { text: Tr.t("theme.brightness"); font-size: 14px; font-weight: 500; color: Pal.text; vertical-alignment: center; }
+        Text { text: Tr.t("theme.brightness"); font-size: 14px * Zoom.scale; font-weight: 500; color: Pal.text; vertical-alignment: center; }
         AppSlider {
             horizontal-stretch: 1;
             value: Hue.brightness;
@@ -120,7 +120,7 @@ export component ColourControls inherits VerticalLayout {
             height: 48px;
             border-radius: 14px;
             background: Hue.auto-on ? Pal.accent : Pal.surface2;
-            Text { text: Tr.t("theme.auto"); font-size: 14px; font-weight: 500; color: Hue.auto-on ? Pal.on-accent : Pal.text; }
+            Text { text: Tr.t("theme.auto"); font-size: 14px * Zoom.scale; font-weight: 500; color: Hue.auto-on ? Pal.on-accent : Pal.text; }
             TouchArea { clicked => { Hue.auto-picked(); } }
         }
     }
