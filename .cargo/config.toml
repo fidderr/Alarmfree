@@ -1,9 +1,16 @@
 # This machine's NDK 30 (Slint's prebuilt Skia needs it) and the 16 KB page size Android 15+ wants.
 [target.aarch64-linux-android]
 linker = "C:/Users/rfidd/AppData/Local/Android/Sdk/ndk/30.0.16248370/toolchains/llvm/prebuilt/windows-x86_64/bin/aarch64-linux-android31-clang.cmd"
-rustflags = ["-C", "link-arg=-Wl,-z,max-page-size=16384", "-C", "link-arg=-llog"]
+rustflags = ["-C", "link-arg=-Wl,-z,max-page-size=16384", "-C", "link-arg=-llog", "-C", "link-arg=-Wl,--icf=all"]
 
 # Emulators.
 [target.x86_64-linux-android]
 linker = "C:/Users/rfidd/AppData/Local/Android/Sdk/ndk/30.0.16248370/toolchains/llvm/prebuilt/windows-x86_64/bin/x86_64-linux-android31-clang.cmd"
-rustflags = ["-C", "link-arg=-Wl,-z,max-page-size=16384", "-C", "link-arg=-llog"]
+rustflags = ["-C", "link-arg=-Wl,-z,max-page-size=16384", "-C", "link-arg=-llog", "-C", "link-arg=-Wl,--icf=all"]
+
+# SQLite (bundled by rusqlite) without what the app never uses: full-text search, R-tree, the JSON
+# functions (the app stores JSON as plain text and reads it with serde), DBSTAT, SOUNDEX, STAT4,
+# extension loading and a few unused hooks. -0.4 MB. Set here, not in build.sh, so `cargo test`
+# runs the database tests against the same SQLite.
+[env]
+LIBSQLITE3_FLAGS = "-USQLITE_ENABLE_FTS3 -USQLITE_ENABLE_FTS3_PARENTHESIS -USQLITE_ENABLE_FTS5 -USQLITE_ENABLE_RTREE -USQLITE_ENABLE_DBSTAT_VTAB -USQLITE_SOUNDEX -USQLITE_ENABLE_STAT4 -USQLITE_ENABLE_STAT2 -USQLITE_ENABLE_LOAD_EXTENSION -USQLITE_ENABLE_COLUMN_METADATA -DSQLITE_OMIT_LOAD_EXTENSION -DSQLITE_OMIT_DEPRECATED -DSQLITE_OMIT_PROGRESS_CALLBACK -DSQLITE_OMIT_SHARED_CACHE -DSQLITE_OMIT_JSON -DSQLITE_OMIT_TRACE -DSQLITE_OMIT_AUTHORIZATION"
