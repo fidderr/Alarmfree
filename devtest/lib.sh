@@ -9,8 +9,8 @@
 export MSYS_NO_PATHCONV=1
 ADB="${ADB:-$LOCALAPPDATA/Android/Sdk/platform-tools/adb.exe}"
 SERIAL="${SERIAL:-emulator-5554}"
-PKG=com.fidderr.alarmfree
-ACTIVITY=dev.dioxus.main.MainActivity
+PKG=com.fidderr.alarmfree.slint
+ACTIVITY=android.app.NativeActivity
 OUT="${OUT:-devtest-out}"
 mkdir -p "$OUT"
 
@@ -77,7 +77,8 @@ ask() { # pid in out command
     still_ours || give_way
     printf '{ %s\n} < /dev/null 2>&1; echo "__DONE__$?"\n' "$4" >&"$2"
     while :; do
-        if ! IFS= read -r -t 90 line <&"$3"; then
+        if ! IFS= read -r -t "${ASK_TIMEOUT:-90}" line <&"$3"; then
+            echo "NOTE  no answer from the device shell to: ${4:0:160}" >&2
             kill "$pid" 2> /dev/null
             return 124
         fi
@@ -316,7 +317,8 @@ reboot_only() {
     # dark ten minutes into a run, and every picture after that was black. A phone keeps its own.
     case "$SERIAL" in
         emulator-*)
-            note "screen_off_timeout was $(timeout 20 "$ADB" -s "$SERIAL" shell settings get system screen_off_timeout | tr -d '')"
+            note "screen_off_timeout was $(timeout 20 "$ADB" -s "$SERIAL" shell settings get system screen_off_timeout | tr -d '
+')"
             timeout 20 "$ADB" -s "$SERIAL" shell settings put system screen_off_timeout 86400000
             # It boots to its lock screen. The app shows over it, so a run can go a long way
             # before a system page, which does not, stays hidden behind it.
@@ -353,7 +355,7 @@ fresh() {
     as_app 'cd files && for f in *; do [ "$f" = sounds ] || rm -rf "$f"; done; rm -rf sounds/custom ../shared_prefs; cp ../clean.db alarmfree.db'
     use_settings '"Dark"' '"English"' '"setup_done":true,"language_follows_phone":false'
 }
-on_home_or_setup() { is_there '.home-header, .setup-header'; }
+on_home_or_setup() { page_is_up; }
 
 # The app's settings: theme, language, and more preferences as JSON fields. Past the
 # first-run screen and in one language, unless a scenario wants otherwise.
@@ -497,58 +499,162 @@ job_status() { # active / pending / none
 # In one go: the app deletes the file once it has seen it.
 action() { as_app "echo $1 > files/debug_action.tmp && mv files/debug_action.tmp files/debug_action.txt"; }
 
-# Run JavaScript in the page and print what it returns. It is how the scenarios press buttons
-# and read the screen on any phone size. One program on the device, that also waits for the
-# answer: under a tenth of a second, against a second when each step was its own.
-js() {
+# ---- The window (Slint) ----
+# The app answers commands written to files/debug_action.txt (src/debug_hooks.rs, src/ui/debug*.rs;
+# a debug build made by ./build.sh). One program on the device writes the command and waits for the
+# answer: under a tenth of a second.
+ui() { # command: its answer, or "no answer from the app"
     local out
-    out=$(as_app "cd files && rm -f debug_script_result.txt && print -r -- 'js:${1//\'/\'\\\'\'}' > debug_action.tmp && mv debug_action.tmp debug_action.txt && i=0; while [ ! -e debug_script_result.txt ] && [ \$i -lt 300 ]; do sleep 0.01; i=\$((i + 1)); done; cat debug_script_result.txt 2> /dev/null")
-    case "$out" in
-        =*)
-            echo "${out#=}"
-            return 0
-            ;;
-    esac
-    # Never empty: that reads as an answer.
-    echo "no answer from the page"
+    out=$(as_app "cd files && rm -f debug_script_result.txt && print -r -- 'ui:${1//\'/\'\\'\'}' > debug_action.tmp && mv debug_action.tmp debug_action.txt && i=0; while [ ! -e debug_script_result.txt ] && [ \$i -lt 300 ]; do sleep 0.01; i=\$((i + 1)); done; cat debug_script_result.txt 2> /dev/null")
+    if [ -n "$out" ]; then
+        echo "$out"
+        return 0
+    fi
+    echo "no answer from the app"
     return 1
 }
-# click selector [which of them] [seconds to wait]
-click() {
-    js "var e = document.querySelectorAll('$1')[${2:-0}]; if (!e) return 'nothing like $1'; e.click(); return 'ok'" > /dev/null
-    sleep "${3:-0.1}"
+# A property of the window from the snapshot: numbers, booleans and strings (not the lists).
+sn() {
+    ui snapshot | sed -nE 's/.*"'"$1"'":("([^"]*)"|([^,}]*)).*/\2\3/p' | head -1
 }
-# For what only looks, so it can be asked again when the page is too busy to answer.
-ask_page() {
-    local out try
-    for try in 1 2 3; do
-        out=$(js "$1")
-        case "$out" in
-            *"no answer"*) sleep 0.5 ;;
-            *) break ;;
-        esac
-    done
-    echo "$out"
+# Which screen: 0 alarms, 1 editor, 2 history, 3 settings, 4 reliability, 5 theme.
+screen_no() { ui screen | sed -nE 's/^screen=([0-9]+).*/\1/p'; }
+on_screen_no() { [ "$(screen_no)" = "$1" ]; }
+# A button of the window by its callback name, as a tap would (see src/ui/debug.rs).
+press() { # callback [argument]
+    local said
+    said=$(ui "press:$1:${2:-}")
+    [ "$said" = OK ] || echo "press $1: $said" >&2
+    sleep "${3:-0.15}"
+    [ "$said" = OK ]
 }
-# Right now, and until it shows or is gone: a screen takes a moment to change. A page that is not
-# up yet does not count, once per scenario: a first load can take most of a minute when Android
-# is busy with something else, which the results then say.
-is_there() { [ "$(js "return document.querySelector('$1') ? 'y' : 'n'")" = y ]; }
-is_not_there() { [ "$(js "return document.querySelector('$1') ? 'y' : 'n'")" = n ]; }
-page_is_up() { [ "$(js "return 'y'")" = y ]; }
+# The middle of the first text on screen that says this, in device pixels ("x y"), or "none".
+where() { ui "find${2:+@$2}:$1"; }
+where_has() { ui "findc${2:+@$2}:$1"; }
+is_there() {
+    case "$(where "$1" "${2:-}")" in
+        [0-9]*) return 0 ;;
+    esac
+    return 1
+}
+is_not_there() { [ "$(where "$1")" = none ]; }
+has_there() {
+    case "$(where_has "$1")" in
+        [0-9]*) return 0 ;;
+    esac
+    return 1
+}
+page_is_up() { [ "$(ui window)" != "no answer from the app" ]; }
+# Right now, and until it shows or is gone: a screen takes a moment to change. A window that is not
+# up yet does not count, once per scenario: a first start can take most of a minute when Android is
+# busy with something else, which the results then say.
 PAGE_WAITED=""
-on_screen() {
+on_screen() { # text [seconds]
     wait_for "${2:-6}" is_there "$1" && return 0
     [ -z "$PAGE_WAITED" ] || return 1
     PAGE_WAITED=1
     page_is_up && return 1
     local t0=$SECONDS
     wait_for 60 page_is_up || return 1
-    echo "NOTE  $CURRENT  the page was not up for another $((SECONDS - t0))s" | tee -a "$RESULTS"
+    echo "NOTE  $CURRENT  the window was not up for another $((SECONDS - t0))s" | tee -a "$RESULTS"
     wait_for "${2:-6}" is_there "$1"
 }
+on_screen_has() { wait_for "${2:-6}" has_there "$1"; }
 gone() { wait_for "${2:-6}" is_not_there "$1"; }
-read_text() { ask_page "var e = document.querySelector('$1'); return e ? e.textContent : ''"; }
+# Every text on screen, one per line, top to bottom.
+all_texts() { ui texts | grep -oE '"t":"([^"\]|\.)*"' | sed -E 's/^"t":"//; s/"$//; s/\\"/"/g'; }
+texts_of() { all_texts | tr '\n' '|' | sed 's/|$//'; }
+# A touch where the text is: the middle of the first text that says this (the n-th, counting
+# from 0), as a finger does it. With `c` in front of the pause, the text only has to have this in it.
+# Where the text is once it holds still: a panel slides in, and a touch on the way would miss.
+still_where() { # command text [which]
+    local a b i=0
+    a=$("$1" "$2" "${3:-}")
+    while [ "$i" -lt 8 ]; do
+        sleep 0.1
+        b=$("$1" "$2" "${3:-}")
+        [ "$a" = "$b" ] && break
+        a=$b
+        i=$((i + 1))
+    done
+    echo "$a"
+}
+tap() { # text [which of them] [seconds to wait]
+    local xy
+    xy=$(still_where where "$1" "${2:-}")
+    case "$xy" in
+        [0-9]*) ;;
+        *)
+            echo "nothing says $1" >&2
+            return 1
+            ;;
+    esac
+    # shellcheck disable=SC2086
+    dev input tap $xy
+    sleep "${3:-0.2}"
+}
+tap_has() { # text [which] [seconds]
+    local xy
+    xy=$(still_where where_has "$1" "${2:-}")
+    case "$xy" in
+        [0-9]*) ;;
+        *)
+            echo "nothing has $1" >&2
+            return 1
+            ;;
+    esac
+    # shellcheck disable=SC2086
+    dev input tap $xy
+    sleep "${3:-0.2}"
+}
+# The same through the window's own events, with no finger on the glass: where only the outcome counts.
+tap_in() { # text [which] [seconds]
+    local said
+    still_where where "$1" "${2:-}" > /dev/null
+    said=$(ui "tap${2:+@$2}:$1")
+    sleep "${3:-0.15}"
+    [ "$said" = OK ] || echo "nothing says $1" >&2
+    [ "$said" = OK ]
+}
+click_text() { tap_in "$@"; }
+# The n-th text field on screen takes this text.
+set_field() { type_field "$@"; }
+# The same through the keys, which runs the field's own handler for what is typed.
+type_field() { # n text
+    local said
+    said=$(ui "settext:$1:$2")
+    sleep 0.2
+    [ "$said" = OK ] || echo "no field $1" >&2
+    [ "$said" = OK ]
+}
+fields() { ui inputs; }
+# Slider n (from the top) to this fraction (0 to 1) of its track, by a touch there.
+set_slider() { # n fraction
+    local row x y w scale
+    row=$(ui boxes:AppSlider | grep -oE '\{[^{}]*\}' | sed -n "$(($1 + 1))p")
+    [ -n "$row" ] || { echo "no slider $1" >&2; return 1; }
+    x=$(echo "$row" | sed -E 's/.*"x":([0-9]+).*/\1/')
+    y=$(echo "$row" | sed -E 's/.*"y":([0-9]+).*/\1/')
+    w=$(echo "$row" | sed -E 's/.*"w":([0-9]+).*/\1/')
+    scale=$(window_size | cut -d' ' -f3)
+    dev input tap "$(awk -v x="$x" -v w="$w" -v s="$scale" -v f="$2" 'BEGIN { printf "%d", x - w / 2 + 12 * s + (w - 24 * s) * f }')" "$y"
+    sleep 0.15
+}
+# The number of a choice in a list of radio rows (from the top), by its text.
+radio_index() {
+    ui texts | python -I -c '
+import json, sys
+want = sys.argv[1]
+rows = [e for e in json.loads(sys.stdin.read()) if e["r"] == "RadioButton"]
+print(next((i for i, e in enumerate(rows) if e["t"] == want), -1))
+' "$1"
+}
+# Is a choice, chip or switch with this label on (checked or selected)?
+is_on() { ui texts | grep -oE '\{[^{}]*"t":"'"$1"'"[^{}]*\}' | grep -q '"on":true'; }
+has_role() { ui texts | grep -oE '\{[^{}]*"t":"'"$1"'"[^{}]*\}' | grep -q "\"r\":\"$2\""; }
+# Device pixels of the window: "width height scale".
+window_size() { ui window; }
+
 press_back() {
     dev input keyevent KEYCODE_BACK
     sleep 0.2
@@ -742,6 +848,12 @@ scenario() {
         note "the screen was off between scenarios: woken"
         wake
     fi
+    # A phone's own app that stopped answering leaves its dialog over everything, and no touch gets through.
+    if on_emulator && shells_open && focused_window | grep -q "Not Responding"; then
+        note "a system app did not respond: its dialog is closed"
+        dev am force-stop com.android.settings
+        dev input keyevent KEYCODE_BACK
+    fi
     adb_ logcat -c
 }
 took() { echo "$((SECONDS - SCENARIO_START))s"; }
@@ -755,4 +867,23 @@ fail() {
     write_log
 }
 note() { echo "      $1"; }
-write_log() { adb_ logcat -d -b all -v time 2> /dev/null | grep -E "AlarmFree|MobileSentinel|Sentinel|AlarmKit|AlarmClass|alarmfree|ActivityTaskManager.*(fidderr|Background)|BackgroundActivity|AndroidRuntime|FATAL|am_anr|ANR in" > "$OUT/$CURRENT.log"; }
+write_log() { adb_ logcat -d -t 30000 -b all -v time 2> /dev/null | grep -E "AlarmFree|MobileSentinel|Sentinel|AlarmKit|AlarmClass|alarmfree|ActivityTaskManager.*(fidderr|Background)|BackgroundActivity|AndroidRuntime|FATAL|am_anr|ANR in" > "$OUT/$CURRENT.log"; }
+
+# One row of history, `$2` days ago.
+history_row() { # id days_ago
+    local at
+    at=$(date -u -d "@$(($(now_s) - $2 * 86400))" +%Y-%m-%dT07:00:00+00:00)
+    printf "INSERT INTO alarm_events (id, alarm_id, alarm_label, fire_timestamp, dismiss_timestamp, total_dismissal_time_ms, outcome, seen) VALUES ('%s', 'a', 'a', '%s', '%s', 0, 'solved', 1);\n" "$1" "$at" "$at" | sql
+}
+history_count() { printf "SELECT count(*) FROM alarm_events;\n" | sql; }
+
+# The bottom bar: Alarms, History or Settings.
+go_tab() { # Alarms / History / Settings
+    tap "$1" L 0.3
+}
+
+# Scroll the panel on top (or the screen) up by about a screen, as a finger does.
+sheet_scroll() {
+    dev input swipe 540 1800 540 700 400
+    sleep 0.8
+}

@@ -38,7 +38,8 @@ SENTINEL_MANIFEST="${SENTINEL_MANIFEST:-../mobile-sentinel/Cargo.toml}"
 
 MODE=debug
 PROFILE_DIR=debug
-CARGO_FLAGS=()
+# The debug build carries what devtest/ drives it with (cargo feature devtest); no other build does.
+CARGO_FLAGS=(--features devtest)
 SENTINEL_FLAGS=()
 case "${1:-}" in
   release)

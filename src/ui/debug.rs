@@ -5,10 +5,14 @@ use std::rc::Rc;
 
 use slint::{ComponentHandle, Model};
 
-use super::{Ctx, Ed, MainWindow, Run};
+use super::{Cal, Cfg, Ctx, Ed, Insets, Look, MainWindow, Motion, Pal, Run, Thm};
 
 fn texts<T: Clone + 'static>(model: impl Model<Data = T>, f: impl Fn(T) -> String) -> Vec<String> {
     model.iter().map(f).collect()
+}
+
+fn hex(c: slint::Color) -> String {
+    format!("#{:02x}{:02x}{:02x}", c.red(), c.green(), c.blue())
 }
 
 /// The main properties of the window as JSON.
@@ -48,9 +52,24 @@ fn snapshot(ui: &MainWindow) -> String {
         "ring_clock": ui.get_ring_clock().as_str(),
         "ring_label": ui.get_ring_label().as_str(),
         "ring_snooze_text": ui.get_ring_snooze_text().as_str(),
+        "pal_bg": hex(ui.global::<Pal>().get_bg()),
+        "pal_text": hex(ui.global::<Pal>().get_text()),
+        "pal_accent": hex(ui.global::<Pal>().get_accent()),
+        "pal_light": ui.global::<Pal>().get_light(),
+        "less_motion": ui.global::<Motion>().get_less(),
+        // The ring screen's look: the backdrop's number in `RingBackdrop::ALL`, its first colour,
+        // the clock's number in `RingClock::ALL`, whether a photo is behind it.
+        "look_kind": ui.global::<Look>().get_kind(),
+        "look_c1": hex(ui.global::<Look>().get_c1()),
+        "look_clock": ui.global::<Look>().get_clock_style(),
+        "look_photo": ui.global::<Look>().get_has_photo(),
+        "ed_preview": ui.get_ed_preview(),
+        // How far the system bars and the keyboard cover the window at the bottom, in device pixels.
+        "insets_bottom_px": (ui.global::<Insets>().get_bottom() * ui.window().scale_factor()).round(),
         "toast_visible": ui.get_toast_visible(),
         "toast_text": ui.get_toast_text().as_str(),
         "run_active": ui.global::<Run>().get_active(),
+        "type_passage": ui.global::<Run>().get_type_cells().iter().map(|c| c.ch.to_string()).collect::<String>(),
         "run_idle_left": ui.global::<Run>().get_idle_left(),
         "scan_state": ui.global::<Run>().get_scan_state(),
         "scanner_open": super::challenge_run::scanner_open(),
@@ -101,6 +120,25 @@ fn press(ui: &MainWindow, name: &str, arg: &str) -> String {
         "ring-snooze" => ui.invoke_ring_snooze(),
         "ring-turn-off" => ui.invoke_ring_turn_off(),
         "toast-undo" => ui.invoke_toast_undo(),
+        "h-delete-history" => ui.invoke_h_delete_history(),
+        "h-period" => ui.invoke_h_period_picked(number()),
+        "h-custom-accepted" => ui.invoke_h_custom_accepted(),
+        "toast-dismiss" => ui.invoke_toast_dismiss(),
+        "hs-pause-apply" => ui.invoke_hs_pause_apply(),
+        "pn-close" => ui.invoke_pn_close(),
+        "open-banner" => ui.invoke_open_banner(),
+        "hide-banner" => ui.invoke_hide_banner(),
+        "template" => ui.invoke_template(number()),
+        // Buttons that are only a picture, so no text names them.
+        "challenge-remove" => ui.global::<Cfg>().invoke_remove(number()),
+        "sound-rename" => ui.global::<Ed>().invoke_rename_start(number()),
+        "sound-rename-done" => ui.global::<Ed>().invoke_rename_done(),
+        "sound-delete" => ui.global::<Ed>().invoke_delete_ask(number()),
+        "sound-delete-yes" => ui.global::<Ed>().invoke_delete_confirm(number()),
+        "accent" => ui.global::<Thm>().invoke_accent_picked(number()),
+        "theme-tile" => ui.global::<Thm>().invoke_tile_picked(number()),
+        "cal-next" => ui.global::<Cal>().invoke_next(),
+        "cal-prev" => ui.global::<Cal>().invoke_prev(),
         other => return format!("ERR unknown callback {other}"),
     }
     "OK".to_owned()
@@ -111,6 +149,10 @@ pub fn run(ctx: &Rc<Ctx>, command: &str) -> String {
     let Some(ui) = ctx.ui.upgrade() else {
         return "ERR no window".to_owned();
     };
+    #[cfg(feature = "devtest")]
+    if let Some(answer) = super::debug_elements::run(&ui, command) {
+        return answer;
+    }
     match command {
         "screen" => screen(&ui),
         "snapshot" => snapshot(&ui),

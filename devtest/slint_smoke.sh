@@ -78,7 +78,13 @@ else
 fi
 
 # The alarm rings 5 minutes from now: move the clock to just before it.
-jump_clock 290
+# (A quick alarm rounds up to the minute, so the moment is read from what is armed.)
+armed_ms=$(as_app "cat $FILES/sentinel/armed/*.armed 2> /dev/null | head -n 1")
+if [ -n "$armed_ms" ] && [ "$armed_ms" -gt 0 ] 2> /dev/null; then
+    dev cmd alarm set-time $((armed_ms - 5000)) > /dev/null
+else
+    jump_clock 290
+fi
 step "the alarm rings" '"ringing":true' 40
 "$ADB" -s "$SERIAL" exec-out screencap -p > "$OUT/slint_smoke_ring.png"
 
@@ -95,7 +101,8 @@ step "it rings again after the snooze" '"ringing":true' 40
 ui press:ring-turn-off > /dev/null
 dev monkey -p "$PKG" 1 > /dev/null 2>&1
 step "turn off ends the ring screen" '"ringing":false' 20
-step "the list is back" '"screen":0' 10
+# A normal alarm that was turned off lands on History (src/ui/ring.rs: a hidden one leaves none).
+step "history shows what just happened" '"screen":2' 10
 
 if [ "$FAILS" -eq 0 ]; then
     echo "ALL PASS"

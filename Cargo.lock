@@ -159,6 +159,7 @@ name = "alarmfree"
 version = "0.4.1"
 dependencies = [
  "chrono",
+ "i-slint-backend-testing",
  "log",
  "mobile-sentinel",
  "rand 0.8.6",

@@ -23,6 +23,8 @@ mod colour;
 mod datepicker;
 #[cfg(debug_assertions)]
 mod debug;
+#[cfg(all(debug_assertions, feature = "devtest"))]
+mod debug_elements;
 mod editor;
 mod editor_look;
 mod editor_sound;

@@ -35,6 +35,11 @@ rusqlite = { version = "0.31", features = ["bundled"] }
 [target.'cfg(target_os = "android")'.dependencies]
 slint = { version = "=1.18.1", default-features = false, features = ["std", "compat-1-2", "backend-android-activity-06", "renderer-skia"] }
 
+[dependencies.i-slint-backend-testing]
+version = "=1.18.1"
+optional = true
+default-features = false
+
 [target.'cfg(not(target_os = "android"))'.dependencies]
 slint = { version = "=1.18.1" }
 
@@ -50,6 +55,9 @@ slint-build = "=1.18.1"
 
 [features]
 default = []
+# What devtest/ needs to look at the Slint elements (src/ui/debug_elements.rs). Debug builds made by
+# ./build.sh only: never in a release.
+devtest = ["dep:i-slint-backend-testing"]
 
 # Release builds. Size-first: the .so is the biggest thing users download. No `strip` here: the Android Gradle
 # plugin strips the shipped .so and keeps symbols for Play crash reports.
