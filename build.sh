@@ -10,6 +10,9 @@
 #   ./build.sh                      debug APK
 #   ./build.sh install [serial]     debug APK, installed on the device
 #   ./build.sh release [install]    release APK (signed with the debug key, so it installs)
+#   ./build.sh fast [install]       release APK from the fast cargo profile (no LTO, incremental):
+#                                   a changed file builds in seconds, the .so is bigger. Not for shipping.
+#   ./build.sh aab                  release AAB for Play (unsigned; then ./sign-aab.sh)
 #
 # Phones are arm64. An emulator needs another ABI:
 #   TARGET=x86_64-linux-android ./build.sh install emulator-5556
@@ -34,14 +37,23 @@ TARGET="${TARGET:-aarch64-linux-android}"
 SENTINEL_MANIFEST="${SENTINEL_MANIFEST:-../vp-work/ms-native/Cargo.toml}"
 
 MODE=debug
+PROFILE_DIR=debug
 CARGO_FLAGS=()
 SENTINEL_FLAGS=()
-if [ "${1:-}" = "release" ]; then
-  MODE=release
-  CARGO_FLAGS=(--release)
-  SENTINEL_FLAGS=(--release)
-  shift
-fi
+case "${1:-}" in
+  release)
+    MODE=release; PROFILE_DIR=release
+    CARGO_FLAGS=(--release); SENTINEL_FLAGS=(--release)
+    shift ;;
+  fast)
+    MODE=fast; PROFILE_DIR=release-fast
+    CARGO_FLAGS=(--profile release-fast); SENTINEL_FLAGS=(--release)
+    shift ;;
+  aab)
+    MODE=aab; PROFILE_DIR=release
+    CARGO_FLAGS=(--release); SENTINEL_FLAGS=(--release --aab)
+    shift ;;
+esac
 INSTALL=false
 SERIAL=""
 if [ "${1:-}" = "install" ]; then
@@ -62,8 +74,8 @@ cargo build --lib --target "$TARGET" ${CARGO_FLAGS[@]+"${CARGO_FLAGS[@]}"}
 # (SentinelBridge), also for what runs without the UI (a ring, a restart after a boot).
 rm -rf build/jniLibs
 mkdir -p "build/jniLibs/$ABI"
-cp "target/$TARGET/$MODE/libalarmfree.so" "build/jniLibs/$ABI/libmain.so"
-cp "target/$TARGET/$MODE/libalarmfree.so" build/libmain.so.unstripped
+cp "target/$TARGET/$PROFILE_DIR/libalarmfree.so" "build/jniLibs/$ABI/libmain.so"
+cp "target/$TARGET/$PROFILE_DIR/libalarmfree.so" build/libmain.so.unstripped
 
 echo "=== [2/3] Generating the Android project, wiring mobile-sentinel + assets + icon, and Gradle ==="
 cargo run --quiet --manifest-path "$SENTINEL_MANIFEST" --bin build_sentinel -- \
@@ -71,15 +83,18 @@ cargo run --quiet --manifest-path "$SENTINEL_MANIFEST" --bin build_sentinel -- \
 
 if [ "$MODE" = debug ]; then
   OUT_REL=target/sentinel-android/app/build/outputs/apk/debug/app-debug.apk
+elif [ "$MODE" = aab ]; then
+  OUT_REL=target/sentinel-android/app/build/outputs/bundle/release/app-release.aab
 else
   OUT_REL=target/sentinel-android/app/build/outputs/apk/release/app-release.apk
   [ -f "$OUT_REL" ] || OUT_REL=target/sentinel-android/app/build/outputs/apk/release/app-release-unsigned.apk
 fi
 mkdir -p build
-cp "$OUT_REL" "build/alarmfree-slint-$MODE.apk"
-echo "built build/alarmfree-slint-$MODE.apk ($(du -h "build/alarmfree-slint-$MODE.apk" | cut -f1))"
+EXT=apk; [ "$MODE" = aab ] && EXT=aab
+cp "$OUT_REL" "build/alarmfree-slint-$MODE.$EXT"
+echo "built build/alarmfree-slint-$MODE.$EXT ($(du -h "build/alarmfree-slint-$MODE.$EXT" | cut -f1))"
 
-if $INSTALL; then
+if $INSTALL && [ "$MODE" != aab ]; then
   echo "=== [3/3] Installing ==="
   if [ -n "$SERIAL" ]; then
     adb -s "$SERIAL" install -r "build/alarmfree-slint-$MODE.apk"

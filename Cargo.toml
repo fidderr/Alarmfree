@@ -65,6 +65,14 @@ lto = "thin"
 codegen-units = 1
 panic = "abort"
 
+# The edit-and-run loop (`./build.sh fast`): no LTO, 16 codegen units, incremental. One changed file
+# builds in about 12 s instead of 170 s, and the .so is 27 MB instead of 16. Never for shipping.
+[profile.release-fast]
+inherits = "release"
+lto = false
+codegen-units = 16
+incremental = true
+
 [dev-dependencies]
 tempfile = "3"
 tokio = { version = "1", features = ["rt", "macros", "time"] }
