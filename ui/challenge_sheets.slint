@@ -1,6 +1,6 @@
 import { Pal, Tr, Motion } from "theme.slint";
 import { Icon, IconName } from "components.slint";
-import { PrimaryButton, Sheet, Stepper } from "widgets.slint";
+import { PrimaryButton, Sheet, Stepper, ChoiceChips, GroupTitle } from "widgets.slint";
 
 export struct CfgRow { name: string, summary: string }
 export struct CfgType { name: string, desc: string }
@@ -112,6 +112,8 @@ export component ChallengesSheet inherits Rectangle {
     }
     Sheet {
         title: Tr.t("config.challenges");
+        done-text: Tr.t("action.done");
+        finish => { root.done(); }
         help: Tr.t("config.challenges_note");
         action-text: Cfg.rows.length > 0 ? Tr.t("config.try_all") : "";
         locked: Cfg.drag-from >= 0;
@@ -160,8 +162,10 @@ export component ChallengesSheet inherits Rectangle {
                 }
             }
         }
-        if Cfg.can-add: PrimaryButton { quiet: true; text: Tr.t("config.add_challenge"); clicked => { root.add-open(); } }
-        PrimaryButton { text: Tr.t("action.done"); clicked => { root.done(); } }
+        if Cfg.can-add: VerticalLayout {
+            padding-top: 8px;
+            PrimaryButton { quiet: true; compact: true; text: Tr.t("config.add_challenge"); clicked => { root.add-open(); } }
+        }
     }
 }
 
@@ -171,36 +175,28 @@ export component AddChallengeSheet inherits Rectangle {
     Sheet {
         title: Tr.t("config.select_challenge");
         help: Tr.t("config.add_note");
+        done-text: Tr.t("challenge.config.back");
+        done-quiet: true;
+        finish => { root.back(); }
         close => { root.back(); }
         for type[i] in Cfg.types: Rectangle {
-            height: 60px;
+            min-height: 60px;
             Rectangle {
                 y: parent.height - 1px;
                 height: 1px;
                 background: Pal.line;
             }
             VerticalLayout {
+                padding-top: 8px;
+                padding-bottom: 8px;
                 alignment: center;
                 spacing: 2px;
                 Text { text: type.name; font-size: 14px; font-weight: 500; color: Pal.text; }
-                Text { text: type.desc; font-size: 12px; color: Pal.text2; wrap: word-wrap; }
+                Text { text: type.desc; font-size: 12px; line-height-factor: 1.14; color: Pal.text2; wrap: word-wrap; }
             }
             TouchArea { clicked => { Cfg.add(i); } }
         }
-        PrimaryButton { quiet: true; text: Tr.t("challenge.config.back"); clicked => { root.back(); } }
     }
-}
-
-component DifficultyChip inherits Rectangle {
-    in property <string> text;
-    in property <bool> on;
-    callback clicked();
-    height: 48px;
-    min-width: 44px;
-    border-radius: 14px;
-    background: root.on ? Pal.accent : Pal.surface2;
-    Text { text: root.text; font-size: 14px; font-weight: 500; color: root.on ? Pal.on-accent : Pal.text; }
-    TouchArea { clicked => { root.clicked(); } }
 }
 
 // The settings of one of them.
@@ -208,23 +204,16 @@ export component ChallengeDetailSheet inherits Rectangle {
     callback back();
     Sheet {
         title: Cfg.detail-title;
+        done-text: Tr.t("action.done");
+        finish => { root.back(); }
         help: Cfg.detail-help;
         action-text: Tr.t("challenge.try");
         close => { root.back(); }
         action => { Cfg.try-detail(); }
         if Cfg.detail-difficulty >= 0: VerticalLayout {
             spacing: 8px;
-            padding-top: 12px;
-            Text { text: Tr.t("challenge.config.difficulty"); font-size: 14px; font-weight: 500; color: Pal.text; }
-            HorizontalLayout {
-                spacing: 8px;
-                for label[i] in Cfg.difficulty-labels: DifficultyChip {
-                    horizontal-stretch: 1;
-                    text: label;
-                    on: Cfg.detail-difficulty == i;
-                    clicked => { Cfg.pick-difficulty(i); }
-                }
-            }
+            GroupTitle { text: Tr.t("challenge.config.difficulty"); }
+            ChoiceChips { labels: Cfg.difficulty-labels; selected: Cfg.detail-difficulty; picked(i) => { Cfg.pick-difficulty(i); } }
             VerticalLayout {
                 padding-top: 4px;
                 Text { text: Cfg.detail-example; font-size: 14px; color: Pal.text2; horizontal-alignment: center; wrap: word-wrap; }
@@ -267,13 +256,18 @@ export component ChallengeDetailSheet inherits Rectangle {
                     overflow: elide;
                 }
             }
-            PrimaryButton { quiet: true; text: Tr.t("challenge.config.scan_now"); clicked => { Cfg.scan-now(); } }
+            VerticalLayout {
+                padding-top: 8px;
+                PrimaryButton { quiet: true; compact: true; text: Tr.t("challenge.config.scan_now"); clicked => { Cfg.scan-now(); } }
+            }
         }
-        Rectangle {
-            height: 44px;
-            Text { text: Tr.t("config.remove_challenge"); font-size: 14px; font-weight: 500; color: Pal.danger; }
-            TouchArea { clicked => { Cfg.remove-detail(); } }
+        VerticalLayout {
+            padding-top: 4px;
+            Rectangle {
+                height: 44px;
+                Text { text: Tr.t("config.remove_challenge"); font-size: 14px; font-weight: 500; color: Pal.danger; }
+                TouchArea { clicked => { Cfg.remove-detail(); } }
+            }
         }
-        PrimaryButton { text: Tr.t("action.done"); clicked => { root.back(); } }
     }
 }
