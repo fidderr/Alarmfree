@@ -937,10 +937,9 @@ Verdicts on performance:
 - **Size: the original wins clearly** (18.6 against 44.1 MB), because Skia and the std widgets are linked into Slint's library.
 - **Scrolling: the original is smoother on this phone.** ColorOS runs the WebView at 90 Hz and Slint at only 60 Hz, and Slint
   has about 12 stalls of 33 to 99 ms per run where the original has 3. Both are fine in the numbers; the 60 against 90 Hz
-  difference is visible by eye, which only the user can judge. A way to ask Android for a higher frame rate from a native host
-  (a preferred refresh rate on the surface) is a possible generic SDK or app addition; it was not tried.
+  difference is visible by eye, which only the user can judge. This was then fixed: see "Refresh rate" below.
 
-Oddities of the Slint build found while measuring (to fix; they are design issues, not crashes):
+Oddities of the Slint build found while measuring (fixed in design round 1, see "Design fixes" below):
 - The reliability banner on Home has no close cross when its text spans the full width, and it is one line with an ellipsis where
   the original's wraps over up to 3 lines.
 - The "Fix" buttons on the welcome and reliability pages are as wide as their text, with no padding; the welcome page's intro text
@@ -1096,11 +1095,76 @@ show different text; the reliability rows are a few dp taller or shorter per row
 instruction line sits 4 dp higher; the animated backdrops show another moment of their animation; the home header "Fr 11:26" is
 not tabular (only the clocks and cards are); the dark colour sheet is 17 dp lower than the original's.
 
-### Stability, design comparison, test yourself
+### Refresh rate, and where the scroll jank comes from
 
-Not done yet. The phone was locked (keyguard showing) when the stability and design part was about to start, and only the user can
-unlock it; nothing was captured or changed. Open: crash and ANR counts for both builds over the core loop, an alarm surviving the
-app being killed, side-by-side screenshots of every screen (`docs/phone/design/`) and the verdict per area. To test yourself on
-the phone: how smooth scrolling feels at 60 against 90 Hz, haptics (wheel ticks, challenges), alarm sound and fade, the camera scan
-and step challenges, and TalkBack.
+Cause of the 60 Hz: a native window runs at the display's default rate unless it asks for more (a WebView page is raised by the system
+itself). Asking for the fastest display mode of the same size (`preferredDisplayModeId`, the mechanism ColorOS honours) made Slint scroll at
+120 Hz. It is now a generic opt-in of the SDK (`mobile_sentinel::display::set_preferred_frame_rate`, branch native-host, commit 852fe5c; off
+unless an app asks) and the Slint build asks for `Highest` at start (`src/ui/mod.rs`).
 
+| Scrolling 14 alarms on the phone | Refresh | Frames | Janky (> 1.5 x vsync) | p50 / p99 gap |
+|---|---|---|---|---|
+| Slint, request off (runs 8 and 9) | 60 Hz | 806 / 803 | 12 / 13 | 16.6 / 49.7 ms |
+| Slint, request on | 120 Hz | 1249 | 7 (0.6%) | 8.3 / 8.3 ms |
+| Original (runs 8 and 9, and a run under Perfetto) | 90 Hz | 1230 to 1430 | 3 / 3 / 0 | 11.1 / 11.1 ms |
+
+Perfetto traces of the same workload for both builds (sched with thread names, gfx/view/input/binder atrace, CPU frequency, the frame
+timeline): `docs/phone/jank-original.pftrace.gz` and `docs/phone/jank-slint.pftrace.gz` (about 15 MB each, not in git history:
+they are kept next to the repo), scripts `devtest/jank_slint.py`, `jank_original.py`, `jank_phase.py`, config `devtest/jank.pbtxt`.
+Findings:
+- **Renderer:** Skia on OpenGL ES (Adreno 830), not Vulkan and not the software renderer (`eglSwapBuffers`, a GPU completion fence thread,
+  SurfaceFlinger "RE GLES (Ganesh)"). Android's own renderer is not involved, which is why `dumpsys gfxinfo` shows 0 frames for Slint.
+  Slint 1.18.1 offers `renderer-skia-vulkan`; nothing in the trace points to the GPU, so it was not tried.
+- **Per-frame cost is small:** one frame is one `android_main` run of 2 to 5 ms on a performance core, mostly at the minimum clock
+  (0.56 GHz; the same work takes about 1.9 ms at 2.4 GHz). No GC, no prime-core work, SurfaceFlinger on time for all 1628 display
+  frames, GPU fence wait about 1 ms, `dequeueBuffer` at most 1.5 ms.
+- **The "stalls" are late input, not slow rendering:** Slint draws only when something changes. Of 21 gaps over 12.5 ms in 1624 swaps,
+  10 sit at a swipe start (35 to 42 ms after DOWN: the first MOVE of `input swipe` arrives that late and there is nothing to draw
+  before it), 6 are one late MOVE (a 16.5 ms gap between two MOVEs) and 2 are idle time between swipes. Only 3 frames were real UI
+  work: the first swipe after start (86.7 ms, 21.5 ms of work at 0.56 GHz), one release frame (26 ms, a 24.7 ms run on one core at
+  1.56 GHz: cause not identified, first use of a glyph or shader is a guess) and one 19.5 ms frame. The original keeps a
+  `Choreographer` frame going on every vsync while a finger is down, so it hides the same input gaps; its five worst frames were
+  15.3 to 18.3 ms present gaps with 2.3 to 5.7 ms of UI and 3.4 to 4.9 ms of RenderThread work, sleeping 10 to 12 ms on late input.
+- **Fix proposals:** (A) redraw on every vsync while a touch is down (animation-tick on the pressed list): hides the gaps in the metric by
+  drawing identical frames, costs battery, no visible gain: not recommended. (B) an ADPF performance hint session for the UI thread
+  to avoid the 0.56 GHz clock on the first frames (the only candidate for real jank; not done). The 24 ms release spike and the 87 ms
+  first swipe would need simpleperf to explain.
+- **Verdict:** with the 120 Hz request on, Slint's scrolling is at least as smooth as the original's by the numbers. Whether it feels
+  so is for the user to judge.
+
+### Stability (phone, about 07:50 to 08:36, phone clock, alarms 2 to 4 minutes ahead)
+
+| | Original | Slint |
+|---|---|---|
+| Crashes (`logcat -b crash`, dropbox crash/ANR/native, our packages only) | 0 | 0 |
+| ANRs | 0 | 0 |
+| Frozen UIs | 0 | 0 |
+| Rings that did not start or came late | 0 | 0 |
+| Real rings | about 7 | about 9 |
+
+Core loop run at least 3 times per app: create and edit an alarm, ring, snooze, ring again, turn off, a Math (Easy) challenge solved at
+the ring, practice mode from the editor and from the menu, History, Settings, Theme, Back through every screen to the background,
+reopen, `am kill` and reopen. Every ring started at the scheduled minute plus 0 to 5 ms in both apps (logcat `AlarmManager sending alarm`).
+An alarm scheduled before `am kill` still rang on time afterwards in both apps, and both the `:sentinel` and the main process came
+back (`am kill` is a background kill like the system's; it does not cancel alarms like `force-stop` does, which is why it was used instead
+of swiping recents). Both apps stay portrait with rotation forced to landscape. With the phone unlocked and the launcher in front, a
+ring after a kill does not take the screen in either app: it waits until the app is opened. Not tested: lock-screen unlock behaviour
+(the phone had to stay unlocked), the locked-boot backup screen, the guardian restart on a frozen UI. Differences seen in the Slint
+build: its kiosk logs "relaunch dispatched" about every 1.3 s while another ring is in front (two alarms in the same minute; both
+rang, no defect found), the card keeps the label next to the "Snoozed until" line like the original's rule says.
+
+### Design comparison and verdicts
+
+53 pairs were captured on the phone (original and Slint, English, system theme which is dark here): `docs/phone/design/` (paired
+images, `overview.jpg`), the fixes and their before/after pairs are listed under "Design fixes (before and after)" above (rounds 1 to 3).
+Verdict per area after the fixes, judged from the pairs: shared look (font, sizes, titles, sheets, dividers) matches; Home, alarm
+card, menu, swipe: matches; editor and all its sheets: matches, with Slint's own calendar kept for the date sheet; ring screen and all
+backdrops: matches (Aurora a little stronger than the original's); challenges and practice: matches; Settings, History, Theme,
+reliability, toasts: match. Differences that remain on purpose or are small: the date sheet calendar, animated look tiles showing
+another moment, the wheel neighbour spacing (40 against 43 dp), chip widths come from a table of the OPPO Sans advances (another
+font can be a few dp off), the phone-specific font family name (on another phone Slint uses its default), the colour sheet's slider
+thumb, the monospace clock style falling back to the default sans, the home header not tabular.
+
+Test yourself on the phone: how smooth scrolling feels at 120 Hz, the feel of the time wheel and reorder, haptics (wheel ticks,
+challenges), alarm sound and fade, the camera scan and step challenges (the step permission was never granted during the tests),
+TalkBack (roles and labels exist but only TalkBack can confirm them), the lock-screen unlock path, and whether the OPPO Sans text feels right.
