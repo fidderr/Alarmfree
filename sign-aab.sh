@@ -91,6 +91,7 @@ fi
 
 # Where dx + build_sentinel puts the unsigned AAB
 UNSIGNED_AAB_CANDIDATES=(
+  "target/sentinel-android/app/build/outputs/bundle/release/app-release.aab"
   "target/dx/alarmfree/release/android/app/app/build/outputs/bundle/release/app-release.aab"
   "target/dx/alarmfree/debug/android/app/app/build/outputs/bundle/release/app-release.aab" # fallback
 )
