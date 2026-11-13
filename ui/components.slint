@@ -80,11 +80,11 @@ export component RoundIconButton inherits Rectangle {
     width: 44px;
     height: 44px;
     border-radius: 22px;
-    background: active ? Pal.accent-soft : Pal.surface;
+    background: active ? Pal.accent : Pal.surface;
     Icon {
         name: root.icon;
         size: 20px;
-        tint: root.active ? Pal.accent : Pal.text;
+        tint: root.active ? Pal.on-accent : Pal.text;
     }
     TouchArea {
         clicked => { root.clicked(); }

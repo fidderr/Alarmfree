@@ -47,10 +47,10 @@ component CheckLine inherits Rectangle {
             alignment: center;
             spacing: 2px;
             Text { text: root.check.title; font-size: 14px; font-weight: 500; color: Pal.text; wrap: word-wrap; }
-            if !root.check.ok: Text { text: root.check.note; font-size: 12px; color: Pal.text2; wrap: word-wrap; }
+            if !root.check.ok: Text { text: root.check.note; font-size: 12px; line-height-factor: 1.14; color: Pal.text2; wrap: word-wrap; }
         }
         if root.check.fixable: Rectangle {
-            min-width: 60px;
+            min-width: fix-label.preferred-width + 28px;
             height: 44px;
             y: (parent.height - self.height) / 2;
             border-radius: 14px;
@@ -58,7 +58,7 @@ component CheckLine inherits Rectangle {
             accessible-role: button;
             accessible-label: Tr.t("reliability.fix") + " " + root.check.title;
             accessible-action-default => { root.fix(); }
-            Text { text: Tr.t("reliability.fix"); font-size: 14px; font-weight: 500; color: Pal.text; }
+            fix-label := Text { x: 14px; text: Tr.t("reliability.fix"); font-size: 14px; font-weight: 500; color: Pal.text; }
             TouchArea { clicked => { root.fix(); } }
         }
     }
@@ -103,9 +103,10 @@ export component ReliabilityScreen inherits Rectangle {
         }
         if !Rel.first-run: ScreenHeader {
             title: Tr.t("reliability.title");
+            title-stretch: false;
             back => { Rel.back(); }
             Rectangle {
-                width: 44px;
+                width: 36px;
                 Rectangle {
                     width: 22px;
                     height: 22px;
@@ -115,6 +116,7 @@ export component ReliabilityScreen inherits Rectangle {
                 }
                 TouchArea { clicked => { root.help-open = !root.help-open; } }
             }
+            Rectangle { horizontal-stretch: 1; }
         }
         if root.help-open && !Rel.first-run: Rectangle {
             height: help-text.preferred-height + 24px + 8px;
@@ -130,6 +132,7 @@ export component ReliabilityScreen inherits Rectangle {
                     width: parent.width - 28px;
                     text: Rel.help;
                     font-size: 14px;
+                    line-height-factor: 1.22;
                     color: Pal.text;
                     wrap: word-wrap;
                 }
@@ -143,13 +146,11 @@ export component ReliabilityScreen inherits Rectangle {
                 spacing: 16px;
                 padding-left: 16px;
                 padding-right: 16px;
-                padding-top: 8px;
-                if Rel.first-run: Text {
-                    x: 4px;
-                    text: Tr.t("setup.intro");
-                    font-size: 14px;
-                    color: Pal.text2;
-                    wrap: word-wrap;
+                padding-top: Rel.first-run ? 8px : 16px;
+                if Rel.first-run: VerticalLayout {
+                    padding-left: 4px;
+                    padding-right: 4px;
+                    Text { text: Tr.t("setup.intro"); font-size: 14px; line-height-factor: 1.22; color: Pal.text2; wrap: word-wrap; }
                 }
                 RowList {
                     VerticalLayout {
@@ -175,7 +176,11 @@ export component ReliabilityScreen inherits Rectangle {
             padding-bottom: 16px + Insets.bottom;
             spacing: 8px;
             if Rel.first-run: PrimaryButton { text: Tr.t("setup.done"); clicked => { Rel.done(); } }
-            if !Rel.first-run && Rel.test-pending: Text { x: 4px; text: Tr.t("reliability.test_set"); font-size: 12px; color: Pal.text2; wrap: word-wrap; }
+            if !Rel.first-run && Rel.test-pending: VerticalLayout {
+                padding-left: 4px;
+                padding-right: 4px;
+                Text { text: Tr.t("reliability.test_set"); font-size: 12px; line-height-factor: 1.14; color: Pal.text2; wrap: word-wrap; }
+            }
             if !Rel.first-run && Rel.test-pending: PrimaryButton { quiet: true; text: Tr.t("reliability.test_cancel"); clicked => { Rel.cancel-test(); } }
             if !Rel.first-run && !Rel.test-pending: PrimaryButton { text: Tr.t("reliability.test"); clicked => { Rel.test(); } }
         }

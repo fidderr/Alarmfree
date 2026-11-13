@@ -4,6 +4,8 @@ import { Icon, IconName, AppSwitch } from "components.slint";
 // The screen's top bar: back arrow, title, and room for actions on the right.
 export component ScreenHeader inherits Rectangle {
     in property <string> title;
+    // False when what follows the title (a ?) belongs right next to it.
+    in property <bool> title-stretch: true;
     callback back();
     height: 60px;
     HorizontalLayout {
@@ -19,10 +21,10 @@ export component ScreenHeader inherits Rectangle {
             TouchArea { clicked => { root.back(); } }
         }
         Text {
-            horizontal-stretch: 1;
+            horizontal-stretch: root.title-stretch ? 1 : 0;
             text: root.title;
             font-size: 20px;
-            font-weight: 700;
+            font-weight: 500;
             color: Pal.text;
             vertical-alignment: center;
             overflow: elide;
@@ -39,12 +41,12 @@ export component Row inherits Rectangle {
     accessible-role: button;
     accessible-label: root.title + " " + root.value;
     accessible-action-default => { root.clicked(); }
-    height: 56px;
+    height: 54px;
     HorizontalLayout {
         padding-left: 16px;
-        padding-right: 12px;
-        spacing: 8px;
-        Text { text: root.title; font-size: 16px; color: Pal.text; vertical-alignment: center; }
+        padding-right: 14px;
+        spacing: 12px;
+        Text { text: root.title; font-size: 14px; font-weight: 500; color: Pal.text; vertical-alignment: center; }
         Text {
             horizontal-stretch: 1;
             text: root.value;
@@ -54,7 +56,7 @@ export component Row inherits Rectangle {
             vertical-alignment: center;
             overflow: elide;
         }
-        Icon { name: IconName.chevron-right; size: 18px; tint: Pal.text2; y: (parent.height - self.height) / 2; }
+        Icon { name: IconName.chevron-right; size: 14px; tint: Pal.text2; y: (parent.height - self.height) / 2; }
     }
     TouchArea { clicked => { root.clicked(); } }
 }
@@ -68,11 +70,11 @@ export component SwitchRow inherits Rectangle {
     accessible-checkable: true;
     accessible-checked: root.on;
     accessible-action-default => { root.toggled(!root.on); }
-    height: 56px;
+    height: 54px;
     HorizontalLayout {
         padding-left: 16px;
-        padding-right: 16px;
-        Text { horizontal-stretch: 1; text: root.title; font-size: 16px; color: Pal.text; vertical-alignment: center; }
+        padding-right: 14px;
+        Text { horizontal-stretch: 1; text: root.title; font-size: 14px; font-weight: 500; color: Pal.text; vertical-alignment: center; }
         Rectangle { width: 44px; AppSwitch { on: root.on; } }
     }
     TouchArea { clicked => { root.toggled(!root.on); } }
@@ -88,9 +90,10 @@ export component RowList inherits Rectangle {
     }
 }
 
+// From where the text starts: a line across the whole card weighs more. It takes no room of its own.
 export component Separator inherits Rectangle {
-    height: 1px;
-    background: Pal.line;
+    height: 0px;
+    Rectangle { x: 16px; width: parent.width - 16px; height: 1px; background: Pal.line; }
 }
 
 export component PrimaryButton inherits Rectangle {
@@ -101,8 +104,8 @@ export component PrimaryButton inherits Rectangle {
     accessible-label: root.text;
     accessible-action-default => { root.clicked(); }
     height: 52px;
-    border-radius: 16px;
-    background: quiet ? Pal.surface : Pal.accent;
+    border-radius: 14px;
+    background: quiet ? Pal.surface2 : Pal.accent;
     Text {
         text: root.text;
         font-size: 16px;
@@ -148,31 +151,31 @@ export component Sheet inherits Rectangle {
     property <bool> shown: false;
     property <bool> help-open: false;
     init => { shown = true; }
-    background: #00000066;
+    background: #0000008c;
     TouchArea { clicked => { root.close(); } }
     panel := Rectangle {
         x: 0px;
         width: parent.width;
-        height: min(parent.height * 0.85, 76px + body.preferred-height + Insets.bottom + 16px);
+        height: min(parent.height * 0.9, 74px + body.preferred-height + Insets.bottom + 20px);
         y: root.shown ? parent.height - self.height : parent.height;
         animate y { duration: Motion.ms(220ms); easing: ease-out; }
-        background: Pal.bg;
-        border-top-left-radius: 24px;
-        border-top-right-radius: 24px;
+        background: Pal.surface;
+        border-top-left-radius: 28px;
+        border-top-right-radius: 28px;
         TouchArea { }
         Rectangle {
-            y: 8px;
+            y: 10px;
             width: 36px;
             height: 4px;
             border-radius: 2px;
-            background: Pal.line;
+            background: Pal.off;
         }
         HorizontalLayout {
-            y: 16px;
-            height: 52px;
+            y: 22px;
+            height: 44px;
             padding-left: 20px;
             padding-right: 12px;
-            Text { horizontal-stretch: root.help == "" ? 1 : 0; text: root.title; font-size: 18px; font-weight: 700; color: Pal.text; vertical-alignment: center; overflow: elide; }
+            Text { horizontal-stretch: root.help == "" ? 1 : 0; text: root.title; font-size: 20px; font-weight: 500; color: Pal.text; vertical-alignment: center; overflow: elide; }
             if root.help != "": Rectangle {
                 width: 36px;
                 accessible-role: button;
@@ -197,23 +200,26 @@ export component Sheet inherits Rectangle {
             }
         }
         Flickable {
-            y: 72px;
-            height: parent.height - 72px;
+            y: 74px;
+            height: parent.height - 74px;
             interactive: !root.locked;
-            content-height: body.preferred-height + Insets.bottom + 16px;
+            content-height: body.preferred-height + Insets.bottom + 20px;
             body := VerticalLayout {
                 alignment: start;
-                padding-left: 16px;
-                padding-right: 16px;
+                padding-left: 20px;
+                padding-right: 20px;
                 spacing: 8px;
-                if root.help-open: Rectangle {
-                    border-radius: 14px;
-                    background: Pal.accent-soft;
-                    VerticalLayout {
-                        padding: 12px;
-                        padding-left: 14px;
-                        padding-right: 14px;
-                        Text { text: root.help; font-size: 14px; color: Pal.text; wrap: word-wrap; }
+                if root.help-open: VerticalLayout {
+                    padding-bottom: 8px;
+                    Rectangle {
+                        border-radius: 14px;
+                        background: Pal.accent-soft;
+                        VerticalLayout {
+                            padding: 12px;
+                            padding-left: 14px;
+                            padding-right: 14px;
+                            Text { text: root.help; font-size: 14px; line-height-factor: 1.22; color: Pal.text; wrap: word-wrap; }
+                        }
                     }
                 }
                 @children
@@ -234,7 +240,6 @@ export component RadioRow inherits Rectangle {
     accessible-action-default => { root.clicked(); }
     height: 52px;
     HorizontalLayout {
-        padding-left: 4px;
         spacing: 14px;
         Rectangle {
             width: 22px;
@@ -345,29 +350,29 @@ export component Stepper inherits Rectangle {
     in property <string> value;
     callback less();
     callback more();
-    height: 56px;
+    height: 64px;
     HorizontalLayout {
-        spacing: 8px;
-        Text { horizontal-stretch: 1; text: root.title; font-size: 16px; color: Pal.text; vertical-alignment: center; }
+        spacing: 4px;
+        Text { horizontal-stretch: 1; text: root.title; font-size: 14px; font-weight: 500; color: Pal.text; vertical-alignment: center; }
         Rectangle {
             width: 44px;
             height: 44px;
             y: (parent.height - self.height) / 2;
             border-radius: 22px;
-            background: Pal.surface;
+            background: Pal.surface2;
             accessible-role: button;
             accessible-label: Tr.t("action.decrease") + " " + root.title;
             accessible-action-default => { root.less(); }
             Text { text: "\u{2212}"; font-size: 20px; color: Pal.text; }
             TouchArea { clicked => { root.less(); } }
         }
-        Text { min-width: 84px; text: root.value; font-size: 16px; font-weight: 500; color: Pal.text; horizontal-alignment: center; vertical-alignment: center; }
+        Text { min-width: 76px; text: root.value; font-size: 16px; font-weight: 500; color: Pal.text; horizontal-alignment: center; vertical-alignment: center; }
         Rectangle {
             width: 44px;
             height: 44px;
             y: (parent.height - self.height) / 2;
             border-radius: 22px;
-            background: Pal.surface;
+            background: Pal.surface2;
             accessible-role: button;
             accessible-label: Tr.t("action.increase") + " " + root.title;
             accessible-action-default => { root.more(); }
@@ -491,6 +496,15 @@ export component TextField inherits Rectangle {
     border-width: 1px;
     border-color: Pal.line;
     background: Pal.bg;
+    if field.has-focus: Rectangle {
+        x: -4px;
+        y: -4px;
+        width: parent.width + 8px;
+        height: parent.height + 8px;
+        border-radius: 18px;
+        border-width: 2px;
+        border-color: Pal.accent;
+    }
     field := TextInput {
         accessible-label: root.label != "" ? root.label : root.placeholder;
         x: 12px;

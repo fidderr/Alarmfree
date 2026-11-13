@@ -8,8 +8,7 @@ component PanelItem inherits Rectangle {
     callback clicked();
     height: 52px;
     Text {
-        x: 4px;
-        width: parent.width - 8px;
+        width: parent.width;
         text: root.choice.text;
         font-size: 16px;
         font-weight: root.choice.selected ? 500 : 400;
@@ -45,12 +44,15 @@ export component PanelSheet inherits Rectangle {
         if root.note != "": Text {
             text: root.note;
             font-size: 14px;
+            line-height-factor: 1.22;
             color: Pal.text2;
             wrap: word-wrap;
         }
-        for choice[i] in root.choices: PanelItem {
-            choice: choice;
-            clicked => { root.picked(i); }
+        if root.choices.length > 0: VerticalLayout {
+            for choice[i] in root.choices: PanelItem {
+                choice: choice;
+                clicked => { root.picked(i); }
+            }
         }
         if root.chips.length > 0: HorizontalLayout {
             spacing: 8px;

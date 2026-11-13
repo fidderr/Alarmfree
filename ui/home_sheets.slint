@@ -16,13 +16,12 @@ component SheetItem inherits Rectangle {
     accessible-action-default => { root.clicked(); }
     height: 52px;
     HorizontalLayout {
-        padding-left: 4px;
-        padding-right: 4px;
         Text {
             horizontal-stretch: 1;
             text: root.choice.text;
             font-size: 16px;
-            color: root.choice.danger ? Pal.danger : Pal.text;
+            font-weight: root.choice.selected ? 500 : 400;
+            color: root.choice.danger ? Pal.danger : root.choice.selected ? Pal.accent : Pal.text;
             vertical-alignment: center;
             overflow: elide;
         }
@@ -43,9 +42,11 @@ export component HomeSheets inherits Rectangle {
         title: root.title;
         help: root.sheet == HomeSheet.sort ? Tr.t("home.sort_note") : root.sheet == HomeSheet.pause-all ? Tr.t("home.pause_note") : "";
         close => { root.close(); }
-        for choice[i] in root.choices: SheetItem {
-            choice: choice;
-            clicked => { root.picked(i); }
+        VerticalLayout {
+            for choice[i] in root.choices: SheetItem {
+                choice: choice;
+                clicked => { root.picked(i); }
+            }
         }
     }
     if root.sheet == HomeSheet.pause-date: Sheet {

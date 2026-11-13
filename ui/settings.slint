@@ -20,7 +20,7 @@ export struct SettingsView {
 
 component ListTitle inherits Rectangle {
     in property <string> text;
-    height: 16px;
+    height: 14px;
     Text {
         x: 4px;
         width: parent.width - 4px;
@@ -34,8 +34,8 @@ component ListTitle inherits Rectangle {
 
 // A line from where the text starts: a line across the whole card weighs more.
 component Inset inherits Rectangle {
-    height: 1px;
-    Rectangle { x: 16px; width: parent.width - 16px; background: Pal.line; }
+    height: 0px;
+    Rectangle { x: 16px; width: parent.width - 16px; height: 1px; background: Pal.line; }
 }
 
 component SetRow inherits Rectangle {
@@ -126,7 +126,8 @@ export component SettingsScreen inherits Rectangle {
                 alignment: start;
                 padding-left: 16px;
                 padding-right: 16px;
-                padding-bottom: 24px;
+                padding-top: 12px;
+                padding-bottom: 16px;
                 spacing: 8px;
                 Rectangle {
                     height: 64px;
@@ -163,14 +164,14 @@ export component SettingsScreen inherits Rectangle {
                     if root.st.widget: Inset { }
                     if root.st.widget: SetRow { title: Tr.t("settings.add_widget"); clicked => { root.open-row(3); } }
                 }
-                Rectangle { height: 16px; }
+                Rectangle { height: 8px; }
                 ListTitle { text: Tr.t("settings.alarms"); }
                 Card {
                     SetRow { title: Tr.t("settings.new_alarms"); clicked => { root.open-row(4); } }
                     Inset { }
                     SetRow { title: Tr.t("settings.min_volume"); value: root.st.volume; clicked => { root.open-row(5); } }
                 }
-                Rectangle { height: 16px; }
+                Rectangle { height: 8px; }
                 ListTitle { text: Tr.t("settings.feel"); }
                 Card {
                     SetRow { title: Tr.t("settings.touch_feedback"); switch: true; on: root.st.touch; clicked => { root.toggled(0, !root.st.touch); } }
@@ -179,7 +180,7 @@ export component SettingsScreen inherits Rectangle {
                     Inset { }
                     SetRow { title: Tr.t("settings.confetti"); switch: true; on: root.st.confetti; clicked => { root.toggled(2, !root.st.confetti); } }
                 }
-                Rectangle { height: 16px; }
+                Rectangle { height: 8px; }
                 ListTitle { text: Tr.t("settings.data"); }
                 Card {
                     SetRow { title: Tr.t("settings.backup"); clicked => { root.open-row(6); } }

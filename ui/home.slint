@@ -262,8 +262,11 @@ export component HomeScreen inherits Rectangle {
                 horizontal-stretch: 1;
                 alignment: start;
                 Text { text: Tr.t("home.next_label"); font-size: 12px; font-weight: 500; color: Pal.text2; }
-                Text { text: root.next-title; font-size: 28px; font-weight: 700; color: Pal.text; overflow: elide; }
-                if root.next-sub != "": Text { text: root.next-sub; font-size: 14px; color: Pal.text2; }
+                Text { text: root.next-title; font-size: 28px; font-weight: 700; line-height-factor: 1.036; color: Pal.text; overflow: elide; }
+                if root.next-sub != "": VerticalLayout {
+                    padding-top: 4px;
+                    Text { text: root.next-sub; font-size: 14px; color: Pal.text2; }
+                }
             }
             HorizontalLayout {
                 spacing: 8px;
@@ -273,34 +276,41 @@ export component HomeScreen inherits Rectangle {
             }
         }
         if root.banner != "": Rectangle {
-            height: 60px;
-            HorizontalLayout {
-                padding-left: 16px;
-                padding-right: 16px;
-                padding-bottom: 16px;
-                spacing: 4px;
-                Rectangle {
-                    horizontal-stretch: 1;
-                    border-radius: 14px;
-                    background: Pal.warn-soft;
-                    HorizontalLayout {
-                        padding: 10px;
-                        padding-left: 12px;
-                        padding-right: 12px;
-                        spacing: 10px;
-                        Icon { name: IconName.warning; size: 18px; tint: Pal.warn; y: (parent.height - self.height) / 2; }
-                        Text { text: root.banner; horizontal-stretch: 1; font-size: 14px; color: Pal.text; overflow: elide; vertical-alignment: center; }
-                        Text { text: Tr.t("reliability.fix"); font-size: 14px; font-weight: 500; color: Pal.warn; vertical-alignment: center; }
-                    }
-                    TouchArea { clicked => { root.open-banner(); } }
-                }
+            height: banner-box.height + 16px;
+            banner-box := Rectangle {
+                x: 16px;
+                y: 0px;
+                width: parent.width - 32px;
+                height: max(44px, banner-text.preferred-height + 20px);
+                border-radius: 14px;
+                background: Pal.warn-soft;
+                TouchArea { clicked => { root.open-banner(); } }
                 if root.banner-can-hide: Rectangle {
+                    x: parent.width - 44px;
                     width: 44px;
                     accessible-role: button;
                     accessible-label: Tr.t("reliability.hide");
                     accessible-action-default => { root.hide-banner(); }
                     Icon { name: IconName.xmark; size: 16px; tint: Pal.text2; }
                     TouchArea { clicked => { root.hide-banner(); } }
+                }
+                Icon { name: IconName.warning; size: 18px; tint: Pal.warn; x: 12px; y: (parent.height - self.height) / 2; }
+                banner-fix := Text {
+                    x: parent.width - (root.banner-can-hide ? 56px : 12px) - self.width;
+                    y: (parent.height - self.height) / 2;
+                    text: Tr.t("reliability.fix");
+                    font-size: 14px;
+                    font-weight: 500;
+                    color: Pal.warn;
+                }
+                banner-text := Text {
+                    x: 40px;
+                    y: (parent.height - self.height) / 2;
+                    width: banner-fix.x - 10px - 40px;
+                    text: root.banner;
+                    font-size: 14px;
+                    color: Pal.text;
+                    wrap: word-wrap;
                 }
             }
         }
@@ -309,7 +319,7 @@ export component HomeScreen inherits Rectangle {
             padding-right: 16px;
             padding-bottom: 4px;
             spacing: 8px;
-            Text { text: Tr.t("home.quick"); font-size: 12px; color: Pal.text2; vertical-alignment: center; }
+            Text { text: Tr.t("home.quick"); font-size: 12px; font-weight: 500; color: Pal.text2; vertical-alignment: center; }
             for label[i] in root.quick-labels: SlimChip {
                 horizontal-stretch: 1;
                 text: label;
@@ -368,20 +378,14 @@ export component HomeScreen inherits Rectangle {
                 spacing: 8px;
                 alignment: start;
                 Rectangle {
-                    height: 72px;
-                    Rectangle {
-                        width: 72px;
-                        height: 72px;
-                        border-radius: 36px;
-                        background: Pal.surface;
-                        Icon { name: IconName.clock; size: 40px; tint: Pal.text2; }
-                    }
+                    height: 40px;
+                    Icon { name: IconName.clock; size: 40px; tint: Pal.text2; }
                 }
                 Text { text: Tr.t("alarm.no_alarms"); font-size: 16px; font-weight: 500; horizontal-alignment: center; color: Pal.text; }
                 Text { text: Tr.t("alarm.tap_to_create"); font-size: 14px; horizontal-alignment: center; wrap: word-wrap; color: Pal.text2; }
-                Rectangle { height: 8px; }
+                Rectangle { height: 0px; }
                 for label[i] in [root.empty-weekdays, root.empty-weekend]: Rectangle {
-                    height: 48px;
+                    height: 44px;
                     border-radius: 14px;
                     background: Pal.surface;
                     Text { text: label; font-size: 14px; font-weight: 500; color: Pal.text; }

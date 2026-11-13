@@ -946,6 +946,48 @@ Oddities of the Slint build found while measuring (to fix; they are design issue
 - The "Fix" buttons on the welcome and reliability pages are as wide as their text, with no padding; the welcome page's intro text
   starts left of its heading and the card has no side margins (the original has both).
 
+### Design fixes (before and after)
+
+Round 1 of the design pass, checked on the phone (Dutch, default theme, 1080x2376 at 480 dpi). Each line: what changed, the
+Slint capture before (`docs/phone/design/before/<screen>.jpg`) and the pair after (original left, Slint right,
+`docs/phone/design/after/<screen>-orig-slint.jpg`).
+
+Refresh rate: the Java hack in `MainActivity` is gone; `src/ui/mod.rs::run()` calls the SDK's
+`mobile_sentinel::display::set_preferred_frame_rate(PreferredFrameRate::Highest)`. Scrolling 14 alarms on the phone
+(`JANK_ONLY=slint JANK_FRESH=1 devtest/compare.sh`): display mode 120 Hz, vsync period 8.33 ms, 1249 frames seen, 7 janky,
+p50 / p90 / p95 / p99 all 8.3 ms. Without the request (`perf-run8.txt`): 60 Hz, 806 frames, 12 janky, p99 49.7 ms.
+
+Shared look (`ui/widgets.slint`, `components.slint`, `panel.slint`, `home_sheets.slint`, `main.slint`):
+- Font: the original's `Roboto, system-ui, sans-serif` does not find a family called Roboto on ColorOS, so the WebView draws the
+  system font (`SysFont-Regular.ttf`, family "OPPO Sans 4.0 EN"); Slint took Roboto. The window now sets
+  `default-font-family: "OPPO Sans 4.0 EN"` (a phone without that family falls back to Slint's default).
+- The "text 10% larger" came from Roboto's metrics and from sizes that were not the CSS ones: list rows were 16 px / 56 dp where the
+  CSS has 14 px weight 500 / 54 dp, and `line-height` values (14/20, 12/16) were missing: Slint's `line-height-factor` is relative
+  to the font's natural line height, so 20/14 is 1.22 and 16/12 is 1.14 here (font ascent plus descent is 1.172 em).
+- Titles: screen titles 20 px weight 500 (were 700), sheet titles 20 px weight 500 (were 18 px 700).
+- Sheet: `--surface` background instead of the page colour, radius 28, scrim 0.55, grab handle in `--off`, 20 dp side padding, title row
+  44 dp starting 22 dp down, body from 74 dp, help text box gap, max height 90%. Round buttons and the in-sheet steppers use
+  `--surface2` (on the raised sheet `--surface` would vanish); the stepper is 64 dp high with 14 px titles.
+- Dividers: `Separator` (and Settings' `Inset`) are inset by 16 dp and take no room, like the CSS overlay line, so a row is 54 dp not 55.
+- Focus ring on `TextField` (2 px accent outline, 2 px offset), the pause button when active is filled accent with `--on-accent`.
+
+Per screen:
+- Welcome page: Fix buttons have 14 dp padding, intro text starts at the heading, row and note heights as the CSS. `before/firstrun.jpg`, `after/firstrun-orig-slint.jpg`
+- Home with the reliability banner and empty state: banner wraps to 3 lines, the close cross is inside the banner and always there
+  when the check can be hidden, the empty clock has no filled circle, template buttons 44 dp, "Quick" label weight 500, next-alarm
+  header line heights. `before/home-empty-banner.jpg`, `after/home-empty-banner-orig-slint.jpg`
+- Home with an alarm (banner, quick row; the card itself is round 2): `before/home-alarms.jpg`, `after/home-alarms-orig-slint.jpg`
+- Alarm menu sheet: raised surface, 20 px title, 52 dp items without the 8 dp gaps, danger and selected colours. `before/alarm-menu.jpg`, `after/alarm-menu-orig-slint.jpg`
+- Settings: banner row spacing, section gaps (24 dp), list title height, inset dividers, 54 dp rows. `before/settings1.jpg`, `after/settings1-orig-slint.jpg`
+- Reliability: card top margin 16 dp, `?` right next to the title, Fix buttons, note line height. `before/reliability.jpg`, `after/reliability-orig-slint.jpg`
+- Editor (shared rows only): 54 dp rows with 14 px titles and inset dividers; days, time, presets are round 2. `before/editor-top.jpg`, `after/editor-top-orig-slint.jpg`
+- Snooze sheet: sheet look and stepper. `before/snooze-sheet.jpg`, `after/snooze-sheet-orig-slint.jpg`
+
+Still different after this round: the editor's days, preset chips, time digits and Save bar; the alarm card (time weight, weekday
+letter spacing, row dividers); the time wheel, sound, vibration and ring-limit chips (the original wraps chips over rows, Slint has
+one row); the Label sheet focuses its field at once and opens the keyboard (the original waits for a tap); the toast's wrapping;
+the original's text is a little lighter on dark in some places by antialiasing only.
+
 ### Stability, design comparison, test yourself
 
 Not done yet. The phone was locked (keyguard showing) when the stability and design part was about to start, and only the user can

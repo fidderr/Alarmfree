@@ -138,6 +138,9 @@ export component MainWindow inherits Window {
     callback toast-dismiss();
     background: Pal.bg;
     default-font-size: 14px;
+    // What the original's WebView draws on this phone: the system font (Roboto is not a family
+    // of its own there). Where it does not exist Slint takes its own default.
+    default-font-family: "OPPO Sans 4.0 EN";
 
     // A tablet or an unfolded foldable: the list and an alarm side by side.
     property <bool> split: root.width >= 840px && (root.screen == 0 || root.screen == 1);
