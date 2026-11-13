@@ -38,6 +38,13 @@ slint = { version = "=1.18.1", default-features = false, features = ["std", "com
 [target.'cfg(not(target_os = "android"))'.dependencies]
 slint = { version = "=1.18.1" }
 
+# Three tiny edits to Slint 1.18.1, kept in vendor/ (see vendor/README.md): no ICU line-break
+# dictionaries and no SVG stack. -5.6 MB of libmain.so. Remove them when Slint has options for it.
+[patch.crates-io]
+i-slint-core = { path = "vendor/i-slint-core" }
+i-slint-renderer-skia = { path = "vendor/i-slint-renderer-skia" }
+i-slint-backend-android-activity = { path = "vendor/i-slint-backend-android-activity" }
+
 [build-dependencies]
 slint-build = "=1.18.1"
 
