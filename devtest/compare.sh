@@ -50,7 +50,7 @@ SLINT_APK="${SLINT_APK:-build/alarmfree-slint-release.apk}"
 ORIG_PKG=com.fidderr.alarmfree
 ORIG_ACT=dev.dioxus.main.MainActivity
 SLINT_PKG=com.fidderr.alarmfree.slint
-SLINT_ACT=com.fidderr.alarmfree.slint.MainActivity
+SLINT_ACT=android.app.NativeActivity
 mkdir -p "$OUT"
 
 case "$SERIAL" in

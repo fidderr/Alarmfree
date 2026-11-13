@@ -622,7 +622,7 @@ Milestones are commits on branch `slint-port`; the SDK parts are on `native-host
 - **M4 (so far)** Home panels: sort (own/time/next ring), pause all (until tomorrow, a week, a date), alarm menu (skip next / undo skip, duplicate, pause until a date, end pause, use for new alarms, delete) with undo toasts; the toast moves to the top while a panel is open; panels scroll when long.
 - **M3** `devtest/compare.sh`: APK size, cold start, PSS, SurfaceFlinger frame times, side by side with the original.
 - **M2** Home list, editor (time wheel sheet, -1/-5/+1/+5, days and presets, label, sound with preview and "add your own", snooze), save, delete, discard guard, ring screen (clock, date, label, note, snooze, turn off), firing poll, heartbeat, history event on dismiss, wake-up check, one-time alarms switching off.
-- **M1** Slint skeleton on a NativeActivity (`libmain.so`), `build.sh` with `build_sentinel --project`, theme from `Palette`, insets, system bars, back button, toast with undo, quick alarms, empty-state templates, alarm switch.
+- **M1** Slint skeleton on a NativeActivity (`libmain.so`), `build.sh` with `build_sentinel` (at that time on the hand-made `android/` project, see "Generated host" below), theme from `Palette`, insets, system bars, back button, toast with undo, quick alarms, empty-state templates, alarm switch.
 
 Known gaps right now: see "Gaps found by the audit" and the checklist below. Still open there: accessibility unverified (no TalkBack), the OS reduce-animations switch not seen working, Pause-all help not opened by hand, kiosk / locked-boot / guardian paths on a phone, `devtest/all.sh` and `matrix.sh` rewritten for the debug channel, the app does not follow the phone's font size.
 
@@ -1131,6 +1131,50 @@ Findings:
   first swipe would need simpleperf to explain.
 - **Verdict:** with the 120 Hz request on, Slint's scrolling is at least as smooth as the original's by the numbers. Whether it feels
   so is for the user to judge.
+
+### Generated host: before and after
+
+The app no longer has an `android/` folder. `sentinel.toml` says `generate = true` (mobile-sentinel, branch `native-host`): `build_sentinel` writes the
+whole Gradle project (AGP 8.7.0, manifest, theme, R8 keep rules) into `target/sentinel-android/` on every build. What is left of the app besides
+Rust is `sentinel.toml` and `assets/`. `build.sh` builds `libalarmfree.so` with cargo, stages it as `build/jniLibs/<abi>/libmain.so`, keeps the
+unstripped copy as `build/libmain.so.unstripped` (for crash symbols) and runs `build_sentinel` without `--project`. The activity is the platform's
+`android.app.NativeActivity` (no Java class any more): `ALARMFREE_ACTIVITY_FQCN` in `src/platform.rs` and the devtest scripts name it.
+Release builds run R8 and resource shrinking, and AGP strips the library (the NDK version comes from `ANDROID_NDK_HOME`, 30.0.16248370).
+
+Measured on the OnePlus 13 with `devtest/compare.sh` (7 cold starts, release, arm64, refresh request on, 120 Hz), before = the APK of `526c27f`
+(`android/` project, no R8, unstripped library), after = generated host. Same phone, same run order, same script.
+
+| | Before | After |
+|---|---|---|
+| APK | 47,322,251 B (45.1 MB) | 28,956,410 B (27.6 MB) |
+| `lib/arm64-v8a/libmain.so` | 38,302,312 B, has `.symtab` | 23,540,888 B, no `.symtab` |
+| `classes.dex` | 3,933,520 B | 420,592 B |
+| Cold start, median of 7 (`am start -W`) | 96 ms (82 to 101) | 93 ms (87 to 117) |
+| PSS after start, main process | 70 MB | 69 MB |
+| PSS with the editor open, main process | 72 MB | 71 MB |
+| PSS, all processes of the app | 78 MB | 75 MB |
+| Idle CPU, 60 s on the home list | 0.20% of a core | 0.22% |
+| Scrolling 14 alarms (SurfaceFlinger frames) | 1249 frames, 6 janky (0.5%), p50/p99 8.3/8.3 ms | 1000 frames, 2 janky (0.2%), p50/p99 8.3/8.3 ms |
+
+The size gain is the stripped library and R8 (dex 3.9 MB to 0.4 MB); the old build had neither. Start, memory and
+scrolling are within the noise of the script (the original WebView build measured in the same two runs: 161/159 ms, 191/196 MB, 0 janky).
+Raw tables: `docs/phone/generated-host-before.txt` and `generated-host-after.txt`.
+
+Manifest, old template against the generated one (checked in the merged manifest inside the APK with `aapt2 dump xmltree`):
+- Same: `hasCode`, `supportsRtl`, `enableOnBackInvokedCallback`, label, `AppTheme`, `launchMode=singleInstance`, `showWhenLocked`, `turnScreenOn`,
+  `windowSoftInputMode=adjustResize`, the whole `configChanges` list, `android.app.lib_name=main`, icon, portrait lock, direct boot.
+- Different: `extractNativeLibs` is now `false` (the library is loaded straight from the APK; was `true`), and `allowNativeHeapPointerTagging=false`
+  is gone (the old template carried it from the start with no recorded reason). Both are untested beyond the smoke test below.
+- Generator bug found and fixed in the SDK (`3da1e8c` on `native-host`): the generated manifest named `launchMode="singleTask"` and `build_sentinel`
+  then added `singleInstance`, a duplicate attribute that broke the manifest merge. The generator now leaves `launchMode` to `build_sentinel`.
+
+Smoke test on the phone with the release build: first-run page, editor (label, sound picker, "no sound, only vibration"), save and enable, ring
+(the ring screen opens over the launcher), snooze (5 min), the ring again after the snooze ("nog 2"), turn off, a Math challenge alarm solved at the
+ring (history shows it), edit and save, settings backup written to Download (removed afterwards), widget row (the launcher's pin dialog came up and was
+dismissed with Back), the camera permission prompt for the Scan challenge (denied with Back), Back out of sheets, editor discard sheet and the home
+list, Back at home, reopen, force-stop and cold reopen with the alarms kept. `logcat` held no `ClassNotFoundException`, `NoSuchMethodError`, `No
+implementation found` or `UnsatisfiedLinkError` for the app. Unverified: a ring over a locked screen, a reboot (direct boot), the widget actually on a
+home screen, a real scan, and everything the user judges by eye or ear.
 
 ### Stability (phone, about 07:50 to 08:36, phone clock, alarms 2 to 4 minutes ahead)
 

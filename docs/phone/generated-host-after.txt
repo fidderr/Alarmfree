@@ -1,0 +1,17 @@
+
+                                                          AlarmFree (WebView)        AlarmFree Slint
+APK size (MB)                                                            31.5                   27.6
+Cold start, median of 7 (ms, am start -W)                                 159                     93
+  the runs (ms)                                        162 166 153 160 159 159 156  87 93 88 97 91 98 117 
+PSS after start, main process (MB)                                        126                     69
+PSS after opening the editor, main process (MB)                           127                     71
+WebView processes started by the app (PSS, MB)                             61                      0
+PSS of all the app's own processes (MB)                                   135                     75
+PSS app processes + WebView after the editor (MB)                         196                     75
+Idle CPU, 60 s on the home list (% of one core)                          0.37                   0.22
+Vsync period while scrolling (ms)                                       11.11                   8.33
+Frames seen while scrolling (SurfaceFlinger)                             1417                   1000
+Janky frames (> 1.5 x vsync period apart)                            0 (0.0%)               2 (0.2%)
+Time between frames p50 / p90 (ms)                                11.1 / 11.1              8.3 / 8.3
+Time between frames p95 / p99 (ms)                                11.1 / 11.1              8.3 / 8.3
+gfxinfo: frames / janky (see notes)                                  1429 / 6                  0 / 0
