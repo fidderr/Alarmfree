@@ -100,13 +100,14 @@ component StarLayer inherits Rectangle {
 // The sky and the sun come up over 45 seconds from the moment this shows, and then stay up.
 component Sunrise inherits Rectangle {
     in property <bool> animated;
+    in property <bool> tile;
     in property <float> t;
     in property <color> c1;
     in property <color> c2;
     in property <color> c3;
     in property <length> unit;
     property <float> start;
-    property <float> p: root.animated && !Motion.less ? Ease.out(min(1.0, (root.t - root.start) / 45)) : 1;
+    property <float> p: root.animated && !Motion.less ? Ease.out(min(1.0, (root.t - root.start) / 45)) : (root.tile && !Motion.less ? 0 : 1);
     init => {
         root.start = root.t;
     }
@@ -136,6 +137,9 @@ export component Backdrop inherits Rectangle {
     in property <image> photo;
     in property <bool> has-photo;
     in property <bool> animated: false;
+    // A small one that does not move (a tile of the ring look sheet): the sunrise on it is as the
+    // original's, where it starts at its dimmest and takes 45 seconds to come up.
+    in property <bool> tile: false;
     // Keep stars from behind the words (the real ring screen and its preview).
     in property <bool> star-mask: false;
     // One 'u' of the original: 1 percent of the shorter side, smaller on a tile.
@@ -172,6 +176,7 @@ export component Backdrop inherits Rectangle {
     // Sunrise
     if root.kind == 2: Sunrise {
         animated: root.animated;
+        tile: root.tile;
         t: root.t;
         c1: root.c1;
         c2: root.c2;

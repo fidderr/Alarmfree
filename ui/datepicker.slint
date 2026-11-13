@@ -24,10 +24,15 @@ component MonthButton inherits Rectangle {
     TouchArea { enabled: root.enabled; clicked => { root.clicked(); } }
 }
 
-// A month to pick a day from.
+// A month to pick a day from, in a field like the app's others: the page colour, a thin line, round corners.
 export component DatePicker inherits Rectangle {
-    height: 44px + 28px + 6 * 44px;
+    height: 8px + 44px + 28px + 6 * 44px + 8px;
+    border-radius: 14px;
+    border-width: 1px;
+    border-color: Pal.line;
+    background: Pal.bg;
     VerticalLayout {
+        padding: 8px;
         HorizontalLayout {
             height: 44px;
             MonthButton { enabled: Cal.can-prev; clicked => { Cal.prev(); } }
@@ -57,14 +62,13 @@ export component DatePicker inherits Rectangle {
                     width: 40px;
                     height: 40px;
                     border-radius: 20px;
-                    background: cell.selected ? Pal.accent : transparent;
-                    border-width: cell.today && !cell.selected ? 1px : 0px;
-                    border-color: Pal.accent;
+                    background: cell.selected ? Pal.accent : (cell.today ? Pal.accent-soft : transparent);
                     Text {
                         text: cell.text;
-                        font-size: 15px;
-                        font-weight: cell.selected || cell.today ? 700 : 400;
-                        color: cell.selected ? Pal.on-accent : cell.enabled ? Pal.text : Pal.off;
+                        font-size: 14px;
+                        font-weight: cell.selected || cell.today ? 500 : 400;
+                        color: cell.selected ? Pal.on-accent : cell.today ? Pal.accent : cell.enabled ? Pal.text : Pal.text2;
+                        opacity: cell.enabled || cell.selected ? 1.0 : 0.4;
                     }
                     TouchArea { enabled: cell.enabled; clicked => { Cal.picked(i); } }
                 }

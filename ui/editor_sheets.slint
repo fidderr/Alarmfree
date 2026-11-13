@@ -108,8 +108,10 @@ export global Ed {
 
 component FieldLabel inherits VerticalLayout {
     in property <string> text;
+    // The first thing under the title has no field above it to be 16 dp from.
+    in property <bool> first: false;
     spacing: 8px;
-    padding-top: 8px;
+    padding-top: root.first ? 16px : 8px;
     Text { text: root.text; font-size: 14px; font-weight: 500; color: Pal.text; }
     @children
 }
@@ -129,16 +131,20 @@ export component TimeSheet inherits Rectangle {
     callback done();
     Sheet {
         title: Tr.t("config.time");
+        done-text: Tr.t("action.done");
+        finish => { root.done(); }
         close => { root.done(); }
         for r in [Ed.time-rev]: HorizontalLayout {
             alignment: center;
-            spacing: 4px;
+            spacing: 10px;
+            padding-top: 4px;
+            padding-bottom: 8px;
             Wheel {
                 value: Ed.hour;
                 labels: Ed.hour-labels;
                 changed(v) => { Ed.hour = v; Ed.hour-changed(v); }
             }
-            Text { text: ":"; font-size: 28px; font-weight: 700; color: Pal.text; vertical-alignment: center; }
+            Text { text: ":"; font-size: 28px; font-weight: 700; color: Pal.text; vertical-alignment: center; y: -2px; }
             Wheel {
                 value: Ed.minute;
                 labels: Ed.minute-labels;
@@ -153,7 +159,6 @@ export component TimeSheet inherits Rectangle {
                 edited(s) => { Ed.time-typed(s); }
             }
         }
-        PrimaryButton { text: Tr.t("action.done"); clicked => { root.done(); } }
     }
 }
 
@@ -162,12 +167,17 @@ export component DateSheet inherits Rectangle {
     callback done();
     Sheet {
         title: Tr.t("config.date_title");
+        done-text: Tr.t("action.done");
+        finish => { root.done(); }
         help: Tr.t("config.date_note");
         close => { root.done(); }
-        DatePicker { }
+        FieldLabel {
+            first: true;
+            text: Tr.t("config.date");
+            DatePicker { }
+        }
         GroupTitle { text: Tr.t("config.quick"); }
         ChoiceChips { labels: Ed.quick-labels; selected: Ed.quick-selected; picked(i) => { Ed.date-quick(i); } }
-        PrimaryButton { text: Tr.t("action.done"); clicked => { root.done(); } }
     }
 }
 
@@ -176,14 +186,16 @@ export component LabelSheet inherits Rectangle {
     callback done();
     Sheet {
         title: Tr.t("config.label");
+        done-text: Tr.t("action.done");
+        finish => { root.done(); }
         help: Tr.t("config.label_note");
         close => { root.done(); }
         for r in [Ed.label-rev]: FieldLabel {
+            first: true;
             text: Tr.t("config.label_name");
             TextField {
                 text: Ed.label-text;
                 placeholder: Tr.t("config.label_placeholder");
-                focus-on-show: true;
                 edited(s) => { Ed.label-edited(s); }
                 accepted => { root.done(); }
             }
@@ -199,7 +211,6 @@ export component LabelSheet inherits Rectangle {
         }
         if Ed.used.length > 0: VerticalLayout {
             spacing: 8px;
-            padding-top: 12px;
             GroupTitle { text: Tr.t("config.used_before"); }
             for line in Ed.used-lines: HorizontalLayout {
                 spacing: 8px;
@@ -222,7 +233,6 @@ export component LabelSheet inherits Rectangle {
                 }
             }
         }
-        PrimaryButton { text: Tr.t("action.done"); clicked => { root.done(); } }
     }
 }
 
@@ -231,11 +241,16 @@ export component SoundSheet inherits Rectangle {
     callback done();
     Sheet {
         title: Tr.t("config.sound");
+        done-text: Tr.t("action.done");
+        finish => { root.done(); }
         help: Tr.t("config.sound_note");
         action-text: Ed.sound-none ? "" : (Ed.sounding ? Tr.t("action.stop") : Tr.t("action.start"));
+        action-has-icon: true;
+        action-icon: Ed.sounding ? IconName.stop : IconName.play;
         close => { root.done(); }
         action => { Ed.sound-preview(); }
-        RadioRow { text: Tr.t("config.no_sound"); selected: Ed.sound-none; clicked => { Ed.no-sound(); } }
+        VerticalLayout {
+            RadioRow { text: Tr.t("config.no_sound"); selected: Ed.sound-none; clicked => { Ed.no-sound(); } }
         for row[i] in Ed.sound-rows: Rectangle {
             height: 52px;
             if row.state == 1: HorizontalLayout {
@@ -266,7 +281,11 @@ export component SoundSheet inherits Rectangle {
                 if row.state == 0 && row.custom: IconButton { icon: IconName.xmark; clicked => { Ed.delete-ask(i); } }
             }
         }
-        PrimaryButton { quiet: true; text: Tr.t("sound.import"); clicked => { Ed.add-sound(); } }
+        }
+        VerticalLayout {
+            padding-top: 8px;
+            PrimaryButton { quiet: true; compact: true; text: Tr.t("sound.import"); clicked => { Ed.add-sound(); } }
+        }
         HorizontalLayout {
             spacing: 12px;
             padding-top: 4px;
@@ -281,7 +300,6 @@ export component SoundSheet inherits Rectangle {
         }
         GroupTitle { text: Tr.t("config.fade_in"); }
         ChoiceChips { labels: Ed.fade-labels; selected: Ed.fade-selected; picked(i) => { Ed.fade-picked(i); } }
-        PrimaryButton { text: Tr.t("action.done"); clicked => { root.done(); } }
     }
 }
 
@@ -290,18 +308,20 @@ export component VibrationSheet inherits Rectangle {
     callback done();
     Sheet {
         title: Tr.t("config.vibration");
+        done-text: Tr.t("action.done");
+        finish => { root.done(); }
         help: Tr.t("config.vibration_note");
         action-text: Ed.vib-can-try ? (Ed.vibrating ? Tr.t("action.stop") : Tr.t("action.start")) : "";
+        action-has-icon: true;
+        action-icon: Ed.vibrating ? IconName.stop : IconName.play;
         close => { root.done(); }
         action => { Ed.vib-preview(); }
         ChoiceChips { labels: Ed.vib-labels; selected: Ed.vib-selected; picked(i) => { Ed.vib-picked(i); } }
         if Ed.delay-visible: VerticalLayout {
             spacing: 8px;
-            padding-top: 12px;
             GroupTitle { text: Tr.t("config.sound_delay"); }
             ChoiceChips { labels: Ed.delay-labels; selected: Ed.delay-selected; picked(i) => { Ed.delay-picked(i); } }
         }
-        PrimaryButton { text: Tr.t("action.done"); clicked => { root.done(); } }
     }
 }
 
@@ -310,6 +330,8 @@ export component SnoozeSheet inherits Rectangle {
     callback done();
     Sheet {
         title: Tr.t("config.snooze");
+        done-text: Tr.t("action.done");
+        finish => { root.done(); }
         help: Tr.t("config.snooze_note");
         close => { root.done(); }
         Stepper {
@@ -324,7 +346,6 @@ export component SnoozeSheet inherits Rectangle {
             less => { Ed.snooze-count(false); }
             more => { Ed.snooze-count(true); }
         }
-        PrimaryButton { text: Tr.t("action.done"); clicked => { root.done(); } }
     }
 }
 
@@ -335,10 +356,11 @@ export component OptionsSheet inherits Rectangle {
     callback done();
     Sheet {
         title: root.title;
+        done-text: Tr.t("action.done");
+        finish => { root.done(); }
         help: root.help;
         close => { root.done(); }
         ChoiceChips { labels: Ed.opt-labels; selected: Ed.opt-selected; picked(i) => { Ed.opt-picked(i); } }
-        PrimaryButton { text: Tr.t("action.done"); clicked => { root.done(); } }
     }
 }
 
@@ -361,7 +383,8 @@ component LookTileView inherits Rectangle {
             c3: root.tile.c3;
             photo: root.tile.photo;
             has-photo: root.tile.has-photo;
-            unit: 1.2px;
+            tile: true;
+            unit: 1.08px;
         }
         if root.tile.add: Icon { name: IconName.plus; size: 20px; tint: Pal.text2; }
     }
@@ -392,6 +415,8 @@ export component RingLookSheet inherits Rectangle {
     callback done();
     Sheet {
         title: Tr.t("config.ring_look");
+        done-text: Tr.t("action.done");
+        finish => { root.done(); }
         help: Tr.t("config.ring_look_note");
         action-text: Tr.t("ring.preview");
         close => { root.done(); }
@@ -436,7 +461,6 @@ export component RingLookSheet inherits Rectangle {
         }
         GroupTitle { text: Tr.t("config.ring_clock"); }
         ChoiceChips { labels: Ed.clock-labels; selected: Ed.clock-selected; picked(i) => { Ed.clock-picked(i); } }
-        PrimaryButton { text: Tr.t("action.done"); clicked => { root.done(); } }
     }
 }
 
@@ -445,6 +469,8 @@ export component RingColourSheet inherits Rectangle {
     callback back();
     Sheet {
         title: Tr.t("config.ring_colour");
+        done-text: Tr.t("action.done");
+        finish => { root.back(); }
         action-text: Tr.t("ring.preview");
         close => { root.back(); }
         action => { Ed.look-preview(); }
@@ -460,11 +486,11 @@ export component RingColourSheet inherits Rectangle {
                 c1: Ed.live.c1;
                 c2: Ed.live.c2;
                 c3: Ed.live.c3;
-                unit: 1.2px;
+                tile: true;
+                unit: 1.08px;
             }
         }
         SwatchGrid { swatches: Ed.swatches; picked(i) => { Ed.swatch-picked(i); } }
         ColourControls { }
-        PrimaryButton { text: Tr.t("action.done"); clicked => { root.back(); } }
     }
 }
