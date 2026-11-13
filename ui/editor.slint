@@ -1,9 +1,35 @@
 import { Pal, Tr, Insets } from "theme.slint";
 import { Icon, IconName } from "components.slint";
-import { ScreenHeader, Row, SwitchRow, RowList, Separator, PrimaryButton, Chip, Sheet } from "widgets.slint";
+import { ScreenHeader, Row, SwitchRow, RowList, Separator, PrimaryButton, ChoiceChips, Sheet } from "widgets.slint";
 import { DayCell } from "home.slint";
 import { Cfg, ChallengesSheet, AddChallengeSheet, ChallengeDetailSheet } from "challenge_sheets.slint";
 import { Ed, TimeSheet, DateSheet, LabelSheet, SoundSheet, VibrationSheet, SnoozeSheet, OptionsSheet, RingLookSheet, RingColourSheet } from "editor_sheets.slint";
+
+// The step of the time: a pill, 56 by 36 dp.
+component TimeShift inherits Rectangle {
+    in property <string> text;
+    callback clicked();
+    accessible-role: button;
+    accessible-label: root.text;
+    accessible-action-default => { root.clicked(); }
+    height: 36px;
+    border-radius: 18px;
+    background: Pal.surface;
+    Text { text: root.text; font-size: 14px; font-weight: 500; color: Pal.text; }
+    TouchArea { clicked => { root.clicked(); } }
+}
+
+// A plain choice in a sheet that cannot be undone: red text, 52 dp high.
+component DangerItem inherits Rectangle {
+    in property <string> text;
+    callback clicked();
+    accessible-role: button;
+    accessible-label: root.text;
+    accessible-action-default => { root.clicked(); }
+    height: 52px;
+    Text { x: 0px; text: root.text; font-size: 16px; color: Pal.danger; vertical-alignment: center; }
+    TouchArea { clicked => { root.clicked(); } }
+}
 
 // Which panel is open over the editor.
 export enum EditorSheet { none, time, date, label, sound, vibration, snooze, delete, discard, challenges, add-challenge, detail, limit, wake-check, notice, ring-look, ring-colour }
@@ -60,95 +86,120 @@ export component EditorScreen inherits Rectangle {
         }
         Flickable {
             vertical-stretch: 1;
-            content-height: content.preferred-height + 16px;
+            content-height: content.preferred-height;
             content := VerticalLayout {
-                spacing: 16px;
                 padding-bottom: 16px;
+                alignment: start;
                 // The time, large, with a step either way, and when that rings.
                 if !root.defaults: VerticalLayout {
-                    spacing: 8px;
+                    padding-top: 12px;
                     padding-left: 16px;
                     padding-right: 16px;
                     HorizontalLayout {
-                        height: 88px;
-                        spacing: 8px;
+                        height: 80px;
                         VerticalLayout {
-                            width: 52px;
+                            width: 56px;
                             spacing: 8px;
-                            alignment: center;
-                            Chip { text: "\u{2212}1"; clicked => { root.shift(-1); } }
-                            Chip { text: "\u{2212}5"; clicked => { root.shift(-5); } }
+                            TimeShift { text: "\u{2212}1"; clicked => { root.shift(-1); } }
+                            TimeShift { text: "\u{2212}5"; clicked => { root.shift(-5); } }
                         }
                         Rectangle {
                             horizontal-stretch: 1;
                             Text {
                                 text: root.time-text;
-                                font-size: root.twelve ? 40px : 56px;
-                                font-weight: 700;
+                                font-size: root.twelve ? 44px : 64px;
+                                font-weight: 450;
+                                letter-spacing: root.twelve ? 0px : 1.2px;
                                 color: Pal.text;
                             }
                             TouchArea { clicked => { root.open(EditorSheet.time); } }
                         }
                         VerticalLayout {
-                            width: 52px;
+                            width: 56px;
                             spacing: 8px;
-                            alignment: center;
-                            Chip { text: "+1"; clicked => { root.shift(1); } }
-                            Chip { text: "+5"; clicked => { root.shift(5); } }
+                            TimeShift { text: "+1"; clicked => { root.shift(1); } }
+                            TimeShift { text: "+5"; clicked => { root.shift(5); } }
                         }
                     }
-                    Text {
-                        text: root.rings-text;
-                        font-size: 14px;
-                        color: Pal.text2;
-                        horizontal-alignment: center;
-                        wrap: word-wrap;
+                    VerticalLayout {
+                        padding-top: 8px;
+                        Text {
+                            text: root.rings-text;
+                            font-size: 14px;
+                            color: Pal.text2;
+                            horizontal-alignment: center;
+                            wrap: word-wrap;
+                        }
                     }
                 }
                 // Which days, or the one date.
                 if !root.defaults: VerticalLayout {
-                    spacing: 12px;
+                    padding-top: 20px;
                     padding-left: 16px;
                     padding-right: 16px;
-                    if root.one-time: PrimaryButton {
-                        text: root.once-text;
-                        clicked => { root.open(EditorSheet.date); }
+                    if root.one-time: Rectangle {
+                        height: 44px;
+                        border-radius: 14px;
+                        background: Pal.accent;
+                        accessible-role: button;
+                        accessible-label: root.once-text;
+                        accessible-action-default => { root.open(EditorSheet.date); }
+                        Text { text: root.once-text; font-size: 14px; font-weight: 500; color: Pal.on-accent; }
+                        TouchArea { clicked => { root.open(EditorSheet.date); } }
                     }
-                    if !root.one-time: HorizontalLayout {
-                        spacing: 6px;
-                        for day[i] in root.days: Rectangle {
-                            horizontal-stretch: 1;
-                            height: 48px;
-                            border-radius: 14px;
-                            background: day.on ? Pal.accent : Pal.surface;
-                            Text {
-                                text: day.letter;
-                                font-size: 15px;
-                                font-weight: 500;
-                                color: day.on ? Pal.on-accent : Pal.text;
+                    if !root.one-time: Rectangle {
+                        height: 44px;
+                        // 44 dp places to tap, 38 dp round buttons in them: the first and the last line up with the rest.
+                        HorizontalLayout {
+                            x: -3px;
+                            width: parent.width + 6px;
+                            alignment: space-between;
+                            for day[i] in root.days: Rectangle {
+                                width: 44px;
+                                accessible-role: button;
+                                accessible-label: day.letter;
+                                accessible-checkable: true;
+                                accessible-checked: day.on;
+                                accessible-action-default => { root.day-toggled(i); }
+                                Rectangle {
+                                    width: 38px;
+                                    height: 38px;
+                                    border-radius: 19px;
+                                    background: day.on ? Pal.accent : Pal.surface;
+                                    Text {
+                                        text: day.letter;
+                                        font-size: 14px;
+                                        font-weight: 500;
+                                        color: day.on ? Pal.on-accent : Pal.text2;
+                                    }
+                                }
+                                TouchArea { clicked => { root.day-toggled(i); } }
                             }
-                            TouchArea { clicked => { root.day-toggled(i); } }
                         }
                     }
-                    HorizontalLayout {
-                        spacing: 8px;
-                        for label[i] in root.preset-labels: Chip {
-                            horizontal-stretch: 1;
-                            text: label;
-                            on: root.preset-active == i;
-                            clicked => { root.preset(i); }
+                    VerticalLayout {
+                        padding-top: 16px;
+                        ChoiceChips {
+                            small: true;
+                            labels: root.preset-labels;
+                            selected: root.preset-active;
+                            picked(i) => { root.preset(i); }
                         }
                     }
-                    if root.error != "": Text {
-                        text: root.error;
-                        font-size: 14px;
-                        color: Pal.danger;
-                        wrap: word-wrap;
+                    if root.error != "": VerticalLayout {
+                        padding-top: 8px;
+                        Text {
+                            text: root.error;
+                            font-size: 12px;
+                            color: Pal.danger;
+                            wrap: word-wrap;
+                        }
                     }
                 }
                 HorizontalLayout {
                     padding-left: 16px;
                     padding-right: 16px;
+                    padding-top: root.defaults ? 16px : 20px;
                     RowList {
                         Row { title: Tr.t("config.label"); value: Ed.label-summary; clicked => { root.open(EditorSheet.label); } }
                         Separator { }
@@ -164,6 +215,7 @@ export component EditorScreen inherits Rectangle {
                 HorizontalLayout {
                     padding-left: 16px;
                     padding-right: 16px;
+                    padding-top: 16px;
                     RowList {
                         Row { title: Tr.t("config.ring_look"); value: Ed.look-summary; clicked => { root.open(EditorSheet.ring-look); } }
                         Separator { }
@@ -179,12 +231,13 @@ export component EditorScreen inherits Rectangle {
             }
         }
         Rectangle {
-            height: 68px + Insets.bottom;
+            height: 12px + 52px + 16px + Insets.bottom;
+            background: Pal.bg;
             VerticalLayout {
-                padding: 8px;
+                padding-top: 12px;
                 padding-left: 16px;
                 padding-right: 16px;
-                padding-bottom: 8px + Insets.bottom;
+                padding-bottom: 16px + Insets.bottom;
                 PrimaryButton { text: Tr.t("action.save"); clicked => { root.save(); } }
             }
         }
@@ -215,15 +268,17 @@ export component EditorScreen inherits Rectangle {
     if root.sheet == EditorSheet.ring-colour: RingColourSheet { back => { root.open(EditorSheet.ring-look); } }
     if root.sheet == EditorSheet.delete: Sheet {
         title: Tr.t("alarm.delete_confirm");
+        done-text: Tr.t("alarm.keep");
+        finish => { root.close-sheet(); }
         close => { root.close-sheet(); }
-        PrimaryButton { text: Tr.t("action.delete"); clicked => { root.delete-confirmed(); } }
-        PrimaryButton { quiet: true; text: Tr.t("alarm.keep"); clicked => { root.close-sheet(); } }
+        DangerItem { text: Tr.t("action.delete"); clicked => { root.delete-confirmed(); } }
     }
     if root.sheet == EditorSheet.discard: Sheet {
         title: Tr.t("config.discard_title");
+        done-text: Tr.t("config.keep_editing");
+        finish => { root.close-sheet(); }
         close => { root.close-sheet(); }
-        PrimaryButton { text: Tr.t("config.discard"); clicked => { root.discard-confirmed(); } }
-        PrimaryButton { quiet: true; text: Tr.t("config.keep_editing"); clicked => { root.close-sheet(); } }
+        DangerItem { text: Tr.t("config.discard"); clicked => { root.discard-confirmed(); } }
     }
     if root.sheet == EditorSheet.challenges: ChallengesSheet {
         done => { root.sheet = EditorSheet.none; }

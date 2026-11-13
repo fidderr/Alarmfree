@@ -1,6 +1,6 @@
 import { Pal, Tr } from "theme.slint";
 import { Icon, IconName } from "components.slint";
-import { Sheet, PrimaryButton } from "widgets.slint";
+import { Sheet } from "widgets.slint";
 import { DatePicker } from "datepicker.slint";
 
 export struct SheetChoice { text: string, selected: bool, danger: bool }
@@ -52,8 +52,9 @@ export component HomeSheets inherits Rectangle {
     if root.sheet == HomeSheet.pause-date: Sheet {
         title: Tr.t("home.pause_date");
         help: Tr.t("home.pause_date_note");
+        done-text: Tr.t("home.pause_apply");
+        finish => { root.pause-apply(); }
         close => { root.close(); }
         DatePicker { }
-        PrimaryButton { text: Tr.t("home.pause_apply"); clicked => { root.pause-apply(); } }
     }
 }

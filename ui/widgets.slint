@@ -99,41 +99,20 @@ export component Separator inherits Rectangle {
 export component PrimaryButton inherits Rectangle {
     in property <string> text;
     in property <bool> quiet: false;
+    // The smaller one under a list: 48 dp, 14 px.
+    in property <bool> compact: false;
     callback clicked();
     accessible-role: button;
     accessible-label: root.text;
     accessible-action-default => { root.clicked(); }
-    height: 52px;
+    height: root.compact ? 48px : 52px;
     border-radius: 14px;
     background: quiet ? Pal.surface2 : Pal.accent;
     Text {
         text: root.text;
-        font-size: 16px;
+        font-size: root.compact ? 14px : 16px;
         font-weight: 500;
         color: root.quiet ? Pal.text : Pal.on-accent;
-    }
-    TouchArea { clicked => { root.clicked(); } }
-}
-
-// A small pill the user picks one of.
-export component Chip inherits Rectangle {
-    in property <string> text;
-    in property <bool> on;
-    callback clicked();
-    accessible-role: button;
-    accessible-label: root.text;
-    accessible-checkable: true;
-    accessible-checked: root.on;
-    accessible-action-default => { root.clicked(); }
-    height: 44px;
-    min-width: 52px;
-    border-radius: 22px;
-    background: on ? Pal.accent-soft : Pal.surface;
-    Text {
-        text: root.text;
-        font-size: 14px;
-        font-weight: 500;
-        color: root.on ? Pal.accent : Pal.text;
     }
     TouchArea { clicked => { root.clicked(); } }
 }
@@ -142,21 +121,31 @@ export component Chip inherits Rectangle {
 export component Sheet inherits Rectangle {
     in property <string> title;
     in property <string> action-text;
+    // A filled icon before the action: play to start something, stop while it runs.
+    in property <IconName> action-icon: IconName.play;
+    in property <bool> action-has-icon: false;
+    // The main button, pinned to the bottom of the panel while the rest scrolls.
+    in property <string> done-text;
+    // The pinned button quiet, when leaving is not the point of the panel.
+    in property <bool> done-quiet: false;
     // What a ? next to the title opens, in place.
     in property <string> help;
     // Set while something inside is dragged, so the panel does not scroll along.
     in property <bool> locked;
     callback close();
     callback action();
+    callback finish();
     property <bool> shown: false;
     property <bool> help-open: false;
+    property <length> done-room: root.done-text == "" ? 0px : 52px + 20px + Insets.bottom;
+    property <length> wanted: 74px + body.preferred-height + (root.done-text == "" ? Insets.bottom + 20px : 24px + root.done-room);
     init => { shown = true; }
     background: #0000008c;
     TouchArea { clicked => { root.close(); } }
     panel := Rectangle {
         x: 0px;
         width: parent.width;
-        height: min(parent.height * 0.9, 74px + body.preferred-height + Insets.bottom + 20px);
+        height: min(parent.height * 0.9, root.wanted);
         y: root.shown ? parent.height - self.height : parent.height;
         animate y { duration: Motion.ms(220ms); easing: ease-out; }
         background: Pal.surface;
@@ -194,16 +183,27 @@ export component Sheet inherits Rectangle {
             }
             if root.help != "": Rectangle { horizontal-stretch: 1; }
             if root.action-text != "": Rectangle {
-                width: 80px;
-                Text { text: root.action-text; font-size: 14px; font-weight: 500; color: Pal.accent; }
+                width: action-row.preferred-width + 16px;
+                accessible-role: button;
+                accessible-label: root.action-text;
+                accessible-action-default => { root.action(); }
+                action-row := HorizontalLayout {
+                    alignment: center;
+                    spacing: 6px;
+                    if root.action-has-icon: Rectangle {
+                        width: 14px;
+                        Icon { name: root.action-icon; size: 14px; tint: Pal.accent; filled: true; }
+                    }
+                    Text { text: root.action-text; font-size: 14px; font-weight: 500; color: Pal.accent; vertical-alignment: center; }
+                }
                 TouchArea { clicked => { root.action(); } }
             }
         }
         Flickable {
             y: 74px;
-            height: parent.height - 74px;
+            height: parent.height - 74px - root.done-room - (root.wanted > panel.height ? 8px : 0px);
             interactive: !root.locked;
-            content-height: body.preferred-height + Insets.bottom + 20px;
+            content-height: body.preferred-height + (root.done-text == "" ? Insets.bottom + 20px : 24px);
             body := VerticalLayout {
                 alignment: start;
                 padding-left: 20px;
@@ -225,6 +225,19 @@ export component Sheet inherits Rectangle {
                 @children
             }
         }
+        if root.done-text != "": Rectangle {
+            x: 20px;
+            y: panel.height - 20px - Insets.bottom - 52px;
+            width: parent.width - 40px;
+            height: 52px;
+            border-radius: 14px;
+            background: root.done-quiet ? Pal.surface2 : Pal.accent;
+            accessible-role: button;
+            accessible-label: root.done-text;
+            accessible-action-default => { root.finish(); }
+            Text { text: root.done-text; font-size: 16px; font-weight: 500; color: root.done-quiet ? Pal.text : Pal.on-accent; }
+            TouchArea { clicked => { root.finish(); } }
+        }
     }
 }
 
@@ -240,25 +253,20 @@ export component RadioRow inherits Rectangle {
     accessible-action-default => { root.clicked(); }
     height: 52px;
     HorizontalLayout {
+        padding-left: 2px;
+        padding-right: 2px;
         spacing: 14px;
         Rectangle {
-            width: 22px;
+            width: 20px;
             Rectangle {
-                width: 22px;
-                height: 22px;
-                border-radius: 11px;
-                border-width: 2px;
-                border-color: root.selected ? Pal.accent : Pal.off;
-                Rectangle {
-                    width: 10px;
-                    height: 10px;
-                    border-radius: 5px;
-                    background: Pal.accent;
-                    visible: root.selected;
-                }
+                width: 20px;
+                height: 20px;
+                border-radius: 10px;
+                border-width: root.selected ? 6px : 2px;
+                border-color: root.selected ? Pal.accent : Pal.text2;
             }
         }
-        Text { horizontal-stretch: 1; text: root.text; font-size: 16px; color: Pal.text; vertical-alignment: center; overflow: elide; }
+        Text { horizontal-stretch: 1; text: root.text; font-size: 14px; font-weight: root.selected ? 500 : 400; color: Pal.text; vertical-alignment: center; overflow: elide; }
     }
     TouchArea { clicked => { root.clicked(); } }
 }
@@ -276,9 +284,20 @@ export component Wheel inherits Rectangle {
     property <bool> dragging: false;
     property <bool> moved: false;
     property <int> modulus: labels.length;
-    width: 84px;
+    width: 96px;
     height: 200px;
+    border-radius: 20px;
+    background: Pal.surface2;
     clip: true;
+    // Behind the number picked.
+    Rectangle {
+        x: 8px;
+        y: 78px;
+        width: parent.width - 16px;
+        height: 44px;
+        border-radius: 14px;
+        background: Pal.accent-soft;
+    }
     for off[i] in [-3, -2, -1, 0, 1, 2, 3]: Text {
         y: (i - 1) * root.pitch + root.drag-px;
         height: root.pitch;
@@ -286,11 +305,26 @@ export component Wheel inherits Rectangle {
         horizontal-alignment: center;
         vertical-alignment: center;
         text: root.labels[Math.mod(root.value + off + root.modulus * 2, root.modulus)];
-        font-size: off == 0 ? 30px : (off == 1 || off == -1) ? 22px : off == 2 || off == -2 ? 18px : 15px;
-        font-weight: off == 0 ? 700 : 400;
-        color: off == 0 ? Pal.text : Pal.text2;
+        font-size: off == 0 ? 28px : (off == 1 || off == -1) ? 20px : off == 2 || off == -2 ? 16px : 14px;
+        font-weight: off == 0 ? 700 : (off == 1 || off == -1) ? 500 : 400;
+        color: off == 0 ? Pal.accent : (off == 1 || off == -1) ? Pal.text : Pal.text2;
         opacity: off == 0 ? 1.0 : (off == 1 || off == -1) ? 0.8 : off == 2 || off == -2 ? 0.5 : 0.28;
         animate y { duration: root.dragging ? 0ms : Motion.ms(240ms); easing: ease-out; }
+    }
+    // The rows fade out towards the top and the bottom.
+    Rectangle {
+        x: 0px;
+        y: 0px;
+        width: parent.width;
+        height: 52px;
+        background: @linear-gradient(180deg, Pal.surface 0%, Pal.surface.transparentize(1) 100%);
+    }
+    Rectangle {
+        x: 0px;
+        y: parent.height - 52px;
+        width: parent.width;
+        height: 52px;
+        background: @linear-gradient(0deg, Pal.surface 0%, Pal.surface.transparentize(1) 100%);
     }
     ta := TouchArea {
         pointer-event(e) => {
@@ -431,40 +465,61 @@ export component AppSlider inherits Rectangle {
     }
 }
 
-// A row of choices, equally wide: the one picked is filled.
+export struct ChipPos { x: length, w: length, line: int }
+
+// Rust works out where each chip goes (see `src/ui/chipflow.rs`).
+export global ChipLayout {
+    pure callback positions([string], length, length, length, length, length) -> [ChipPos];
+}
+
+// Choices that fill a line and wrap onto the next one, like a flex row. The one picked is filled.
+// `small` is the editor's repeat presets: 12 px text in a 30 dp pill inside a 44 dp place to tap.
 export component ChoiceChips inherits Rectangle {
     in property <[string]> labels;
     in property <int> selected: -1;
+    in property <bool> small: false;
     callback picked(int);
-    height: 48px;
-    HorizontalLayout {
-        spacing: 8px;
-        for label[i] in root.labels: Rectangle {
-            horizontal-stretch: 1;
-            min-width: 44px;
-            border-radius: 14px;
-            background: root.selected == i ? Pal.accent : Pal.surface2;
+    property <length> item-h: root.small ? 44px : 48px;
+    property <length> row-gap: root.small ? 0px : 8px;
+    property <[ChipPos]> pos: ChipLayout.positions(root.labels, root.width, root.small ? 6px : 8px, root.small ? 16px : 12px, root.small ? 0px : 44px, root.small ? 12px : 14px);
+    property <int> lines: root.pos.length == 0 ? 0 : root.pos[root.pos.length - 1].line + 1;
+    height: root.lines * root.item-h + max(0, root.lines - 1) * root.row-gap;
+    for label[i] in root.labels: Rectangle {
+        x: root.pos[i].x;
+        y: root.pos[i].line * (root.item-h + root.row-gap);
+        width: root.pos[i].w;
+        height: root.item-h;
+        accessible-role: button;
+        accessible-label: label;
+        accessible-checkable: true;
+        accessible-checked: root.selected == i;
+        accessible-action-default => { root.picked(i); }
+        Rectangle {
+            y: root.small ? 7px : 0px;
+            height: root.small ? 30px : 48px;
+            border-radius: root.small ? 15px : 14px;
+            background: root.small ? (root.selected == i ? Pal.accent-soft : Pal.surface) : (root.selected == i ? Pal.accent : Pal.surface2);
             Text {
-                x: 4px;
-                width: parent.width - 8px;
+                x: 6px;
+                width: parent.width - 12px;
                 text: label;
-                font-size: 14px;
+                font-size: root.small ? 12px : 14px;
                 font-weight: 500;
-                color: root.selected == i ? Pal.on-accent : Pal.text;
+                color: root.small ? (root.selected == i ? Pal.accent : Pal.text) : (root.selected == i ? Pal.on-accent : Pal.text);
                 horizontal-alignment: center;
                 vertical-alignment: center;
                 overflow: elide;
             }
-            TouchArea { clicked => { root.picked(i); } }
         }
+        TouchArea { clicked => { root.picked(i); } }
     }
 }
 
 // A small heading above a group in a sheet.
-export component GroupTitle inherits Text {
-    font-size: 14px;
-    font-weight: 500;
-    color: Pal.text;
+export component GroupTitle inherits VerticalLayout {
+    in property <string> text;
+    padding-top: 12px;
+    Text { text: root.text; font-size: 14px; font-weight: 500; color: Pal.text; }
 }
 
 // A text button without a background.

@@ -10,6 +10,9 @@ export component Icon inherits Path {
     in property <IconName> name: IconName.clock;
     in property <length> size: 16px;
     in property <color> tint: Pal.text;
+    // Filled with the tint as well, for play and stop.
+    in property <bool> filled: false;
+    fill: filled ? tint : transparent;
     width: size;
     height: size;
     viewbox-width: 24;
@@ -99,6 +102,9 @@ export component SlimChip inherits Rectangle {
     accessible-label: root.text;
     accessible-action-default => { root.clicked(); }
     min-height: 44px;
+    // All as wide as each other, whatever the text: `flex: 1`.
+    min-width: 0px;
+    preferred-width: 0px;
     Rectangle {
         height: 34px;
         border-radius: 17px;

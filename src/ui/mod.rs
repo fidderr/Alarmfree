@@ -18,6 +18,7 @@ slint::include_modules!();
 
 mod challenge_run;
 mod challenge_sheets;
+mod chipflow;
 mod colour;
 mod datepicker;
 #[cfg(debug_assertions)]
@@ -333,6 +334,7 @@ pub fn run() -> Result<(), slint::PlatformError> {
                 .into()
         });
     }
+    ui.global::<ChipLayout>().on_positions(chipflow::positions);
     apply_theme(&ctx);
     settings::apply_motion(&ctx);
     reliability::refresh_banner(&ctx);

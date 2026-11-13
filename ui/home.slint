@@ -21,6 +21,8 @@ component AlarmCard inherits Rectangle {
     in property <bool> opened;
     in property <bool> can-reorder;
     in property <bool> lifted;
+    // A line above it, from where the text starts, except on the first card.
+    in property <bool> divider;
     callback open();
     callback menu();
     callback toggle();
@@ -97,8 +99,8 @@ component AlarmCard inherits Rectangle {
                         min-width: data.twelve ? 104px : 76px;
                         text: data.time;
                         font-size: data.twelve ? 20px : 24px;
-                        font-weight: 500;
-                        letter-spacing: data.twelve ? 0px : -0.3px;
+                        font-weight: 450;
+                        letter-spacing: data.twelve ? 0px : 1.1px;
                         color: data.on ? Pal.text : Pal.text2;
                         vertical-alignment: center;
                     }
@@ -123,8 +125,10 @@ component AlarmCard inherits Rectangle {
                             spacing: 2px;
                             alignment: start;
                             for day in data.days: Text {
+                                width: 13.2px;
+                                horizontal-alignment: center;
                                 text: day.letter;
-                                font-size: 12px;
+                                font-size: 11px;
                                 font-weight: (day.on && data.on) ? 700 : 400;
                                 color: (day.on && data.on) ? Pal.accent : Pal.text2;
                             }
@@ -148,6 +152,13 @@ component AlarmCard inherits Rectangle {
                 }
             }
         }
+    }
+    if root.divider && !root.lifted: Rectangle {
+        x: 16px;
+        y: 0px;
+        width: parent.width - 16px;
+        height: 1px;
+        background: Pal.line;
     }
     // Held for a moment: the card can be dragged to another place.
     hold := Timer {
@@ -269,6 +280,7 @@ export component HomeScreen inherits Rectangle {
                 }
             }
             HorizontalLayout {
+                horizontal-stretch: 0;
                 spacing: 8px;
                 alignment: start;
                 RoundIconButton { icon: IconName.pause; label: Tr.t("home.pause_aria"); active: root.paused; clicked => { root.pause-all(); } }
@@ -329,7 +341,7 @@ export component HomeScreen inherits Rectangle {
         fl := Flickable {
             vertical-stretch: 1;
             interactive: root.drag-from < 0;
-            content-height: max(self.height, 12px + root.rows.length * 76px + 120px + Insets.bottom);
+            content-height: max(self.height, 12px + root.rows.length * 76px + 88px);
             Rectangle {
                 x: 16px;
                 y: 12px;
@@ -349,6 +361,7 @@ export component HomeScreen inherits Rectangle {
                     opened: root.open-id == row.id;
                     can-reorder: root.can-reorder;
                     lifted: i == root.drag-from;
+                    divider: i > 0 && i != root.drag-from && i != root.drag-from + 1;
                     open => { root.open(row.id); }
                     menu => { root.menu(row.id); }
                     toggle => { root.toggle(row.id); }
