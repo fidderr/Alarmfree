@@ -112,6 +112,7 @@ export component ColourControls inherits VerticalLayout {
             horizontal-stretch: 1;
             text: Hue.code;
             label: Tr.t("theme.code");
+            align: center;
             edited(s) => { Hue.code-edited(s); }
         }
         if Hue.show-auto: Rectangle {
@@ -123,4 +124,5 @@ export component ColourControls inherits VerticalLayout {
             TouchArea { clicked => { Hue.auto-picked(); } }
         }
     }
+    Rectangle { height: 8px; }
 }

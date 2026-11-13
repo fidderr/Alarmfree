@@ -1,5 +1,5 @@
 import { Pal, Tr, Insets } from "theme.slint";
-import { Icon, IconName, AppSwitch } from "components.slint";
+import { Icon, IconName, AppSwitch, TabularText } from "components.slint";
 import { ScreenHeader, RowList, Separator, PrimaryButton, Sheet } from "widgets.slint";
 import { ColourControls, SwatchGrid, SwatchCell } from "colour.slint";
 import { DayCell } from "home.slint";
@@ -51,12 +51,12 @@ component ColourRow inherits Rectangle {
     in property <string> value;
     in property <color> colour;
     callback clicked();
-    height: 56px;
+    height: 54px;
     HorizontalLayout {
         padding-left: 16px;
-        padding-right: 12px;
-        spacing: 8px;
-        Text { text: root.title; font-size: 16px; color: Pal.text; vertical-alignment: center; }
+        padding-right: 14px;
+        spacing: 12px;
+        Text { text: root.title; font-size: 14px; font-weight: 500; color: Pal.text; vertical-alignment: center; }
         Text { horizontal-stretch: 1; text: root.value; font-size: 14px; color: Pal.text2; horizontal-alignment: right; vertical-alignment: center; overflow: elide; }
         Rectangle {
             width: 24px;
@@ -69,7 +69,7 @@ component ColourRow inherits Rectangle {
 
 // A fixed sample of the app, so a change further down the page shows up right here.
 component Preview inherits Rectangle {
-    height: 16px + 44px + 16px + 38px + 16px;
+    height: 16px + 33px + 16px + 33px + 16px;
     Rectangle {
         x: 16px;
         width: parent.width - 32px;
@@ -79,9 +79,9 @@ component Preview inherits Rectangle {
             padding: 16px;
             spacing: 16px;
             HorizontalLayout {
-                height: 44px;
+                height: 33px;
                 spacing: 16px;
-                Text { min-width: 76px; text: "07:00"; font-size: 24px; font-weight: 500; letter-spacing: -0.3px; color: Pal.text; vertical-alignment: center; }
+                TabularText { min-width: 76px; horizontal-stretch: 0; text: "07:00"; font-size: 24px; font-weight: 450; letter-spacing: -0.3px; ink: Pal.text; horizontal-alignment: left; }
                 VerticalLayout {
                     horizontal-stretch: 1;
                     alignment: center;
@@ -91,8 +91,10 @@ component Preview inherits Rectangle {
                         spacing: 2px;
                         alignment: start;
                         for day in Thm.days: Text {
+                            width: 13.2px;
+                            horizontal-alignment: center;
                             text: day.letter;
-                            font-size: 12px;
+                            font-size: 11px;
                             font-weight: day.on ? 700 : 400;
                             color: day.on ? Pal.accent : Pal.text2;
                         }
@@ -101,16 +103,16 @@ component Preview inherits Rectangle {
                 Rectangle { width: 44px; AppSwitch { on: true; y: (parent.height - self.height) / 2; } }
             }
             HorizontalLayout {
-                height: 38px;
+                height: 33px;
                 spacing: 16px;
                 alignment: start;
                 Rectangle {
                     min-width: 36px + save.preferred-width;
                     border-radius: 14px;
                     background: Pal.accent;
-                    save := Text { text: Tr.t("action.save"); font-size: 16px; font-weight: 500; color: Pal.on-accent; }
+                    save := Text { text: Tr.t("action.save"); font-size: 14px; font-weight: 500; color: Pal.on-accent; }
                 }
-                Text { text: Tr.t("challenge.try"); font-size: 16px; font-weight: 500; color: Pal.accent; vertical-alignment: center; }
+                Text { text: Tr.t("challenge.try"); font-size: 14px; font-weight: 500; color: Pal.accent; vertical-alignment: center; }
             }
         }
     }
@@ -119,6 +121,10 @@ component Preview inherits Rectangle {
 component Tile inherits Rectangle {
     in property <ThemeTile> tile;
     callback clicked();
+    min-width: 0px;
+    preferred-width: 0px;
+    min-height: 72px + label.preferred-height;
+    preferred-height: 72px + label.preferred-height;
     accessible-role: button;
     accessible-label: root.tile.name;
     accessible-checkable: true;
@@ -164,14 +170,14 @@ component Tile inherits Rectangle {
                 border-color: Pal.accent;
             }
         }
-        Text {
-            height: 16px;
+        label := Text {
             text: root.tile.name;
             font-size: 12px;
             font-weight: root.tile.selected ? 500 : 400;
             color: root.tile.selected ? Pal.text : Pal.text2;
             horizontal-alignment: center;
-            overflow: elide;
+            wrap: word-wrap;
+            line-height-factor: 1.14;
         }
     }
     TouchArea { clicked => { root.clicked(); } }
@@ -201,32 +207,31 @@ export component ThemeScreen inherits Rectangle {
                 padding-right: 16px;
                 padding-top: 20px;
                 spacing: 16px;
-                Rectangle {
-                    height: Math.ceil(Thm.tiles.length / 3) * 88px + (Math.ceil(Thm.tiles.length / 3) - 1) * 16px;
-                    property <length> w: (self.width - 24px) / 3;
-                    for tile[i] in Thm.tiles: Tile {
-                        x: Math.mod(i, 3) * (parent.w + 12px);
-                        y: Math.floor(i / 3) * (88px + 16px);
-                        width: parent.w;
-                        height: 88px;
-                        tile: tile;
-                        clicked => { Thm.tile-picked(i); }
+                VerticalLayout {
+                    spacing: 16px;
+                    for r in Math.ceil(Thm.tiles.length / 3): HorizontalLayout {
+                        spacing: 12px;
+                        for c in 3: Tile {
+                            horizontal-stretch: 1;
+                            tile: Thm.tiles[r * 3 + c];
+                            clicked => { Thm.tile-picked(r * 3 + c); }
+                        }
                     }
                 }
                 Rectangle {
-                    height: 56px;
+                    height: 54px;
                     RowList {
                         Rectangle {
-                            height: 56px;
+                            height: 54px;
                             HorizontalLayout {
                                 padding-left: 16px;
-                                padding-right: 12px;
+                                padding-right: 14px;
                                 spacing: 12px;
                                 Rectangle {
                                     width: 24px;
                                     Dot { rainbow: true; y: (parent.height - self.height) / 2; }
                                 }
-                                Text { horizontal-stretch: 1; text: Tr.t("theme.custom"); font-size: 16px; color: Pal.text; vertical-alignment: center; overflow: elide; }
+                                Text { horizontal-stretch: 1; text: Tr.t("theme.custom"); font-size: 14px; font-weight: 500; color: Pal.text; vertical-alignment: center; overflow: elide; }
                             }
                             TouchArea { clicked => { Thm.own-picked(); } }
                         }
@@ -250,21 +255,25 @@ export component ThemeScreen inherits Rectangle {
                         ColourRow { title: Tr.t("theme.text"); value: Thm.ink-auto ? Tr.t("theme.auto") : ""; colour: Thm.own-ink; clicked => { Thm.role-open(3); } }
                     }
                 }
-                Text {
-                    x: 4px;
-                    height: 16px;
-                    text: Tr.t("settings.accent");
-                    font-size: 12px;
-                    font-weight: 500;
-                    color: Pal.text2;
-                    vertical-alignment: center;
+                Rectangle {
+                    height: 20px;
+                    Text {
+                        x: 4px;
+                        y: 4px;
+                        height: 16px;
+                        text: Tr.t("settings.accent");
+                        font-size: 12px;
+                        font-weight: 500;
+                        color: Pal.text2;
+                        vertical-alignment: center;
+                    }
                 }
                 Rectangle {
-                    height: 2 * 44px + 12px + 8px;
-                    property <length> gap: (self.width - 40px - 5 * 44px) / 4;
+                    height: 2 * 44px + 12px - 4px;
+                    property <length> gap: (self.width - 8px - 5 * 44px) / 4;
                     for swatch[i] in Thm.accents: Rectangle {
-                        x: 20px + Math.mod(i, 5) * (44px + parent.gap);
-                        y: 4px + Math.floor(i / 5) * (44px + 12px);
+                        x: 4px + Math.mod(i, 5) * (44px + parent.gap);
+                        y: Math.floor(i / 5) * (44px + 12px) - 4px;
                         width: 44px;
                         height: 44px;
                         border-radius: 22px;
@@ -284,8 +293,8 @@ export component ThemeScreen inherits Rectangle {
                     }
                     // The tenth: any colour, from the wheel.
                     Rectangle {
-                        x: 20px + Math.mod(Thm.accents.length, 5) * (44px + parent.gap);
-                        y: 4px + Math.floor(Thm.accents.length / 5) * (44px + 12px);
+                        x: 4px + Math.mod(Thm.accents.length, 5) * (44px + parent.gap);
+                        y: Math.floor(Thm.accents.length / 5) * (44px + 12px) - 4px;
                         width: 44px;
                         height: 44px;
                         border-radius: 22px;
