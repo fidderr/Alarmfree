@@ -905,3 +905,52 @@ Done and seen on emulator-5556 (`wm size 1800x2400` + `wm density 280`, reset af
 
 ## Scroll measurement note
 `devtest/compare.sh` used to measure the first-run page, not the list: the Slint copy starts on the first-run screen, and its quick pill sits lower (reliability banner, "next alarm" sub line). The script now gets past the first-run page and taps the right pill, with 14 alarms on the list. On emulator-5556 (release, x86_64): before the shadow change 908 frames, p50 32.9 ms, 706 janky; after 1058 frames, p50 31.4 ms, 607 janky. A plain screen (Settings) scrolls with the same p50 of about 30 ms, so the floor is the emulator's input rate, not the list. A drop shadow on every card (blur 0 when not lifted) made each card an offscreen layer; the shadow now exists only on the lifted card. Idle: 0 frames in 4 s on Home.
+
+## Phone comparison
+
+Real phone: OnePlus 13 (ColorOS, Android 16, arm64), 1080x2376 at 480 dpi, panel up to 120 Hz. Release builds of both, arm64 only:
+the original from a copy of its source (`build/original`, its stray x86_64 library removed from the APK so the size is fair) and the
+Slint port at commit `1ea9c8b`. Measured with `devtest/compare.sh` (two full runs, 7 cold starts each; raw tables in
+`docs/phone/perf-run8.txt` and `perf-run9.txt`). The phone refuses `pm clear` for adb, so the script reinstalls the two packages
+for a clean state.
+
+| | Original (WebView) run 8 / run 9 | Slint run 8 / run 9 |
+|---|---|---|
+| APK size | 18.6 MB | 44.1 MB |
+| Cold start, median of 7 (`am start -W`) | 155 / 152 ms | 87 / 101 ms |
+| PSS after start, main process | 123 / 110 MB | 67 / 68 MB |
+| PSS with the editor open, main process | 124 / 123 MB | 74 / 74 MB |
+| WebView helper processes | 58 / 58 MB | 0 |
+| PSS, app + WebView, editor open | 188 / 187 MB | 80 / 80 MB |
+| Idle CPU, 60 s on the home list (% of one core) | 0.40 / 0.37 | 0.22 / 0.20 |
+| Display refresh while scrolling | 90 Hz (11.1 ms) | 60 Hz (16.7 ms) |
+| Frames while scrolling (SurfaceFlinger) | 1230 / 1239 | 806 / 803 |
+| Janky frames (more than 1.5 x vsync apart) | 3 (0.2%) / 3 (0.2%) | 12 (1.5%) / 13 (1.6%) |
+| Frame interval p50 / p99 | 11.1 / 11.1 ms | 16.6 / 49.7 ms |
+
+Frame source: SurfaceFlinger `--latency` of the app's layer, relative to the real vsync period. `dumpsys gfxinfo` reports about
+1200 frames for the original (render time only, p99 about 10 ms) and none for Slint, which draws on its own GPU surface.
+
+Verdicts on performance:
+- **Start and memory: Slint wins clearly.** About 40% faster cold start, about 55% less memory in total (no WebView), and about
+  half the idle CPU.
+- **Size: the original wins clearly** (18.6 against 44.1 MB), because Skia and the std widgets are linked into Slint's library.
+- **Scrolling: the original is smoother on this phone.** ColorOS runs the WebView at 90 Hz and Slint at only 60 Hz, and Slint
+  has about 12 stalls of 33 to 99 ms per run where the original has 3. Both are fine in the numbers; the 60 against 90 Hz
+  difference is visible by eye, which only the user can judge. A way to ask Android for a higher frame rate from a native host
+  (a preferred refresh rate on the surface) is a possible generic SDK or app addition; it was not tried.
+
+Oddities of the Slint build found while measuring (to fix; they are design issues, not crashes):
+- The reliability banner on Home has no close cross when its text spans the full width, and it is one line with an ellipsis where
+  the original's wraps over up to 3 lines.
+- The "Fix" buttons on the welcome and reliability pages are as wide as their text, with no padding; the welcome page's intro text
+  starts left of its heading and the card has no side margins (the original has both).
+
+### Stability, design comparison, test yourself
+
+Not done yet. The phone was locked (keyguard showing) when the stability and design part was about to start, and only the user can
+unlock it; nothing was captured or changed. Open: crash and ANR counts for both builds over the core loop, an alarm surviving the
+app being killed, side-by-side screenshots of every screen (`docs/phone/design/`) and the verdict per area. To test yourself on
+the phone: how smooth scrolling feels at 60 against 90 Hz, haptics (wheel ticks, challenges), alarm sound and fade, the camera scan
+and step challenges, and TalkBack.
+
