@@ -34,7 +34,7 @@ for triple in aarch64-linux-android x86_64-linux-android; do
   export "CC_$var=$NDK_BIN/${triple}31-clang.cmd" "CXX_$var=$NDK_BIN/${triple}31-clang++.cmd" "AR_$var=$NDK_BIN/llvm-ar.exe"
 done
 TARGET="${TARGET:-aarch64-linux-android}"
-SENTINEL_MANIFEST="${SENTINEL_MANIFEST:-../vp-work/ms-native/Cargo.toml}"
+SENTINEL_MANIFEST="${SENTINEL_MANIFEST:-../mobile-sentinel/Cargo.toml}"
 
 MODE=debug
 PROFILE_DIR=debug
