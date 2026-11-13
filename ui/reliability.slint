@@ -72,7 +72,8 @@ component PlainRow inherits Rectangle {
         padding-left: 16px;
         padding-right: 14px;
         spacing: 12px;
-        Text { horizontal-stretch: 1; text: root.title; font-size: 14px; font-weight: 500; color: Pal.text; vertical-alignment: center; overflow: elide; }
+        Text { horizontal-stretch: 1; text: root.title; font-size: 14px; font-weight: 500; color: Pal.text; vertical-alignment: center; wrap: word-wrap; }
+        Rectangle { width: 48px; }
         Icon { name: IconName.chevron-right; size: 14px; tint: Pal.text2; y: (parent.height - self.height) / 2; }
     }
     TouchArea { clicked => { root.clicked(); } }

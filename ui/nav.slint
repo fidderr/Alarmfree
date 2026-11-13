@@ -6,6 +6,9 @@ component NavItem inherits Rectangle {
     in property <string> label;
     in property <bool> active;
     callback clicked();
+    horizontal-stretch: 1;
+    preferred-width: 0px;
+    min-width: 0px;
     accessible-role: tab;
     accessible-label: root.label;
     accessible-checkable: true;

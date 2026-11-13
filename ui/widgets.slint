@@ -27,7 +27,7 @@ export component ScreenHeader inherits Rectangle {
             font-weight: 500;
             color: Pal.text;
             vertical-alignment: center;
-            overflow: elide;
+            wrap: word-wrap;
         }
         @children
     }
@@ -544,6 +544,7 @@ export component TextField inherits Rectangle {
     in property <string> label;
     in property <bool> focus-on-show: false;
     in property <InputType> input-type: InputType.text;
+    in property <TextHorizontalAlignment> align: left;
     callback edited(string);
     callback accepted();
     height: 48px;
@@ -569,6 +570,7 @@ export component TextField inherits Rectangle {
         color: Pal.text;
         single-line: true;
         input-type: root.input-type;
+        horizontal-alignment: root.align;
         vertical-alignment: center;
         edited => { root.edited(self.text); }
         accepted => { root.accepted(); }
@@ -581,6 +583,7 @@ export component TextField inherits Rectangle {
         font-size: 16px;
         color: Pal.text2;
         opacity: 0.7;
+        horizontal-alignment: root.align;
         vertical-alignment: center;
         overflow: elide;
     }

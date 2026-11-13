@@ -279,7 +279,7 @@ fn open_backup(ctx: &Ctx) {
         ctx,
         Panel {
             title: t(&tr, "settings.backup"),
-            note: t(&tr, "settings.backup_note"),
+            help: t(&tr, "settings.backup_note"),
             rows: vec![
                 (
                     t(&tr, "settings.backup_save"),
