@@ -78,7 +78,10 @@ cp "target/$TARGET/$PROFILE_DIR/libalarmfree.so" "build/jniLibs/$ABI/libmain.so"
 cp "target/$TARGET/$PROFILE_DIR/libalarmfree.so" build/libmain.so.unstripped
 
 echo "=== [2/3] Generating the Android project, wiring mobile-sentinel + assets + icon, and Gradle ==="
-cargo run --quiet --manifest-path "$SENTINEL_MANIFEST" --bin build_sentinel -- \
+# Newer SDKs keep the build tool behind the `build` feature.
+SDK_FEATURES=()
+grep -q '^build = ' "$SENTINEL_MANIFEST" && SDK_FEATURES=(--features build)
+cargo run --quiet --manifest-path "$SENTINEL_MANIFEST" ${SDK_FEATURES[@]+"${SDK_FEATURES[@]}"} --bin build_sentinel -- \
   ${SENTINEL_FLAGS[@]+"${SENTINEL_FLAGS[@]}"}
 
 if [ "$MODE" = debug ]; then
