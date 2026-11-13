@@ -1,5 +1,5 @@
 import { Pal, Tr, Insets } from "theme.slint";
-import { Icon, IconName } from "components.slint";
+import { Icon, IconName, TabularText } from "components.slint";
 import { ScreenHeader, Row, SwitchRow, RowList, Separator, PrimaryButton, ChoiceChips, Sheet } from "widgets.slint";
 import { DayCell } from "home.slint";
 import { Cfg, ChallengesSheet, AddChallengeSheet, ChallengeDetailSheet } from "challenge_sheets.slint";
@@ -105,12 +105,14 @@ export component EditorScreen inherits Rectangle {
                         }
                         Rectangle {
                             horizontal-stretch: 1;
-                            Text {
+                            TabularText {
+                                width: parent.width;
+                                height: parent.height;
                                 text: root.time-text;
                                 font-size: root.twelve ? 44px : 64px;
-                                font-weight: 450;
-                                letter-spacing: root.twelve ? 0px : 1.2px;
-                                color: Pal.text;
+                                font-weight: 500;
+                                letter-spacing: -1px;
+                                ink: Pal.text;
                             }
                             TouchArea { clicked => { root.open(EditorSheet.time); } }
                         }

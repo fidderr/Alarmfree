@@ -3,7 +3,7 @@
 
 use slint::{Model, ModelRc, SharedString, VecModel};
 
-use super::ChipPos;
+use super::{ChipPos, Glyph};
 
 /// How wide each character from U+0020 to U+017F is, in thousandths of the font size: the
 /// advances of OPPO Sans 4.0 EN at weight 500, the phone's system font that the UI draws with
@@ -99,9 +99,36 @@ pub(super) fn positions(
     ))
 }
 
+/// The characters of a text, each saying whether it is a digit (these get the room of the widest
+/// digit, see `TabularText`).
+pub(super) fn glyphs(text: SharedString) -> ModelRc<Glyph> {
+    ModelRc::new(VecModel::from(
+        text.chars()
+            .map(|c| Glyph {
+                text: c.to_string().into(),
+                digit: c.is_ascii_digit(),
+            })
+            .collect::<Vec<_>>(),
+    ))
+}
+
 #[cfg(test)]
 mod tests {
-    use super::place;
+    use super::{glyphs, place};
+    use slint::Model;
+
+    #[test]
+    fn a_clock_splits_into_digits_and_the_rest() {
+        let got: Vec<(String, bool)> = glyphs("07:30 AM".into())
+            .iter()
+            .map(|g| (g.text.to_string(), g.digit))
+            .collect();
+        assert_eq!(got.len(), 8);
+        assert_eq!(got[0], ("0".to_owned(), true));
+        assert_eq!(got[2], (":".to_owned(), false));
+        assert_eq!(got[5], (" ".to_owned(), false));
+        assert_eq!(got.iter().filter(|g| g.1).count(), 4);
+    }
 
     fn labels(words: &[&str]) -> Vec<String> {
         words.iter().map(|w| w.to_string()).collect()

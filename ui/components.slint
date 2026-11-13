@@ -128,7 +128,7 @@ export component Toast inherits Rectangle {
     in property <bool> has-undo;
     callback undo();
     callback dismiss();
-    height: max(48px, label.preferred-height + (root.error ? 16px : 8px));
+    height: max(root.has-undo ? 52px : 48px, label.preferred-height + (root.error ? 16px : 8px));
     border-radius: 14px;
     background: Pal.inverse;
     TouchArea { clicked => { root.dismiss(); } }
@@ -147,14 +147,63 @@ export component Toast inherits Rectangle {
             color: Pal.on-inverse;
         }
         if root.has-undo: Rectangle {
-            min-width: 64px;
-            Text {
+            min-width: undo-text.preferred-width + 20px;
+            undo-text := Text {
                 text: Tr.t("action.undo");
                 font-size: 14px;
                 font-weight: 700;
                 color: Pal.on-inverse;
             }
             TouchArea { clicked => { root.undo(); } }
+        }
+    }
+}
+
+export struct Glyph { text: string, digit: bool }
+
+// Rust splits a string into its characters, saying which are digits (see `src/ui/chipflow.rs`).
+export global Glyphs {
+    pure callback split(string) -> [Glyph];
+}
+
+// A time with every digit in a cell as wide as the widest digit, like `font-variant-numeric:
+// tabular-nums` of the original: a 1 keeps the room of a 0, so a clock does not change width.
+export component TabularText inherits Rectangle {
+    in property <string> text;
+    in property <length> font-size: 14px;
+    in property <int> font-weight: 400;
+    in property <string> font-family;
+    in property <length> letter-spacing: 0px;
+    in property <color> ink: Pal.text;
+    in property <TextHorizontalAlignment> horizontal-alignment: center;
+    property <length> cell: max(max(max(max(m0.preferred-width, m1.preferred-width), max(m2.preferred-width, m3.preferred-width)), max(max(m4.preferred-width, m5.preferred-width), max(m6.preferred-width, m7.preferred-width))), max(m8.preferred-width, m9.preferred-width));
+    preferred-width: row.preferred-width;
+    preferred-height: m0.preferred-height;
+    m0 := Text { visible: false; text: "0"; font-size: root.font-size; font-weight: root.font-weight; font-family: root.font-family; letter-spacing: root.letter-spacing; }
+    m1 := Text { visible: false; text: "1"; font-size: root.font-size; font-weight: root.font-weight; font-family: root.font-family; letter-spacing: root.letter-spacing; }
+    m2 := Text { visible: false; text: "2"; font-size: root.font-size; font-weight: root.font-weight; font-family: root.font-family; letter-spacing: root.letter-spacing; }
+    m3 := Text { visible: false; text: "3"; font-size: root.font-size; font-weight: root.font-weight; font-family: root.font-family; letter-spacing: root.letter-spacing; }
+    m4 := Text { visible: false; text: "4"; font-size: root.font-size; font-weight: root.font-weight; font-family: root.font-family; letter-spacing: root.letter-spacing; }
+    m5 := Text { visible: false; text: "5"; font-size: root.font-size; font-weight: root.font-weight; font-family: root.font-family; letter-spacing: root.letter-spacing; }
+    m6 := Text { visible: false; text: "6"; font-size: root.font-size; font-weight: root.font-weight; font-family: root.font-family; letter-spacing: root.letter-spacing; }
+    m7 := Text { visible: false; text: "7"; font-size: root.font-size; font-weight: root.font-weight; font-family: root.font-family; letter-spacing: root.letter-spacing; }
+    m8 := Text { visible: false; text: "8"; font-size: root.font-size; font-weight: root.font-weight; font-family: root.font-family; letter-spacing: root.letter-spacing; }
+    m9 := Text { visible: false; text: "9"; font-size: root.font-size; font-weight: root.font-weight; font-family: root.font-family; letter-spacing: root.letter-spacing; }
+    row := HorizontalLayout {
+        alignment: root.horizontal-alignment == TextHorizontalAlignment.left ? LayoutAlignment.start : root.horizontal-alignment == TextHorizontalAlignment.right ? LayoutAlignment.end : LayoutAlignment.center;
+        for g in Glyphs.split(root.text): Rectangle {
+            width: g.digit ? root.cell : glyph.preferred-width;
+            glyph := Text {
+                width: parent.width;
+                text: g.text;
+                font-size: root.font-size;
+                font-weight: root.font-weight;
+                font-family: root.font-family;
+                letter-spacing: root.letter-spacing;
+                color: root.ink;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
         }
     }
 }

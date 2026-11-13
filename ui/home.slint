@@ -1,5 +1,5 @@
 import { Motion, Pal, Tr, Insets } from "theme.slint";
-import { Icon, IconName, AppSwitch, RoundIconButton, SlimChip } from "components.slint";
+import { Icon, IconName, AppSwitch, RoundIconButton, SlimChip, TabularText } from "components.slint";
 import { BottomNav } from "nav.slint";
 
 export struct DayCell { letter: string, on: bool }
@@ -95,14 +95,15 @@ component AlarmCard inherits Rectangle {
                     padding-top: 8px;
                     padding-bottom: 8px;
                     spacing: 16px;
-                    Text {
+                    TabularText {
                         min-width: data.twelve ? 104px : 76px;
+                        horizontal-stretch: 0;
                         text: data.time;
                         font-size: data.twelve ? 20px : 24px;
                         font-weight: 450;
-                        letter-spacing: data.twelve ? 0px : 1.1px;
-                        color: data.on ? Pal.text : Pal.text2;
-                        vertical-alignment: center;
+                        letter-spacing: data.twelve ? 0px : -0.3px;
+                        ink: data.on ? Pal.text : Pal.text2;
+                        horizontal-alignment: left;
                     }
                     VerticalLayout {
                         alignment: center;

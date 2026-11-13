@@ -335,6 +335,7 @@ pub fn run() -> Result<(), slint::PlatformError> {
         });
     }
     ui.global::<ChipLayout>().on_positions(chipflow::positions);
+    ui.global::<Glyphs>().on_split(chipflow::glyphs);
     apply_theme(&ctx);
     settings::apply_motion(&ctx);
     reliability::refresh_banner(&ctx);
