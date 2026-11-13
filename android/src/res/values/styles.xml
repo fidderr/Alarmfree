@@ -1,5 +1,0 @@
-<resources>
-    <!-- build_sentinel puts the window colour (sentinel.toml) into this theme. -->
-    <style name="AppTheme" parent="@android:style/Theme.DeviceDefault.NoActionBar">
-    </style>
-</resources>

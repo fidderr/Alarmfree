@@ -1,7 +1,10 @@
 #!/bin/bash
 # AlarmFree Slint: the copy of AlarmFree whose UI is Slint, with no WebView.
-# Cargo builds libalarmfree.so, then mobile-sentinel's build_sentinel wires the SDK's Kotlin,
-# manifest parts and assets into the Gradle project in android/ and Gradle builds the APK.
+# Cargo builds libalarmfree.so, then mobile-sentinel's build_sentinel (generate = true in
+# sentinel.toml) writes the whole Gradle project into target/sentinel-android/, wires the SDK's
+# Kotlin, manifest parts and assets into it and Gradle builds the APK. The app keeps no android/ folder.
+# A release build runs R8 and the Android Gradle plugin strips the library; the unstripped copy
+# (for crash symbols) is build/libmain.so.unstripped.
 #
 # Usage:
 #   ./build.sh                      debug APK
@@ -55,35 +58,22 @@ esac
 echo "=== [1/3] Building libalarmfree.so ($TARGET, $MODE) ==="
 cargo build --lib --target "$TARGET" ${CARGO_FLAGS[@]+"${CARGO_FLAGS[@]}"}
 
-# The Gradle project takes the native library from build/jniLibs, the Java source from
-# android/src/java, and the manifest and theme from app/src/main.
+# Named main: the manifest's NativeActivity and the SDK's Kotlin load the library by that name
+# (SentinelBridge), also for what runs without the UI (a ring, a restart after a boot).
 rm -rf build/jniLibs
-mkdir -p "build/jniLibs/$ABI" android/app/src/main/res/values
-# Named main: the SDK's Kotlin loads the library by that name (SentinelBridge), also for what runs
-# without the UI (a ring, a restart after a boot).
+mkdir -p "build/jniLibs/$ABI"
 cp "target/$TARGET/$MODE/libalarmfree.so" "build/jniLibs/$ABI/libmain.so"
-cp android/src/AndroidManifest.template.xml android/app/src/main/AndroidManifest.xml
-cp android/src/res/values/styles.xml android/app/src/main/res/values/styles.xml
+cp "target/$TARGET/$MODE/libalarmfree.so" build/libmain.so.unstripped
 
-# build_sentinel writes this machine's SDK paths into these two files; put them back after.
-mkdir -p build
-cp android/settings.gradle build/settings.gradle.orig
-cp android/app/build.gradle.kts build/app.build.gradle.kts.orig
-restore() {
-  cp build/settings.gradle.orig android/settings.gradle
-  cp build/app.build.gradle.kts.orig android/app/build.gradle.kts
-}
-trap restore EXIT
-
-echo "=== [2/3] Wiring mobile-sentinel + assets + icon, and Gradle ==="
+echo "=== [2/3] Generating the Android project, wiring mobile-sentinel + assets + icon, and Gradle ==="
 cargo run --quiet --manifest-path "$SENTINEL_MANIFEST" --bin build_sentinel -- \
-  --project android ${SENTINEL_FLAGS[@]+"${SENTINEL_FLAGS[@]}"}
+  ${SENTINEL_FLAGS[@]+"${SENTINEL_FLAGS[@]}"}
 
 if [ "$MODE" = debug ]; then
-  OUT_REL=android/app/build/outputs/apk/debug/app-debug.apk
+  OUT_REL=target/sentinel-android/app/build/outputs/apk/debug/app-debug.apk
 else
-  OUT_REL=android/app/build/outputs/apk/release/app-release.apk
-  [ -f "$OUT_REL" ] || OUT_REL=android/app/build/outputs/apk/release/app-release-unsigned.apk
+  OUT_REL=target/sentinel-android/app/build/outputs/apk/release/app-release.apk
+  [ -f "$OUT_REL" ] || OUT_REL=target/sentinel-android/app/build/outputs/apk/release/app-release-unsigned.apk
 fi
 mkdir -p build
 cp "$OUT_REL" "build/alarmfree-slint-$MODE.apk"

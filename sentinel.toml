@@ -1,13 +1,21 @@
 # AlarmFree — mobile-sentinel build configuration
 # Used by: build_sentinel (run via ./build.sh, with optional "workspace" flag for local dev)
 #
-# The app's package name is set in android/app/build.gradle.kts (applicationId
-# com.fidderr.alarmfree.slint): this copy installs next to the original, never to Play.
+# build_sentinel writes the whole Gradle project into target/sentinel-android/ on every run: this
+# app keeps no android/ folder. It is a NativeActivity app (Slint draws in it), so the manifest is
+# generated too. The package name is not the original's: this copy installs next to it, never to Play.
 
 [android]
-activity = "com.fidderr.alarmfree.slint.MainActivity"
-# The hand-made Gradle project of this app (a NativeActivity that Slint draws in).
-project = "android"
+generate = true
+application_id = "com.fidderr.alarmfree.slint"
+label = "AlarmFree Slint"
+version_code = 1
+version_name = "0.4.1"
+native_lib = "main"
+# build.sh stages libalarmfree.so here as <abi>/libmain.so (the SDK's Kotlin loads it by that name).
+jni_libs = "build/jniLibs"
+# A copy for comparing, never for Play: a release build is signed with the debug key, so it installs.
+release_debug_signing = true
 icon = "assets/icon.webp"
 # The picture's own background, so launchers can give it any shape without a box in it.
 icon_background = "F7F7F7"

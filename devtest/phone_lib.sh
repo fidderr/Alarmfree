@@ -6,7 +6,7 @@ S=bb741d88
 OUT=/c/Git/alarmfree-slint/devtest-out/phone/design
 WOUT=C:/Git/alarmfree-slint/devtest-out/phone/design
 O=com.fidderr.alarmfree; OA=dev.dioxus.main.MainActivity
-L=com.fidderr.alarmfree.slint; LA=com.fidderr.alarmfree.slint.MainActivity
+L=com.fidderr.alarmfree.slint; LA=android.app.NativeActivity
 sh() { adb -s $S shell "$@" | tr -d '\r'; }
 focus() { sh dumpsys window | grep mCurrentFocus; }
 ok() { focus | grep -Eq 'com\.fidderr\.alarmfree(\.slint)?/'; }

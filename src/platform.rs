@@ -16,7 +16,7 @@ use crate::models::{AlarmOutcome, Locale};
 
 /// Fully-qualified name of the entry activity (a NativeActivity). The same value is in
 /// `sentinel.toml`, for the Android manifest.
-const ALARMFREE_ACTIVITY_FQCN: &str = "com.fidderr.alarmfree.slint.MainActivity";
+const ALARMFREE_ACTIVITY_FQCN: &str = "android.app.NativeActivity";
 
 /// Notification channel id for the firing FGS notification.
 pub const FOREGROUND_CHANNEL_ID: &str = "alarmfree_firing";
