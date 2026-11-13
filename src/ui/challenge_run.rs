@@ -15,7 +15,7 @@ use crate::challenges::memory::{self, DisplayStep, MemoryState, Phase, Tap};
 use crate::challenges::reaction::{Event as ReactionEvent, ReactionGame, POLL_MS};
 use crate::challenges::{
     fraction, idle_left_percent, prepare, typing, Challenge, ChallengeToRun, CELEBRATION_MS,
-    FALLBACK_HOLDS, FALLBACK_HOLD_MS, IDLE_LIMIT_SECS, SCAN_QUIET_SECS,
+    FALLBACK_HOLDS, FALLBACK_HOLD_MS, IDLE_LIMIT_SECS, SCAN_CAMERA_SECS,
 };
 use crate::i18n::t;
 use crate::models::{ChallengeSetup, ChallengeSolve, ChallengeType};
@@ -82,8 +82,8 @@ pub struct RunState {
     celebrating: bool,
     idle_secs: u32,
     idle_limit: u32,
-    scan_quiet: u32,
-    scanning_secs: u32,
+    /// How long the camera may stay up (see `SCAN_CAMERA_SECS`).
+    scan_limit: u32,
     last_shake: i32,
     last_steps: i32,
     seq: i32,
@@ -154,8 +154,7 @@ fn begin(ctx: &Rc<Ctx>, mode: Mode, challenges: Vec<ChallengeToRun>) {
         celebrating: false,
         idle_secs: 0,
         idle_limit: crate::platform::shortened("idle_secs", IDLE_LIMIT_SECS),
-        scan_quiet: crate::platform::shortened("scan_quiet_secs", SCAN_QUIET_SECS),
-        scanning_secs: 0,
+        scan_limit: crate::platform::shortened("scan_camera_secs", SCAN_CAMERA_SECS),
         last_shake: mobile_sentinel::sensors::shake_count(),
         last_steps: mobile_sentinel::sensors::step_count(),
         seq: 0,
@@ -264,7 +263,6 @@ pub fn touched(ctx: &Rc<Ctx>) {
 
 #[derive(Default)]
 struct Tick {
-    long_scan: Option<bool>,
     idle: bool,
 }
 
@@ -272,19 +270,12 @@ fn clock_tick(ctx: &Rc<Ctx>) {
     let tick = with_run(ctx, |run, ui| {
         let mut tick = Tick::default();
         let screen = ui.global::<Run>();
+        // The camera keeps its own limit and closes itself; the idle limit starts again after.
         if scanner_open() {
             run.idle_secs = 0;
-            run.scanning_secs += 1;
             screen.set_idle_left(100);
-            if run.scanning_secs == run.scan_quiet {
-                tick.long_scan = Some(true);
-            }
             return tick;
         }
-        if run.scanning_secs >= run.scan_quiet {
-            tick.long_scan = Some(false);
-        }
-        run.scanning_secs = 0;
         let shakes = mobile_sentinel::sensors::shake_count();
         let steps = mobile_sentinel::sensors::step_count();
         if shakes != run.last_shake || steps != run.last_steps {
@@ -305,18 +296,6 @@ fn clock_tick(ctx: &Rc<Ctx>) {
         return;
     };
     let id = ring_id(ctx);
-    if let (Some(long), Some(id), Some(kit)) = (
-        tick.long_scan,
-        id.as_deref(),
-        crate::platform::alarm_kit_optional(),
-    ) {
-        let instance = mobile_sentinel::InstanceId::new(id.to_owned());
-        let _ = if long {
-            kit.resume(&instance)
-        } else {
-            kit.pause(&instance)
-        };
-    }
     if tick.idle {
         // Back to the ringing: AlarmKit brings the sound back.
         abort(ctx);
@@ -1025,16 +1004,17 @@ pub fn scan_tap(ctx: &Rc<Ctx>) {
         }
         *state = 1;
         ui.global::<Run>().set_scan_state(1);
-        Some(seq)
+        Some((seq, run.scan_limit))
     })
     .flatten();
-    let Some(token) = token else {
+    let Some((token, limit)) = token else {
         return;
     };
-    // Blocks until the scanner is done.
+    // Blocks until the scanner is done: a code, Back, or its time limit.
     std::thread::spawn(move || {
         SCANNER_OPEN.store(true, Ordering::Relaxed);
-        let result = mobile_sentinel::scanner::scan();
+        let result =
+            mobile_sentinel::scanner::scan_for(std::time::Duration::from_secs(limit.into()));
         SCANNER_OPEN.store(false, Ordering::Relaxed);
         let scanned = result.unwrap_or_default();
         let _ = slint::invoke_from_event_loop(move || {

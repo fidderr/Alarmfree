@@ -5,7 +5,7 @@ use std::rc::Rc;
 
 use slint::{ComponentHandle, Model};
 
-use super::{Ctx, Ed, MainWindow};
+use super::{Ctx, Ed, MainWindow, Run};
 
 fn texts<T: Clone + 'static>(model: impl Model<Data = T>, f: impl Fn(T) -> String) -> Vec<String> {
     model.iter().map(f).collect()
@@ -50,6 +50,10 @@ fn snapshot(ui: &MainWindow) -> String {
         "ring_snooze_text": ui.get_ring_snooze_text().as_str(),
         "toast_visible": ui.get_toast_visible(),
         "toast_text": ui.get_toast_text().as_str(),
+        "run_active": ui.global::<Run>().get_active(),
+        "run_idle_left": ui.global::<Run>().get_idle_left(),
+        "scan_state": ui.global::<Run>().get_scan_state(),
+        "scanner_open": super::challenge_run::scanner_open(),
     });
     value.to_string()
 }
@@ -110,6 +114,11 @@ pub fn run(ctx: &Rc<Ctx>, command: &str) -> String {
     match command {
         "screen" => screen(&ui),
         "snapshot" => snapshot(&ui),
+        // The scan challenge's button: it needs the run, not just the window.
+        "press:scan" => {
+            super::challenge_run::scan_tap(ctx);
+            "OK".to_owned()
+        }
         _ => match command.strip_prefix("press:") {
             Some(rest) => {
                 let (name, arg) = rest.split_once(':').unwrap_or((rest, ""));

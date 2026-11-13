@@ -144,9 +144,10 @@ fn prepare_one(engine: &mut ChallengeEngine, setup: &ChallengeSetup) -> Challeng
 /// ringing again.
 pub const IDLE_LIMIT_SECS: u32 = 60;
 
-/// The camera may be up this long before the alarm rings again, camera or no camera. Getting to a
-/// code in another room takes a while, but opening it and going back to sleep is no way out.
-pub const SCAN_QUIET_SECS: u32 = 180;
+/// The camera stays up at most this long, then closes itself and the scan challenge's screen is
+/// back, where the idle limit runs again: a tap on Scan in time opens it once more. Opening the
+/// camera and going back to sleep is no way out.
+pub const SCAN_CAMERA_SECS: u32 = IDLE_LIMIT_SECS;
 
 /// A solved challenge stays on screen this long before the next one starts.
 pub const CELEBRATION_MS: u64 = 1800;
