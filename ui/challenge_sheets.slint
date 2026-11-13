@@ -179,22 +179,26 @@ export component AddChallengeSheet inherits Rectangle {
         done-quiet: true;
         finish => { root.back(); }
         close => { root.back(); }
-        for type[i] in Cfg.types: Rectangle {
-            min-height: 60px;
-            Rectangle {
-                y: parent.height - 1px;
-                height: 1px;
-                background: Pal.line;
+        VerticalLayout {
+            spacing: 0px;
+            for type[i] in Cfg.types: Rectangle {
+                min-height: 60px;
+                vertical-stretch: 0;
+                Rectangle {
+                    y: parent.height - 1px;
+                    height: 1px;
+                    background: Pal.line;
+                }
+                VerticalLayout {
+                    padding-top: 8px;
+                    padding-bottom: 8px;
+                    alignment: center;
+                    spacing: 2px;
+                    Text { text: type.name; font-size: 14px; font-weight: 500; color: Pal.text; }
+                    Text { text: type.desc; font-size: 12px; line-height-factor: 1.14; color: Pal.text2; wrap: word-wrap; }
+                }
+                TouchArea { clicked => { Cfg.add(i); } }
             }
-            VerticalLayout {
-                padding-top: 8px;
-                padding-bottom: 8px;
-                alignment: center;
-                spacing: 2px;
-                Text { text: type.name; font-size: 14px; font-weight: 500; color: Pal.text; }
-                Text { text: type.desc; font-size: 12px; line-height-factor: 1.14; color: Pal.text2; wrap: word-wrap; }
-            }
-            TouchArea { clicked => { Cfg.add(i); } }
         }
     }
 }

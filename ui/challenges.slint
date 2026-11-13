@@ -234,8 +234,8 @@ component TypingBody inherits VerticalLayout {
         min-height: 90px;
         vertical-stretch: 0;
         border-radius: 8px;
-        border-width: 1px;
-        border-color: Pal.line;
+        border-width: input.has-focus ? 2px : 1px;
+        border-color: input.has-focus ? Pal.accent : Pal.line;
         background: Pal.surface;
         input := TextInput {
             x: 12px;
@@ -321,7 +321,7 @@ component MemoryBody inherits VerticalLayout {
         color: Pal.accent;
         horizontal-alignment: center;
     }
-    Rectangle { height: 12px; }
+    Rectangle { height: 20px; }
     Rectangle {
         height: Run.cells.length > 0 ? ((Run.cells.length / Run.cols) * (root.cell-h + root.gap) - root.gap) : 0px;
         Rectangle {
@@ -444,6 +444,7 @@ component HoldBody inherits VerticalLayout {
             TouchArea { clicked => { Run.fallback-cancelled(); } }
         }
     }
+    Rectangle { height: 8px; }
     area := Rectangle {
         vertical-stretch: 1;
         border-radius: 20px;
@@ -528,7 +529,7 @@ component ReactionBody inherits VerticalLayout {
             animate width { duration: 40ms; }
         }
     }
-    Rectangle { height: 8px; }
+    Rectangle { height: 14px; }
     area := Rectangle {
         vertical-stretch: 1;
         border-radius: 20px;
@@ -664,12 +665,12 @@ export component RunScreen inherits Rectangle {
             padding-top: 40px + Insets.top;
             padding-bottom: 16px + Insets.bottom;
             HorizontalLayout {
-                height: 24px;
+                height: Run.practice ? 44px : 24px;
                 spacing: 8px;
                 Text { horizontal-stretch: 1; text: Run.progress; font-size: 14px; color: Pal.text2; vertical-alignment: center; overflow: elide; }
                 if Run.practice: Rectangle {
-                    min-width: 56px;
-                    Text { text: Run.exit-text; font-size: 14px; font-weight: 500; color: Pal.accent; }
+                    min-width: exit-label.preferred-width + 16px;
+                    exit-label := Text { text: Run.exit-text; font-size: 14px; font-weight: 500; color: Pal.accent; }
                     TouchArea { clicked => { Run.exit(); } }
                 }
                 if Run.total > 1: HorizontalLayout {
@@ -718,8 +719,8 @@ export component RunScreen inherits Rectangle {
                 }
             }
             if Run.can-fallback && !Run.celebrating: Rectangle {
-                height: 44px;
-                Text { text: Tr.t("challenge.fallback.link"); font-size: 14px; color: Pal.text2; }
+                height: 52px;
+                Text { y: 8px; height: 44px; text: Tr.t("challenge.fallback.link"); font-size: 14px; color: Pal.text2; horizontal-alignment: center; vertical-alignment: center; }
                 TouchArea { clicked => { Run.asking-fallback = true; } }
             }
         }
@@ -731,8 +732,15 @@ export component RunScreen inherits Rectangle {
     if Run.asking-fallback: Sheet {
         title: Tr.t("challenge.fallback.title");
         close => { Run.asking-fallback = false; }
-        Text { text: Tr.t("challenge.fallback.explain"); font-size: 14px; color: Pal.text2; wrap: word-wrap; }
-        PrimaryButton { quiet: true; text: Tr.t("action.cancel"); clicked => { Run.asking-fallback = false; } }
+        Text { text: Tr.t("challenge.fallback.explain"); font-size: 14px; line-height-factor: 1.22; color: Pal.text2; wrap: word-wrap; }
+        Rectangle {
+            height: 64px;
+            accessible-role: button;
+            accessible-label: Tr.t("action.cancel");
+            accessible-action-default => { Run.asking-fallback = false; }
+            Text { x: 0px; text: Tr.t("action.cancel"); font-size: 16px; color: Pal.text; vertical-alignment: center; height: parent.height; }
+            TouchArea { clicked => { Run.asking-fallback = false; } }
+        }
         PrimaryButton { text: Tr.t("challenge.fallback.confirm"); clicked => { Run.asking-fallback = false; Run.fallback-confirmed(); } }
     }
 }
