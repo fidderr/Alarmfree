@@ -222,8 +222,8 @@ locate_pill() {
 }
 tap_pill() { tap "$(px 72)" "$PILL_Y_PX"; }
 
-dev install -r "$ORIG_INSTALL" > /dev/null || { echo "install of the original failed"; exit 1; }
-dev install -r "$SLINT_INSTALL" > /dev/null || { echo "install of the Slint copy failed"; exit 1; }
+[ -n "${JANK_ONLY:-}" ] || dev install -r "$ORIG_INSTALL" > /dev/null || { echo "install of the original failed"; exit 1; }
+[ -n "${JANK_ONLY:-}" ] || dev install -r "$SLINT_INSTALL" > /dev/null || { echo "install of the Slint copy failed"; exit 1; }
 
 cold_start() { # pkg act -> median ms
   local pkg="$1" act="$2" times=() i t
@@ -350,12 +350,18 @@ frame_times() { # layer -> "present_ts delta_ms period_ms" per frame (period = t
 }
 
 scroll_frames() { # pkg act -> "frames janky p50 p90 p95 p99 period_ms" (ms between frames; janky > 1.5 x the vsync period)
-  local pkg="$1" act="$2" layer trial all="$OUT/$pkg.frames" y1 y2
+  local pkg="$1" act="$2" layer trial all y1 y2
+  all="$OUT/$pkg.frames"
   seed_alarms "$pkg" "$act"
   layer=$(layer_of "$pkg")
   echo "  layer: $layer" >&2
   shell dumpsys gfxinfo "$pkg" reset > /dev/null 2>&1
   : > "$all"
+  if [ -n "${PERFETTO_NAME:-}" ]; then # a trace of the same workload (JANK_ONLY runs)
+    dev shell perfetto -c - --txt -o "/data/misc/perfetto-traces/$PERFETTO_NAME.pftrace" < devtest/jank.pbtxt > "$OUT/perfetto.log" 2>&1 &
+    PERFETTO_PID=$!
+    sleep 3
+  fi
   # Swipes stay inside the list (the quick row and the banner above it do not scroll): from 70 dp
   # below the pill's centre to 82 % of the height (above the tab bar and the navigation bar), 1.2 s
   # each, so the finger moves for the whole swipe and the 127 frames read afterwards are all of it.
@@ -366,6 +372,11 @@ scroll_frames() { # pkg act -> "frames janky p50 p90 p95 p99 period_ms" (ms betw
     swipe $((W / 2)) $y2 $((W / 2)) $y1 1200
     frame_times "$layer" | awk '$2 < 100' >> "$all"
   done
+  if [ -n "${PERFETTO_NAME:-}" ]; then
+    wait "$PERFETTO_PID"
+    dev pull "/data/misc/perfetto-traces/$PERFETTO_NAME.pftrace" "$OUT/$PERFETTO_NAME.pftrace" > /dev/null
+    shell rm -f "/data/misc/perfetto-traces/$PERFETTO_NAME.pftrace"
+  fi
   shell dumpsys gfxinfo "$pkg" > "$OUT/$pkg.gfxinfo"
   # The last 127 frames are read after every swipe, so a frame can be read twice: one per timestamp.
   sort -u -k1,1 "$all" | awk '{ print $2, $3 }' | sort -n | awk '
@@ -394,6 +405,17 @@ measure_app() { # prefix pkg act apk -> sets <prefix>_* variables
   reset_pkg "$pkg" "$apk"
 }
 
+# JANK_ONLY=orig|slint: only the scrolling measurement of one app (installed already), nothing else.
+if [ -n "${JANK_ONLY:-}" ]; then
+  if [ "$JANK_ONLY" = slint ]; then P=$SLINT_PKG; A=$SLINT_ACT; else P=$ORIG_PKG; A=$ORIG_ACT; fi
+  echo "display: $(shell dumpsys display | grep -m1 -oE 'renderFrameRate [0-9.]+')" >&2
+  [ -n "${JANK_FRESH:-}" ] && { reset_pkg "$P" "${JANK_APK:?}"; first_run "$P" "$A"; }
+  echo "frames janky p50 p90 p95 p99 period_ms: $(scroll_frames "$P" "$A")"
+  echo "gfxinfo: $(gfx_summary "$P")"
+  [ -n "${JANK_FRESH:-}" ] && reset_pkg "$P" "$JANK_APK" # the seeded alarms ring in 5 minutes: gone
+  stop_all
+  exit 0
+fi
 echo "device: $SERIAL ($(shell getprop ro.product.cpu.abi), Android $(shell getprop ro.build.version.release)), ${W}x${H} at $DENS dpi, $RUNS cold starts each" >&2
 echo "display: $(shell dumpsys display | grep -m1 -oE 'renderFrameRate [0-9.]+')" >&2
 echo "measuring the original..." >&2
