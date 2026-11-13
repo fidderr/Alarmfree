@@ -2,39 +2,63 @@ name: CI
 
 on:
   push:
-    branches: [main, hardening, alarm-reliability-qol]
+    branches: [main, dioxus]
   pull_request:
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
 
+# The app builds against the SDK next to it (`../mobile-sentinel` in Cargo.toml): both repos are
+# checked out side by side. The SDK's branch main is what the app is built against.
 jobs:
   host:
     name: fmt, clippy, test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          path: Alarmfree
+      - uses: actions/checkout@v5
+        with:
+          repository: fidderr/mobile-sentinel
+          ref: main
+          path: mobile-sentinel
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-
       - uses: Swatinem/rust-cache@v2
-      - name: Dioxus desktop build deps
-        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libxdo-dev libayatana-appindicator3-dev
+        with:
+          workspaces: Alarmfree
+      # Slint's desktop build (the tests and the desktop binary) needs these to compile.
+      - name: Slint desktop build deps
+        run: sudo apt-get update && sudo apt-get install -y libfontconfig1-dev libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libx11-dev libxcb1-dev
       - run: cargo fmt --check
+        working-directory: Alarmfree
       - run: cargo clippy --all-targets -- -D warnings
+        working-directory: Alarmfree
       - run: cargo test
+        working-directory: Alarmfree
 
   android:
     name: android cross-check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          path: Alarmfree
+      - uses: actions/checkout@v5
+        with:
+          repository: fidderr/mobile-sentinel
+          ref: main
+          path: mobile-sentinel
       - uses: dtolnay/rust-toolchain@stable
         with:
+          components: clippy
           targets: aarch64-linux-android
-
       - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: Alarmfree
       # rusqlite's bundled SQLite is C, so the build script needs the NDK's
       # clang. The ubuntu runner ships an NDK; API 31 matches minSdk.
       - name: Point cc at the preinstalled NDK
@@ -42,7 +66,7 @@ jobs:
           BIN="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
           test -x "$BIN/aarch64-linux-android31-clang"
           echo "CC_aarch64_linux_android=$BIN/aarch64-linux-android31-clang" >> "$GITHUB_ENV"
+          echo "CXX_aarch64_linux_android=$BIN/aarch64-linux-android31-clang++" >> "$GITHUB_ENV"
           echo "AR_aarch64_linux_android=$BIN/llvm-ar" >> "$GITHUB_ENV"
-      # dx switches on the mobile renderer for an Android build; plain cargo has to be told.
-      - run: cargo check --target aarch64-linux-android --features dioxus/mobile
-      - run: cargo clippy --target aarch64-linux-android --features dioxus/mobile -- -D warnings
+      - run: cargo clippy --lib --target aarch64-linux-android -- -D warnings
+        working-directory: Alarmfree
