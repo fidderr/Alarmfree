@@ -12,6 +12,8 @@ NAME=${1:-full}
 # A build that fails leaves the last APK where it was: this would then test something older.
 built=$(stat -c %Y "$APK") || exit 1
 for repo in . ../mobile-sentinel; do
+    # A snapshot copy of devtest/ (not a repository) has nothing to compare.
+    git -C "$repo" rev-parse --git-dir > /dev/null 2>&1 || continue
     if [ "$built" -lt "$(git -C "$repo" log -1 --format=%ct)" ]; then
         echo "$APK is older than the last commit in $repo: build first"
         exit 1
@@ -54,8 +56,9 @@ START=$SECONDS
 # The big screens first: next to the other emulator's tour of every panel, late in its run, Android
 # 16 starved to the point of its own system UI freezing.
 # The restarts with a PIN last: Android 12 is done by then, and they stay under a minute.
-FIRST=big_screens LAST="s13d s13b s13" SKIP=$OLDEST_ONLY run_on "${AVD_NEW:-af36}" "${PORT_NEW:-5554}" &
+# LEG=af31 or LEG=af36 runs one of the two (the other can run from a snapshot copy meanwhile).
+[ "${LEG:-}" = af31 ] || FIRST=big_screens LAST="s13d s13b s13" SKIP=$OLDEST_ONLY run_on "${AVD_NEW:-af36}" "${PORT_NEW:-5554}" &
 # Android 12's graphics on the host's GPU crashed the emulator now and then, in the middle of a run.
-EMULATOR_GPU=swiftshader_indirect SKIP=$NEWEST_ONLY run_on af31 5556 &
+[ "${LEG:-}" = af36 ] || EMULATOR_GPU=swiftshader_indirect SKIP=$NEWEST_ONLY run_on af31 5556 &
 wait
 echo "all of it in $(((SECONDS - START) / 60)) min $(((SECONDS - START) % 60)) s"

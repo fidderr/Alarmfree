@@ -951,6 +951,8 @@ s29() {
 # A panel is open when the snapshot names one.
 sheet_open() { [ "$(sn home_sheet)" != None ] && [ -n "$(sn home_sheet)" ]; }
 sheet_closed() { [ "$(sn home_sheet)" = None ]; }
+preview_up() { [ "$(sn ed_preview)" = true ]; }
+preview_down() { [ "$(sn ed_preview)" = false ]; }
 editor_sheet_open() { [ "$(sn ed_sheet)" != None ] && [ -n "$(sn ed_sheet)" ]; }
 editor_sheet_closed() { [ "$(sn ed_sheet)" = None ]; }
 on_editor() { wait_for "${1:-6}" on_screen_no 1; }
@@ -1065,9 +1067,12 @@ s31() {
 
 # The trash can in the editor's header: a picture with no name, at the right end of the header.
 tap_trash() {
-    local w s
+    local w s y
     read -r w _ s <<< "$(window_size)"
-    dev input tap "$(awk -v w="$w" -v s="$s" 'BEGIN { printf "%d", w - 22 * s }')" "$(awk -v s="$s" 'BEGIN { printf "%d", 56 * s }')"
+    # On the title's line: its height depends on the status bar.
+    y=$(where "$(sn ed_title)" | cut -d' ' -f2)
+    case "$y" in '' | *[!0-9]*) y=$(awk -v s="$s" 'BEGIN { printf "%d", 56 * s }') ;; esac
+    dev input tap "$(awk -v w="$w" -v s="$s" 'BEGIN { printf "%d", w - 22 * s }')" "$y"
     sleep 0.5
 }
 
@@ -1120,10 +1125,14 @@ s32() {
     wait_for 5 sound_off
     dev rm -f /sdcard/Download/alarmfree-rings.txt
     start_app
-    wait_for 8 page_is_up
-    open_reliability
+    wait_for 20 page_is_up
+    # The window is up before its bottom bar has painted, on a loaded emulator.
+    # The window comes back on the screen it was left on: the one the ring was started from.
+    on_screen_no 4 || { on_screen Settings 15 || screenshot s32_no_settings; open_reliability; }
     on_screen "Save the record of how fast alarms rang" 8
-    tap "Save the record of how fast alarms rang" 0 0.5
+    # Under the Test alarm button until the screen is scrolled.
+    sheet_scroll
+    tap_scrolling "Save the record of how fast alarms rang"
     sleep 0.5
     [ "$(dev cat /sdcard/Download/alarmfree-rings.txt | grep -c ' sound ')" -ge 1 ] && record=yes
     dev rm -f /sdcard/Download/alarmfree-rings.txt
@@ -1313,6 +1322,8 @@ s37() {
     }
     local problems=""
     swipe_card
+    # The first touch in the first seconds of a window can be lost: once more.
+    is_there "Skip the next ring" || swipe_card
     screenshot s37_swiped
     is_there "Skip the next ring" || problems="$problems; did not move: $(texts_of)"
     is_there Delete || problems="$problems; delete not in view"
@@ -2539,7 +2550,14 @@ s55() {
     is_there "Turn off" && tap "Turn off" 0 0.3
     on_screen SCAN 8 || problems="$problems; no scan button after Home"
     tap SCAN 0 0.3
-    wait_for 8 scanner_on_top || problems="$problems; the camera does not open after Home"
+    # The process lives through Home on Android 14 and later: a tap while the camera that Home closed is
+    # still reporting back is ignored (it is still scanning for that long). A person taps again.
+    wait_for 3 scanner_on_top || { sleep 1; tap SCAN 0 0.3; }
+    wait_for 8 scanner_on_top || {
+        problems="$problems; the camera does not open after Home"
+        note "after Home: focus=$(focused_window | cut -c1-90) scan_state=$(sn scan_state) screen=$(screen_no) texts=$(texts_of | head -c 160)"
+        screenshot s55_after_home
+    }
     # What the scanner does with a code, without a code to show an emulator's camera.
     as_app "echo a-code > /data/user/0/$PKG/files/sentinel_scan_result.txt; echo a-code > $DATA/files/sentinel_scan_result.txt"
     ended() { state_is a scheduled && sound_off; }

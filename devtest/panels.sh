@@ -16,7 +16,23 @@ panel_problem() {
     echo "$PANEL_N  $1" >> "$OUT/panels${VARIANT:-}/problems.txt"
 }
 
+# What the screen under a panel has that can be on or off: a panel's scrim leaves it in the element
+# tree but a touch on it only closes the panel. Taken at every stop without a panel.
+PANEL_BASELINE=""
+sheet_checkables() {
+    local line names
+    # By the text alone: what is under the panel may have moved or switched since.
+    names=$(printf '%s
+' "$PANEL_BASELINE" | cut -d'|' -f1)
+    checkables | while IFS= read -r line; do
+        printf '%s
+' "$names" | grep -qxF -- "${line%%|*}" || printf '%s
+' "$line"
+    done
+}
+
 picture() {
+    any_sheet_up || PANEL_BASELINE=$(checkables)
     PANEL_N=$((PANEL_N + 1))
     PANEL_LAST="$OUT/panels${VARIANT:-}/$(printf %03d "$PANEL_N")_$1.png"
     adb_ exec-out screencap -p > "$PANEL_LAST"
@@ -30,7 +46,7 @@ panel_check() {
 # Every stop of what is on top: a check and a picture, and the next one by touch. A swipe that
 # changes nothing is the end of what scrolls.
 look_through() { # name
-    local name=$1 stop=0 found prev="" size w h
+    local name=$1 stop=0 moved=0 found prev="" size w h
     size=$(window_size)
     w=${size%% *}
     size=${size#* }
@@ -45,18 +61,23 @@ look_through() { # name
             PANEL_N=$((PANEL_N - 1))
             break
         fi
+        [ -z "$prev" ] || moved=1
         prev=$PANEL_LAST
         dev input swipe $((w / 2)) $((h * 75 / 100)) $((w / 2)) $((h * 30 / 100)) 300
         sleep 0.5
     done
-    # Back to the top, for what comes next.
-    dev input swipe $((w / 2)) $((h * 25 / 100)) $((w / 2)) $((h * 85 / 100)) 200
-    dev input swipe $((w / 2)) $((h * 25 / 100)) $((w / 2)) $((h * 85 / 100)) 200
+    # Back to the top, for what comes next: only when it moved, and from inside what moved (a drag
+    # from the scrim of a panel closes it).
+    if [ "$moved" = 1 ]; then
+        dev input swipe $((w / 2)) $((h * 40 / 100)) $((w / 2)) $((h * 90 / 100)) 200
+        dev input swipe $((w / 2)) $((h * 40 / 100)) $((w / 2)) $((h * 90 / 100)) 200
+    fi
     sleep 0.3
 }
 
 # The things on screen that are on or off: "text|x|y|state|role", one per line.
-checkables() {
+checkables() { checkables_raw | tr -d '\r'; }
+checkables_raw() {
     ui texts | python -I -c '
 import json, sys
 seen = set()
@@ -71,7 +92,7 @@ for e in json.loads(sys.stdin.read()):
 # Every choice and switch on screen does what it does: a switch goes over and back, a choice takes.
 # Then it is as it was.
 try_chips() { # name
-    local name=$1 line text x y was now role before=$(checkables)
+    local name=$1 line text x y was now role before=$(sheet_checkables | grep -v '^What is this?|')
     [ -n "$before" ] || return 0
     while IFS='|' read -r text x y was role; do
         [ -n "$text" ] || continue
@@ -93,7 +114,7 @@ try_chips() { # name
     while IFS='|' read -r text x y was role; do
         [ "$was" = true ] && [ "$role" != Switch ] && { dev input tap "$x" "$y"; sleep 0.15; }
     done <<< "$before"
-    [ "$(checkables | sort)" = "$(echo "$before" | sort)" ] ||
+    [ "$(sheet_checkables | grep -v '^What is this?|' | sort)" = "$(echo "$before" | sort)" ] ||
         panel_problem "$name: the choices do not go back"
 }
 
