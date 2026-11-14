@@ -71,7 +71,9 @@ Corrected: the template said "we plan to"; this lists what was actually done, in
   sends it from their own email app. It can attach a diagnostic log that the app keeps on the phone (events and
   times, never alarm names or notes) and, if the user chooses, their alarm setup. After a crash or a missed alarm
   the app offers to send a report once.
-- Made the screens work with large text and screen readers: [list what the accessibility check changed].
+- Made the screens work better with large text and screen readers: the ring screen buttons, the number keys and the
+  memory cells have screen reader labels, and at a large font size the repeat presets in the editor and the
+  next-alarm title on Home no longer cut their text short.
 - Replaced the store screenshots with ones that show the features, each with a short caption, in five languages.
 - Not done on purpose: A/B testing and remote performance monitoring, because both need analytics, which would break
   the promise of no tracking.

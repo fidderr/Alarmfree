@@ -7,6 +7,13 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-14
+
+The app is now the Slint version (drawn natively with Skia in a NativeActivity, no WebView), under
+the Play app's id `com.fidderr.alarmfree`: it installs as an update over 0.4.1 (versionCode 12400)
+and keeps the alarms, settings, own sounds and history. Built on mobile-sentinel 0.6.0 from this
+workspace (path dependency until that crate release is published).
+
 ### Added
 
 - A short intro of three cards (what the app does, the challenges, why the setup matters) before the
@@ -30,13 +37,8 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 ### Changed
 
 - The privacy page describes reports, and no longer lists an internet permission the app does not have.
-
-## [0.5.0] - 2026-11-14
-
-The app is now the Slint version (drawn natively with Skia in a NativeActivity, no WebView), under
-the Play app's id `com.fidderr.alarmfree`: it installs as an update over 0.4.1 (versionCode 12400)
-and keeps the alarms, settings, own sounds and history. Built on mobile-sentinel from this
-workspace (path dependency until the next crate release).
+- At a large font size (1.3), the repeat presets in the editor and the next-alarm title on Home no longer cut
+  their text short.
 
 ### Fixed
 
