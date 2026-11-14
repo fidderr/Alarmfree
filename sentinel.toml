@@ -3,14 +3,14 @@
 #
 # build_sentinel writes the whole Gradle project into target/sentinel-android/ on every run: this
 # app keeps no android/ folder. It is a NativeActivity app (Slint draws in it), so the manifest is
-# generated too. The package name is not the original's: this copy installs next to it, never to Play.
+# generated too. The package name is the Play app's: this build replaces the Dioxus one (0.4.1, versionCode 12356) as an update.
 
 [android]
 generate = true
-application_id = "com.fidderr.alarmfree.slint"
-label = "AlarmFree Slint"
-version_code = 1
-version_name = "0.4.1"
+application_id = "com.fidderr.alarmfree"
+label = "AlarmFree"
+version_code = 12400
+version_name = "0.5.0"
 native_lib = "main"
 # build.sh stages libalarmfree.so here as <abi>/libmain.so (the SDK's Kotlin loads it by that name).
 jni_libs = "build/jniLibs"

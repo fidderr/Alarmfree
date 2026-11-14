@@ -9,7 +9,7 @@
 export MSYS_NO_PATHCONV=1
 ADB="${ADB:-$LOCALAPPDATA/Android/Sdk/platform-tools/adb.exe}"
 SERIAL="${SERIAL:-emulator-5554}"
-PKG=com.fidderr.alarmfree.slint
+PKG=com.fidderr.alarmfree
 ACTIVITY=android.app.NativeActivity
 OUT="${OUT:-devtest-out}"
 mkdir -p "$OUT"

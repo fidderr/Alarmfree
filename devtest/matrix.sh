@@ -1791,7 +1791,7 @@ s48() {
     # Alarms to a file: only the one alarm in it, under today's name.
     go_tab Settings
     wait_for 5 on_screen_no 3
-    tap_has "Back up" 0 0.6
+    tap_scrolling "Back up"
     on_screen "Save to a file" 4
     tap "Save to a file" 0 1
     file=$(dev ls /sdcard/Download/ | grep -m1 '^alarmfree-')
@@ -1799,7 +1799,7 @@ s48() {
     [ "$(dev cat "/sdcard/Download/$file" | grep -c '"time_hour"')" -ge 1 ] || problems="$problems; no alarm in the file"
     # And back from it, as a second one.
     wait_for 6 on_screen_no 3
-    tap_has "Back up" 0 0.6
+    tap_scrolling "Back up"
     on_screen "Add alarms from a file" 4
     tap "Add alarms from a file" 0 1
     if picker_tap "$file"; then
