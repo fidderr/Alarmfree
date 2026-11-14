@@ -191,7 +191,13 @@ screen_off() {
     SCREEN_WENT_OFF=1
 }
 go_home() { dev input keyevent KEYCODE_HOME; }
-screenshot() { adb_ exec-out screencap -p > "$OUT/$1${VARIANT:-}.png"; }
+# On a phone a picture is taken only while AlarmFree has the focus: never the owner's file picker,
+# notification shade or another app.
+screen_may_be_taken() { on_emulator || focus_in_app; }
+screenshot() {
+    screen_may_be_taken || { note "no picture $1: AlarmFree is not in front"; return 0; }
+    adb_ exec-out screencap -p > "$OUT/$1${VARIANT:-}.png"
+}
 
 # ---- The clock ----
 on_emulator() { case "$SERIAL" in emulator-*) return 0 ;; *) return 1 ;; esac; }

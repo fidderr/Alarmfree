@@ -47,6 +47,7 @@ picture() {
     baseline_update
     PANEL_N=$((PANEL_N + 1))
     PANEL_LAST="$OUT/panels${VARIANT:-}/$(printf %03d "$PANEL_N")_$1.png"
+    screen_may_be_taken || { note "no picture $1: AlarmFree is not in front"; return 0; }
     adb_ exec-out screencap -p > "$PANEL_LAST"
 }
 
