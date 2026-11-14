@@ -920,20 +920,29 @@ go_tab() { # Alarms / History / Settings; a touch in the first seconds of the wi
     return 1
 }
 
-# Scroll the panel on top (or the screen) up by about a screen, as a finger does.
-# Relative to the window, not 1800 px: on a 1920 px window that starts in the gesture area at the
-# bottom, where an upward swipe is the Home gesture and takes the app away.
-swipe_ys() { # from to, as percent of the height -> device pixels
-    local size w h
+# Scroll the panel on top (or the screen) up by about a screen, as a finger does: 1100 px, from
+# 1800 px as before, but from no lower than 80% of the window. On a window of 1920 px 1800 is in the
+# gesture area at the bottom, where an upward swipe is the Home gesture and takes the app away; and
+# a shorter swipe than 1100 px leaves rows of the editor below the window.
+swipe_ys() { # scroll | back -> x y x y in device pixels
+    local size w h from to
     size=$(window_size)
     w=$(echo "$size" | cut -d' ' -f1)
     h=$(echo "$size" | cut -d' ' -f2)
     case "$w$h" in *[!0-9]* | "") w=1080 h=1920 ;; esac
-    echo "$((w / 2)) $((h * $1 / 100)) $((w / 2)) $((h * $2 / 100))"
+    from=$((h * 80 / 100))
+    [ "$from" -le 1800 ] || from=1800
+    to=$((from - 1100))
+    [ "$to" -ge $((h * 4 / 100)) ] || to=$((h * 4 / 100))
+    if [ "$1" = back ]; then
+        echo "$((w / 2)) $to $((w / 2)) $from"
+    else
+        echo "$((w / 2)) $from $((w / 2)) $to"
+    fi
 }
 sheet_scroll() {
     # shellcheck disable=SC2046
-    dev input swipe $(swipe_ys 78 30) 400
+    dev input swipe $(swipe_ys scroll) 400
     sleep 0.8
 }
 # Scroll the panel until this exact text (the n-th, or L for the last) is on screen.
@@ -963,6 +972,6 @@ hide_keyboard() {
 }
 sheet_scroll_up() {
     # shellcheck disable=SC2046
-    dev input swipe $(swipe_ys 30 78) 400
+    dev input swipe $(swipe_ys back) 400
     sleep 0.8
 }
