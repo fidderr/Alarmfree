@@ -1365,7 +1365,8 @@ s38() {
     tap_has Theme 0 0.5
     wait_for 5 on_screen_no 5 || problems="$problems; no theme screen"
     screenshot s38_swatches
-    is_there "Choose your own colour" || problems="$problems; no swatches: $(texts_of)"
+    # The second row of swatches sits below the window on a screen with a navigation bar.
+    scroll_to "Choose your own colour" || problems="$problems; no swatches: $(texts_of)"
     # The swatches are pictures with no name: the third one is purple.
     press accent 2 0.5
     [ "$(sn pal_accent)" = "#b9a0ff" ] || problems="$problems; colour is $(sn pal_accent)"
@@ -1385,8 +1386,11 @@ s38() {
         *) problems="$problems; own sound not listed: $names" ;;
     esac
     press sound-rename "$(sound_row mytune)" 0.6
+    screenshot s38_rename_before
     set_field 0 Morning || problems="$problems; no field to rename in"
+    screenshot s38_rename_typed
     press sound-rename-done "" 0.6
+    screenshot s38_rename_done
     names=$(texts_of)
     case "$names" in
         *Morning*) ;;
