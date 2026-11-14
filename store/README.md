@@ -18,7 +18,7 @@ Everything Play Console asks for, ready to paste. Package name: `com.fidderr.ala
 
 To make them again after the app changes: build the debug APK, then
 `bash devtest/store_shots.sh` (screenshots, all languages, about 8 minutes on the af36 emulator) and
-`python store/make_graphics.py` (feature graphics).
+`python store/make_graphics.py` (feature graphics) and `python store/make_captions.py` (the screenshots with a caption each, in `screenshots/<language>/captioned/`: upload those).
 
 ## App content (Policy and programs → App content)
 
@@ -30,7 +30,7 @@ To make them again after the app changes: build the debug APK, then
 | Content rating | Category *Utility, Productivity, Communication or Other*; no to every question about violence, sexuality, language, drugs, gambling, user interaction, sharing location and digital purchases. Expected: Everyone / PEGI 3 |
 | Target audience | 13 and older (13-15, 16-17, 18+). Not under 13: that brings in the Families policy for nothing |
 | News app | No |
-| Data safety | **No** to "Does your app collect or share any of the required user data types?". Nothing leaves the phone: alarms, history, sounds and photos stay in the app's storage, the scanner (ZXing) and step counter work on the phone, there is no network code. With "No", Play skips the rest of the form |
+| Data safety | **No** to "Does your app collect or share any of the required user data types?". Nothing leaves the phone: alarms, history, sounds and photos stay in the app's storage, the scanner (ZXing) and step counter work on the phone, there is no network code. A bug report leaves the phone only when the user presses send in their own email app (the app transmits nothing itself), see `production-access-answers.md`, section Data safety. With "No", Play skips the rest of the form |
 | Government app, financial features, health | No |
 | Exact alarm | Yes, core functionality: Alarm clock |
 | Full-screen intent | Yes, core functionality: Alarm clock; pre-grant at install: Yes |
@@ -53,4 +53,4 @@ To make them again after the app changes: build the debug APK, then
 | `SYSTEM_ALERT_WINDOW` | Optional, brings the alarm screen up while the phone is in use. |
 | `ACTIVITY_RECOGNITION` | Only for the Steps challenge, when the user adds it. |
 | `CAMERA` | Only for the Scan challenge, when the user adds it. |
-| `INTERNET` | Needed by the built-in web view that draws the screens. No connections are made. |
+| `INTERNET` | Not requested: the app has no internet permission. Bug reports go through the user's own email app. |

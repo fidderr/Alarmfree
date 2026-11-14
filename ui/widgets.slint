@@ -481,7 +481,7 @@ export component ChoiceChips inherits Rectangle {
     callback picked(int);
     property <length> item-h: root.small ? 44px : 48px;
     property <length> row-gap: root.small ? 0px : 8px;
-    property <[ChipPos]> pos: ChipLayout.positions(root.labels, root.width, root.small ? 6px : 8px, root.small ? 16px : 12px, root.small ? 0px : 44px, root.small ? 12px : 14px);
+    property <[ChipPos]> pos: ChipLayout.positions(root.labels, root.width, root.small ? 6px : 8px, root.small ? 16px : 12px, root.small ? 0px : 44px, (root.small ? 12px : 14px) * Zoom.scale);
     property <int> lines: root.pos.length == 0 ? 0 : root.pos[root.pos.length - 1].line + 1;
     height: root.lines * root.item-h + max(0, root.lines - 1) * root.row-gap;
     for label[i] in root.labels: Rectangle {

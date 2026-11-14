@@ -9,6 +9,7 @@ pub mod custom_sounds;
 pub mod db;
 #[cfg(debug_assertions)]
 pub mod debug_hooks;
+pub mod diag_log;
 pub mod feedback;
 pub mod firing_state;
 pub mod history_persistence;
@@ -20,6 +21,7 @@ pub mod ordering;
 pub mod persistence;
 pub mod platform;
 pub mod reliability;
+pub mod report;
 pub mod ring_photos;
 pub mod sanitize;
 pub mod schedule;

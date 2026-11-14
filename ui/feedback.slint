@@ -1,0 +1,335 @@
+import { Pal, Tr, Insets, Zoom } from "theme.slint";
+import { Icon, IconName } from "components.slint";
+import { ScreenHeader, RowList, Separator, PrimaryButton, SwitchRow, ChoiceChips, LinkButton } from "widgets.slint";
+
+// The report form, the help page and the intro. Rust fills what is read-only here.
+export global Fb {
+    // 0 a problem, 1 an idea.
+    in property <int> kind;
+    in-out property <string> what;
+    in-out property <string> expected;
+    in-out property <string> when;
+    in property <bool> attach-log: true;
+    in property <bool> attach-setup: false;
+    in property <bool> previewing;
+    in property <string> preview;
+    // What happened to the last send: no email app, saved to Downloads, ...
+    in property <string> note;
+    // The banner on Home after a crash or a missed alarm.
+    in property <string> trouble;
+    callback back();
+    callback kind-picked(int);
+    callback toggle-log();
+    callback toggle-setup();
+    callback toggle-preview();
+    callback send();
+    callback open-trouble();
+    callback hide-trouble();
+}
+
+export struct HelpItem { question: string, answer: string }
+
+export global Hp {
+    in property <[HelpItem]> items;
+    callback back();
+    callback open-reliability();
+    callback open-report();
+}
+
+export global Intro {
+    in-out property <int> page: 0;
+    callback skip();
+    callback finish();
+}
+
+// A text field that grows with what is typed, with its question above it.
+component ReportField inherits VerticalLayout {
+    in property <string> label;
+    in-out property <string> text;
+    in property <length> field-min: 48px;
+    spacing: 6px;
+    Text { text: root.label; font-size: 14px * Zoom.scale; font-weight: 500; color: Pal.text; wrap: word-wrap; }
+    Rectangle {
+        height: max(root.field-min, field.preferred-height + 24px);
+        border-radius: 14px;
+        border-width: 1px;
+        border-color: Pal.line;
+        background: Pal.surface;
+        if field.has-focus: Rectangle {
+            x: -3px;
+            y: -3px;
+            width: parent.width + 6px;
+            height: parent.height + 6px;
+            border-radius: 17px;
+            border-width: 2px;
+            border-color: Pal.accent;
+        }
+        field := TextInput {
+            accessible-label: root.label;
+            x: 12px;
+            y: 12px;
+            width: parent.width - 24px;
+            text <=> root.text;
+            font-size: 16px * Zoom.scale;
+            color: Pal.text;
+            wrap: word-wrap;
+            single-line: false;
+        }
+    }
+}
+
+export component ReportScreen inherits Rectangle {
+    background: Pal.bg;
+    VerticalLayout {
+        padding-top: Insets.top;
+        padding-left: Insets.left;
+        padding-right: Insets.right;
+        ScreenHeader {
+            title: Tr.t("report.title");
+            back => { Fb.back(); }
+        }
+        if !Fb.previewing: Flickable {
+            vertical-stretch: 1;
+            content-height: body.preferred-height + 16px;
+            body := VerticalLayout {
+                alignment: start;
+                spacing: 16px;
+                padding-left: 16px;
+                padding-right: 16px;
+                padding-top: 8px;
+                Text { text: Tr.t("report.intro"); font-size: 14px * Zoom.scale; line-height-factor: 1.22; color: Pal.text2; wrap: word-wrap; }
+                ChoiceChips {
+                    labels: [Tr.t("report.kind_problem"), Tr.t("report.kind_idea")];
+                    selected: Fb.kind;
+                    picked(i) => { Fb.kind-picked(i); }
+                }
+                ReportField { label: Fb.kind == 0 ? Tr.t("report.what") : Tr.t("report.what_idea"); text <=> Fb.what; field-min: 96px; }
+                if Fb.kind == 0: ReportField { label: Tr.t("report.expected"); text <=> Fb.expected; field-min: 64px; }
+                ReportField { label: Tr.t("report.when"); text <=> Fb.when; }
+                RowList {
+                    VerticalLayout {
+                        SwitchRow { title: Tr.t("report.attach_log"); on: Fb.attach-log; toggled(on) => { Fb.toggle-log(); } }
+                        Separator { }
+                        SwitchRow { title: Tr.t("report.attach_setup"); on: Fb.attach-setup; toggled(on) => { Fb.toggle-setup(); } }
+                    }
+                }
+                Text { text: Tr.t("report.log_note"); font-size: 12px * Zoom.scale; line-height-factor: 1.14; color: Pal.text2; wrap: word-wrap; }
+                if Fb.note != "": Rectangle {
+                    height: note-text.preferred-height + 24px;
+                    border-radius: 14px;
+                    background: Pal.warn-soft;
+                    note-text := Text { x: 14px; y: 12px; width: parent.width - 28px; text: Fb.note; font-size: 14px * Zoom.scale; color: Pal.text; wrap: word-wrap; }
+                }
+                Rectangle { height: 4px; }
+            }
+        }
+        if Fb.previewing: Flickable {
+            vertical-stretch: 1;
+            content-height: preview-body.preferred-height + 16px;
+            preview-body := VerticalLayout {
+                alignment: start;
+                spacing: 12px;
+                padding-left: 16px;
+                padding-right: 16px;
+                padding-top: 8px;
+                Text { text: Tr.t("report.preview_note"); font-size: 12px * Zoom.scale; line-height-factor: 1.14; color: Pal.text2; wrap: word-wrap; }
+                Rectangle {
+                    height: preview-text.preferred-height + 24px;
+                    border-radius: 14px;
+                    background: Pal.surface;
+                    preview-text := Text {
+                        x: 12px;
+                        y: 12px;
+                        width: parent.width - 24px;
+                        text: Fb.preview;
+                        font-size: 11px * Zoom.scale;
+                        font-family: "monospace";
+                        color: Pal.text;
+                        wrap: word-wrap;
+                    }
+                }
+            }
+        }
+        VerticalLayout {
+            padding: 12px;
+            padding-left: 16px;
+            padding-right: 16px;
+            padding-bottom: 16px + Insets.bottom;
+            spacing: 8px;
+            PrimaryButton { quiet: true; compact: true; text: Fb.previewing ? Tr.t("report.hide_preview") : Tr.t("report.show_preview"); clicked => { Fb.toggle-preview(); } }
+            PrimaryButton { text: Tr.t("report.send"); clicked => { Fb.send(); } }
+        }
+    }
+}
+
+component HelpLine inherits Rectangle {
+    in property <HelpItem> item;
+    property <bool> open: false;
+    height: head.height + (root.open ? answer.preferred-height + 16px : 0px);
+    head := Rectangle {
+        x: 0px;
+        y: 0px;
+        width: parent.width;
+        height: max(54px, q.preferred-height + 24px);
+        accessible-role: button;
+        accessible-label: root.item.question;
+        accessible-expandable: true;
+        accessible-expanded: root.open;
+        accessible-action-default => { root.open = !root.open; }
+        HorizontalLayout {
+            padding-left: 16px;
+            padding-right: 14px;
+            spacing: 12px;
+            q := Text { horizontal-stretch: 1; text: root.item.question; font-size: 14px * Zoom.scale; font-weight: 500; color: Pal.text; vertical-alignment: center; wrap: word-wrap; }
+            Rectangle {
+                width: 14px;
+                Text { text: root.open ? "−" : "+"; font-size: 18px * Zoom.scale; color: Pal.text2; horizontal-alignment: center; vertical-alignment: center; }
+            }
+        }
+        TouchArea { clicked => { root.open = !root.open; } }
+    }
+    answer := Text {
+        visible: root.open;
+        x: 16px;
+        y: head.height;
+        width: parent.width - 32px;
+        text: root.item.answer;
+        font-size: 14px * Zoom.scale;
+        line-height-factor: 1.22;
+        color: Pal.text2;
+        wrap: word-wrap;
+    }
+}
+
+export component HelpScreen inherits Rectangle {
+    background: Pal.bg;
+    VerticalLayout {
+        padding-top: Insets.top;
+        padding-left: Insets.left;
+        padding-right: Insets.right;
+        ScreenHeader {
+            title: Tr.t("help.title");
+            back => { Hp.back(); }
+        }
+        Flickable {
+            vertical-stretch: 1;
+            content-height: body.preferred-height + 16px;
+            body := VerticalLayout {
+                alignment: start;
+                spacing: 16px;
+                padding-left: 16px;
+                padding-right: 16px;
+                padding-top: 8px;
+                RowList {
+                    VerticalLayout {
+                        for item[i] in Hp.items: VerticalLayout {
+                            if i > 0: Separator { }
+                            HelpLine { item: item; }
+                        }
+                    }
+                }
+                VerticalLayout {
+                    spacing: 8px;
+                    PrimaryButton { quiet: true; compact: true; text: Tr.t("reliability.title"); clicked => { Hp.open-reliability(); } }
+                    PrimaryButton { quiet: true; compact: true; text: Tr.t("report.title"); clicked => { Hp.open-report(); } }
+                }
+            }
+        }
+    }
+}
+
+export component IntroScreen inherits Rectangle {
+    background: Pal.bg;
+    property <int> last: 2;
+    property <[IconName]> icons: [IconName.clock, IconName.touch, IconName.check];
+    property <[string]> titles: [Tr.t("intro.1_title"), Tr.t("intro.2_title"), Tr.t("intro.3_title")];
+    property <[string]> bodies: [Tr.t("intro.1_body"), Tr.t("intro.2_body"), Tr.t("intro.3_body")];
+    VerticalLayout {
+        padding-top: Insets.top;
+        padding-left: Insets.left;
+        padding-right: Insets.right;
+        HorizontalLayout {
+            height: 60px;
+            padding: 8px;
+            Rectangle { horizontal-stretch: 1; }
+            LinkButton {
+                text: Tr.t("intro.skip");
+                accessible-role: button;
+                accessible-label: Tr.t("intro.skip");
+                clicked => { Intro.skip(); }
+            }
+        }
+        VerticalLayout {
+            vertical-stretch: 1;
+            alignment: center;
+            spacing: 24px;
+            padding-left: 32px;
+            padding-right: 32px;
+            Rectangle {
+                height: 96px;
+                Rectangle {
+                    width: 96px;
+                    height: 96px;
+                    border-radius: 48px;
+                    background: Pal.accent-soft;
+                    Icon { name: root.icons[Intro.page]; size: 44px; tint: Pal.accent; }
+                }
+            }
+            Text { text: root.titles[Intro.page]; font-size: 26px * Zoom.scale; font-weight: 700; color: Pal.text; horizontal-alignment: center; wrap: word-wrap; }
+            Text { text: root.bodies[Intro.page]; font-size: 16px * Zoom.scale; line-height-factor: 1.25; color: Pal.text2; horizontal-alignment: center; wrap: word-wrap; }
+        }
+        HorizontalLayout {
+            height: 24px;
+            alignment: center;
+            spacing: 8px;
+            for i in 3: Rectangle {
+                y: 8px;
+                width: i == Intro.page ? 22px : 8px;
+                height: 8px;
+                border-radius: 4px;
+                background: i == Intro.page ? Pal.accent : Pal.off;
+            }
+        }
+        VerticalLayout {
+            padding: 16px;
+            padding-bottom: 16px + Insets.bottom;
+            PrimaryButton {
+                text: Intro.page == root.last ? Tr.t("intro.start") : Tr.t("intro.next");
+                clicked => {
+                    if (Intro.page == root.last) { Intro.finish(); } else { Intro.page += 1; }
+                }
+            }
+        }
+    }
+}
+
+// The banner on Home after something went wrong.
+export component TroubleBanner inherits Rectangle {
+    height: box.height + 16px;
+    box := Rectangle {
+        x: 16px;
+        width: parent.width - 32px;
+        height: max(44px, text.preferred-height + 20px);
+        border-radius: 14px;
+        background: Pal.accent-soft;
+        TouchArea { clicked => { Fb.open-trouble(); } }
+        Rectangle {
+            x: parent.width - 44px;
+            width: 44px;
+            accessible-role: button;
+            accessible-label: Tr.t("report.dismiss");
+            accessible-action-default => { Fb.hide-trouble(); }
+            Icon { name: IconName.xmark; size: 16px; tint: Pal.text2; }
+            TouchArea { clicked => { Fb.hide-trouble(); } }
+        }
+        text := Text {
+            x: 14px;
+            y: (parent.height - self.height) / 2;
+            width: parent.width - 14px - 52px;
+            text: Fb.trouble;
+            font-size: 14px * Zoom.scale;
+            color: Pal.text;
+            wrap: word-wrap;
+        }
+    }
+}

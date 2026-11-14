@@ -149,6 +149,9 @@ pub fn save_alarms(alarms: &[AlarmData]) {
     let db = DB.db.as_ref();
     let existing = db.list_alarms().unwrap_or_default();
     let (removed, changed) = changes(&existing, alarms);
+    for line in crate::diag_log::alarm_changes(&existing, alarms) {
+        crate::diag_log::event("alarm", &line);
+    }
 
     for id in removed {
         if let Err(e) = db.delete_alarm(id) {

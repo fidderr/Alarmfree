@@ -124,6 +124,9 @@ component KeyButton inherits Rectangle {
     in property <color> fill: Pal.surface;
     in property <color> ink: Pal.text;
     callback clicked();
+    accessible-role: button;
+    accessible-label: root.text;
+    accessible-action-default => { root.clicked(); }
     height: 64px;
     border-radius: 20px;
     background: ta.pressed ? fill.darker(0.15) : fill;
@@ -283,6 +286,9 @@ component TypingBody inherits VerticalLayout {
 component MemoryCell inherits Rectangle {
     in property <RunCell> cell;
     callback clicked();
+    accessible-role: button;
+    accessible-label: cell.text;
+    accessible-action-default => { root.clicked(); }
     property <float> shake: cell.state == 3 ? 1.0 : 0.0;
     animate shake { duration: Motion.ms(300ms); }
     border-width: 2px;
@@ -675,6 +681,9 @@ export component RunScreen inherits Rectangle {
                 spacing: 8px;
                 Text { horizontal-stretch: 1; text: Run.progress; font-size: 14px * Zoom.scale; color: Pal.text2; vertical-alignment: center; overflow: elide; }
                 if Run.practice: Rectangle {
+                    accessible-role: button;
+                    accessible-label: Run.exit-text;
+                    accessible-action-default => { Run.exit(); }
                     min-width: exit-label.preferred-width + 16px;
                     exit-label := Text { text: Run.exit-text; font-size: 14px * Zoom.scale; font-weight: 500; color: Pal.accent; }
                     TouchArea { clicked => { Run.exit(); } }
@@ -725,6 +734,9 @@ export component RunScreen inherits Rectangle {
                 }
             }
             if Run.can-fallback && !Run.celebrating: Rectangle {
+                accessible-role: button;
+                accessible-label: Tr.t("challenge.fallback.link");
+                accessible-action-default => { Run.asking-fallback = true; }
                 height: 52px;
                 Text { y: 8px; height: 44px; text: Tr.t("challenge.fallback.link"); font-size: 14px * Zoom.scale; color: Pal.text2; horizontal-alignment: center; vertical-alignment: center; }
                 TouchArea { clicked => { Run.asking-fallback = true; } }

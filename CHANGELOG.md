@@ -7,6 +7,30 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+### Added
+
+- A short intro of three cards (what the app does, the challenges, why the setup matters) before the
+  first-run setup, with Skip on every card, and "Show intro again" in Settings.
+- Settings, "Help and feedback": a Help page (why an alarm might not ring, per phone maker; challenges and the
+  backup challenge; backup and restore; what the app collects), "Rate AlarmFree" (opens the Play listing, no
+  prompt), and "Report a problem or idea".
+- Report a problem or idea: type, what happened, what was expected, roughly when (filled in with the last alarm
+  that rang), the diagnostic log and, if chosen, the alarm setup file; "Show what is sent"; sends with the user's
+  own email app (the report is saved to Downloads when there is none). Nothing is sent by the app, which still
+  has no internet permission. `docs/BUG_REPORTS.md` explains how to read a report; `devtest/repro.sh` rebuilds
+  the situation on an emulator.
+- A diagnostic log of events (start, alarms saved, enabled and deleted with time and repeat only, scheduled,
+  ring started with lateness, ring stopped, missed, re-armed, permissions, restarts, panics). Never an alarm's
+  name or note. Two files of 256 KB.
+- A banner on Home, once, after a panic or a missed alarm: "Something went wrong last time. Send a report?".
+- Screen reader labels on the ring screen's buttons, the number keys, the memory cells and two challenge links.
+- `store/make_captions.py`: the store screenshots with a caption each, in five languages.
+- `store/production-access-answers.md`: the answers for the Play production-access questionnaire.
+
+### Changed
+
+- The privacy page describes reports, and no longer lists an internet permission the app does not have.
+
 ## [0.5.0] - 2026-11-14
 
 The app is now the Slint version (drawn natively with Skia in a NativeActivity, no WebView), under
