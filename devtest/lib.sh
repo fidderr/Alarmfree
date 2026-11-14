@@ -915,8 +915,19 @@ go_tab() { # Alarms / History / Settings; a touch in the first seconds of the wi
 }
 
 # Scroll the panel on top (or the screen) up by about a screen, as a finger does.
+# Relative to the window, not 1800 px: on a 1920 px window that starts in the gesture area at the
+# bottom, where an upward swipe is the Home gesture and takes the app away.
+swipe_ys() { # from to, as percent of the height -> device pixels
+    local size w h
+    size=$(window_size)
+    w=$(echo "$size" | cut -d' ' -f1)
+    h=$(echo "$size" | cut -d' ' -f2)
+    case "$w$h" in *[!0-9]* | "") w=1080 h=1920 ;; esac
+    echo "$((w / 2)) $((h * $1 / 100)) $((w / 2)) $((h * $2 / 100))"
+}
 sheet_scroll() {
-    dev input swipe 540 1800 540 700 400
+    # shellcheck disable=SC2046
+    dev input swipe $(swipe_ys 78 30) 400
     sleep 0.8
 }
 # Tap what the text names, scrolling the panel up first when it is not on screen yet.
@@ -936,6 +947,7 @@ hide_keyboard() {
     sleep 0.6
 }
 sheet_scroll_up() {
-    dev input swipe 540 700 540 1800 400
+    # shellcheck disable=SC2046
+    dev input swipe $(swipe_ys 30 78) 400
     sleep 0.8
 }

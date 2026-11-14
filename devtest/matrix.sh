@@ -2891,7 +2891,7 @@ s61() {
     set_field 0 '#102030'
     sleep 0.3
     [ "$(sn pal_text)" != "#102030" ] || problems="$problems; text as dark as the page can be chosen"
-    is_there "Changed a little so everything stays readable." || problems="$problems; does not say it changed the colour"
+    on_screen "Changed a little so everything stays readable." 3 || problems="$problems; does not say it changed the colour"
     screenshot s61_adjusted
     tap Automatic 0 0.4
     is_there "Changed a little so everything stays readable." && problems="$problems; still says it changed the colour"

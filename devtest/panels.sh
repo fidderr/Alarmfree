@@ -395,6 +395,10 @@ s57() {
     fresh
     panel_settings false
     start_app
+    # The intro of three cards comes first; Skip goes on to the setup.
+    wait_for 15 on_screen_no 6 || panel_problem "no intro before the first-run screen"
+    look_through intro
+    tap Skip 0 0.6
     wait_for 15 on_screen_no 4 || panel_problem "no first-run screen"
     look_through setup
     dev am force-stop "$PKG"
