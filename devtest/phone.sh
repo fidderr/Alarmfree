@@ -1,5 +1,5 @@
 #!/bin/bash
-# The suite on a real phone: APK=<arm64 apk> SERIAL=<phone> PHONE_SQLITE=<tool> bash devtest/phone.sh <name> [scenarios...]
+# The suite on a real phone: APK=<arm64 apk> SERIAL=<phone> PHONE_SQLITE=<aarch64 af_sqlite3 on this PC> bash devtest/phone.sh <name> [scenarios...]
 # Never reboots it, never sets a PIN, no widget: not reboot_and_wait as devtest/all.sh does, because
 # a phone with a PIN would then stand at its lock screen. The alarm volume goes to 1 for the run and
 # comes back after, also when the run is stopped. Run it with a test build and no alarms of one's own
@@ -37,6 +37,14 @@ mkdir -p "$OUT"
         esac
     fi
     dev_shell() { timeout 20 "$ADB" -s "$SERIAL" shell "$@"; }
+    # PHONE_SQLITE is a file on this PC (devtest/af_sqlite3, built for aarch64-linux-android):
+    # it goes to the phone here, and the scenarios copy it from there. MSYS_NO_PATHCONV keeps
+    # Git Bash from turning the phone's /data/local/tmp into a Windows path.
+    if [ -f "$PHONE_SQLITE" ]; then
+        MSYS_NO_PATHCONV=1 timeout 60 "$ADB" -s "$SERIAL" push "$PHONE_SQLITE" /data/local/tmp/af_sqlite3 > /dev/null || { echo "STOP  the sqlite tool did not reach the phone"; exit 1; }
+        dev_shell chmod 755 /data/local/tmp/af_sqlite3
+        export PHONE_SQLITE=/data/local/tmp/af_sqlite3
+    fi
     dev_shell settings put global stay_on_while_plugged_in 3
     dev_shell settings put system screen_off_timeout 1800000
     dev_shell input keyevent KEYCODE_WAKEUP
