@@ -237,6 +237,12 @@ impl AndroidWindowAdapter {
                         .unwrap_or_else(|e| print_jni_error(&self.app, e));
                 }
             }
+            // AlarmFree: let go of the surface as soon as the window is gone. On Android 14 and later the
+            // task survives Home and the window is made again; the old surface was only dropped when the
+            // new one arrived, and in between the new window got out-of-order buffers and no touches.
+            PollEvent::Main(MainEvent::TerminateWindow { .. }) => {
+                self.renderer.suspend()?;
+            }
             PollEvent::Main(
                 MainEvent::WindowResized { .. } | MainEvent::ContentRectChanged { .. },
             ) => self.resize()?,
