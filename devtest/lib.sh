@@ -930,6 +930,15 @@ sheet_scroll() {
     dev input swipe $(swipe_ys 78 30) 400
     sleep 0.8
 }
+# Scroll the panel until this exact text (the n-th, or L for the last) is on screen.
+scroll_to() { # text [which]
+    local i
+    for i in 1 2 3 4; do
+        is_there "$1" "${2:-}" && return 0
+        sheet_scroll
+    done
+    return 1
+}
 # Tap what the text names, scrolling the panel up first when it is not on screen yet.
 # Up to four screens down: the settings list is longer than one (Help and feedback sits above Data).
 tap_scrolling() { # text
