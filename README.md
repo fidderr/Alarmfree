@@ -187,15 +187,15 @@ Neither the feature nor the channel is in a release: `./build.sh release|fast|aa
 `debug_hooks` is `cfg(debug_assertions)` only.
 
 ```bash
-SERIAL=emulator-5556 AVD=af31 devtest/matrix.sh        # every scenario on one device
-SERIAL=emulator-5556 devtest/matrix.sh s01 s07         # just these
+SERIAL=emulator-5558 AVD=afg12 devtest/matrix.sh        # every scenario on one device
+SERIAL=emulator-5558 devtest/matrix.sh s01 s07         # just these
 bash devtest/all.sh                                    # Android 16 and 12 at once, 16 also on big screens
-SERIAL=emulator-5556 bash devtest/dump.sh 'tap Settings'  # what the window shows, to write a scenario
-SERIAL=emulator-5556 bash devtest/slint_smoke.sh       # the short check: make, ring, snooze, turn off
+SERIAL=emulator-5558 bash devtest/dump.sh 'tap Settings'  # what the window shows, to write a scenario
+SERIAL=emulator-5558 bash devtest/slint_smoke.sh       # the short check: make, ring, snooze, turn off
 ```
 
-`all.sh` uses AVDs `af36` (port 5554) and `af31` (5556); `AVD_NEW=af36tab PORT_NEW=5562` picks other
-ones for the newest Android. The scenarios keep their numbers from the Dioxus suite (s01 to s63,
+`all.sh` runs AVDs `afg16` (Android 16) and then `afg12` (Android 12), both Google APIs images on port 5558,
+one after the other; `AVD_NEW`/`PORT_NEW` and `AVD_OLD`/`PORT_OLD` pick other ones, `LEG=afg16` runs one. The scenarios keep their numbers from the Dioxus suite (s01 to s63,
 `big_screens`, and the phone-only `s60p_*` and `s62p`); only how they press and read the screen changed.
 
 All of it takes about 15 to 20 minutes on two emulators, and no scenario over a minute apart from
@@ -235,7 +235,7 @@ own sound and history are byte for byte what they were, that the same cards and 
 screen, and that the ring screen is in the saved language. Build the old app from a worktree of the
 `dioxus` branch at `2f65c82` (the 0.4.1 release; the branch head needs an unreleased SDK):
 `TARGET=x86_64-linux-android ./build.sh` there, then
-`DX_APK=<that apk> bash devtest/upgrade.sh af36 5554`. The new app keeps the old one's database,
+`DX_APK=<that apk> bash devtest/upgrade.sh afg16 5558`. The new app keeps the old one's database,
 `files/sentinel/` records and device-encrypted storage as they are: nothing is migrated.
 
 ## Data

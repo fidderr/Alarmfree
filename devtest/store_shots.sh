@@ -7,7 +7,7 @@
 # Pictures in store/screenshots/<lang>/. Uses the debug APK that is already built.
 cd "$(dirname "$0")/.." || exit 1
 export APK="${APK:-target/dx/alarmfree/debug/android/app/app/build/outputs/apk/debug/app-debug.apk}"
-export AVD="${AVD:-af36}" SERIAL="${SERIAL:-emulator-5554}" OUT="devtest-out/store"
+export AVD="${AVD:-afg16}" SERIAL="${SERIAL:-emulator-5558}" OUT="devtest-out/store"
 RESULTS="$OUT/results.txt"
 CURRENT=store_shots
 . devtest/lib.sh

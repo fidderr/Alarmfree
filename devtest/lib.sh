@@ -260,7 +260,7 @@ until_past() { # wait until device time is past unix second $1
 # app running at all, the emulator can freeze for good or exit (emulator 37.2.13,
 # Windows). For the app it is the same restart: every process and OS alarm is gone,
 # and BOOT_COMPLETED comes. A clean shutdown is what only a real phone tests.
-AVD="${AVD:-af36}"
+AVD="${AVD:-afg16}"
 EMULATOR="${EMULATOR:-$LOCALAPPDATA/Android/Sdk/emulator/emulator.exe}"
 
 emulator_start() {

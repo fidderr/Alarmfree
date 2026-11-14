@@ -2,7 +2,7 @@
 # The whole suite on the newest and the oldest Android at the same time, with the APK that is
 # already built (APK says which, for a release). Two emulators: that is what 16 GB has room for.
 #
-# Usage: bash devtest/all.sh [name]    (AVD_NEW=af36tab PORT_NEW=5562 to use other ones for the newest Android)  results in devtest-out/<name>_<avd>/ and <name>_<avd>.log
+# Usage: bash devtest/all.sh [name]    (AVD_NEW / PORT_NEW and AVD_OLD / PORT_OLD pick other emulators; the legs run one after the other, default afg16 then afg12 on port 5558, LEG=afg16 or LEG=afg12 runs one)  results in devtest-out/<name>_<avd>/ and <name>_<avd>.log
 cd "$(dirname "$0")/.." || exit 1
 export APK="${APK:-build/alarmfree-slint-debug.apk}"
 NAME=${1:-full}
@@ -56,9 +56,8 @@ START=$SECONDS
 # The big screens first: next to the other emulator's tour of every panel, late in its run, Android
 # 16 starved to the point of its own system UI freezing.
 # The restarts with a PIN last: Android 12 is done by then, and they stay under a minute.
-# LEG=af31 or LEG=af36 runs one of the two (the other can run from a snapshot copy meanwhile).
-[ "${LEG:-}" = af31 ] || FIRST=big_screens LAST="s13d s13b s13" SKIP=$OLDEST_ONLY run_on "${AVD_NEW:-af36}" "${PORT_NEW:-5554}" &
+# One emulator lane (2 GB each): the legs run one after the other.
+[ "${LEG:-}" = afg12 ] || FIRST=big_screens LAST="s13d s13b s13" SKIP=$OLDEST_ONLY run_on "${AVD_NEW:-afg16}" "${PORT_NEW:-5558}"
 # Android 12's graphics on the host's GPU crashed the emulator now and then, in the middle of a run.
-[ "${LEG:-}" = af36 ] || EMULATOR_GPU=swiftshader_indirect SKIP=$NEWEST_ONLY run_on af31 5556 &
-wait
+[ "${LEG:-}" = afg16 ] || EMULATOR_GPU=swiftshader_indirect SKIP=$NEWEST_ONLY run_on "${AVD_OLD:-afg12}" "${PORT_OLD:-5558}"
 echo "all of it in $(((SECONDS - START) / 60)) min $(((SECONDS - START) % 60)) s"

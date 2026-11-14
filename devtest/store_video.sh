@@ -7,7 +7,7 @@
 # Usage: bash devtest/store_video.sh    -> release/AlarmFree-foreground-service.mp4
 cd "$(dirname "$0")/.." || exit 1
 export APK="${APK:-target/dx/alarmfree/debug/android/app/app/build/outputs/apk/debug/app-debug.apk}"
-export AVD="${AVD:-af36}" SERIAL="${SERIAL:-emulator-5554}" OUT="devtest-out/store"
+export AVD="${AVD:-afg16}" SERIAL="${SERIAL:-emulator-5558}" OUT="devtest-out/store"
 RESULTS="$OUT/results_video.txt"
 CURRENT=store_video
 . devtest/lib.sh

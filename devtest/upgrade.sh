@@ -5,11 +5,11 @@
 #   DX_APK=build/dioxus-0.4.1-debug.apk bash devtest/upgrade.sh <avd> <port>
 # Build the old one in a worktree of the dioxus branch at 2f65c82 (see README "Upgrade test").
 cd "$(dirname "$0")/.." || exit 1
-avd=${1:-af36} port=${2:-5554}
+avd=${1:-afg16} port=${2:-5558}
 DX_APK=${DX_APK:-build/dioxus-0.4.1-debug.apk}
 NEW_APK=${APK:-build/alarmfree-slint-debug.apk}
 export AVD=$avd SERIAL=emulator-$port OUT="devtest-out/upgrade_$avd"
-[ "$avd" = af31 ] && export EMULATOR_GPU=swiftshader_indirect
+[ "$avd" = afg12 ] && export EMULATOR_GPU=swiftshader_indirect
 . devtest/lib.sh
 claim_device
 rm -f "$RESULTS"
