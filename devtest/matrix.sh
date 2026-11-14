@@ -2872,7 +2872,7 @@ s61() {
     set_field 0 '#c06020'
     sleep 0.3
     [ "$(sn pal_accent)" = "#c06020" ] || problems="$problems; the code gives $(sn pal_accent)"
-    done_sheet_theme() { tap Done 0 0.4; }
+    done_sheet_theme() { hide_keyboard; tap Done 0 0.4; }
     done_sheet_theme
     # A theme of one's own, from what is on screen.
     tap "Your own theme" 0 0.5

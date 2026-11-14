@@ -912,6 +912,12 @@ tap_scrolling() { # text
     wait_for 2 has_there "$1" || { sheet_scroll; wait_for 2 has_there "$1"; }
     tap_has "$1" 0 0.3
 }
+# A phone's keyboard stays up over a sheet's Done button: Back puts it away (an emulator has none).
+hide_keyboard() {
+    dev dumpsys input_method | grep -q 'mInputShown=true' || return 0
+    dev input keyevent KEYCODE_BACK
+    sleep 0.6
+}
 sheet_scroll_up() {
     dev input swipe 540 700 540 1800 400
     sleep 0.8
