@@ -54,7 +54,12 @@ mkdir -p "$OUT"
     export CLEAN_COPY
     start_app
     wait_for 60 page_is_up && wait_for 30 on_screen_no 0 || { echo "STOP  the window does not come up on the alarm list"; exit 1; }
-    timeout "${LIMIT:-3000}" bash devtest/matrix.sh "$@" || echo "STOP  the run ended with $?"
+    if [ -n "${FEEDBACK:-}" ]; then
+        # The feedback round (s70 to s75), on the phone: NO_BOOT, NO_INSTALL and NO_LOCK keep it to the app.
+        NO_BOOT=1 NO_INSTALL=1 KEEP=1 timeout "${LIMIT:-3000}" bash devtest/feedback.sh phone "$SERIAL" "$@" || echo "STOP  the run ended with $?"
+    else
+        timeout "${LIMIT:-3000}" bash devtest/matrix.sh "$@" || echo "STOP  the run ended with $?"
+    fi
 ) > "devtest-out/$NAME.log" 2>&1
 sed -n '/===== SUMMARY/,$p' "devtest-out/$NAME.log" | grep -E '^(FAIL|STOP|SKIP|NOTE|passed:|over a minute)' | cut -c1-300 | sort -u
 grep -E '^(volume was|installed|STOP|put back)' "devtest-out/$NAME.log" | cut -c1-200

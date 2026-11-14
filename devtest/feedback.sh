@@ -11,20 +11,25 @@ cd "$(dirname "$0")/.." || exit 1
 export APK="${APK:-build/alarmfree-slint-debug.apk}"
 avd=$1 port=$2
 shift 2
-export AVD=$avd SERIAL=emulator-$port OUT="devtest-out/fb_$avd"
+# On a real phone (phone.sh sets SERIAL and NO_LOCK): its own serial, nothing of its settings touched.
+export AVD=$avd SERIAL="${SERIAL:-emulator-$port}" OUT="${OUT:-devtest-out/fb_$avd}"
 . devtest/lib.sh
 claim_device
 if [ -z "${NO_BOOT:-}" ]; then
     reboot_and_wait || { echo "FAIL  $avd did not start"; exit 1; }
 fi
-said=$(adb_ install -r -g "$APK" 2>&1)
-case "$said" in *Success*) ;; *) echo "STOP install: $said"; exit 1 ;; esac
+if [ -z "${NO_INSTALL:-}" ]; then
+    said=$(adb_ install -r -g "$APK" 2>&1)
+    case "$said" in *Success*) ;; *) echo "STOP install: $said"; exit 1 ;; esac
+fi
 : > "$RESULTS"
 open_shells
-dev settings put global auto_time 0
-dev settings put system font_scale 1.0
-dev locksettings set-disabled false > /dev/null
-dev dumpsys deviceidle whitelist +"$PKG" > /dev/null
+if [ -z "${NO_LOCK:-}" ]; then
+    dev settings put global auto_time 0
+    dev settings put system font_scale 1.0
+    dev locksettings set-disabled false > /dev/null
+    dev dumpsys deviceidle whitelist +"$PKG" > /dev/null
+fi
 fresh
 
 sz=$(adb_ shell wm size | tr -d '
@@ -357,6 +362,6 @@ done
 echo
 echo "===== SUMMARY ($SERIAL) ====="
 cat "$RESULTS"
-dev settings put system font_scale 1.0
-[ -z "${KEEP:-}" ] && emulator_stop
+[ -n "${NO_LOCK:-}" ] || dev settings put system font_scale 1.0
+[ -z "${KEEP:-}" ] && [ -z "${NO_LOCK:-}" ] && emulator_stop
 exit 0
