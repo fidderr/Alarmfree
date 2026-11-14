@@ -183,7 +183,7 @@ panel_alarms() {
 panel_look() {
     local look
     case "$AVD" in
-        af31) look="Light German H12 1.3 Blue" ;;
+        af31) look="Light English H12 1.3 Blue" ;; # the tour finds things by their English text (s34 covers the long languages)
         phone) look="Dark Dutch H24 1.0 Blue" ;;
         *) look="Dark English H24 1.0 Blue" ;;
     esac

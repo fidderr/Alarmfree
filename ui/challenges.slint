@@ -648,7 +648,13 @@ component Celebration inherits Rectangle {
 // Doing the challenges one after another: the ringing alarm's, or practice.
 export component RunScreen inherits Rectangle {
     background: Pal.bg;
-    TouchArea { clicked => { Run.touched(); } }
+    TouchArea {
+        pointer-event(e) => {
+            if e.kind == PointerEventKind.down {
+                Run.touched();
+            }
+        }
+    }
     Rectangle {
         width: min(parent.width, 560px);
         x: (parent.width - self.width) / 2;

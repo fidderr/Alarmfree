@@ -1185,6 +1185,16 @@ s34() {
         wait_for 5 on_screen_no 0
         press go 1 0.5
         result=$(clipped)
+        # The period chips are a row that scrolls: what sticks out has to come into the window by a swipe.
+        if [ -n "$result" ]; then
+            dev input swipe 900 341 100 341 300
+            sleep 0.8
+            after=$(clipped)
+            case "$after" in
+                *"$result"*) problems="$problems $locale/history: $result stays out after scrolling;" ;;
+            esac
+            result=""
+        fi
         [ -z "$result" ] || problems="$problems $locale/history: $result;"
         press go 2 0.5
         result=$(clipped)
@@ -2808,11 +2818,17 @@ s61() {
     on_screen "Colour code" 4 || on_screen_has "code" 3
     local before x y w h scale
     before=$(sn pal_accent)
-    read -r x y w h <<< "$(ui boxes:ColourControls | grep -oE '"x":[0-9]+,"y":[0-9]+' | head -1 | tr -dc '0-9,' | tr ',' ' ') $(ui boxes:ColourControls | grep -oE '"w":[0-9]+,"h":[0-9]+' | head -1 | tr -dc '0-9,' | tr ',' ' ')"
+    local boxes
+    boxes=$(ui boxes:ColourControls)
+    x=$(echo "$boxes" | grep -oE '"x":[0-9]+' | head -1 | tr -dc 0-9)
+    y=$(echo "$boxes" | grep -oE '"y":[0-9]+' | head -1 | tr -dc 0-9)
+    h=$(echo "$boxes" | grep -oE '"h":[0-9]+' | head -1 | tr -dc 0-9)
     scale=$(window_size | cut -d' ' -f3)
     # The wheel is 200 points across at the top of the controls: a point left of its middle.
     y=$((y - h / 2 + $(awk -v s="$scale" 'BEGIN { printf "%d", 108 * s }')))
     x=$((x - $(awk -v s="$scale" 'BEGIN { printf "%d", 70 * s }')))
+    # A panel takes touches once it holds still.
+    sleep 0.8
     dev input swipe "$x" "$y" "$((x + 20))" "$((y + 20))" 300
     sleep 0.4
     [ "$(sn pal_accent)" != "$before" ] || problems="$problems; the wheel does nothing"

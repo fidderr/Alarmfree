@@ -292,6 +292,13 @@ pub fn poll(ctx: &Rc<Ctx>) {
     }
 }
 
+/// A touch on a ringing alarm's screen counts for its ring limit.
+pub fn note_activity() {
+    if let Some(kit) = crate::platform::alarm_kit_optional() {
+        kit.note_activity();
+    }
+}
+
 pub fn snooze(ctx: &Rc<Ctx>) {
     let id = {
         let mut ring = ctx.ring.borrow_mut();

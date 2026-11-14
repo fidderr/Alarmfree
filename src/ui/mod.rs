@@ -415,6 +415,7 @@ pub fn run() -> Result<(), slint::PlatformError> {
     on!(on_ed_sheet_closed, |ctx| editor::sheet_closed(&ctx));
     on!(on_ring_snooze, |ctx| ring::snooze(&ctx));
     on!(on_ring_turn_off, |ctx| ring::turn_off(&ctx));
+    on!(on_ring_activity, |_ctx| ring::note_activity());
     challenge_run::connect(&ctx, &ui);
     challenge_sheets::connect(&ctx, &ui);
     on!(on_toast_undo, |ctx| toast::undo(&ctx));

@@ -96,6 +96,8 @@ export component RingScreen inherits Rectangle {
     callback snooze();
     callback turn-off();
     callback closed();
+    // A finger came down anywhere: somebody is there (the platform's touch hook does not see a NativeActivity's touches).
+    callback activity();
     // A photo can be anything: the same words on it whatever the theme.
     property <bool> on-photo: Look.kind == 7 && Look.has-photo;
     property <bool> dressed: (Look.kind >= 1 && Look.kind <= 6) || root.on-photo;
@@ -113,6 +115,13 @@ export component RingScreen inherits Rectangle {
         has-photo: Look.has-photo;
         animated: true;
         star-mask: true;
+    }
+    TouchArea {
+        pointer-event(e) => {
+            if e.kind == PointerEventKind.down {
+                root.activity();
+            }
+        }
     }
     VerticalLayout {
         padding-left: 20px + Insets.left;

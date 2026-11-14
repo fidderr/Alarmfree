@@ -109,6 +109,7 @@ fn with_input<R>(ctx: &Ctx, f: impl FnOnce(&mut RunState, &MainWindow) -> R) -> 
 
 fn reset_idle(run: &mut RunState, ui: &MainWindow) {
     run.idle_secs = 0;
+    super::ring::note_activity();
     ui.global::<Run>().set_idle_left(100);
 }
 

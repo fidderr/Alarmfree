@@ -120,6 +120,7 @@ export component MainWindow inherits Window {
     in property <int> ring-challenge-count;
     callback ring-snooze();
     callback ring-turn-off();
+    callback ring-activity();
     callback open(string);
     callback menu(string);
     callback toggle(string);
@@ -317,6 +318,7 @@ export component MainWindow inherits Window {
         challenge-count: root.ring-challenge-count;
         snooze => { root.ring-snooze(); }
         turn-off => { root.ring-turn-off(); }
+        activity => { root.ring-activity(); }
     }
 
     if root.screen == 4: ReliabilityScreen { }
