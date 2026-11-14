@@ -1377,14 +1377,14 @@ s38() {
     press open a 0.8
     on_editor
     tap_has Sound 0 0.6
-    on_screen mytune 5 || on_screen_has mytune 3
+    scroll_until mytune
     local names
     names=$(texts_of)
     case "$names" in
         *mytune*) ;;
         *) problems="$problems; own sound not listed: $names" ;;
     esac
-    press sound-rename "$(($(radio_index mytune) - 1))" 0.6
+    press sound-rename "$(sound_row mytune)" 0.6
     set_field 0 Morning || problems="$problems; no field to rename in"
     press sound-rename-done "" 0.6
     names=$(texts_of)
@@ -1932,6 +1932,22 @@ open_row() {
     tap_has "$1" 0 0.4
     wait_for 4 editor_sheet_open
 }
+# The number of an own sound's row in the sound sheet: the bundled ones first, then the own ones by
+# name. Counted from the files, because a scrolled list shows only part of its rows.
+sound_row() { # name (without .ogg)
+    local own
+    own=$(as_app "ls files/sounds/custom" | sort | grep -n -x "$1.ogg" | cut -d: -f1)
+    echo $(($(as_app "ls files/sounds/default" | sed 's/\.[^.]*$//' | sort -u | wc -l) + own - 1))
+}
+# A list longer than the window (a phone's sheet): scroll until this text is on screen.
+scroll_until() { # text
+    local i
+    for i in 1 2 3 4; do
+        wait_for 2 has_there "$1" && return 0
+        sheet_scroll
+    done
+    return 1
+}
 # Does the text have this in it? Otherwise it goes on the list of problems.
 has() { # text what
     case "$1" in
@@ -2241,8 +2257,9 @@ s53() {
     # A sound of one's own: asks first, then it is gone.
     note "s53: A sound of one's own: asks first, then it is gone. @$SECONDS"
     open_row Sound
+    scroll_until mytune
     has "$(texts_of)" mytune
-    press sound-delete "$(($(radio_index mytune) - 1))" 0.4
+    press sound-delete "$(sound_row mytune)" 0.4
     tap Delete L 0.5
     case "$(texts_of)" in
         *mytune*) problems="$problems; sound still listed" ;;
