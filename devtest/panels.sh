@@ -161,7 +161,18 @@ try_chips() { # name [x y of the row that opened it]
                 sleep 0.2
                 ;;
             *)
-                [ "$now" = true ] || [ "$was" = true ] || panel_problem "$name: the choice '$text' does not take"
+                if [ "$now" != true ] && [ "$was" != true ]; then
+                    # A choice that opens the phone's picker (Photo, for the ring screen, with no photo yet)
+                    # takes by leaving the app: Back brings it back. Any other choice has to take.
+                    sleep 1.2
+                    if focus_in_app; then
+                        panel_problem "$name: the choice '$text' does not take"
+                    else
+                        press_back
+                        wait_for 8 focus_in_app || { panel_problem "$name: not back from the picker of '$text'"; press_back; }
+                        sleep 0.5
+                    fi
+                fi
                 ;;
         esac
     done <<< "$before"
