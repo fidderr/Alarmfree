@@ -61,7 +61,7 @@ pub fn repeated_pattern(pattern: &[i64], total_ms: u64) -> Vec<u64> {
 
 /// The backup screen, for when the app's own keeps failing: as many long holds as
 /// the slowest challenge takes, because it must not be the easy way out.
-const BACKUP_HOLDS: u32 = 20;
+pub(crate) const BACKUP_HOLDS: u32 = 20;
 const BACKUP_HOLD_MS: u32 = 3_000;
 
 /// A phone that restarted and was not unlocked yet cannot show this app's screen. The alarm
@@ -137,6 +137,18 @@ fn record_outcome(
     at: chrono::DateTime<chrono::Utc>,
 ) {
     let alarm = list.iter().find(|a| a.id == alarm_id);
+    let due = at.with_timezone(&Local).format("%Y-%m-%d %H:%M:%S");
+    let (tag, what) = match outcome {
+        AlarmOutcome::Missed => ("missed", "alarm did not ring"),
+        AlarmOutcome::Limit => ("ring", "ended at its limit, nobody there"),
+        AlarmOutcome::Backup => ("ring", "ended by the backup screen"),
+        AlarmOutcome::Reboot => ("ring", "ended by a restart of the phone"),
+        AlarmOutcome::Solved => ("ring", "solved"),
+    };
+    crate::diag_log::event(
+        tag,
+        &format!("{what} id={} at={due}", crate::diag_log::short_id(alarm_id)),
+    );
     // A wake-up check or a test alarm is not one of the user's alarms.
     if alarm.is_some_and(|a| a.hidden) {
         return;
@@ -144,6 +156,10 @@ fn record_outcome(
     let label = alarm.map(display_name).unwrap_or_default();
     crate::history_persistence::record_outcome(alarm_id, &label, outcome, at);
 }
+
+/// Whether the first setup of this process came from a wake-up and not from the screen.
+pub static PROCESS_STARTED_BY_WAKE: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
 
 /// Platform setup happens once per process, whichever comes first: the UI, or
 /// something else that started the app (see [`on_wake`]).
@@ -359,6 +375,24 @@ fn setup_platform(woken: bool) {
     kit.on_ring_end(handle_ring_ends);
     let _ = ALARM_KIT.set(kit);
 
+    PROCESS_STARTED_BY_WAKE.store(woken, std::sync::atomic::Ordering::Relaxed);
+    crate::diag_log::event(
+        "start",
+        &format!(
+            "process up for {} app {} ({})",
+            if woken {
+                "a wake-up with no screen"
+            } else {
+                "the screen"
+            },
+            env!("CARGO_PKG_VERSION"),
+            crate::report::VERSION_CODE
+        ),
+    );
+    crate::diag_log::event(
+        "permissions",
+        &crate::diag_log::permissions_line(&crate::reliability::report()),
+    );
     sync_alarms(alarm_kit(), woken);
 
     #[cfg(debug_assertions)]
@@ -414,6 +448,18 @@ fn sync_alarms(kit: &'static AlarmKit, woken: bool) {
         kit.on_startup(&alarms)
     };
 
+    crate::diag_log::event(
+        "rearm",
+        &format!(
+            "armed {} alarms ({}) ended_by_reboot={} ring_ends={} missed={} finished={}",
+            alarms.len(),
+            if woken { "wake-up" } else { "app start" },
+            report.ended_by_reboot.len(),
+            report.ring_ends.len(),
+            report.missed.len(),
+            report.finished.len()
+        ),
+    );
     let now = chrono::Utc::now();
     for id in &report.ended_by_reboot {
         record_outcome(&list, &id.0, AlarmOutcome::Reboot, now);
@@ -553,12 +599,37 @@ pub(crate) fn apply_alarm(alarm: &AlarmData) {
     } else {
         kit.create_with_id(id, spec)
     };
-    if let Err(e) = res {
-        log::warn!(
-            "[AlarmFree] AlarmKit schedule failed for {}: {e:?}",
-            alarm.id
-        );
+    match res {
+        Ok(_) => log_scheduled(kit, alarm),
+        Err(e) => {
+            log::warn!(
+                "[AlarmFree] AlarmKit schedule failed for {}: {e:?}",
+                alarm.id
+            );
+            crate::diag_log::event(
+                "schedule",
+                &format!("failed id={} {e:?}", crate::diag_log::short_id(&alarm.id)),
+            );
+        }
     }
+}
+
+/// The next ring AlarmKit has for this alarm, in the log.
+fn log_scheduled(kit: &AlarmKit, alarm: &AlarmData) {
+    use chrono::TimeZone;
+    let next = kit
+        .next_fire(&InstanceId::new(alarm.id.clone()))
+        .ok()
+        .flatten()
+        .and_then(|ms| Local.timestamp_millis_opt(ms).single())
+        .map_or_else(
+            || "none".to_owned(),
+            |at| at.format("%Y-%m-%d %H:%M:%S").to_string(),
+        );
+    crate::diag_log::event(
+        "schedule",
+        &format!("id={} next={next}", crate::diag_log::short_id(&alarm.id)),
+    );
 }
 
 /// Remove everything but the saved alarm itself: nothing may ring for it any

@@ -16,10 +16,12 @@ import { SettingsScreen, SettingsView } from "settings.slint";
 import { HistoryScreen, StatLine, BarCell, EventLine } from "history.slint";
 import { PanelSheet } from "panel.slint";
 import { Thm, ThemeScreen, ThemeTile } from "theme_screen.slint";
+import { Fb, Hp, Intro, HelpItem, ReportScreen, HelpScreen, IntroScreen } from "feedback.slint";
 export { Pal, Tr, Insets, AlarmRow, DayCell, EditorSheet, HomeSheet, SheetChoice }
 export { Ed, SoundRow, LookTile, SwatchCell, UsedChip, Cal, DateCell, Hue, Look, Rel, CheckRow }
 export { ChipLayout, ChipPos, Glyphs, Glyph }
 export { SettingsView, StatLine, BarCell, EventLine, Motion, Zoom, Thm, ThemeTile }
+export { Fb, Hp, Intro, HelpItem }
 export { Run, RunCell, TypeCell, ReactTarget, RunKind, Cfg, CfgRow, CfgType, CfgStepper }
 
 export component MainWindow inherits Window {
@@ -37,7 +39,7 @@ export component MainWindow inherits Window {
     callback delete-alarm(string);
     callback reorder(int, int);
     callback reorder-started();
-    // 0 alarms, 1 editor, 2 history, 3 settings.
+    // 0 alarms, 1 editor, 2 history, 3 settings, 4 reliability, 5 theme, 6 intro, 7 report, 8 help.
     in-out property <int> screen: 0;
     in property <bool> ringing;
     // The panels over the list.
@@ -324,6 +326,12 @@ export component MainWindow inherits Window {
     if root.screen == 4: ReliabilityScreen { }
 
     if root.screen == 5: ThemeScreen { }
+
+    if root.screen == 6: IntroScreen { }
+
+    if root.screen == 7: ReportScreen { }
+
+    if root.screen == 8: HelpScreen { }
 
     if root.ed-preview: RingScreen {
         preview: true;

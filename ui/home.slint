@@ -1,6 +1,7 @@
 import { Motion, Pal, Tr, Insets, Zoom } from "theme.slint";
 import { Icon, IconName, AppSwitch, RoundIconButton, SlimChip, TabularText } from "components.slint";
 import { BottomNav } from "nav.slint";
+import { Fb, TroubleBanner } from "feedback.slint";
 
 export struct DayCell { letter: string, on: bool }
 
@@ -274,7 +275,7 @@ export component HomeScreen inherits Rectangle {
                 horizontal-stretch: 1;
                 alignment: start;
                 Text { text: Tr.t("home.next_label"); font-size: 12px * Zoom.scale; font-weight: 500; color: Pal.text2; }
-                Text { text: root.next-title; font-size: 28px * Zoom.scale; font-weight: 700; line-height-factor: 1.036; color: Pal.text; overflow: elide; }
+                Text { text: root.next-title; font-size: 28px * min(Zoom.scale, 1.15); font-weight: 700; line-height-factor: 1.036; color: Pal.text; overflow: elide; }
                 if root.next-sub != "": VerticalLayout {
                     padding-top: 4px;
                     Text { text: root.next-sub; font-size: 14px * Zoom.scale; color: Pal.text2; }
@@ -327,6 +328,7 @@ export component HomeScreen inherits Rectangle {
                 }
             }
         }
+        if Fb.trouble != "": TroubleBanner { }
         HorizontalLayout {
             padding-left: 16px;
             padding-right: 16px;

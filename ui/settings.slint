@@ -181,6 +181,17 @@ export component SettingsScreen inherits Rectangle {
                     SetRow { title: Tr.t("settings.confetti"); switch: true; on: root.st.confetti; clicked => { root.toggled(2, !root.st.confetti); } }
                 }
                 Rectangle { height: 8px; }
+                ListTitle { text: Tr.t("settings.support"); }
+                Card {
+                    SetRow { title: Tr.t("help.title"); clicked => { root.open-row(11); } }
+                    Inset { }
+                    SetRow { title: Tr.t("settings.rate"); clicked => { root.open-row(12); } }
+                    Inset { }
+                    SetRow { title: Tr.t("report.title"); clicked => { root.open-row(13); } }
+                    Inset { }
+                    SetRow { title: Tr.t("settings.intro_again"); clicked => { root.open-row(14); } }
+                }
+                Rectangle { height: 8px; }
                 ListTitle { text: Tr.t("settings.data"); }
                 Card {
                     SetRow { title: Tr.t("settings.backup"); clicked => { root.open-row(6); } }

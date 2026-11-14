@@ -28,6 +28,7 @@ mod debug_elements;
 mod editor;
 mod editor_look;
 mod editor_sound;
+mod feedback;
 mod history;
 mod home;
 mod home_sheets;
@@ -45,6 +46,9 @@ const SCREEN_HISTORY: i32 = 2;
 const SCREEN_SETTINGS: i32 = 3;
 const SCREEN_RELIABILITY: i32 = 4;
 const SCREEN_THEME: i32 = 5;
+const SCREEN_INTRO: i32 = 6;
+const SCREEN_REPORT: i32 = 7;
+const SCREEN_HELP: i32 = 8;
 
 /// Everything the screens share. Only the UI thread touches it.
 pub struct Ctx {
@@ -71,6 +75,7 @@ pub struct Ctx {
     pub problem: Cell<Option<mobile_sentinel::health::Check>>,
     pub reliability: RefCell<reliability::State>,
     pub theme: RefCell<theme::State>,
+    pub feedback: RefCell<feedback::State>,
 }
 
 // For what comes back to the UI thread from another one.
@@ -154,6 +159,9 @@ fn back(ctx: &Rc<Ctx>) {
         1 => editor::back(ctx),
         SCREEN_RELIABILITY => reliability::leave(ctx),
         SCREEN_THEME => theme::leave(ctx),
+        SCREEN_INTRO => feedback::finish_intro(ctx),
+        SCREEN_REPORT => feedback::back_from_report(ctx),
+        SCREEN_HELP => feedback::leave_help(ctx),
         // The main screens do not stack: back from them is the alarms.
         SCREEN_HISTORY | SCREEN_SETTINGS => go(ctx, 0),
         _ => mobile_sentinel::foregrounding::move_to_back(),
@@ -285,11 +293,23 @@ fn connect_editor_sheets(ctx: &Rc<Ctx>, ui: &MainWindow) {
     colour::connect(ctx, ui);
     reliability::connect(ctx, ui);
     theme::connect(ctx, ui);
+    feedback::connect(ctx, ui);
 }
 
 pub fn run() -> Result<(), slint::PlatformError> {
     // First, so the alarm list below already reflects one-time alarms it switched off.
     crate::platform::init_platform();
+    crate::diag_log::event(
+        "start",
+        &format!(
+            "screen opened, {}",
+            if crate::platform::PROCESS_STARTED_BY_WAKE.load(std::sync::atomic::Ordering::Relaxed) {
+                "warm: the process was already up for a wake-up"
+            } else {
+                "cold or already running"
+            }
+        ),
+    );
     // A native window may stay at 60 Hz otherwise; the original's WebView gets the fast rate itself.
     mobile_sentinel::display::set_preferred_frame_rate(
         mobile_sentinel::display::PreferredFrameRate::Highest,
@@ -324,6 +344,7 @@ pub fn run() -> Result<(), slint::PlatformError> {
         problem: Cell::new(None),
         reliability: RefCell::new(reliability::State::default()),
         theme: RefCell::new(theme::State::default()),
+        feedback: RefCell::new(feedback::State::default()),
     });
     CTX.with(|slot| *slot.borrow_mut() = Rc::downgrade(&ctx));
 
@@ -423,8 +444,9 @@ pub fn run() -> Result<(), slint::PlatformError> {
 
     // The setup comes before anything else, once.
     if first_run {
-        reliability::open(&ctx, true);
+        feedback::open_intro(&ctx, true);
     }
+    feedback::refresh_trouble(&ctx);
 
     // Anything the user must know about what happened while the app was away: a database that
     // had to be reset (or cannot persist) instead of a silently empty alarm list, and alarms

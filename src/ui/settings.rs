@@ -172,6 +172,10 @@ pub fn row(ctx: &Rc<Ctx>, index: i32) {
         8 => open_about(ctx),
         9 => super::reliability::open(ctx, false),
         10 => super::theme::open(ctx),
+        11 => super::feedback::open_help(ctx),
+        12 => super::feedback::rate(ctx),
+        13 => super::feedback::open_report(ctx, crate::report::Kind::Problem),
+        14 => super::feedback::open_intro(ctx, false),
         _ => {}
     }
 }

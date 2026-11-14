@@ -47,3 +47,9 @@ direct_boot = true
 # mobile-sentinel). From 600dp wide on, Android 16 goes its own way, and the layout is
 # made for that.
 screen_orientation = "portrait"
+
+# So the Report a problem screen can tell whether an email app exists (Android 11+ hides apps otherwise).
+[android.declare.queries]
+[[android.declare.queries.intent]]
+action = "android.intent.action.SEND_MULTIPLE"
+data = { mimeType = "message/rfc822" }

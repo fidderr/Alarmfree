@@ -187,6 +187,28 @@ fn start(ctx: &Rc<Ctx>, id: &str) {
         times,
         first_interaction: None,
     };
+    if let Some(alarm) = alarm.as_ref() {
+        let late = if times.snoozed == 0 {
+            let fired = times
+                .ring_started
+                .with_timezone(&chrono::Local)
+                .naive_local();
+            format!(
+                "{}s after its time",
+                crate::diag_log::lateness_secs(fired, alarm.time_hour, alarm.time_minute)
+            )
+        } else {
+            format!("after snooze {}", times.snoozed)
+        };
+        crate::diag_log::event(
+            "ring",
+            &format!(
+                "started id={} {late} challenges={}",
+                crate::diag_log::short_id(id),
+                alarm.challenges.len()
+            ),
+        );
+    }
     // The screen came up: part of the record of how fast this ring was.
     if let Some(kit) = crate::platform::alarm_kit_optional() {
         kit.note_ui_up(&mobile_sentinel::InstanceId::new(id.to_owned()));
@@ -251,6 +273,7 @@ pub fn poll(ctx: &Rc<Ctx>) {
     if crate::platform::take_ring_end_news() {
         *ctx.alarms.borrow_mut() = crate::persistence::load_alarms();
         super::home::refresh(ctx);
+        super::feedback::refresh_trouble(ctx);
         // Rang until its limit with nobody there: nothing else tells the user.
         let notices = unseen_outcome_notices(ctx);
         if !notices.is_empty() {
@@ -268,7 +291,18 @@ pub fn poll(ctx: &Rc<Ctx>) {
         if current != showing {
             match current {
                 Some(id) => start(ctx, &id),
-                None => stop(ctx),
+                None => {
+                    if let Some(id) = showing {
+                        crate::diag_log::event(
+                            "ring",
+                            &format!(
+                                "stopped id={} how=ended outside the screen (limit, backup screen or restart)",
+                                crate::diag_log::short_id(&id)
+                            ),
+                        );
+                    }
+                    stop(ctx)
+                }
             }
         }
     }
@@ -312,6 +346,10 @@ pub fn snooze(ctx: &Rc<Ctx>) {
         ring.id.clone()
     };
     show_texts(ctx);
+    crate::diag_log::event(
+        "ring",
+        &format!("snoozed id={}", crate::diag_log::short_id(&id)),
+    );
     let kit = crate::platform::alarm_kit();
     let instance = mobile_sentinel::InstanceId::new(id.clone());
     if let Err(e) = kit.snooze(&instance) {
@@ -371,6 +409,17 @@ fn finished(ctx: &Rc<Ctx>, id: &str, solves: Vec<ChallengeSolve>) {
             ));
         }
     }
+    crate::diag_log::event(
+        "ring",
+        &format!(
+            "stopped id={} how=solved challenges_solved={}",
+            crate::diag_log::short_id(id),
+            ctx.ring
+                .borrow()
+                .as_ref()
+                .map_or(0, |ring| ring.setups.len())
+        ),
+    );
     finish_alarm(ctx, id);
     stop(ctx);
     // Like the original: the history shows what just happened, a hidden alarm leaves none.

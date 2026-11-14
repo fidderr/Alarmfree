@@ -223,6 +223,8 @@ pub struct Prefs {
     /// Warnings the user does not want on the home screen. The reliability screen still
     /// has them.
     pub hidden_warnings: Vec<String>,
+    /// The newest log line a bug report was offered for, so the banner shows once.
+    pub report_seen: String,
 }
 
 impl Default for Prefs {
@@ -243,6 +245,7 @@ impl Default for Prefs {
             setup_done: false,
             alarm_defaults: None,
             hidden_warnings: Vec::new(),
+            report_seen: String::new(),
         }
     }
 }
