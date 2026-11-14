@@ -455,11 +455,9 @@ public class SlintAndroidJavaHelper {
                 }
                 // On API 34+, Back arrives via OnBackInvokedDispatcher; forward
                 // it into Slint's key-event pipeline.
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE && mBackCallback == null) {
-                    mBackCallback = () -> SlintAndroidJavaHelper.onBackInvoked();
-                    mActivity.getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
-                            OnBackInvokedDispatcher.PRIORITY_DEFAULT, mBackCallback);
-                }
+                // AlarmFree: not registered. Slint's callback finishes the activity when its key
+                // pipeline does not take Back, and it won over mobile-sentinel's own callback on
+                // Android 14 and later: Back left the app. See vendor/README.md.
             }
         });
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
