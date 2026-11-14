@@ -184,7 +184,8 @@ try_language() { # name
     tap_row "Nederlands"
     sleep 0.8
     is_there Instellingen || panel_problem "$1: Nederlands does not take"
-    tap_row "English"
+    # The last "English": the first one can be the row behind the sheet, which says the language it has.
+    tap English L 0.5
     sleep 0.8
     is_there Settings || panel_problem "$1: English does not come back"
 }
