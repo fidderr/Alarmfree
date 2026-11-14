@@ -263,7 +263,6 @@ panel_look() {
     local look
     case "$AVD" in
         af31) look="Light English H12 1.3 Blue" ;; # the tour finds things by their English text (s34 covers the long languages)
-        phone) look="Dark Dutch H24 1.0 Blue" ;;
         *) look="Dark English H24 1.0 Blue" ;;
     esac
     [ -z "${VARIANT:-}" ] || look="Black English H12 1.0 Blue"
@@ -347,12 +346,21 @@ panel_challenges() {
 # The theme screen: what each theme looks like, the wheel, and a theme of one's own.
 panel_theme_stops() {
     local name
+    # A phone takes a moment to repaint in the new colours, and a touch before that is lost.
+    theme_tap() {
+        local i
+        for i in 1 2 3; do
+            tap "$1" 0 1.0
+            wait_for 2 is_on "$1" && break
+        done
+        sleep 0.4
+    }
     for name in "Same as the phone" Dark Light "Pure black" Midnight Forest Plum Sand Mist; do
-        tap "$name" 0 0.3
+        theme_tap "$name"
         is_on "$name" || panel_problem "theme $name does not take"
         picture "theme_$(echo "$name" | tr ' ' _)"
     done
-    tap Dark 0 0.3
+    theme_tap Dark
     tap_row "Choose your own colour"
     panel_open theme_accent_wheel
     tap_row "Your own theme"
@@ -361,7 +369,7 @@ panel_theme_stops() {
         tap_row "$name"
         panel_open "theme_own_$name"
     done
-    tap Dark 0 0.3
+    theme_tap Dark
 }
 
 s57() {
@@ -570,7 +578,7 @@ s57() {
     press h-delete-history "" 0.5
     wait_for 3 panel_up
     tap_row "Older than 30 days"
-    if is_there Delete; then
+    if wait_for 3 is_there Delete; then
         look_through history_delete_period
         press_back
         wait_for 3 panel_down || panel_problem "history_delete_period: Back leaves it open"
