@@ -1786,6 +1786,7 @@ s48() {
     press open a 0.8
     on_editor
     tap_has Sound 0 0.6
+    scroll_until "Add your own sound"
     on_screen "Add your own sound" 4
     tap "Add your own sound" 0 1
     if picker_tap mytune.ogg; then

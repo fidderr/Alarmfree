@@ -503,9 +503,21 @@ action() { as_app "echo $1 > files/debug_action.tmp && mv files/debug_action.tmp
 # The app answers commands written to files/debug_action.txt (src/debug_hooks.rs, src/ui/debug*.rs;
 # a debug build made by ./build.sh). One program on the device writes the command and waits for the
 # answer: under a tenth of a second.
+# A text for inside single quotes in a shell: each quote becomes quote, backslash, quote, quote. Done
+# in a loop: how bash reads a quote in the replacement of ${var//x/y} differs between versions (5.3
+# made three quotes of it, which left the quote open and the shell on the device waiting for the
+# rest: "no answer from the device shell" after 90 s, on any text with an apostrophe).
+sq_escape() {
+    local rest=$1 out="" q="'"
+    while [[ $rest == *"$q"* ]]; do
+        out+="${rest%%"$q"*}'\\''"
+        rest=${rest#*"$q"}
+    done
+    printf '%s' "$out$rest"
+}
 ui() { # command: its answer, or "no answer from the app"
     local out
-    out=$(as_app "cd files && rm -f debug_script_result.txt && print -r -- 'ui:${1//\'/\'\\'\'}' > debug_action.tmp && mv debug_action.tmp debug_action.txt && i=0; while [ ! -e debug_script_result.txt ] && [ \$i -lt 300 ]; do sleep 0.01; i=\$((i + 1)); done; cat debug_script_result.txt 2> /dev/null")
+    out=$(as_app "cd files && rm -f debug_script_result.txt && print -r -- 'ui:$(sq_escape "$1")' > debug_action.tmp && mv debug_action.tmp debug_action.txt && i=0; while [ ! -e debug_script_result.txt ] && [ \$i -lt 300 ]; do sleep 0.01; i=\$((i + 1)); done; cat debug_script_result.txt 2> /dev/null")
     if [ -n "$out" ]; then
         echo "$out"
         return 0
@@ -908,8 +920,13 @@ sheet_scroll() {
     sleep 0.8
 }
 # Tap what the text names, scrolling the panel up first when it is not on screen yet.
+# Up to four screens down: the settings list is longer than one (Help and feedback sits above Data).
 tap_scrolling() { # text
-    wait_for 2 has_there "$1" || { sheet_scroll; wait_for 2 has_there "$1"; }
+    local i
+    for i in 1 2 3 4; do
+        wait_for 2 has_there "$1" && break
+        sheet_scroll
+    done
     tap_has "$1" 0 0.3
 }
 # A phone's keyboard stays up over a sheet's Done button: Back puts it away (an emulator has none).
