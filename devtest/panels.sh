@@ -115,7 +115,11 @@ for e in json.loads(sys.stdin.read()):
 
 # Every choice and switch on screen does what it does: a switch goes over and back, a choice takes.
 # Then it is as it was.
-try_chips() { # name
+# A panel whose rows close it on a pick (language, time format, week start, new alarms, volume ...) gets
+# the opening row's place in $2 $3: it is opened again to see what the pick did, and what was on is
+# taken again. Returns 3 when the panel closed itself that way, and is closed again then.
+try_chips() { # name [x y of the row that opened it]
+    local ox=${2:-} oy=${3:-}
     local name=$1 line text x y was now role floor before=$(sheet_checkables | grep -v '^What is this?|')
     # What is below the window (a long list in a panel) is not touched.
     floor=$(( $(window_size | cut -d' ' -f2) - 200 ))
@@ -130,6 +134,25 @@ try_chips() { # name
         [ "$y" -lt "$floor" ] || continue
         dev input tap "$x" "$y"
         sleep 0.2
+        if no_sheet_up; then
+            # The pick took and closed the panel by itself.
+            [ "$role" != Switch ] || panel_problem "$name: the switch '$text' closes the panel"
+            if [ -z "$ox" ]; then
+                panel_problem "$name: the choice '$text' closes the panel, and there is no row to open it again from"
+                return 3
+            fi
+            dev input tap "$ox" "$oy"
+            sleep 0.7
+            wait_for 3 any_sheet_up || { panel_problem "$name: the panel does not open again"; return 3; }
+            now=$(checkables | grep -F -m1 "$text|" | cut -d'|' -f4)
+            [ "$now" = true ] || [ "$was" = true ] || panel_problem "$name: the choice '$text' does not take"
+            # As it was: take what was on, which closes the panel again.
+            while IFS='|' read -r text x y was role; do
+                [ "$was" = true ] && [ "$role" != Switch ] && { dev input tap "$x" "$y"; sleep 0.7; break; }
+            done <<< "$before"
+            wait_for 3 no_sheet_up || { panel_problem "$name: the choice that was on leaves the panel open"; press_back; }
+            return 3
+        fi
         now=$(checkables | grep -F -m1 "$text|" | cut -d'|' -f4)
         case "$role" in
             Switch)
@@ -180,19 +203,29 @@ tap_row() { # text
 
 # The language sheet: every language would change what the rest of the tour reads. One other one
 # takes, and English (the tour's own) comes back.
-try_language() { # name
+try_language() { # name [x y of the row that opened it]
     tap_row "Nederlands"
     sleep 0.8
     is_there Instellingen || panel_problem "$1: Nederlands does not take"
+    # A language closes the sheet. Open it again, now in Dutch, and take English from it.
+    wait_for 3 no_sheet_up || { panel_problem "$1: choosing a language leaves the sheet open"; press_back; }
+    if [ -n "${2:-}" ]; then
+        dev input tap "$2" "$3"
+    else
+        tap_has Taal 0 0.3
+    fi
+    sleep 0.7
+    wait_for 4 any_sheet_up || { panel_problem "$1: the sheet does not open again"; return; }
     # The last "English": the first one can be the row behind the sheet, which says the language it has.
     tap English L 0.5
     sleep 0.8
     is_there Settings || panel_problem "$1: English does not come back"
+    wait_for 3 no_sheet_up || { panel_problem "$1: choosing English leaves the sheet open"; press_back; }
 }
 
 # A panel that opened: all of it, and what closes it closes it and nothing else: Done from a row,
 # Back from anywhere else.
-panel_open() { # name
+panel_open() { # name [x y of the row that opened it, for panels that close themselves]
     local name=$1
     if ! wait_for 4 any_sheet_up; then
         panel_problem "$name: no panel"
@@ -201,8 +234,12 @@ panel_open() { # name
     look_through "$name"
     panel_help "$name"
     case "$name" in
-        *Language*) try_language "$name" ;;
-        *) try_chips "$name" ;;
+        *Language*)
+            try_language "$name" "${2:-}" "${3:-}"
+            sleep 0.6
+            return 0
+            ;;
+        *) try_chips "$name" "${2:-}" "${3:-}" || { sleep 0.6; return 0; } ;;
     esac
     if is_there Done; then
         tap Done 0 0.3
@@ -298,7 +335,7 @@ for e in json.loads(sys.stdin.read()):
         dev input tap "$x" "$y"
         sleep 0.4
         if any_sheet_up; then
-            panel_open "${name}_$(echo "$text" | tr -c 'a-zA-Z0-9\n' _ | cut -c1-24)"
+            panel_open "${name}_$(echo "$text" | tr -c 'a-zA-Z0-9\n' _ | cut -c1-24)" "$x" "$y"
         elif ! on_screen_no "$here"; then
             look_through "${name}_$(echo "$text" | tr -c 'a-zA-Z0-9\n' _ | cut -c1-24)"
             press_back
