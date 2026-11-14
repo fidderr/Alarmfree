@@ -945,6 +945,22 @@ sheet_scroll() {
     dev input swipe $(swipe_ys scroll) 400
     sleep 0.8
 }
+# A tap on what the text names, once it is clear of the bottom of the window: on a window with a
+# navigation bar (3-button navigation) or a Done button that stays at the bottom of a panel, what is
+# there takes the touch and the control does nothing. With "has" the text only has to be in it.
+# The margin (default 100 px) is how far above the bottom edge it has to be.
+tap_clear() { # text [has] [margin]
+    local i y h find=where tapper=tap margin=${3:-100}
+    [ "${2:-}" != has ] || { find=where_has; tapper=tap_has; }
+    h=$(window_size | cut -d' ' -f2)
+    case "$h" in '' | *[!0-9]*) h=1920 ;; esac
+    for i in 1 2 3; do
+        y=$($find "$1" | cut -d' ' -f2)
+        case "$y" in '' | *[!0-9]*) ;; *) [ "$y" -lt $((h - margin)) ] && break ;; esac
+        sheet_scroll
+    done
+    $tapper "$1" 0 0.5
+}
 # Scroll the panel until this exact text (the n-th, or L for the last) is on screen.
 scroll_to() { # text [which]
     local i

@@ -2850,7 +2850,7 @@ s61() {
     [ "$(sn pal_bg)" = "#f3ede2" ] || problems="$problems; Sand is $(sn pal_bg)"
     [ "$(sn pal_light)" = true ] || problems="$problems; Sand is not a light theme"
     # On the wheel: a finger, as a person does it.
-    tap "Choose your own colour" 0 0.5
+    tap_clear "Choose your own colour"
     on_screen "Colour code" 4 || on_screen_has "code" 3
     local before x y w h scale
     before=$(sn pal_accent)
@@ -2955,7 +2955,7 @@ s62() {
     [ "$(all_texts | grep -c -E '^(Plain|Aurora|Sunrise|Waves|Stars|Rings|Bubbles|Photo)$')" -ge 8 ] || problems="$problems; not all backgrounds: $(texts_of)"
     screenshot s62_panel
     tap_in Waves 0 0.3
-    tap_has Colour 0 0.5
+    tap_clear Colour has 300
     set_field 0 '#c06020'
     sleep 0.3
     tap Done 0 0.4
