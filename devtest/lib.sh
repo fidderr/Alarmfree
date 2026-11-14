@@ -191,7 +191,13 @@ screen_off() {
     SCREEN_WENT_OFF=1
 }
 go_home() { dev input keyevent KEYCODE_HOME; }
-screenshot() { adb_ exec-out screencap -p > "$OUT/$1${VARIANT:-}.png"; }
+# On a phone a picture is taken only while AlarmFree has the focus: never the owner's file picker,
+# notification shade or another app.
+screen_may_be_taken() { on_emulator || focus_in_app; }
+screenshot() {
+    screen_may_be_taken || { note "no picture $1: AlarmFree is not in front"; return 0; }
+    adb_ exec-out screencap -p > "$OUT/$1${VARIANT:-}.png"
+}
 
 # ---- The clock ----
 on_emulator() { case "$SERIAL" in emulator-*) return 0 ;; *) return 1 ;; esac; }
@@ -929,6 +935,15 @@ sheet_scroll() {
     # shellcheck disable=SC2046
     dev input swipe $(swipe_ys 78 30) 400
     sleep 0.8
+}
+# Scroll the panel until this exact text (the n-th, or L for the last) is on screen.
+scroll_to() { # text [which]
+    local i
+    for i in 1 2 3 4; do
+        is_there "$1" "${2:-}" && return 0
+        sheet_scroll
+    done
+    return 1
 }
 # Tap what the text names, scrolling the panel up first when it is not on screen yet.
 # Up to four screens down: the settings list is longer than one (Help and feedback sits above Data).

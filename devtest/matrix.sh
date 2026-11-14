@@ -2887,6 +2887,7 @@ s61() {
     [ "$(sn pal_text)" != "$(sn pal_bg)" ] || problems="$problems; text like the background"
     done_sheet_theme
     # Unreadable on purpose.
+    scroll_to Text L
     tap Text L 0.5
     set_field 0 '#102030'
     sleep 0.3
@@ -2958,6 +2959,7 @@ s62() {
     set_field 0 '#c06020'
     sleep 0.3
     tap Done 0 0.4
+    scroll_to Mono
     tap_in Mono 0 0.2
     # A preview: as it will look, without a sound, and it closes by a tap and by Back.
     tap Preview L 0.6
