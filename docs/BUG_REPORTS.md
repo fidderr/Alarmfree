@@ -19,8 +19,7 @@ presses send there; the app has no internet permission. With no email app, the r
 After a panic or a missed alarm, Home shows a dismissable banner "Something went wrong last time. Send a report?"
 once (the newest log line is remembered as seen).
 
-The address is the constant `CONTACT_EMAIL` in `src/report.rs`. While it is empty the email app opens with no
-recipient and the user has to type one: fill it in before release.
+The address is the constant `CONTACT_EMAIL` in `src/report.rs` (the public developer address of the Play listing).
 
 ## What a report looks like
 

@@ -3,9 +3,9 @@
 
 use crate::models::AlarmData;
 
-/// Where reports go. Empty until the developer fills it in: the email app then opens with no
-/// recipient and the user can type one.
-pub const CONTACT_EMAIL: &str = "";
+/// Where reports go: the public developer address from the Play listing. If it is ever empty the
+/// email app opens with no recipient and the user can type one.
+pub const CONTACT_EMAIL: &str = "r.fidder97@gmail.com";
 
 /// The Android versionCode of this build, as in `sentinel.toml`.
 pub const VERSION_CODE: u32 = 12400;
