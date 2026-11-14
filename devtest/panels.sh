@@ -152,8 +152,9 @@ try_chips() { # name
 
 # The ? on top, if there is one: it opens the explanation in place, and closes it again.
 panel_help() { # name
-    local name=$1 before after
+    local name=$1 before after sig0
     is_there "What is this?" || return 0
+    sig0=$(layout_sig)
     before=$(texts_of)
     tap "What is this?" 0 0.3
     after=$(texts_of)
@@ -163,7 +164,8 @@ panel_help() { # name
         panel_problem "$name: the ? opens nothing"
     fi
     tap "What is this?" 0 0.3
-    [ "$(texts_of)" = "$before" ] || panel_problem "$name: the ? does not close"
+    # By where things are: a countdown on the screen behind changes by itself.
+    [ "$(layout_sig)" = "$sig0" ] || panel_problem "$name: the ? does not close"
 }
 
 any_sheet_up() { sheet_open || panel_up || editor_sheet_open || [ "$(sn theme_sheet)" = true ]; }
@@ -295,6 +297,14 @@ for e in json.loads(sys.stdin.read()):
 # it is when it has to be done.
 panel_challenges() {
     local added
+    # Under the eight challenges of this alarm: the list scrolls.
+    local ay by
+    ay=$(where "Add a challenge" | cut -d' ' -f2)
+    by=$(where Done | cut -d' ' -f2)
+    case "$ay$by" in
+        *[!0-9]* | '') ;;
+        *) [ "$ay" -gt $((by - 110)) ] && sheet_scroll ;;
+    esac
     tap "Add a challenge" 0 0.4
     look_through challenge_add
     panel_help challenge_add
@@ -516,7 +526,11 @@ s57() {
     else
         panel_problem "no panel for the ring screen"
     fi
+    # The panel before this one is still sliding out: a touch now is lost.
+    wait_for 4 no_sheet_up
+    sleep 0.8
     tap_row Challenges
+    wait_for 3 editor_sheet_open || { sleep 0.8; tap_row Challenges; }
     if wait_for 3 editor_sheet_open; then
         is_there "Try all" || panel_problem "no way to try them all"
         panel_challenges
@@ -541,7 +555,7 @@ s57() {
     # A period asks first too, and Back is no.
     press h-delete-history "" 0.5
     wait_for 3 panel_up
-    tap "Older than 30 days" 0 0.4
+    tap_row "Older than 30 days"
     if is_there Delete; then
         look_through history_delete_period
         press_back
