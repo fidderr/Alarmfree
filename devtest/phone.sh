@@ -45,7 +45,7 @@ mkdir -p "$OUT"
     fresh
     export CLEAN_COPY
     start_app
-    on_screen .home-header 40 || { echo "STOP  the page does not render"; exit 1; }
+    wait_for 60 page_is_up && wait_for 30 on_screen_no 0 || { echo "STOP  the window does not come up on the alarm list"; exit 1; }
     timeout "${LIMIT:-3000}" bash devtest/matrix.sh "$@" || echo "STOP  the run ended with $?"
 ) > "devtest-out/$NAME.log" 2>&1
 sed -n '/===== SUMMARY/,$p' "devtest-out/$NAME.log" | grep -E '^(FAIL|STOP|SKIP|NOTE|passed:|over a minute)' | cut -c1-300 | sort -u
