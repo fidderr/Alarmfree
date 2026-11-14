@@ -178,6 +178,17 @@ tap_row() { # text
     tap_has "$1" 0 0.5
 }
 
+# The language sheet: every language would change what the rest of the tour reads. One other one
+# takes, and English (the tour's own) comes back.
+try_language() { # name
+    tap_row "Nederlands"
+    sleep 0.8
+    is_there Instellingen || panel_problem "$1: Nederlands does not take"
+    tap_row "English"
+    sleep 0.8
+    is_there Settings || panel_problem "$1: English does not come back"
+}
+
 # A panel that opened: all of it, and what closes it closes it and nothing else: Done from a row,
 # Back from anywhere else.
 panel_open() { # name
@@ -188,7 +199,10 @@ panel_open() { # name
     fi
     look_through "$name"
     panel_help "$name"
-    try_chips "$name"
+    case "$name" in
+        *Language*) try_language "$name" ;;
+        *) try_chips "$name" ;;
+    esac
     if is_there Done; then
         tap Done 0 0.3
         wait_for 3 no_sheet_up || {
