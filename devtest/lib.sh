@@ -961,6 +961,25 @@ tap_clear() { # text [has] [margin]
     done
     $tapper "$1" 0 0.5
 }
+# set_field for a field that may lie under the panel's pinned Done button (3-button navigation and a
+# panel that is longer than the window): the panel is scrolled up first, from the gutter at its left
+# edge, where no slider or field takes the swipe.
+set_field_clear() { # n text
+    local i f d h x1 y1 x2 y2
+    h=$(window_size | cut -d' ' -f2)
+    case "$h" in '' | *[!0-9]*) h=1920 ;; esac
+    for i in 1 2 3; do
+        f=$(ui inputs | grep -oE '"y":[0-9]+' | sed -n "$(($1 + 1))p" | tr -dc 0-9)
+        d=$(where Done | cut -d' ' -f2)
+        case "$d" in '' | *[!0-9]*) d=$((h - 200)) ;; esac
+        case "$f" in '' | *[!0-9]*) break ;; esac
+        [ "$f" -lt $((d - 80)) ] && break
+        read -r x1 y1 x2 y2 <<< "$(swipe_ys scroll)"
+        dev input swipe 26 "$y1" 26 "$y2" 400
+        sleep 0.8
+    done
+    set_field "$1" "$2"
+}
 # Scroll the panel until this exact text (the n-th, or L for the last) is on screen.
 scroll_to() { # text [which]
     local i

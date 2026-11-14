@@ -2847,8 +2847,10 @@ s61() {
     tap_has Theme 0 0.5
     wait_for 5 on_screen_no 5 || problems="$problems; no theme screen"
     [ "$(all_texts | grep -c -E '^(Same as the phone|Dark|Light|Pure black|Midnight|Forest|Plum|Sand|Mist)$')" -ge 9 ] || problems="$problems; not all themes: $(texts_of)"
-    is_there "Choose your own colour" || problems="$problems; not all accents"
+    # The second row of swatches sits below the window on a screen with a navigation bar.
+    scroll_to "Choose your own colour" || problems="$problems; not all accents"
     screenshot s61_theme
+    sheet_scroll_up
     # A theme that comes with the app, and an accent for it.
     tap Sand 0 0.4
     [ "$(sn pal_bg)" = "#f3ede2" ] || problems="$problems; Sand is $(sn pal_bg)"
@@ -2960,7 +2962,7 @@ s62() {
     screenshot s62_panel
     tap_in Waves 0 0.3
     tap_clear Colour has 300
-    set_field 0 '#c06020'
+    set_field_clear 0 '#c06020'
     sleep 0.3
     tap Done 0 0.4
     scroll_to Mono
