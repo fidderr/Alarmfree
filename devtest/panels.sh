@@ -25,7 +25,9 @@ sheet_checkables() {
     # By the text alone: what is under the panel may have moved or switched since.
     names=$(printf '%s
 ' "$PANEL_BASELINE" | cut -d'|' -f1)
-    checkables | while IFS= read -r line; do
+    # The tabs under the scrim are no choice of a panel: with 3-button navigation they sit above the
+    # bottom of the window, where the tour touches what it finds.
+    checkables | grep -v '|Tab$' | while IFS= read -r line; do
         printf '%s
 ' "$names" | grep -qxF -- "${line%%|*}" || printf '%s
 ' "$line"
@@ -220,7 +222,8 @@ no_sheet_up() { ! any_sheet_up; }
 tap_row() { # text
     has_there "$1" || { sheet_scroll_up; has_there "$1" || sheet_scroll; }
     has_there "$1" || sheet_scroll
-    tap_has "$1" 0 0.5
+    # Not under the navigation bar (3-button navigation), where the touch would be a press on Back.
+    tap_clear "$1" has 250
 }
 
 # The language sheet: every language would change what the rest of the tour reads. One other one
@@ -263,6 +266,8 @@ panel_open() { # name [x y of the row that opened it, for panels that close them
             ;;
         *) try_chips "$name" "${2:-}" "${3:-}" || { sleep 0.6; return 0; } ;;
     esac
+    # A field the tour touched has the keyboard up, which covers Done and takes the first Back.
+    hide_keyboard
     if is_there Done; then
         tap Done 0 0.3
         wait_for 3 no_sheet_up || {
@@ -370,15 +375,9 @@ for e in json.loads(sys.stdin.read()):
 # it is when it has to be done.
 panel_challenges() {
     local added
-    # Under the eight challenges of this alarm: the list scrolls.
-    local ay by
-    ay=$(where "Add a challenge" | cut -d' ' -f2)
-    by=$(where Done | cut -d' ' -f2)
-    case "$ay$by" in
-        *[!0-9]* | '') ;;
-        *) [ "$ay" -gt $((by - 110)) ] && sheet_scroll ;;
-    esac
-    tap "Add a challenge" 0 0.4
+    # Under the eight challenges of this alarm: the list scrolls, and with a navigation bar the
+    # button is not in the window until it has (nothing says it), or lies under Done.
+    tap_clear "Add a challenge" "" 300
     look_through challenge_add
     panel_help challenge_add
     press_back
@@ -429,6 +428,7 @@ panel_theme_stops() {
         tap_row "$name"
         panel_open "theme_own_$name"
     done
+    is_there Dark || { sheet_scroll_up; sheet_scroll_up; }
     theme_tap Dark
 }
 
@@ -666,7 +666,9 @@ s57() {
         done
         prev_chip=$name
         tap "$name" 0 0.3
-        found=$(panel_check)
+        # The chips of the row scroll sideways: at the end of the row one of them is cut off at the
+        # edge by design, with fewer than three others in the window (a narrower font than the phone's).
+        found=$(panel_check | tr ',' '\n' | sed 's/^ *//' | grep -vxE 'This week|Last week|This month|Last month|This year|Last year|Your own days' | paste -sd, -)
         [ -z "$found" ] || panel_problem "history filter $name: $found"
         picture "history_filter_$(echo "$name" | tr ' ' _)"
     done
