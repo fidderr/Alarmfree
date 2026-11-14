@@ -621,7 +621,16 @@ click_text() { tap_in "$@"; }
 set_field() { type_field "$@"; }
 # The same through the keys, which runs the field's own handler for what is typed.
 type_field() { # n text
-    local said
+    local said before after i
+    # The keyboard moves the sheet: tap a field only once the fields stand still, or the tap
+    # lands where the field was (the second text went into the first field).
+    before=$(ui inputs)
+    for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+        sleep 0.25
+        after=$(ui inputs)
+        [ "$after" = "$before" ] && break
+        before=$after
+    done
     said=$(ui "settext:$1:$2")
     sleep 0.2
     [ "$said" = OK ] || echo "no field $1" >&2
