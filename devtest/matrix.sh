@@ -1251,7 +1251,8 @@ s36() {
     seed c "$(alarm_json c 9 0 "$EVERY_DAY" null)"
     arm a
     on_card 10
-    sleep 0.5
+    # Android resizes the window once more about a second after the first frame; a hold that starts in that moment is lost.
+    sleep 2.5
     local before after again gap problems="" ax ay cx cy
     before=$(row_labels)
     read -r ax ay <<< "$(where a)"
