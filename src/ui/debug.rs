@@ -35,6 +35,7 @@ fn snapshot(ui: &MainWindow) -> String {
         "hs_title": ui.get_hs_title().as_str(),
         "hs_choices": texts(ui.get_hs_choices(), |c| c.text.to_string()),
         "panel_open": ui.get_panel_open(),
+        "theme_sheet": ui.global::<Thm>().get_sheet_open(),
         "pn_title": ui.get_pn_title().as_str(),
         "pn_choices": texts(ui.get_pn_choices(), |c| c.text.to_string()),
         "next_title": ui.get_next_title().as_str(),

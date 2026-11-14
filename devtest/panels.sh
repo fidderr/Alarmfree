@@ -19,6 +19,7 @@ panel_problem() {
 # What the screen under a panel has that can be on or off: a panel's scrim leaves it in the element
 # tree but a touch on it only closes the panel. Taken at every stop without a panel.
 PANEL_BASELINE=""
+PANEL_BASELINE_SCREEN=""
 sheet_checkables() {
     local line names
     # By the text alone: what is under the panel may have moved or switched since.
@@ -31,8 +32,19 @@ sheet_checkables() {
     done
 }
 
+# Everything seen on this screen so far, also what a scroll took out of the window.
+baseline_update() {
+    any_sheet_up && return 0
+    local here
+    here=$(screen_no)
+    [ "$here" = "$PANEL_BASELINE_SCREEN" ] || PANEL_BASELINE=""
+    PANEL_BASELINE_SCREEN=$here
+    PANEL_BASELINE=$(printf '%s
+%s' "$PANEL_BASELINE" "$(checkables)")
+}
+
 picture() {
-    any_sheet_up || PANEL_BASELINE=$(checkables)
+    baseline_update
     PANEL_N=$((PANEL_N + 1))
     PANEL_LAST="$OUT/panels${VARIANT:-}/$(printf %03d "$PANEL_N")_$1.png"
     adb_ exec-out screencap -p > "$PANEL_LAST"
@@ -45,8 +57,12 @@ panel_check() {
 
 # Every stop of what is on top: a check and a picture, and the next one by touch. A swipe that
 # changes nothing is the end of what scrolls.
+# Where the texts are, without what they say.
+layout_sig() {
+    ui texts | python -I -c 'import json,sys; print(sorted(e["y"] for e in json.loads(sys.stdin.read())))' | md5sum | cut -d' ' -f1
+}
 look_through() { # name
-    local name=$1 stop=0 moved=0 found prev="" size w h
+    local name=$1 stop=0 moved=0 found prev="" sig first_sig="" size w h
     size=$(window_size)
     w=${size%% *}
     size=${size#* }
@@ -56,21 +72,29 @@ look_through() { # name
         found=$(panel_check)
         [ -z "$found" ] || panel_problem "$name: $found"
         picture "${name}_$stop"
-        if [ -n "$prev" ] && cmp -s "$prev" "$PANEL_LAST"; then
+        # Moved or not, by where things are (a picture also differs when the clock in the status bar does).
+        sig=$(layout_sig)
+        if [ -n "$prev" ] && [ "$prev" = "$sig" ]; then
             rm -f "$PANEL_LAST"
             PANEL_N=$((PANEL_N - 1))
             break
         fi
         [ -z "$prev" ] || moved=1
-        prev=$PANEL_LAST
+        prev=$sig
+        [ -n "$first_sig" ] || first_sig=$sig
         dev input swipe $((w / 2)) $((h * 75 / 100)) $((w / 2)) $((h * 30 / 100)) 300
         sleep 0.5
     done
     # Back to the top, for what comes next: only when it moved, and from inside what moved (a drag
     # from the scrim of a panel closes it).
     if [ "$moved" = 1 ]; then
-        dev input swipe $((w / 2)) $((h * 40 / 100)) $((w / 2)) $((h * 90 / 100)) 200
-        dev input swipe $((w / 2)) $((h * 40 / 100)) $((w / 2)) $((h * 90 / 100)) 200
+        local k=0
+        # Short pulls until it is where it was: a long one past the top would pull a panel shut.
+        while [ "$k" -lt 16 ] && [ "$(layout_sig)" != "$first_sig" ]; do
+            dev input swipe $((w / 2)) $((h * 45 / 100)) $((w / 2)) $((h * 70 / 100)) 250
+            sleep 0.4
+            k=$((k + 1))
+        done
     fi
     sleep 0.3
 }
@@ -92,10 +116,18 @@ for e in json.loads(sys.stdin.read()):
 # Every choice and switch on screen does what it does: a switch goes over and back, a choice takes.
 # Then it is as it was.
 try_chips() { # name
-    local name=$1 line text x y was now role before=$(sheet_checkables | grep -v '^What is this?|')
+    local name=$1 line text x y was now role floor before=$(sheet_checkables | grep -v '^What is this?|')
+    # What is below the window (a long list in a panel) is not touched.
+    floor=$(( $(window_size | cut -d' ' -f2) - 200 ))
+    # The buttons that stay at the bottom of a panel cover what is under them.
+    for text in Done Start Stop; do
+        y=$(where "$text" | cut -d' ' -f2)
+        case "$y" in '' | *[!0-9]*) ;; *) [ "$y" -gt 1200 ] && [ $((y - 100)) -lt "$floor" ] && floor=$((y - 100)) ;; esac
+    done
     [ -n "$before" ] || return 0
     while IFS='|' read -r text x y was role; do
         [ -n "$text" ] || continue
+        [ "$y" -lt "$floor" ] || continue
         dev input tap "$x" "$y"
         sleep 0.2
         now=$(checkables | grep -F -m1 "$text|" | cut -d'|' -f4)
@@ -112,7 +144,7 @@ try_chips() { # name
     done <<< "$before"
     # Choices go back by taking what was on, last.
     while IFS='|' read -r text x y was role; do
-        [ "$was" = true ] && [ "$role" != Switch ] && { dev input tap "$x" "$y"; sleep 0.15; }
+        [ "$was" = true ] && [ "$role" != Switch ] && [ "$y" -lt "$floor" ] && { dev input tap "$x" "$y"; sleep 0.15; }
     done <<< "$before"
     [ "$(sheet_checkables | grep -v '^What is this?|' | sort)" = "$(echo "$before" | sort)" ] ||
         panel_problem "$name: the choices do not go back"
@@ -134,8 +166,15 @@ panel_help() { # name
     [ "$(texts_of)" = "$before" ] || panel_problem "$name: the ? does not close"
 }
 
-any_sheet_up() { sheet_open || panel_up || editor_sheet_open; }
+any_sheet_up() { sheet_open || panel_up || editor_sheet_open || [ "$(sn theme_sheet)" = true ]; }
 no_sheet_up() { ! any_sheet_up; }
+
+# A row of a screen that scrolls: where it is, wherever the screen was left.
+tap_row() { # text
+    has_there "$1" || { sheet_scroll_up; has_there "$1" || sheet_scroll; }
+    has_there "$1" || sheet_scroll
+    tap_has "$1" 0 0.5
+}
 
 # A panel that opened: all of it, and what closes it closes it and nothing else: Done from a row,
 # Back from anywhere else.
@@ -154,6 +193,7 @@ panel_open() { # name
             panel_problem "$name: Done leaves it open"
             press_back
         }
+        sleep 0.6
         return 0
     fi
     press_back
@@ -161,6 +201,8 @@ panel_open() { # name
         panel_problem "$name: Back leaves it open"
         press_back
     }
+    # It slides out before it lets touches through.
+    sleep 0.6
 }
 
 # A week of history, with what can go wrong in it too.
@@ -221,6 +263,7 @@ panel_settings() { use_settings "\"$PANEL_THEME\"" "\"$PANEL_LANGUAGE\"" "\"setu
 # The rows are the buttons of the screen, which a person reads as "title value".
 panel_rows() { # name screen-number
     local name=$1 here=$2 line text x y role was now before_n
+    baseline_update
     local rows
     rows=$(ui texts | python -I -c '
 import json, sys
@@ -257,7 +300,8 @@ panel_challenges() {
     panel_help challenge_add
     press_back
     wait_for 3 editor_sheet_open || panel_problem "not back from adding a challenge"
-    tap Try L 0.4
+    sleep 0.8
+    tap "Try all" 0 0.4
     if wait_for 5 run_up; then
         sleep 0.3
         focus_in_app || { press_back; sleep 0.5; }
@@ -285,12 +329,12 @@ panel_theme_stops() {
         picture "theme_$(echo "$name" | tr ' ' _)"
     done
     tap Dark 0 0.3
-    tap "Choose your own colour" 0 0.4
+    tap_row "Choose your own colour"
     panel_open theme_accent_wheel
-    tap "Your own theme" 0 0.4
+    tap_row "Your own theme"
     look_through theme_own
     for name in Background Cards Text; do
-        tap "$name" L 0.4
+        tap_row "$name"
         panel_open "theme_own_$name"
     done
     tap Dark 0 0.3
@@ -355,15 +399,23 @@ s57() {
     fi
     tap "Sort alarms" 0 0.4
     panel_open home_sort
-    local i n
+    local i n j v
     n=$(ui snapshot | grep -o '"id":"' | wc -l)
     i=0
     while [ "$i" -lt "${n:-0}" ]; do
-        tap "More actions" "$i" 0.4
+        j=$i
+        # The cards below the screen: scroll the list to the end, then count from the last one.
+        if [ "$(where "More actions" "$i")" = none ]; then
+            sheet_scroll
+            v=$(ui texts | python -I -c 'import json,sys; print(sum(1 for e in json.loads(sys.stdin.read()) if e["t"] == "More actions" and e["r"] == "Button"))' | tr -d '')
+            j=$((i - n + ${v:-0}))
+        fi
+        tap "More actions" "$j" 0.4
         panel_open "home_menu$i"
         i=$((i + 1))
     done
 
+    sheet_scroll_up
     # A quick alarm, and what it says.
     tap "+5" 0 0.4
     [ "$(sn toast_visible)" = true ] || panel_problem "a quick alarm says nothing"
@@ -400,11 +452,11 @@ s57() {
     panel_open editor_delete
     # Each row of the editor.
     for name in Label Sound Vibration Snooze 'Alarm screen' 'Ring limit' 'Are you up?' 'Notice before'; do
-        tap_has "$name" 0 0.4
+        tap_row "$name"
         panel_open "editor_$(echo "$name" | tr -c 'a-zA-Z0-9\n' _)"
     done
     # Trying them is what the panels of sound and vibration are about: what it looks like then.
-    tap_has Sound 0 0.5
+    tap_row Sound
     if is_there Start; then
         tap Start 0 0.3
         picture editor_sound_playing
@@ -414,7 +466,7 @@ s57() {
     else
         panel_problem "no way to try a sound"
     fi
-    tap_has Vibration 0 0.5
+    tap_row Vibration
     if is_there Steady; then
         tap Steady 0 0.3
         is_there Stop || panel_problem "a tap on a pattern shows no way to stop it"
@@ -425,7 +477,7 @@ s57() {
         panel_problem "no vibration panel"
     fi
     # Every look of the ring screen as big as it will be. A moment first: what moves has to get going.
-    tap_has 'Alarm screen' 0 0.5
+    tap_row 'Alarm screen'
     if wait_for 3 editor_sheet_open; then
         look_preview() { # picture
             tap Preview L 0.5
@@ -446,7 +498,7 @@ s57() {
         done
         tap_has Colour 0 0.5
         if on_screen "Colour code" 3 || on_screen_has code 2; then
-            tap_in Coral 0 0.3
+            sleep 0.3
             picture ring_look_colour
             tap Done 0 0.3
             look_preview ring_look_own_colour
@@ -464,7 +516,7 @@ s57() {
     else
         panel_problem "no panel for the ring screen"
     fi
-    tap_has Challenges 0 0.5
+    tap_row Challenges
     if wait_for 3 editor_sheet_open; then
         is_there "Try all" || panel_problem "no way to try them all"
         panel_challenges
@@ -500,7 +552,19 @@ s57() {
     tap_has "All stats" 0 0.4
     look_through history_all_stats
     tap_has "Fewer stats" 0 0.3
+    prev_chip="This week"
     for name in "This week" "Last week" "This month" "Last month" "This year" "Last year" "Your own days"; do
+        # The row of periods scrolls sideways: what is out of the window comes in by a swipe.
+        k=0
+        while ! has_there "$name" && [ "$k" -lt 3 ]; do
+            y=$(where "$prev_chip" | cut -d' ' -f2)
+            case "$y" in '' | *[!0-9]*) y=$(where "This month" | cut -d' ' -f2) ;; esac
+            case "$y" in '' | *[!0-9]*) y=341 ;; esac
+            dev input swipe 900 "$y" 100 "$y" 300
+            sleep 0.6
+            k=$((k + 1))
+        done
+        prev_chip=$name
         tap "$name" 0 0.3
         found=$(panel_check)
         [ -z "$found" ] || panel_problem "history filter $name: $found"
@@ -523,7 +587,7 @@ s57() {
     else
         panel_problem "no theme screen"
     fi
-    tap Reliability 0 0.5
+    tap_row Reliability
     if wait_for 5 on_screen_no 4; then
         look_through reliability
         panel_help reliability

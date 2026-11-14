@@ -1,4 +1,6 @@
 //! AlarmFree library crate - exposes modules for integration testing.
+// The debug snapshot (src/ui/debug.rs) is one long json! literal.
+#![recursion_limit = "256"]
 
 pub mod alarm_ops;
 pub mod calendar;

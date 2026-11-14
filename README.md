@@ -152,9 +152,10 @@ You need Rust with the Android targets, the Android SDK, a JDK 17, and the NDK t
 `TARGET=x86_64-linux-android ./build.sh ...` builds for an emulator. The result is
 `build/alarmfree-slint-<mode>.apk`. `cargo build --lib` makes `libalarmfree.so`, and the SDK's
 `build_sentinel` writes the whole Gradle project into `target/sentinel-android/` and runs Gradle:
-the app keeps no `android/` folder. `sentinel.toml` gives this build the application id
-`com.fidderr.alarmfree.slint` and the label "AlarmFree Slint", so it installs next to the Play
-version and is not what goes to Play yet.
+the app keeps no `android/` folder. `sentinel.toml` gives the build the Play app's application id
+`com.fidderr.alarmfree`, version code 12400 (Play has the Dioxus 0.4.1 line at 12356) and version name
+0.5.0, so it installs as an update over the Dioxus version and keeps its alarms, settings and history
+(see "Upgrade test" below).
 
 `cargo run` starts the UI on a desktop.
 
@@ -223,6 +224,19 @@ overnight run.
 
 No device outside the emulators and one OnePlus has seen this yet. Phone makers differ, which
 is what the test alarm and the saved record of how fast rings were are for.
+
+### Upgrade test (Play Dioxus 0.4.1 to this build)
+
+`devtest/upgrade.sh <avd> <port>` (scenario `s64`) installs the old app, gives it four alarms of every
+kind, an own sound, settings in Dutch with a light theme, history and one real ring, then installs
+this build over it with `adb install -r` (same package, same debug key) without opening it. It checks
+that an alarm the old app armed rings by itself after the update, and that the alarms, settings,
+own sound and history are byte for byte what they were, that the same cards and the history are on
+screen, and that the ring screen is in the saved language. Build the old app from a worktree of the
+`dioxus` branch at `2f65c82` (the 0.4.1 release; the branch head needs an unreleased SDK):
+`TARGET=x86_64-linux-android ./build.sh` there, then
+`DX_APK=<that apk> bash devtest/upgrade.sh af36 5554`. The new app keeps the old one's database,
+`files/sentinel/` records and device-encrypted storage as they are: nothing is migrated.
 
 ## Data
 

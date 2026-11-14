@@ -7,6 +7,22 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-14
+
+The app is now the Slint version (drawn natively with Skia in a NativeActivity, no WebView), under
+the Play app's id `com.fidderr.alarmfree`: it installs as an update over 0.4.1 (versionCode 12400)
+and keeps the alarms, settings, own sounds and history. Built on mobile-sentinel from this
+workspace (path dependency until the next crate release).
+
+### Fixed
+
+- Back on Android 14 and later: Slint's own back callback won over the SDK's, so Back on the
+  alarm list or in a sheet left the app. It is no longer registered (`vendor/`).
+- A touch on a ringing alarm's screen, or in its challenge, counts as activity for the ring limit
+  (the platform's touch hook does not see a NativeActivity's touches).
+- Android 14 and later keep the task through Home; the window is made again. The old surface is
+  released when the window ends, instead of when the new one arrives.
+
 ## [0.4.1] - 2026-11-11
 
 Built on mobile-sentinel 0.5.0.

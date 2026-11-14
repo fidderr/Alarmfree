@@ -217,12 +217,15 @@ export component LabelSheet inherits Rectangle {
                 alignment: start;
                 for chip[i] in Ed.used: Rectangle {
                     visible: chip.line == line;
-                    width: chip.line == line ? max(52px, chip-text.preferred-width + 28px) : 0px;
+                    // No wider than the sheet: a long name would stretch the whole sheet past the window.
+                    width: chip.line == line ? max(52px, min(chip-text.preferred-width + 28px, root.width - 80px)) : 0px;
                     height: chip.line == line ? 48px : 0px;
                     border-radius: 14px;
                     background: chip.selected ? Pal.accent : Pal.surface2;
                     chip-text := Text {
                         x: 14px;
+                        width: parent.width - 28px;
+                        overflow: elide;
                         text: chip.text;
                         font-size: 14px * Zoom.scale;
                         font-weight: 500;
