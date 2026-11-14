@@ -120,7 +120,7 @@ for e in json.loads(sys.stdin.read()):
 # the opening row's place in $2 $3: it is opened again to see what the pick did, and what was on is
 # taken again. Returns 3 when the panel closed itself that way, and is closed again then.
 try_chips() { # name [x y of the row that opened it]
-    local ox=${2:-} oy=${3:-}
+    local ox=${2:-} oy=${3:-} window
     local name=$1 line text x y was now role floor before=$(sheet_checkables | grep -v '^What is this?|')
     # What is below the window (a long list in a panel) is not touched.
     floor=$(( $(window_size | cut -d' ' -f2) - 200 ))
@@ -135,6 +135,27 @@ try_chips() { # name [x y of the row that opened it]
         [ "$y" -lt "$floor" ] || continue
         dev input tap "$x" "$y"
         sleep 0.2
+        if ! focus_in_app; then
+            # Something else came up over the app. The phone's picker is what a choice such as Photo (the
+            # ring screen, no photo yet) is for: Back returns. Anything else is a problem, with the
+            # window and the log kept to see what it was.
+            sleep 1
+            window=$(focused_window | grep -o '[A-Za-z.]*/[A-Za-z.]*' | head -1)
+            case "$window" in
+                *[Pp]icker* | *[Dd]ocuments* | *MediaProvider* | *[Gg]allery*)
+                    note "$name: '$text' opens $window"
+                    ;;
+                *)
+                    panel_problem "$name: after '$text' the app is not in front: $window"
+                    adb_ logcat -d -t 800 -b all -v time 2> /dev/null | grep -E "AlarmFree|Sentinel|AndroidRuntime|FATAL|am_proc_died|am_kill|ActivityTaskManager" > "$OUT/panels${VARIANT:-}/lost_$(echo "${name}_$text" | tr -c 'a-zA-Z0-9
+' _ | cut -c1-60).log"
+                    ;;
+            esac
+            press_back
+            wait_for 8 focus_in_app || { panel_problem "$name: not back from '$text' ($window)"; press_back; }
+            sleep 0.5
+            continue
+        fi
         if no_sheet_up; then
             # The pick took and closed the panel by itself.
             [ "$role" != Switch ] || panel_problem "$name: the switch '$text' closes the panel"
@@ -162,18 +183,7 @@ try_chips() { # name [x y of the row that opened it]
                 sleep 0.2
                 ;;
             *)
-                if [ "$now" != true ] && [ "$was" != true ]; then
-                    # A choice that opens the phone's picker (Photo, for the ring screen, with no photo yet)
-                    # takes by leaving the app: Back brings it back. Any other choice has to take.
-                    sleep 1.2
-                    if focus_in_app; then
-                        panel_problem "$name: the choice '$text' does not take"
-                    else
-                        press_back
-                        wait_for 8 focus_in_app || { panel_problem "$name: not back from the picker of '$text'"; press_back; }
-                        sleep 0.5
-                    fi
-                fi
+                [ "$now" = true ] || [ "$was" = true ] || panel_problem "$name: the choice '$text' does not take"
                 ;;
         esac
     done <<< "$before"
