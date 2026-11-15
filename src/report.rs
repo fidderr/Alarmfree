@@ -8,7 +8,7 @@ use crate::models::AlarmData;
 pub const CONTACT_EMAIL: &str = "r.fidder97@gmail.com";
 
 /// The Android versionCode of this build, as in `sentinel.toml`.
-pub const VERSION_CODE: u32 = 12400;
+pub const VERSION_CODE: u32 = 12401;
 
 /// The file the report is attached as.
 pub const REPORT_FILE: &str = "alarmfree-report.txt";
@@ -72,7 +72,7 @@ pub fn scrub(text: &str, alarms: &[AlarmData]) -> String {
     out
 }
 
-/// The subject: `AlarmFree 0.5.0 (12400): <first words>`.
+/// The subject: `AlarmFree 0.5.1 (12401): <first words>`.
 pub fn subject(kind: Kind, version: &str, code: u32, what: &str) -> String {
     let words: Vec<&str> = what.split_whitespace().take(7).collect();
     let mut head = words.join(" ");
@@ -236,9 +236,10 @@ mod tests {
         let log =
             "2026-11-14T07:00:01.000+01:00 ring started id=aaaaaaaa late=1s\nleak: Secret errand\n";
         let text = build(&answers, "0.5.0", &parts(&alarms, log));
+        let app = format!("App: AlarmFree 0.5.0 ({VERSION_CODE})");
         for needle in [
             "Type: Problem",
-            "App: AlarmFree 0.5.0 (12400)",
+            app.as_str(),
             "It did not ring",
             "== Device ==",
             "Time zone: Europe/Amsterdam",
