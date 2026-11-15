@@ -2242,7 +2242,8 @@ s53() {
     note "s53: One date. @$SECONDS"
     tap "One date" 0 0.5
     on_screen Tomorrow 4
-    tap Tomorrow 0 0.3
+    # The quick dates sit under the calendar: half behind Done with a navigation bar, until it scrolls.
+    tap_clear Tomorrow "" 400
     done_sheet
     # A challenge with a setting, and one taken away again.
     note "s53: A challenge with a setting, and one taken away again. @$SECONDS"
