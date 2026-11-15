@@ -2628,7 +2628,10 @@ s55() {
     tap SCAN 0 0.3
     # The process lives through Home on Android 14 and later: a tap while the camera that Home closed is
     # still reporting back is ignored (it is still scanning for that long). A person taps again.
-    wait_for 3 scanner_on_top || { sleep 1; tap SCAN 0 0.3; }
+    # The challenge screen goes back to the ring after its idle time (8 s here): on a busy emulator that has happened
+    # by now, and a person would press Turn off and Scan again.
+    again() { is_there "Turn off" && tap "Turn off" 0 0.3; on_screen SCAN 8 && tap SCAN 0 0.3; }
+    wait_for 3 scanner_on_top || { sleep 1; again; }
     wait_for 8 scanner_on_top || {
         problems="$problems; the camera does not open after Home"
         note "after Home: focus=$(focused_window | cut -c1-90) scan_state=$(sn scan_state) screen=$(screen_no) texts=$(texts_of | head -c 160)"
