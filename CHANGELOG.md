@@ -7,6 +7,23 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-11-15
+
+The first Play release of the Slint app (0.5.0 was not uploaded), versionCode 12401, on
+mobile-sentinel 0.6.0 from crates.io.
+
+### Fixed
+
+- With a large display size or text, or a narrow screen, the alarm card no longer runs past the right
+  edge (the on/off switch was cut off), and the editor's weekday circles and settings card fit the
+  screen: they shrink with the window instead of keeping fixed minimum widths.
+- A tap on a sound in the sound list plays it for a few seconds again, as before; another tap takes
+  over, Start/Stop plays it longer, and closing the list stops it.
+
+### Changed
+
+- Slightly smaller side margins on every screen (16 dp to 12 dp), so less space is wasted.
+
 ## [0.5.0] - 2026-11-14
 
 The app is now the Slint version (drawn natively with Skia in a NativeActivity, no WebView), under
