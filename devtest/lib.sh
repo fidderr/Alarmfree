@@ -341,6 +341,9 @@ PERMISSIONS_TOUCHED=""
 fresh() {
     shells_open || open_shells
     dev am force-stop "$PKG"
+    # A soft keyboard that the last scenario's field left up outlives the app on Android 12, and
+    # covers the lower half of the next one.
+    on_emulator && hide_keyboard
     [ -z "$SCREEN_WENT_OFF" ] || { wake; SCREEN_WENT_OFF=""; }
     [ -z "$PERMISSIONS_TOUCHED" ] || grant_all
     if [ -z "$CLEAN_COPY" ]; then
@@ -735,8 +738,12 @@ await_silence() {
         n=$(now_s)
         [ "$n" -gt $((T + limit)) ] && return 1
         if sound_off; then
-            STOPPED_AT=$((n - T))
-            return 0
+            # Silent for good: the player that stalls hands over to the next sound, with a gap.
+            sleep 1.5
+            if sound_off; then
+                STOPPED_AT=$((n - T))
+                return 0
+            fi
         fi
         sleep 0.1
     done
@@ -898,8 +905,12 @@ write_log() { adb_ logcat -d -t 30000 -b all -v time 2> /dev/null | grep -E "Ala
 
 # One row of history, `$2` days ago.
 history_row() { # id days_ago
-    local at
-    at=$(date -u -d "@$(($(now_s) - $2 * 86400))" +%Y-%m-%dT07:00:00+00:00)
+    local at now at_s
+    now=$(now_s)
+    # 07:00 UTC of that day, but never in the future (today before 07:00 UTC): a period lists only what has happened.
+    at_s=$(date -u -d "$(date -u -d "@$((now - $2 * 86400))" +%Y-%m-%d)T07:00:00Z" +%s)
+    [ "$at_s" -le $((now - 600)) ] || at_s=$((now - 600))
+    at=$(date -u -d "@$at_s" +%Y-%m-%dT%H:%M:%S+00:00)
     printf "INSERT INTO alarm_events (id, alarm_id, alarm_label, fire_timestamp, dismiss_timestamp, total_dismissal_time_ms, outcome, seen) VALUES ('%s', 'a', 'a', '%s', '%s', 0, 'solved', 1);\n" "$1" "$at" "$at" | sql
 }
 history_count() { printf "SELECT count(*) FROM alarm_events;\n" | sql; }
