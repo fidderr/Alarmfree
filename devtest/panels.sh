@@ -116,6 +116,10 @@ for e in json.loads(sys.stdin.read()):
 '
 }
 
+# Only the cards and the text have an Automatic in their panel; the one of the theme screen behind a panel is not it.
+panel_has_automatic() { # panel name
+    case "$1" in theme_own_Cards | theme_own_Text) is_there Automatic ;; *) return 1 ;; esac
+}
 # Every choice and switch on screen does what it does: a switch goes over and back, a choice takes.
 # Then it is as it was.
 # A panel whose rows close it on a pick (language, time format, week start, new alarms, volume ...) gets
@@ -206,7 +210,7 @@ try_chips() { # name [x y of the row that opened it]
     done <<< "$before"
     # A colour that was automatic (nothing ringed) goes back by Automatic: a swatch can not be taken off.
     if ! printf '%s
-' "$before" | grep -q '|true|' && is_there Automatic; then
+' "$before" | grep -q '|true|' && panel_has_automatic "$name"; then
         for i in 1 2 3; do
             tap Automatic 0 0.6
             [ "$(sheet_checkables | grep -v '^What is this?|' | sort)" = "$(echo "$before" | sort)" ] && break
@@ -217,7 +221,7 @@ try_chips() { # name [x y of the row that opened it]
     # (a note under the swatches comes and goes), what it is and whether it is on is what counts.
     local same_names=0
     if ! printf '%s
-' "$before" | grep -q '|true|' && ! is_there Automatic; then same_names=1; fi
+' "$before" | grep -q '|true|' && ! panel_has_automatic "$name"; then same_names=1; fi
     for i in 1 2 3 4 5 6; do
         if [ "$same_names" = 1 ]; then
             [ "$(sheet_checkables | grep -v '^What is this?|' | cut -d'|' -f1,5 | sort)" = "$(echo "$before" | cut -d'|' -f1,5 | sort)" ] && break
