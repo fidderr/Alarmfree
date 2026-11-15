@@ -1,4 +1,4 @@
-import { Pal, Tr, Insets, Zoom } from "theme.slint";
+import { Pal, Tr, Insets, Page, Zoom } from "theme.slint";
 import { Icon, IconName } from "components.slint";
 import { ScreenHeader, RowList, Separator, PrimaryButton, SwitchRow, ChoiceChips, LinkButton } from "widgets.slint";
 
@@ -91,11 +91,12 @@ export component ReportScreen inherits Rectangle {
         if !Fb.previewing: Flickable {
             vertical-stretch: 1;
             content-height: body.preferred-height + 16px;
+            content-width: self.width;
             body := VerticalLayout {
                 alignment: start;
                 spacing: 16px;
-                padding-left: 16px;
-                padding-right: 16px;
+                padding-left: Page.margin;
+                padding-right: Page.margin;
                 padding-top: 8px;
                 Text { text: Tr.t("report.intro"); font-size: 14px * Zoom.scale; line-height-factor: 1.22; color: Pal.text2; wrap: word-wrap; }
                 ChoiceChips {
@@ -126,11 +127,12 @@ export component ReportScreen inherits Rectangle {
         if Fb.previewing: Flickable {
             vertical-stretch: 1;
             content-height: preview-body.preferred-height + 16px;
+            content-width: self.width;
             preview-body := VerticalLayout {
                 alignment: start;
                 spacing: 12px;
-                padding-left: 16px;
-                padding-right: 16px;
+                padding-left: Page.margin;
+                padding-right: Page.margin;
                 padding-top: 8px;
                 Text { text: Tr.t("report.preview_note"); font-size: 12px * Zoom.scale; line-height-factor: 1.14; color: Pal.text2; wrap: word-wrap; }
                 Rectangle {
@@ -152,8 +154,8 @@ export component ReportScreen inherits Rectangle {
         }
         VerticalLayout {
             padding: 12px;
-            padding-left: 16px;
-            padding-right: 16px;
+            padding-left: Page.margin;
+            padding-right: Page.margin;
             padding-bottom: 16px + Insets.bottom;
             spacing: 8px;
             PrimaryButton { quiet: true; compact: true; text: Fb.previewing ? Tr.t("report.hide_preview") : Tr.t("report.show_preview"); clicked => { Fb.toggle-preview(); } }
@@ -214,11 +216,12 @@ export component HelpScreen inherits Rectangle {
         Flickable {
             vertical-stretch: 1;
             content-height: body.preferred-height + 16px;
+            content-width: self.width;
             body := VerticalLayout {
                 alignment: start;
                 spacing: 16px;
-                padding-left: 16px;
-                padding-right: 16px;
+                padding-left: Page.margin;
+                padding-right: Page.margin;
                 padding-top: 8px;
                 RowList {
                     VerticalLayout {
@@ -307,8 +310,8 @@ export component IntroScreen inherits Rectangle {
 export component TroubleBanner inherits Rectangle {
     height: box.height + 16px;
     box := Rectangle {
-        x: 16px;
-        width: parent.width - 32px;
+        x: Page.margin;
+        width: parent.width - 2 * Page.margin;
         height: max(44px, text.preferred-height + 20px);
         border-radius: 14px;
         background: Pal.accent-soft;

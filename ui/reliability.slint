@@ -1,4 +1,4 @@
-import { Pal, Tr, Insets, Zoom } from "theme.slint";
+import { Pal, Tr, Insets, Page, Zoom } from "theme.slint";
 import { Icon, IconName } from "components.slint";
 import { ScreenHeader, RowList, Separator, PrimaryButton } from "widgets.slint";
 
@@ -122,8 +122,8 @@ export component ReliabilityScreen inherits Rectangle {
         if root.help-open && !Rel.first-run: Rectangle {
             height: help-text.preferred-height + 24px + 8px;
             Rectangle {
-                x: 16px;
-                width: parent.width - 32px;
+                x: Page.margin;
+                width: parent.width - 2 * Page.margin;
                 height: parent.height - 8px;
                 border-radius: 14px;
                 background: Pal.accent-soft;
@@ -142,11 +142,12 @@ export component ReliabilityScreen inherits Rectangle {
         Flickable {
             vertical-stretch: 1;
             content-height: body.preferred-height + 16px;
+            content-width: self.width;
             body := VerticalLayout {
                 alignment: start;
                 spacing: 16px;
-                padding-left: 16px;
-                padding-right: 16px;
+                padding-left: Page.margin;
+                padding-right: Page.margin;
                 padding-top: Rel.first-run ? 8px : 16px;
                 if Rel.first-run: VerticalLayout {
                     padding-left: 4px;
@@ -172,8 +173,8 @@ export component ReliabilityScreen inherits Rectangle {
         }
         VerticalLayout {
             padding: 12px;
-            padding-left: 16px;
-            padding-right: 16px;
+            padding-left: Page.margin;
+            padding-right: Page.margin;
             padding-bottom: 16px + Insets.bottom;
             spacing: 8px;
             if Rel.first-run: PrimaryButton { text: Tr.t("setup.done"); clicked => { Rel.done(); } }

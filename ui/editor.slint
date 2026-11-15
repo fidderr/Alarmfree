@@ -1,4 +1,4 @@
-import { Pal, Tr, Insets, Zoom } from "theme.slint";
+import { Pal, Tr, Insets, Page, Zoom } from "theme.slint";
 import { Icon, IconName, TabularText } from "components.slint";
 import { ScreenHeader, Row, SwitchRow, RowList, Separator, PrimaryButton, ChoiceChips, Sheet } from "widgets.slint";
 import { DayCell } from "home.slint";
@@ -87,14 +87,15 @@ export component EditorScreen inherits Rectangle {
         Flickable {
             vertical-stretch: 1;
             content-height: content.preferred-height;
+            content-width: self.width;
             content := VerticalLayout {
                 padding-bottom: 16px;
                 alignment: start;
                 // The time, large, with a step either way, and when that rings.
                 if !root.defaults: VerticalLayout {
                     padding-top: 12px;
-                    padding-left: 16px;
-                    padding-right: 16px;
+                    padding-left: Page.margin;
+                    padding-right: Page.margin;
                     HorizontalLayout {
                         height: 80px;
                         VerticalLayout {
@@ -105,11 +106,13 @@ export component EditorScreen inherits Rectangle {
                         }
                         Rectangle {
                             horizontal-stretch: 1;
+                            min-width: 0px;
                             TabularText {
                                 width: parent.width;
                                 height: parent.height;
                                 text: root.time-text;
-                                font-size: root.twelve ? 44px : 64px;
+                                // Smaller when the window is too narrow for the full size between the steps.
+                                font-size: min(root.twelve ? 44px : 64px, (root.width - Insets.left - Insets.right - 2 * Page.margin - 2 * 56px) / (root.twelve ? 4.0 : 2.9));
                                 font-weight: 500;
                                 letter-spacing: -1px;
                                 ink: Pal.text;
@@ -137,8 +140,8 @@ export component EditorScreen inherits Rectangle {
                 // Which days, or the one date.
                 if !root.defaults: VerticalLayout {
                     padding-top: 20px;
-                    padding-left: 16px;
-                    padding-right: 16px;
+                    padding-left: Page.margin;
+                    padding-right: Page.margin;
                     if root.one-time: Rectangle {
                         height: 44px;
                         border-radius: 14px;
@@ -151,22 +154,26 @@ export component EditorScreen inherits Rectangle {
                     }
                     if !root.one-time: Rectangle {
                         height: 44px;
-                        // 44 dp places to tap, 38 dp round buttons in them: the first and the last line up with the rest.
+                        // Places to tap up to 44 dp wide, round buttons up to 38 dp in them: the first and the last
+                        // line up with the rest, and on a narrow window they all get narrower together.
                         HorizontalLayout {
                             x: -3px;
                             width: parent.width + 6px;
                             alignment: space-between;
                             for day[i] in root.days: Rectangle {
-                                width: 44px;
+                                min-width: 0px;
+                                preferred-width: 44px;
+                                max-width: 44px;
+                                horizontal-stretch: 1;
                                 accessible-role: button;
                                 accessible-label: day.letter;
                                 accessible-checkable: true;
                                 accessible-checked: day.on;
                                 accessible-action-default => { root.day-toggled(i); }
                                 Rectangle {
-                                    width: 38px;
-                                    height: 38px;
-                                    border-radius: 19px;
+                                    width: min(38px, parent.width - 4px);
+                                    height: self.width;
+                                    border-radius: self.width / 2;
                                     background: day.on ? Pal.accent : Pal.surface;
                                     Text {
                                         text: day.letter;
@@ -199,8 +206,8 @@ export component EditorScreen inherits Rectangle {
                     }
                 }
                 HorizontalLayout {
-                    padding-left: 16px;
-                    padding-right: 16px;
+                    padding-left: Page.margin;
+                    padding-right: Page.margin;
                     padding-top: root.defaults ? 16px : 20px;
                     RowList {
                         Row { title: Tr.t("config.label"); value: Ed.label-summary; clicked => { root.open(EditorSheet.label); } }
@@ -215,8 +222,8 @@ export component EditorScreen inherits Rectangle {
                     }
                 }
                 HorizontalLayout {
-                    padding-left: 16px;
-                    padding-right: 16px;
+                    padding-left: Page.margin;
+                    padding-right: Page.margin;
                     padding-top: 16px;
                     RowList {
                         Row { title: Tr.t("config.ring_look"); value: Ed.look-summary; clicked => { root.open(EditorSheet.ring-look); } }
@@ -237,8 +244,8 @@ export component EditorScreen inherits Rectangle {
             background: Pal.bg;
             VerticalLayout {
                 padding-top: 12px;
-                padding-left: 16px;
-                padding-right: 16px;
+                padding-left: Page.margin;
+                padding-right: Page.margin;
                 padding-bottom: 16px + Insets.bottom;
                 PrimaryButton { text: Tr.t("action.save"); clicked => { root.save(); } }
             }

@@ -1,4 +1,4 @@
-import { Pal, Tr, Insets, Zoom } from "theme.slint";
+import { Pal, Tr, Insets, Page, Zoom } from "theme.slint";
 import { Icon, IconName, AppSwitch } from "components.slint";
 import { BottomNav } from "nav.slint";
 
@@ -122,10 +122,11 @@ export component SettingsScreen inherits Rectangle {
         Flickable {
             vertical-stretch: 1;
             content-height: body.preferred-height;
+            content-width: self.width;
             body := VerticalLayout {
                 alignment: start;
-                padding-left: 16px;
-                padding-right: 16px;
+                padding-left: Page.margin;
+                padding-right: Page.margin;
                 padding-top: 12px;
                 padding-bottom: 16px;
                 spacing: 8px;

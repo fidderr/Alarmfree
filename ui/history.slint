@@ -1,4 +1,4 @@
-import { Pal, Tr, Insets, Motion, Zoom } from "theme.slint";
+import { Pal, Tr, Insets, Page, Motion, Zoom } from "theme.slint";
 import { Icon, IconName } from "components.slint";
 import { BottomNav } from "nav.slint";
 
@@ -127,7 +127,7 @@ export component HistoryScreen inherits Rectangle {
         HorizontalLayout {
             padding-top: 28px;
             padding-bottom: 12px;
-            padding-left: 20px;
+            padding-left: 16px;
             padding-right: 12px;
             Text {
                 horizontal-stretch: 1;
@@ -150,8 +150,8 @@ export component HistoryScreen inherits Rectangle {
             content-width: chips.preferred-width;
             interactive: chips.preferred-width > self.width;
             chips := HorizontalLayout {
-                padding-left: 16px;
-                padding-right: 16px;
+                padding-left: Page.margin;
+                padding-right: Page.margin;
                 spacing: 8px;
                 for label[i] in root.periods: Rectangle {
                     width: name.preferred-width + 24px;
@@ -173,8 +173,8 @@ export component HistoryScreen inherits Rectangle {
         }
         if root.period == 6: HorizontalLayout {
             padding: 4px;
-            padding-left: 20px;
-            padding-right: 20px;
+            padding-left: 16px;
+            padding-right: 16px;
             spacing: 8px;
             Text { text: Tr.t("filter.last_prefix"); font-size: 14px * Zoom.scale; color: Pal.text2; vertical-alignment: center; }
             Rectangle {
@@ -204,10 +204,11 @@ export component HistoryScreen inherits Rectangle {
         Flickable {
             vertical-stretch: 1;
             content-height: body.preferred-height;
+            content-width: self.width;
             body := VerticalLayout {
                 alignment: start;
-                padding-left: 16px;
-                padding-right: 16px;
+                padding-left: Page.margin;
+                padding-right: Page.margin;
                 padding-bottom: 24px;
                 if root.empty != 0: VerticalLayout {
                     padding: 16px;

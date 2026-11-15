@@ -2673,8 +2673,8 @@ start_stop_says() {
 }
 start_stop() { is_there Stop && tap Stop 0 0.3 || tap Start 0 0.3; }
 
-# Trying a sound and a vibration: a tap only picks a sound, Start plays it, and Stop, closing and
-# time all end it. A tap on a pattern vibrates, for just as long.
+# Trying a sound and a vibration: a tap picks a sound and plays it for a few seconds, Start plays it
+# for longer, and Stop, closing and time all end it. A tap on a pattern vibrates, for just as long.
 s58() {
     scenario s58_trying_sound_and_vibration
     fresh
@@ -2686,18 +2686,31 @@ s58() {
     on_editor
     open_row Sound
     tap_in Funk 0 0.6
-    sound_on && problems="$problems; a tap on a sound plays it"
-    [ "$(start_stop_says)" = false ] || problems="$problems; says it runs: $(start_stop_says)"
-    start_stop
-    wait_for 4 sound_on || problems="$problems; Start is silent"
-    [ "$(start_stop_says)" = true ] || problems="$problems; Start does not turn to Stop"
+    wait_for 4 sound_on || problems="$problems; a tap on a sound is silent"
+    [ "$(start_stop_says)" = true ] || problems="$problems; a tap plays but does not say Stop: $(start_stop_says)"
     screenshot s58_playing
-    # While it plays, another sound takes over.
+    # While it plays, another sound takes over, and the same one starts over.
     tap_in Happy 0 0.6
     sound_on || problems="$problems; another sound stopped it"
     [ "$(start_stop_says)" = true ] || problems="$problems; another sound ended it"
+    tap_in Happy 0 0.6
+    sound_on || problems="$problems; the same sound again stopped it"
     start_stop
     wait_for 4 sound_off || problems="$problems; Stop does not stop it"
+    [ "$(start_stop_says)" = false ] || problems="$problems; says it runs after Stop: $(start_stop_says)"
+    # A tap plays a few seconds and ends by itself.
+    tap_in Happy 0 0.6
+    started=$SECONDS
+    wait_for 4 sound_on || problems="$problems; a tap after Stop is silent"
+    wait_for 12 sound_off || problems="$problems; a tap does not end by itself"
+    took=$((SECONDS - started))
+    [ "$took" -ge 3 ] && [ "$took" -le 9 ] || problems="$problems; a tap played ${took}s"
+    # Start plays it as well.
+    start_stop
+    wait_for 4 sound_on || problems="$problems; Start is silent"
+    [ "$(start_stop_says)" = true ] || problems="$problems; Start does not turn to Stop"
+    start_stop
+    wait_for 4 sound_off
     # By itself after a while, also with a sound shorter than that.
     start_stop
     wait_for 4 sound_on
@@ -2757,7 +2770,7 @@ s58() {
     vibrating_now || problems="$problems; touch feedback off silences the preview"
     done_sheet
     if [ -z "$problems" ]; then
-        pass "a tap is silent, Start and Stop work, 15 s, closing ends it, vibration too (${took}s)"
+        pass "a tap plays 5 s, Start and Stop work, 15 s, closing ends it, vibration too (${took}s)"
     else
         fail "${problems#; }"
     fi
@@ -3176,6 +3189,52 @@ s63() {
     fi
 }
 
+# A large display size and a large text, as a tester had it: the card of an alarm, the quick row,
+# the days and the list of settings in the editor all stay inside the window and inside their card.
+s65() {
+    scenario s65_large_size_fits
+    fresh
+    seed a "$(alarm_json a 7 0 "$EVERY_DAY" null)"
+    arm a
+    local problems="" old_font said look
+    # What sticks out, asked until the window has taken its new size (a start in between is blank).
+    fits() {
+        local n=0
+        said=$(ui "$1")
+        while [ "$said" != none ] && [ "$n" -lt 8 ]; do
+            sleep 0.5
+            said=$(ui "$1")
+            n=$((n + 1))
+        done
+    }
+    old_font=$(dev settings get system font_scale)
+    dev wm size 1080x2376
+    for look in "560 1.3" "640 1.15"; do
+        dev wm density "${look% *}"
+        dev settings put system font_scale "${look#* }"
+        sleep 2
+        start_app
+        on_card 15 || problems="$problems; no list at $look"
+        fits fit:AlarmCard
+        [ "$said" = none ] || problems="$problems; home at $look: $said"
+        screenshot "s65_home_${look% *}_${look#* }"
+        press open a 0.8
+        on_editor || problems="$problems; no editor at $look"
+        fits fit:RowList
+        [ "$said" = none ] || problems="$problems; editor at $look: $said"
+        screenshot "s65_editor_${look% *}_${look#* }"
+        dev am force-stop "$PKG"
+    done
+    dev settings put system font_scale "${old_font:-1.0}"
+    dev wm size reset
+    dev wm density reset
+    if [ -z "$problems" ]; then
+        pass "card, quick row, days and settings fit at large sizes"
+    else
+        fail "${problems#; }"
+    fi
+}
+
 # The notice before an alarm on a real phone, in real time, with the app really swiped away from
 # recents: an emulator cannot show what the phone's maker does to that. Round one: closed before the
 # notice comes, Skip on the pop-up, Undo, and it must ring. Round two: closed with the notice up, Skip
@@ -3398,7 +3457,7 @@ s62p() {
 
 . "$(dirname "$0")/panels.sh"
 
-ALL="s01 s03 s04 s05 s06 s07 s10 s11 s13 s13b s13d s14 s15 s16 s16b s17 s19 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s34 s36 s37 s38 s39 s40 s42 s43 s44 s45 s46 s47 s48 s49 s50 s51 s52 s53 s55 s56 s57 s58 s59 s60 s61 s62 s63 big_screens s54"
+ALL="s01 s03 s04 s05 s06 s07 s10 s11 s13 s13b s13d s14 s15 s16 s16b s17 s19 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s34 s36 s37 s38 s39 s40 s42 s43 s44 s45 s46 s47 s48 s49 s50 s51 s52 s53 s55 s56 s57 s58 s59 s60 s61 s62 s63 s65 big_screens s54"
 ON_A_PHONE="s01 s03 s04 s05 s06 s07 s10 s15 s16 s16b s17 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s36 s37 s38 s39 s42 s43 s45 s46 s47 s49 s50 s51 s52 s53 s55 s56 s57 s58 s59 s61 s62 s63 s60p_a s60p_b s62p"
 
 : > "$RESULTS"
