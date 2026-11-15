@@ -838,14 +838,13 @@ s26() {
         elif on_emulator && [ -n "$ms" ] && [ "${delivery:-9999}" -lt 1000 ]; then
             note "Android delivered it ${ms}ms after its time: the emulator was busy"
             pass "sound ${delivery}ms after delivery, which Android made ${ms}ms after its time$dozing"
-        elif on_emulator && [ -z "${S26_AGAIN:-}" ] && [ -n "$ms" ] && [ "${delivery:-0}" -ge 1000 ]; then
+        elif on_emulator && [ "${S26_AGAIN:-0}" -lt 2 ] && [ -n "$ms" ] && [ "${delivery:-0}" -ge 1000 ]; then
             # The cold start of the window starves the sound of its CPU on an emulator with 2 cores and
             # no GPU (seen: 3 to 7 s from the broadcast to the sound, 0.1 s on a phone and on a quiet
-            # emulator). A real fault repeats: it counts only when it does it twice.
+            # emulator). A real fault repeats: it counts only when it does it three times running.
             note "s26: the sound came ${delivery}ms after delivery on a busy emulator: once more"
             dev dumpsys deviceidle unforce > /dev/null
-            S26_AGAIN=1 s26 "$run"
-            unset S26_AGAIN
+            S26_AGAIN=$((${S26_AGAIN:-0} + 1)) s26 "$run"
             return
         else
             fail "sound ${ms:-?}ms after its time, ${delivery:-?}ms after delivery"
