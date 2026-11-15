@@ -108,7 +108,7 @@ guard_input() {
         [ -n "$f" ] || sleep 0.2
         k=$((k + 1))
     done
-    if echo "$f" | grep -Eq 'com\.fidderr\.alarmfree|nputMethod|inputmethod|permissioncontroller|packageinstaller'; then return 0; fi
+    if echo "$f" | grep -Eq 'com\.fidderr\.alarmfree|nputMethod|inputmethod|permissioncontroller|packageinstaller|RequestIgnoreBatteryOptimizations'; then return 0; fi
     echo "$(date +%T) REFUSED [$f] $*" >> "$GUARD_LOG"
     return 1
 }
