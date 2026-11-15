@@ -1382,7 +1382,7 @@ s37() {
     on_card 3 || problems="$problems; card not back"
     wait_for 3 os_has_alarm || problems="$problems; not armed after undo"
     # A swipe does not get in the way of an ordinary tap.
-    tap_has "$(row_time)" L 0.6
+    tap_has "$(row_time), " L 0.6
     on_editor 3 || problems="$problems; no editor"
     if [ -z "$problems" ]; then
         pass "skip and delete by swiping, both undone"
@@ -2278,7 +2278,7 @@ s53() {
     tap_has "Weekdays at" 0 0.5
     [ "$(sn toast_visible)" = true ] || problems="$problems; a template says nothing"
     [ "$(alarm_count)" = 1 ] || problems="$problems; a template makes no alarm"
-    tap_has "$(row_time)" L 0.6
+    tap_has "$(row_time), " L 0.6
     on_editor || problems="$problems; the alarm from a template opens no editor"
     # Typed, then a tap on the wheel: the row under the middle is one more.
     note "s53: Typed, then a tap on the wheel: the row under the middle i @$SECONDS"

@@ -19,7 +19,7 @@ audit_rows() { # screen rows...
         audit_restart
         case "$screen" in
             settings) go_tab Settings ;;
-            editor) tap_has "$(row_time)" L 0.8 ;;
+            editor) tap_has "$(row_time), " L 0.8 ;;
         esac
         scroll_to "$row" > /dev/null 2>&1
         if tap_has "$row" 0 0.8; then
@@ -45,7 +45,7 @@ a11y_audit() {
     go_tab Settings
     audit_screen settings
     audit_restart
-    tap_has "$(row_time)" L 0.8
+    tap_has "$(row_time), " L 0.8
     on_editor
     audit_screen editor
     tap_time 0.8
@@ -96,7 +96,7 @@ label_dump() {
     label_dump_screen colour_swatches
     press_back
     audit_restart
-    tap_has "$(row_time)" L 0.8
+    tap_has "$(row_time), " L 0.8
     on_editor
     label_dump_screen editor
     scroll_to Weekdays > /dev/null 2>&1
