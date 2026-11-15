@@ -822,6 +822,8 @@ type_test_pin() {
 }
 # Android shows its unlock in the window of the notification shade.
 unlock_has_focus() { focused_window | grep -q -E 'NotificationShade|Bouncer'; }
+# The alarm's own unlock screen, once Android's unlock has given the focus back: a tap before that goes nowhere.
+unlock_screen_has_focus() { focused_window | grep -q SentinelUnlockActivity; }
 app_shell_answers() {
     kill -0 "$APP_PID" 2> /dev/null || open_app_shell
     sleep 0.3

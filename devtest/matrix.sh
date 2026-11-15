@@ -342,6 +342,10 @@ s13() {
     # Android's unlock is still up from the first time: away with it, and ask again.
     press_back
     wait_for 5 top_is_unlock || problems="$problems; after cancelling the unlock: $(top_activity)"
+    # Back from Android's unlock, the screen is on top a moment before it has the focus, and a tap in
+    # that moment goes nowhere (then the PIN typed below is what presses Unlock).
+    wait_for 5 unlock_screen_has_focus || problems="$problems; the unlock screen did not get the focus back: $(focused_window)"
+    sleep 0.5
     screenshot s13_unlock_screen
     sound_on || problems="$problems; silent after cancelling the unlock"
     tap_again
@@ -358,8 +362,14 @@ s13() {
     top_is_main || problems="$problems; the alarm's screen is not on top: $(top_activity)"
     wait_for 5 sound_on || problems="$problems; silent on the alarm's own screen"
     state_is a firing || problems="$problems; state $(state a) on the alarm's own screen"
-    tap "Turn off" 0 0.5
     finished() { sound_off && state_is a scheduled && [ "$(outcomes solved)" = 1 ]; }
+    tap "Turn off" 0 0.5
+    # The app's window has just started in a new process: a tap in the moment Android resizes it once
+    # more is lost (seen on s36 as well), and the screen is still there to be tapped again.
+    if ! wait_for 3 finished; then
+        note "s13: the first tap on Turn off was lost: once more"
+        tap "Turn off" 0 0.5
+    fi
     wait_for 8 finished || problems="$problems; after turning it off: sound=$(sound_on && echo ON || echo off) state=$(state a) solved=$(outcomes solved)"
     [ "$(outcomes backup)" = 0 ] || problems="$problems; history says backup screen"
     if [ -z "$problems" ]; then
