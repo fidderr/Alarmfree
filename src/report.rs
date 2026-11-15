@@ -83,7 +83,7 @@ pub fn scrub(text: &str, alarms: &[AlarmData]) -> String {
     out
 }
 
-/// The subject: `AlarmFree 0.5.1 (12401): <first words>`.
+/// The subject: `AlarmFree 0.5.2 (12402): <first words>`.
 pub fn subject(kind: Kind, version: &str, code: u32, what: &str) -> String {
     let words: Vec<&str> = what.split_whitespace().take(7).collect();
     let mut head = words.join(" ");

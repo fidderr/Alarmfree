@@ -7,6 +7,29 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-11-16
+
+Accessibility with TalkBack, versionCode 12402. The UI now runs on a Slint fork
+(github.com/fidderr/slint, pinned revision) that adds the Android accessibility tree, and on an
+AccessKit fork for hidden nodes and announced state changes; the three patched crates in `vendor/`
+are gone (their changes are in the fork).
+
+### Added
+
+- Every button, switch, chip, tile and alarm card has a name and a role; an alarm card reads as one
+  item ("07:00, Work, Weekdays"); the editor's day buttons carry the full day names.
+- Sheets, panels and the ring screen are modal for screen readers: what is behind them is not reachable.
+- Messages such as "Alarm deleted" are announced (a live region that stays in the tree), and Undo is a button.
+- A Cancel button on the delete-history chooser.
+
+### Changed
+
+- Lists refresh in place, so a screen reader keeps its focus when the list is redrawn.
+- Alarm labels are trimmed when saved.
+- A word being composed by the keyboard no longer shows over a field's placeholder.
+- Devtest: accessibility-tree host tests, a label dump per screen, a focus guard for phone runs, and
+  the Maestro release smoke flow.
+
 ## [0.5.1] - 2026-11-15
 
 The first Play release of the Slint app (0.5.0 was not uploaded), versionCode 12401, on
