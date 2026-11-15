@@ -1864,6 +1864,8 @@ s48() {
     [ -n "$file" ] || problems="$problems; no file in Downloads"
     [ "$(dev cat "/sdcard/Download/$file" | grep -c '"time_hour"')" -ge 1 ] || problems="$problems; no alarm in the file"
     # And back from it, as a second one.
+    # The picker lists what the media index knows: the file just written is not in it yet.
+    dev content call --uri content://media --method scan_volume --arg external_primary > /dev/null 2>&1
     wait_for 6 on_screen_no 3
     tap_scrolling "Back up"
     on_screen "Add alarms from a file" 4
