@@ -3,17 +3,13 @@
 
 use std::rc::Rc;
 
-use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
+use slint::{ComponentHandle, SharedString};
 
 use super::{Cfg, CfgRow, CfgStepper, CfgType, Ctx, EditorSheet, MainWindow};
 use crate::challenges::config::{self, DIFFICULTIES, MAX_CHALLENGES};
 use crate::i18n::t;
 use crate::models::setup::{difficulty_name, CHALLENGE_TYPES};
 use crate::models::ChallengeSetup;
-
-fn model<T: Clone + 'static>(items: Vec<T>) -> ModelRc<T> {
-    ModelRc::from(Rc::new(VecModel::from(items)))
-}
 
 /// Show the list: its rows, the summary of the editor row, and what can be added.
 pub fn sync_rows(ctx: &Ctx) {
@@ -27,7 +23,8 @@ pub fn sync_rows(ctx: &Ctx) {
     let tr = ctx.tr.borrow();
     let cfg = ui.global::<Cfg>();
     cfg.set_summary(config::names_summary(&tr, &ed.setups).into());
-    cfg.set_rows(model(
+    cfg.set_rows(super::refill(
+        cfg.get_rows(),
         ed.setups
             .iter()
             .map(|setup| CfgRow {
@@ -37,7 +34,8 @@ pub fn sync_rows(ctx: &Ctx) {
             .collect(),
     ));
     cfg.set_can_add(ed.setups.len() < MAX_CHALLENGES);
-    cfg.set_types(model(
+    cfg.set_types(super::refill(
+        cfg.get_types(),
         CHALLENGE_TYPES
             .iter()
             .map(|key| CfgType {
@@ -46,7 +44,8 @@ pub fn sync_rows(ctx: &Ctx) {
             })
             .collect(),
     ));
-    cfg.set_difficulty_labels(model(
+    cfg.set_difficulty_labels(super::refill(
+        cfg.get_difficulty_labels(),
         DIFFICULTIES
             .iter()
             .map(|d| SharedString::from(t(&tr, &format!("difficulty.{}", difficulty_name(*d)))))
@@ -82,7 +81,8 @@ fn sync_detail(ctx: &Ctx) {
             .and_then(|d| DIFFICULTIES.iter().position(|x| *x == d))
             .map_or(-1, |i| i as i32),
     );
-    cfg.set_steppers(model(
+    cfg.set_steppers(super::refill(
+        cfg.get_steppers(),
         config::steppers(setup)
             .into_iter()
             .map(|s| CfgStepper {

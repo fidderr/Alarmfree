@@ -298,7 +298,8 @@ pub fn sync(ctx: &Ctx) {
     );
     ui.set_ed_twelve(!twenty_four);
     ui.set_ed_rings_text(rings_text(&tr, current, ed.one_time, &ed.date_value).into());
-    ui.set_ed_days(model(
+    ui.set_ed_days(super::refill(
+        ui.get_ed_days(),
         settings
             .prefs
             .week_start
@@ -313,7 +314,7 @@ pub fn sync(ctx: &Ctx) {
     ));
     let mut labels: Vec<SharedString> = PRESETS.iter().map(|(key, _)| t(&tr, key).into()).collect();
     labels.push(t(&tr, "config.one_date").into());
-    ui.set_ed_preset_labels(model(labels));
+    ui.set_ed_preset_labels(super::refill(ui.get_ed_preset_labels(), labels));
     let active = if ed.one_time {
         3
     } else {
@@ -403,12 +404,14 @@ pub fn sync(ctx: &Ctx) {
     rows.set_snooze_count_text(
         crate::text::counted(&tr, "text.times", u32::from(current.snooze_count)).into(),
     );
-    rows.set_hour_labels(model(
+    rows.set_hour_labels(super::refill(
+        rows.get_hour_labels(),
         (0..24u8)
             .map(|h| SharedString::from(crate::text::hour_label(h, twenty_four)))
             .collect(),
     ));
-    rows.set_minute_labels(model(
+    rows.set_minute_labels(super::refill(
+        rows.get_minute_labels(),
         (0..60)
             .map(|m| SharedString::from(format!("{m:02}")))
             .collect(),
@@ -420,7 +423,8 @@ pub fn sync(ctx: &Ctx) {
     rows.set_note_text(current.note.clone().into());
     rows.set_label_rev(ed.label_rev);
     let today = chrono::Local::now().date_naive();
-    rows.set_quick_labels(model(
+    rows.set_quick_labels(super::refill(
+        rows.get_quick_labels(),
         ["home.today", "home.tomorrow", "config.next_week"]
             .iter()
             .map(|key| SharedString::from(t(&tr, key)))
