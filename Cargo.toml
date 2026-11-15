@@ -33,18 +33,18 @@ rusqlite = { version = "0.31", features = ["bundled"] }
 
 # The UI is Slint, drawn on the GPU by Skia: no WebView. Android hosts it in a NativeActivity.
 [target.'cfg(target_os = "android")'.dependencies]
-slint = { path = "C:/Git/slint-combined/api/rs/slint", default-features = false, features = ["std", "compat-1-20", "system-fonts", "backend-android-activity-06", "renderer-skia", "accessibility"] }
+slint = { path = "C:/Git/slint-release/api/rs/slint", default-features = false, features = ["std", "compat-1-20", "system-fonts", "backend-android-activity-06", "renderer-skia", "accessibility"] }
 
 [dependencies.i-slint-backend-testing]
-path = "C:/Git/slint-combined/internal/backends/testing"
+path = "C:/Git/slint-release/internal/backends/testing"
 optional = true
 default-features = false
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
-slint = { path = "C:/Git/slint-combined/api/rs/slint" }
+slint = { path = "C:/Git/slint-release/api/rs/slint" }
 
 [build-dependencies]
-slint-build = { path = "C:/Git/slint-combined/api/rs/build" }
+slint-build = { path = "C:/Git/slint-release/api/rs/build" }
 
 [features]
 default = []
@@ -75,7 +75,7 @@ codegen-units = 16
 incremental = true
 
 [dev-dependencies]
-i-slint-backend-testing = { path = "C:/Git/slint-combined/internal/backends/testing", default-features = false }
-i-slint-core = { path = "C:/Git/slint-combined/internal/core", default-features = false, features = ["std"] }
+i-slint-backend-testing = { path = "C:/Git/slint-release/internal/backends/testing", default-features = false }
+i-slint-core = { path = "C:/Git/slint-release/internal/core", default-features = false, features = ["std"] }
 tempfile = "3"
 tokio = { version = "1", features = ["rt", "macros", "time"] }
