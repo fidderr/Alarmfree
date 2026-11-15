@@ -149,6 +149,9 @@ export component Sheet inherits Rectangle {
             flick.content-y = max(flick.height - flick.content-height, flick.content-y - (row-y + row-h + 8px - flick.absolute-position.y - flick.height));
         }
     }
+    accessible-role: region;
+    accessible-label: root.title;
+    accessible-modal: true;
     background: #0000008c;
     TouchArea { clicked => { root.close(); } }
     panel := Rectangle {

@@ -82,6 +82,9 @@ component HaloText inherits Rectangle {
 
 // What shows while an alarm rings: the time, what it is, and the way to turn it off.
 export component RingScreen inherits Rectangle {
+    accessible-role: region;
+    accessible-label: root.clock;
+    accessible-modal: true;
     in property <string> date;
     in property <string> clock;
     in property <bool> twenty-four: true;

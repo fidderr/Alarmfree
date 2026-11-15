@@ -9,7 +9,7 @@ use i_slint_backend_testing::{ElementHandle, ElementQuery};
 
 use super::*;
 
-fn window_with(alarms: Vec<AlarmData>) -> (MainWindow, Rc<Ctx>) {
+pub(super) fn window_with(alarms: Vec<AlarmData>) -> (MainWindow, Rc<Ctx>) {
     i_slint_backend_testing::init_no_event_loop();
     let ui = MainWindow::new().unwrap();
     ui.window().set_size(slint::PhysicalSize::new(400, 800));
@@ -25,7 +25,7 @@ fn window_with(alarms: Vec<AlarmData>) -> (MainWindow, Rc<Ctx>) {
     (ui, ctx)
 }
 
-fn alarm(id: &str, hour: u8, label: &str) -> AlarmData {
+pub(super) fn alarm(id: &str, hour: u8, label: &str) -> AlarmData {
     let mut alarm = crate::alarm_ops::factory_alarm();
     alarm.id = id.into();
     alarm.time_hour = hour;

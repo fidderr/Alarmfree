@@ -35,6 +35,8 @@ mod history;
 mod home;
 mod home_sheets;
 mod look;
+#[cfg(test)]
+mod modal_tests;
 mod palette;
 mod panel;
 #[cfg(test)]

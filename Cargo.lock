@@ -170,6 +170,7 @@ dependencies = [
 name = "alarmfree"
 version = "0.5.1"
 dependencies = [
+ "accesskit",
  "chrono",
  "i-slint-backend-testing",
  "i-slint-core",
