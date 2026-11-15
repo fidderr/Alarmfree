@@ -329,6 +329,12 @@ reboot_only() {
             # It boots to its lock screen. The app shows over it, so a run can go a long way
             # before a system page, which does not, stays hidden behind it.
             timeout 20 "$ADB" -s "$SERIAL" shell wm dismiss-keyguard
+            # A user has no accessibility service: the suite runs without one (A11Y=on keeps what the emulator has,
+            # for a run with a screen reader's tree being built).
+            if [ "${A11Y:-off}" = off ]; then
+                timeout 20 "$ADB" -s "$SERIAL" shell settings put secure enabled_accessibility_services null
+                timeout 20 "$ADB" -s "$SERIAL" shell settings put secure accessibility_enabled 0
+            fi
             ;;
     esac
 }
