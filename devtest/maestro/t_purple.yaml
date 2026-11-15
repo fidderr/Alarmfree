@@ -1,0 +1,8 @@
+appId: com.fidderr.alarmfree
+---
+- launchApp
+- tapOn: "Settings"
+- tapOn: "Theme.*"
+- scrollUntilVisible:
+    element: "Purple"
+- tapOn: "Purple"

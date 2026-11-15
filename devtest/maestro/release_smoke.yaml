@@ -1,0 +1,24 @@
+# The tree on a RELEASE build (no devtest feature, not debuggable): start clean, get through the
+# first start, make an alarm through the screens, see it on the list, delete it.
+appId: com.fidderr.alarmfree
+---
+- clearState
+- launchApp
+- tapOn: "Skip"
+- tapOn: "Get started"
+- tapOn: "Create new alarm"
+- tapOn: "+5"
+- tapOn: "Weekend"
+- tapOn: "Label.*"
+- tapOn: "Alarm name"
+- inputText: "Release"
+- tapOn: "Done"
+- tapOn: "Save"
+- assertVisible: ".*Release.*"
+- assertVisible: "On or off: Release"
+- tapOn: ".*Release.*"
+- tapOn: "Delete"
+- tapOn:
+    text: "Delete"
+    index: 1
+- assertVisible: "No alarms yet"
