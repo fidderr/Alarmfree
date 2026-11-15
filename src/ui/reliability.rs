@@ -8,7 +8,6 @@ use std::time::Duration;
 use mobile_sentinel::health::{self, Check, HealthReport};
 use slint::{ComponentHandle, SharedString};
 
-use super::editor::model;
 use super::{CheckRow, Ctx, Rel, SCREEN_RELIABILITY, SCREEN_SETTINGS};
 use crate::i18n::t;
 use crate::reliability::{
@@ -128,7 +127,8 @@ fn sync(ctx: &Ctx) {
         let state = ctx.reliability.borrow();
         rel.set_first_run(state.first_run);
     }
-    rel.set_checks(model(
+    rel.set_checks(super::refill(
+        rel.get_checks(),
         checks
             .iter()
             .map(|check| {

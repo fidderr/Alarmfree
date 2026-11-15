@@ -325,6 +325,8 @@
   "accent.pink": "Roze",
   "accent.amber": "Amber",
   "sound.rename": "Dit geluid hernoemen",
+  "sound.preview_play": "Voorbeeld afspelen",
+  "sound.preview_stop": "Voorbeeld stoppen",
   "config.sound_delay": "Geluid begint na",
   "config.sound_together": "Meteen",
   "config.max_brightness": "Volle helderheid",

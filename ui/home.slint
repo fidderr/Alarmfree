@@ -7,6 +7,8 @@ export struct DayCell { letter: string, name: string, on: bool }
 
 export struct AlarmRow {
     id: string,
+    // What a screen reader says about the whole card: time, name, days and what is up.
+    describe: string,
     time: string,
     twelve: bool,
     label: string,
@@ -43,7 +45,7 @@ component AlarmCard inherits Rectangle {
     height: 76px;
     clip: !lifted;
     accessible-role: list-item;
-    accessible-label: data.time + " " + data.label + " " + data.when;
+    accessible-label: data.describe;
     accessible-action-default => { root.open(); }
 
     Rectangle {
@@ -98,6 +100,7 @@ component AlarmCard inherits Rectangle {
                     padding-bottom: 8px;
                     spacing: 10px;
                     TabularText {
+                        decorative: true;
                         // Smaller when the window is: the time gives way before anything is cut off,
                         // but never so far that the text next to it runs over it.
                         min-width: root.time-size * (data.twelve ? 3.3 : 2.6);
@@ -115,6 +118,7 @@ component AlarmCard inherits Rectangle {
                         spacing: 5px;
                         horizontal-stretch: 1;
                         if data.label != "": Text {
+                            accessible-role: AccessibleRole.none;
                             text: data.label;
                             font-size: 14px * Zoom.scale;
                             font-weight: 500;
@@ -122,6 +126,7 @@ component AlarmCard inherits Rectangle {
                             color: data.on ? Pal.text : Pal.text2;
                         }
                         if data.when != "": Text {
+                            accessible-role: AccessibleRole.none;
                             text: data.when;
                             font-size: 12px * Zoom.scale;
                             color: Pal.text2;
@@ -131,6 +136,7 @@ component AlarmCard inherits Rectangle {
                             spacing: 1px;
                             alignment: start;
                             for day in data.days: Text {
+                                accessible-role: AccessibleRole.none;
                                 // 13.2 wide at most, and as narrow as the letter when the card is.
                                 preferred-width: 13.2px;
                                 max-width: 13.2px;
@@ -156,7 +162,7 @@ component AlarmCard inherits Rectangle {
                 width: 52px;
                 AppSwitch {
                     on: data.on;
-                    label: Tr.t("home.switch_aria") + " " + data.label;
+                    label: Tr.t("home.switch_aria") + " " + (data.label != "" ? data.label : data.time);
                     toggled => { root.toggle(); }
                 }
             }

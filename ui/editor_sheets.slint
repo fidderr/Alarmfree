@@ -110,9 +110,12 @@ component FieldLabel inherits VerticalLayout {
     in property <string> text;
     // The first thing under the title has no field above it to be 16 dp from.
     in property <bool> first: false;
+    // The field under it says this as its own label, so the text is not read a second time.
+    in property <bool> names-field: false;
     spacing: 8px;
     padding-top: root.first ? 16px : 8px;
-    Text { text: root.text; font-size: 14px * Zoom.scale; font-weight: 500; color: Pal.text; }
+    if !root.names-field: Text { text: root.text; font-size: 14px * Zoom.scale; font-weight: 500; color: Pal.text; }
+    if root.names-field: Text { accessible-role: AccessibleRole.none; text: root.text; font-size: 14px * Zoom.scale; font-weight: 500; color: Pal.text; }
     @children
 }
 
@@ -156,8 +159,10 @@ export component TimeSheet inherits Rectangle {
             }
         }
         FieldLabel {
+            names-field: true;
             text: Tr.t("config.time_type");
             TextField {
+                label: Tr.t("config.time_type");
                 placeholder: "07:00";
                 input-type: InputType.number;
                 edited(s) => { Ed.time-typed(s); }
@@ -195,19 +200,23 @@ export component LabelSheet inherits Rectangle {
         help: Tr.t("config.label_note");
         close => { root.done(); }
         for r in [Ed.label-rev]: FieldLabel {
+            names-field: true;
             first: true;
             text: Tr.t("config.label_name");
             TextField {
                 text: Ed.label-text;
+                label: Tr.t("config.label_name");
                 placeholder: Tr.t("config.label_placeholder");
                 edited(s) => { Ed.label-edited(s); }
                 accepted => { root.done(); }
             }
         }
         FieldLabel {
+            names-field: true;
             text: Tr.t("config.note");
             TextField {
                 text: Ed.note-text;
+                label: Tr.t("config.note");
                 placeholder: Tr.t("config.note_placeholder");
                 edited(s) => { Ed.note-edited(s); }
                 accepted => { root.done(); }
@@ -252,6 +261,7 @@ export component SoundSheet inherits Rectangle {
         finish => { root.done(); }
         help: Tr.t("config.sound_note");
         action-text: Ed.sound-none ? "" : (Ed.sounding ? Tr.t("action.stop") : Tr.t("action.start"));
+        action-label: Ed.sounding ? Tr.t("sound.preview_stop") : Tr.t("sound.preview_play");
         action-has-icon: true;
         action-icon: Ed.sounding ? IconName.stop : IconName.play;
         close => { root.done(); }
@@ -268,6 +278,7 @@ export component SoundSheet inherits Rectangle {
                 TextField {
                     horizontal-stretch: 1;
                     text: Ed.rename-text;
+                    label: Tr.t("sound.rename");
                     focus-on-show: true;
                     edited(s) => { Ed.rename-edited(s); }
                     accepted => { Ed.rename-done(); }
@@ -322,6 +333,7 @@ export component VibrationSheet inherits Rectangle {
         finish => { root.done(); }
         help: Tr.t("config.vibration_note");
         action-text: Ed.vib-can-try ? (Ed.vibrating ? Tr.t("action.stop") : Tr.t("action.start")) : "";
+        action-label: Ed.vibrating ? Tr.t("sound.preview_stop") : Tr.t("sound.preview_play");
         action-has-icon: true;
         action-icon: Ed.vibrating ? IconName.stop : IconName.play;
         close => { root.done(); }
@@ -377,6 +389,11 @@ export component OptionsSheet inherits Rectangle {
 component LookTileView inherits Rectangle {
     in property <LookTile> tile;
     callback clicked();
+    accessible-role: button;
+    accessible-label: root.tile.name;
+    accessible-checkable: true;
+    accessible-checked: root.tile.selected;
+    accessible-action-default => { root.clicked(); }
     height: 76px + 6px + 16px;
     Rectangle {
         y: 0px;
@@ -408,6 +425,7 @@ component LookTileView inherits Rectangle {
         border-color: Pal.accent;
     }
     Text {
+        accessible-role: AccessibleRole.none;
         y: 82px;
         width: parent.width;
         text: root.tile.name;

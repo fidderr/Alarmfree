@@ -2671,9 +2671,9 @@ vibrating_now() {
 not_vibrating() { ! vibrating_now; }
 # What the try button of the open panel says: true while it runs (it says Stop), false (Start), or none.
 start_stop_says() {
-    if is_there Stop; then echo true; elif is_there Start; then echo false; else echo none; fi
+    if is_there 'Stop preview'; then echo true; elif is_there 'Play preview'; then echo false; else echo none; fi
 }
-start_stop() { is_there Stop && tap Stop 0 0.3 || tap Start 0 0.3; }
+start_stop() { is_there 'Stop preview' && tap 'Stop preview' 0 0.3 || tap 'Play preview' 0 0.3; }
 
 # Trying a sound and a vibration: a tap picks a sound and plays it for a few seconds, Start plays it
 # for longer, and Stop, closing and time all end it. A tap on a pattern vibrates, for just as long.

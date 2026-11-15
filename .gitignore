@@ -27,3 +27,6 @@ devtest-out/
 
 # Native libraries staged for Gradle by build.sh
 build/
+
+# The database the host tests open in the working directory
+/alarmfree.db*

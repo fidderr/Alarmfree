@@ -620,8 +620,8 @@ tap() { # text [which of them] [seconds to wait]
     dev input tap $xy
     sleep "${3:-0.2}"
 }
-# The time of the editor: its colon, which a touch there opens the time sheet.
-tap_time() { tap ":" 0 "${1:-0.6}"; }
+# The time of the editor, which a touch there opens the time sheet.
+tap_time() { tap_has "Time:" 0 "${1:-0.6}"; }
 tap_has() { # text [which] [seconds]
     local xy
     xy=$(still_where where_has "$1" "${2:-}")

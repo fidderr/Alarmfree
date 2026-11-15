@@ -10,7 +10,7 @@ appId: com.fidderr.alarmfree
 - tapOn: "+5"
 - tapOn: "Weekend"
 - tapOn: "Label.*"
-- tapOn: "Alarm name"
+- tapOn: "Name"
 - inputText: "Release"
 - tapOn: "Done"
 - tapOn: "Save"

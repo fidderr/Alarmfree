@@ -15,7 +15,7 @@ component TimeShift inherits Rectangle {
     height: 36px;
     border-radius: 18px;
     background: Pal.surface;
-    Text { text: root.text; font-size: 14px * Zoom.scale; font-weight: 500; color: Pal.text; }
+    Text { accessible-role: AccessibleRole.none; text: root.text; font-size: 14px * Zoom.scale; font-weight: 500; color: Pal.text; }
     TouchArea { clicked => { root.clicked(); } }
 }
 
@@ -114,6 +114,7 @@ export component EditorScreen inherits Rectangle {
                             accessible-action-default => { root.open(EditorSheet.time); }
                             min-width: 0px;
                             TabularText {
+                                decorative: true;
                                 width: parent.width;
                                 height: parent.height;
                                 text: root.time-text;
@@ -182,6 +183,7 @@ export component EditorScreen inherits Rectangle {
                                     border-radius: self.width / 2;
                                     background: day.on ? Pal.accent : Pal.surface;
                                     Text {
+                                        accessible-role: AccessibleRole.none;
                                         text: day.letter;
                                         font-size: 14px * Zoom.scale;
                                         font-weight: 500;

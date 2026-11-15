@@ -1,7 +1,9 @@
 fn main() {
-    // devtest/ finds elements by their text and place; that needs the compiler's debug info.
-    let config = slint_build::CompilerConfiguration::new()
-        .with_debug_info(std::env::var_os("CARGO_FEATURE_DEVTEST").is_some());
+    // devtest/ finds elements by their text and place; that needs the compiler's debug info, and
+    // so do the host tests that look for elements (src/ui/a11y_tests.rs), which run in debug.
+    let debug = std::env::var_os("CARGO_FEATURE_DEVTEST").is_some()
+        || std::env::var("PROFILE").is_ok_and(|profile| profile == "debug");
+    let config = slint_build::CompilerConfiguration::new().with_debug_info(debug);
     slint_build::compile_with_config("ui/main.slint", config).expect("compile the UI");
     version_from_sentinel_toml();
 }
