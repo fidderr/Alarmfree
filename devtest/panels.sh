@@ -372,9 +372,13 @@ for e in json.loads(sys.stdin.read()):
         if any_sheet_up; then
             panel_open "${name}_$(echo "$text" | tr -c 'a-zA-Z0-9\n' _ | cut -c1-24)" "$x" "$y"
         elif ! on_screen_no "$here"; then
+            # What this screen has was learnt before; the screen opened has its own, and must not replace it.
+            local saved=$PANEL_BASELINE saved_screen=$PANEL_BASELINE_SCREEN
             look_through "${name}_$(echo "$text" | tr -c 'a-zA-Z0-9\n' _ | cut -c1-24)"
             press_back
             wait_for 4 on_screen_no "$here" || panel_problem "$name: not back from $text"
+            PANEL_BASELINE=$saved
+            PANEL_BASELINE_SCREEN=$saved_screen
         fi
     done <<< "$rows"
 }
