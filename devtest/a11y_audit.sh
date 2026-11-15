@@ -54,3 +54,49 @@ a11y_audit() {
     audit_rows settings Theme Language Reliability
     pass "audit done"
 }
+
+# Every screen's labels as the framework sees them: a uiautomator dump per screen, kept in $OUT/labels and checked
+# by label_check.py (root named AlarmFree, no unnamed or duplicate interactive nodes). Findings are printed, not failed.
+label_dump_screen() { # name
+    mkdir -p "$OUT/labels"
+    dev uiautomator dump /sdcard/ui.xml > /dev/null
+    adb_ exec-out cat /sdcard/ui.xml > "$OUT/labels/$1.xml"
+    python -I devtest/label_check.py "$1" < "$OUT/labels/$1.xml"
+}
+label_dump() {
+    scenario label_dump
+    fresh
+    seed a "$(alarm_json a 7 0 "$EVERY_DAY" null)"
+    arm a
+    on_home 10
+    label_dump_screen home
+    audit_restart
+    go_tab History
+    label_dump_screen history
+    press h-delete-history "" 0.5
+    wait_for 3 panel_up
+    label_dump_screen history_delete_sheet
+    press_back
+    audit_restart
+    go_tab Settings
+    label_dump_screen settings
+    tap_has Theme 0 0.8
+    sleep 0.5
+    label_dump_screen theme
+    tap_row "Your own theme"
+    sleep 0.8
+    tap_row Text
+    sleep 0.8
+    label_dump_screen colour_swatches
+    press_back
+    audit_restart
+    tap_has "$(row_time)" L 0.8
+    on_editor
+    label_dump_screen editor
+    scroll_to Weekdays > /dev/null 2>&1
+    label_dump_screen editor_days
+    scroll_to Sound > /dev/null 2>&1
+    tap_has Sound 0 0.8
+    label_dump_screen sound_sheet
+    pass "label dumps in $OUT/labels"
+}
