@@ -220,6 +220,19 @@ no_sheet_up() { ! any_sheet_up; }
 tap_row() { # text
     has_there "$1" || { sheet_scroll_up; has_there "$1" || sheet_scroll; }
     has_there "$1" || sheet_scroll
+    # A row in the tree can sit behind the Save or Done button that stays at the bottom, or the
+    # navigation bar: a touch there is theirs. Scroll until the row is clear of them.
+    local i y b floor
+    floor=$(( $(window_size | cut -d' ' -f2) - 200 ))
+    for b in Save Done; do
+        y=$(where "$b" | cut -d' ' -f2)
+        case "$y" in '' | *[!0-9]*) ;; *) [ "$y" -gt 1200 ] && [ $((y - 120)) -lt "$floor" ] && floor=$((y - 120)) ;; esac
+    done
+    for i in 1 2 3; do
+        y=$(where_has "$1" | cut -d' ' -f2)
+        case "$y" in '' | *[!0-9]*) ;; *) [ "$y" -lt "$floor" ] && break ;; esac
+        sheet_scroll
+    done
     tap_has "$1" 0 0.5
 }
 
