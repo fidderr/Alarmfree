@@ -980,6 +980,14 @@ set_field_clear() { # n text
     done
     set_field "$1" "$2"
 }
+# A short scroll: about a quarter of the window, where sheet_scroll's fling may take a screen and a half.
+sheet_nudge() {
+    local h
+    h=$(window_size | cut -d' ' -f2)
+    case "$h" in '' | *[!0-9]*) h=1920 ;; esac
+    dev input swipe 540 $((h * 70 / 100)) 540 $((h * 45 / 100)) 700
+    sleep 0.8
+}
 # A row of a long list into the middle of the window, by short swipes (a fling carries a long one
 # past it, by a different distance each time): there it is neither under the title nor under the
 # bottom bar. With "has" the text only has to be in it.

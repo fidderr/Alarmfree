@@ -2032,8 +2032,12 @@ s50() {
     press open "$id" 0.8
     on_editor
     rows=$(texts_of)
-    sheet_scroll
-    rows="$rows|$(texts_of)"
+    # In steps, as a longer swipe can carry the rows in between out of the window unseen.
+    local k
+    for k in 1 2 3 4; do
+        sheet_nudge
+        rows="$rows|$(texts_of)"
+    done
     for shown in Morning Funk Steady '6 min, 4' Math '60 min' 'After 3 min' '10 min'; do
         has "$rows" "$shown"
     done
