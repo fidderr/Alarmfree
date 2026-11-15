@@ -1,0 +1,13 @@
+# s36 (the alarms part): hold an alarm on the list and move it to the end.
+# Maestro has no "touch down, wait, then move": a slow swipe is the closest it can do.
+appId: com.fidderr.alarmfree
+---
+- launchApp
+- assertVisible: "7:00 AM a.*"
+- swipe:
+    start: 50%, 40%
+    end: 50%, 70%
+    duration: 1500
+- stopApp
+- launchApp
+- assertVisible: "7:00 AM a.*"

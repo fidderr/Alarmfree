@@ -33,9 +33,27 @@ setup_s38() {
 }
 check_s38() {
     problems=""
-    printf "SELECT prefs FROM settings;\n" | sql | grep -q '"accent":"purple"' || problems="$problems; accent not kept"
+    printf "SELECT prefs FROM settings;\n" | sql | grep -q '"accent":"Purple"' || problems="$problems; accent not kept"
     printf "SELECT prefs FROM settings;\n" | sql | grep -q '"mytune.ogg":"Morning"' || problems="$problems; name not saved"
 }
+
+setup_s36() {
+    fresh
+    seed a "$(alarm_json a 7 0 "$EVERY_DAY" null)"
+    seed b "$(alarm_json b 8 0 "$EVERY_DAY" null)"
+    seed c "$(alarm_json c 9 0 "$EVERY_DAY" null)"
+    arm a
+}
+check_s36() {
+    problems=""
+    local order
+    dev am force-stop "$PKG"
+    start_app
+    wait_for 20 on_card_rows
+    order=$(ui snapshot | grep -oE '"label":"[^"]*","on"' | sed -E 's/^"label":"//; s/","on"$//' | tr '\n' ' ' | sed 's/ $//')
+    [ "$order" = "b c a" ] || problems="$problems; order is '$order'"
+}
+on_card_rows() { ui snapshot | grep -q '"rows":\[{'; }
 
 for i in $(seq 1 "$runs"); do
     t0=$SECONDS

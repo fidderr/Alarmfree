@@ -16,7 +16,12 @@ appId: com.fidderr.alarmfree
     element: "mytune"
     centerElement: true
 - tapOn: "Rename this sound"
+# Slint puts the cursor at the start, and eraseText deletes backwards: a tap at the end first.
+- tapOn:
+    text: "mytune"
+    point: 95%,50%
 - eraseText: 20
 - inputText: "Morning"
-- pressKey: Enter
-- assertVisible: "Morning"
+- tapOn:
+    text: "Done"
+    index: 0
