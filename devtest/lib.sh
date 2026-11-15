@@ -980,6 +980,40 @@ set_field_clear() { # n text
     done
     set_field "$1" "$2"
 }
+# A row of a long list into the middle of the window, by short swipes (a fling carries a long one
+# past it, by a different distance each time): there it is neither under the title nor under the
+# bottom bar. With "has" the text only has to be in it.
+centre_row() { # text [has]
+    local i y h w find=where
+    [ "${2:-}" != has ] || find=where_has
+    h=$(window_size | cut -d' ' -f2)
+    case "$h" in '' | *[!0-9]*) h=1920 ;; esac
+    w=540
+    for i in 1 2 3 4 5 6 7 8; do
+        y=$($find "$1" | cut -d' ' -f2)
+        case "$y" in
+            '' | *[!0-9]*)
+                # Not in the window: below it first, then above.
+                if [ "$i" -le 4 ]; then
+                    dev input swipe "$w" $((h * 70 / 100)) "$w" $((h * 45 / 100)) 700
+                else
+                    dev input swipe "$w" $((h * 45 / 100)) "$w" $((h * 70 / 100)) 700
+                fi
+                ;;
+            *)
+                if [ "$y" -gt $((h * 75 / 100)) ]; then
+                    dev input swipe "$w" $((h * 70 / 100)) "$w" $((h * 50 / 100)) 700
+                elif [ "$y" -lt $((h * 20 / 100)) ]; then
+                    dev input swipe "$w" $((h * 45 / 100)) "$w" $((h * 65 / 100)) 700
+                else
+                    return 0
+                fi
+                ;;
+        esac
+        sleep 0.8
+    done
+    return 1
+}
 # Scroll the panel until this exact text (the n-th, or L for the last) is on screen.
 scroll_to() { # text [which]
     local i

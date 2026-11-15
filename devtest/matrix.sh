@@ -2084,11 +2084,13 @@ s51() {
     tap Done 0 0.3
     wait_for 3 panel_down
     # The last rows sit under the bottom bar until the screen is scrolled.
-    sheet_scroll
+    centre_row "Touch feedback"
     tap "Touch feedback" 0 0.3
+    centre_row "Less motion"
     tap "Less motion" 0 0.3
+    centre_row Confetti
     tap Confetti 0 0.3
-    sheet_scroll_up
+    centre_row Language has
     pick Language Nederlands
     sleep 0.2
     dev am force-stop "$PKG"
