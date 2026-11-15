@@ -288,7 +288,7 @@ export component SoundSheet inherits Rectangle {
                 }
                 if row.state == 2: IconButton { icon: IconName.xmark; label: Tr.t("action.cancel"); clicked => { Ed.delete-cancel(); } }
                 if row.state == 0 && row.custom: IconButton { icon: IconName.pencil; label: Tr.t("sound.rename"); clicked => { Ed.rename-start(i); } }
-                if row.state == 0 && row.custom: IconButton { icon: IconName.xmark; label: Tr.t("action.delete"); clicked => { Ed.delete-ask(i); } }
+                if row.state == 0 && row.custom: IconButton { icon: IconName.xmark; label: Tr.t("sound.delete"); clicked => { Ed.delete-ask(i); } }
             }
         }
         }

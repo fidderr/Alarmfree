@@ -90,11 +90,9 @@ appId: com.fidderr.alarmfree
 - assertVisible: "Notice before 10 min"
 # Off the list from here too, after asking.
 - scrollUntilVisible:
-    element: "Delete"
+    element: "Delete alarm"
     centerElement: true
     direction: UP
+- tapOn: "Delete alarm"
 - tapOn: "Delete"
-- tapOn:
-    text: "Delete"
-    index: 1
 - assertVisible: "No alarms yet"

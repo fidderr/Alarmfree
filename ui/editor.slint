@@ -81,7 +81,7 @@ export component EditorScreen inherits Rectangle {
             if root.deletable: Rectangle {
                 width: 44px;
                 accessible-role: button;
-                accessible-label: Tr.t("action.delete");
+                accessible-label: Tr.t("alarm.delete");
                 accessible-action-default => { root.open(EditorSheet.delete); }
                 Icon { name: IconName.trash; size: 20px; tint: Pal.text2; }
                 TouchArea { clicked => { root.open(EditorSheet.delete); } }
