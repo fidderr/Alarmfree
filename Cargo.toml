@@ -33,25 +33,18 @@ rusqlite = { version = "0.31", features = ["bundled"] }
 
 # The UI is Slint, drawn on the GPU by Skia: no WebView. Android hosts it in a NativeActivity.
 [target.'cfg(target_os = "android")'.dependencies]
-slint = { version = "=1.18.1", default-features = false, features = ["std", "compat-1-2", "backend-android-activity-06", "renderer-skia"] }
+slint = { path = "C:/Git/slint-combined/api/rs/slint", default-features = false, features = ["std", "compat-1-20", "system-fonts", "backend-android-activity-06", "renderer-skia", "accessibility"] }
 
 [dependencies.i-slint-backend-testing]
-version = "=1.18.1"
+path = "C:/Git/slint-combined/internal/backends/testing"
 optional = true
 default-features = false
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
-slint = { version = "=1.18.1" }
-
-# Three tiny edits to Slint 1.18.1, kept in vendor/ (see vendor/README.md): no ICU line-break
-# dictionaries and no SVG stack. -5.6 MB of libmain.so. Remove them when Slint has options for it.
-[patch.crates-io]
-i-slint-core = { path = "vendor/i-slint-core" }
-i-slint-renderer-skia = { path = "vendor/i-slint-renderer-skia" }
-i-slint-backend-android-activity = { path = "vendor/i-slint-backend-android-activity" }
+slint = { path = "C:/Git/slint-combined/api/rs/slint" }
 
 [build-dependencies]
-slint-build = "=1.18.1"
+slint-build = { path = "C:/Git/slint-combined/api/rs/build" }
 
 [features]
 default = []
