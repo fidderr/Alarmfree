@@ -1942,6 +1942,8 @@ s49() {
     type_field 0 "$(sn type_passage)"
     finished() { [ "$(ui inputs)" = "[]" ]; }
     wait_for 10 finished || problems="$problems; typing it all did not finish: '$(ui inputs)'"
+    # Not left up for the scenario after this one.
+    hide_keyboard
     if [ -z "$problems" ]; then
         pass "room made and given back, text arrives, challenge done by typing"
     else
