@@ -235,6 +235,11 @@ export component LabelSheet inherits Rectangle {
                     height: chip.line == line ? 48px : 0px;
                     border-radius: 14px;
                     background: chip.selected ? Pal.accent : Pal.surface2;
+                    accessible-role: button;
+                    accessible-label: chip.text;
+                    accessible-checkable: true;
+                    accessible-checked: chip.selected;
+                    accessible-action-default => { Ed.used-picked(i); }
                     chip-text := Text {
                         x: 14px;
                         width: parent.width - 28px;

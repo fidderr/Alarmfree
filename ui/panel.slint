@@ -7,6 +7,9 @@ component PanelItem inherits Rectangle {
     in property <SheetChoice> choice;
     callback clicked();
     height: 52px;
+    accessible-role: button;
+    accessible-label: root.choice.text;
+    accessible-action-default => { root.clicked(); }
     Text {
         width: parent.width;
         text: root.choice.text;
@@ -62,6 +65,11 @@ export component PanelSheet inherits Rectangle {
                 height: 48px;
                 border-radius: 14px;
                 background: root.chip-selected == i ? Pal.accent : Pal.surface2;
+                accessible-role: button;
+                accessible-label: chip;
+                accessible-checkable: true;
+                accessible-checked: root.chip-selected == i;
+                accessible-action-default => { root.chip-picked(i); }
                 Text {
                     text: chip;
                     font-size: 14px * Zoom.scale;

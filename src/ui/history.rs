@@ -199,6 +199,7 @@ pub fn open_delete(ctx: &Ctx) {
                 ),
             ],
             chip_selected: -1,
+            done: Some((t(&tr, "action.cancel"), Act::Close)),
             ..Panel::default()
         },
     );

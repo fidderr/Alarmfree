@@ -224,6 +224,9 @@ export component ThemeScreen inherits Rectangle {
                     RowList {
                         Rectangle {
                             height: 54px;
+                            accessible-role: button;
+                            accessible-label: Tr.t("theme.custom");
+                            accessible-action-default => { Thm.own-picked(); }
                             HorizontalLayout {
                                 padding-left: 16px;
                                 padding-right: 14px;

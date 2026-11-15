@@ -311,6 +311,9 @@ export component HomeScreen inherits Rectangle {
                 height: max(44px, banner-text.preferred-height + 20px);
                 border-radius: 14px;
                 background: Pal.warn-soft;
+                accessible-role: button;
+                accessible-label: root.banner + ", " + Tr.t("reliability.fix");
+                accessible-action-default => { root.open-banner(); }
                 TouchArea { clicked => { root.open-banner(); } }
                 if root.banner-can-hide: Rectangle {
                     x: parent.width - 44px;
@@ -417,6 +420,9 @@ export component HomeScreen inherits Rectangle {
                     height: 44px;
                     border-radius: 14px;
                     background: Pal.surface;
+                    accessible-role: button;
+                    accessible-label: label;
+                    accessible-action-default => { root.template(i); }
                     Text { text: label; font-size: 14px * Zoom.scale; font-weight: 500; color: Pal.text; }
                     TouchArea { clicked => { root.template(i); } }
                 }

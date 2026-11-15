@@ -68,6 +68,9 @@ component PlainRow inherits Rectangle {
     in property <string> title;
     callback clicked();
     height: 54px;
+    accessible-role: button;
+    accessible-label: root.title;
+    accessible-action-default => { root.clicked(); }
     HorizontalLayout {
         padding-left: 16px;
         padding-right: 14px;
@@ -108,6 +111,11 @@ export component ReliabilityScreen inherits Rectangle {
             back => { Rel.back(); }
             Rectangle {
                 width: 36px;
+                accessible-role: button;
+                accessible-label: Tr.t("action.help");
+                accessible-checkable: true;
+                accessible-checked: root.help-open;
+                accessible-action-default => { root.help-open = !root.help-open; }
                 Rectangle {
                     width: 22px;
                     height: 22px;

@@ -45,6 +45,11 @@ component EventRow inherits VerticalLayout {
     callback delete();
     Rectangle {
         min-height: 60px;
+        accessible-role: button;
+        accessible-label: root.ev.title + (root.ev.sub != "" ? ", " + root.ev.sub : "") + ", " + root.ev.value;
+        accessible-expandable: true;
+        accessible-expanded: root.open;
+        accessible-action-default => { root.toggle(); }
         HorizontalLayout {
             padding: 10px;
             padding-left: 16px;
@@ -84,6 +89,9 @@ component EventRow inherits VerticalLayout {
         StatList { lines: root.ev.details; size: 12px; gap: 4px; }
         Rectangle {
             height: 44px;
+            accessible-role: button;
+            accessible-label: Tr.t("history.delete_one");
+            accessible-action-default => { root.delete(); }
             Text {
                 x: 0px;
                 text: Tr.t("history.delete_one");
@@ -289,6 +297,9 @@ export component HistoryScreen inherits Rectangle {
                             }
                             Rectangle {
                                 height: 44px;
+                                accessible-role: button;
+                                accessible-label: root.show-all ? Tr.t("history.fewer_stats") : Tr.t("history.all_stats");
+                                accessible-action-default => { root.show-all = !root.show-all; }
                                 Text {
                                     text: root.show-all ? Tr.t("history.fewer_stats") : Tr.t("history.all_stats");
                                     font-size: 14px * Zoom.scale;
