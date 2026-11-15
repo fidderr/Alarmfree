@@ -341,6 +341,9 @@ PERMISSIONS_TOUCHED=""
 fresh() {
     shells_open || open_shells
     dev am force-stop "$PKG"
+    # A soft keyboard that the last scenario's field left up outlives the app on Android 12, and
+    # covers the lower half of the next one.
+    on_emulator && hide_keyboard
     [ -z "$SCREEN_WENT_OFF" ] || { wake; SCREEN_WENT_OFF=""; }
     [ -z "$PERMISSIONS_TOUCHED" ] || grant_all
     if [ -z "$CLEAN_COPY" ]; then
@@ -735,8 +738,12 @@ await_silence() {
         n=$(now_s)
         [ "$n" -gt $((T + limit)) ] && return 1
         if sound_off; then
-            STOPPED_AT=$((n - T))
-            return 0
+            # Silent for good: the player that stalls hands over to the next sound, with a gap.
+            sleep 1.5
+            if sound_off; then
+                STOPPED_AT=$((n - T))
+                return 0
+            fi
         fi
         sleep 0.1
     done
@@ -898,8 +905,12 @@ write_log() { adb_ logcat -d -t 30000 -b all -v time 2> /dev/null | grep -E "Ala
 
 # One row of history, `$2` days ago.
 history_row() { # id days_ago
-    local at
-    at=$(date -u -d "@$(($(now_s) - $2 * 86400))" +%Y-%m-%dT07:00:00+00:00)
+    local at now at_s
+    now=$(now_s)
+    # 07:00 UTC of that day, but never in the future (today before 07:00 UTC): a period lists only what has happened.
+    at_s=$(date -u -d "$(date -u -d "@$((now - $2 * 86400))" +%Y-%m-%d)T07:00:00Z" +%s)
+    [ "$at_s" -le $((now - 600)) ] || at_s=$((now - 600))
+    at=$(date -u -d "@$at_s" +%Y-%m-%dT%H:%M:%S+00:00)
     printf "INSERT INTO alarm_events (id, alarm_id, alarm_label, fire_timestamp, dismiss_timestamp, total_dismissal_time_ms, outcome, seen) VALUES ('%s', 'a', 'a', '%s', '%s', 0, 'solved', 1);\n" "$1" "$at" "$at" | sql
 }
 history_count() { printf "SELECT count(*) FROM alarm_events;\n" | sql; }
@@ -960,6 +971,67 @@ tap_clear() { # text [has] [margin]
         sheet_scroll
     done
     $tapper "$1" 0 0.5
+}
+# set_field for a field that may lie under the panel's pinned Done button (3-button navigation and a
+# panel that is longer than the window): the panel is scrolled up first, from the gutter at its left
+# edge, where no slider or field takes the swipe.
+set_field_clear() { # n text
+    local i f d h x1 y1 x2 y2
+    h=$(window_size | cut -d' ' -f2)
+    case "$h" in '' | *[!0-9]*) h=1920 ;; esac
+    for i in 1 2 3; do
+        f=$(ui inputs | grep -oE '"y":[0-9]+' | sed -n "$(($1 + 1))p" | tr -dc 0-9)
+        d=$(where Done | cut -d' ' -f2)
+        case "$d" in '' | *[!0-9]*) d=$((h - 200)) ;; esac
+        case "$f" in '' | *[!0-9]*) break ;; esac
+        [ "$f" -lt $((d - 80)) ] && break
+        read -r x1 y1 x2 y2 <<< "$(swipe_ys scroll)"
+        dev input swipe 26 "$y1" 26 "$y2" 400
+        sleep 0.8
+    done
+    set_field "$1" "$2"
+}
+# A short scroll: about a quarter of the window, where sheet_scroll's fling may take a screen and a half.
+sheet_nudge() {
+    local h
+    h=$(window_size | cut -d' ' -f2)
+    case "$h" in '' | *[!0-9]*) h=1920 ;; esac
+    dev input swipe 540 $((h * 70 / 100)) 540 $((h * 45 / 100)) 700
+    sleep 0.8
+}
+# A row of a long list into the middle of the window, by short swipes (a fling carries a long one
+# past it, by a different distance each time): there it is neither under the title nor under the
+# bottom bar. With "has" the text only has to be in it.
+centre_row() { # text [has]
+    local i y h w find=where
+    [ "${2:-}" != has ] || find=where_has
+    h=$(window_size | cut -d' ' -f2)
+    case "$h" in '' | *[!0-9]*) h=1920 ;; esac
+    w=540
+    for i in 1 2 3 4 5 6 7 8; do
+        y=$($find "$1" | cut -d' ' -f2)
+        case "$y" in
+            '' | *[!0-9]*)
+                # Not in the window: below it first, then above.
+                if [ "$i" -le 4 ]; then
+                    dev input swipe "$w" $((h * 70 / 100)) "$w" $((h * 45 / 100)) 700
+                else
+                    dev input swipe "$w" $((h * 45 / 100)) "$w" $((h * 70 / 100)) 700
+                fi
+                ;;
+            *)
+                if [ "$y" -gt $((h * 75 / 100)) ]; then
+                    dev input swipe "$w" $((h * 70 / 100)) "$w" $((h * 50 / 100)) 700
+                elif [ "$y" -lt $((h * 20 / 100)) ]; then
+                    dev input swipe "$w" $((h * 45 / 100)) "$w" $((h * 65 / 100)) 700
+                else
+                    return 0
+                fi
+                ;;
+        esac
+        sleep 0.8
+    done
+    return 1
 }
 # Scroll the panel until this exact text (the n-th, or L for the last) is on screen.
 scroll_to() { # text [which]

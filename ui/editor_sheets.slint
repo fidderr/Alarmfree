@@ -242,7 +242,7 @@ export component LabelSheet inherits Rectangle {
 // Which sound, how loud, and how it starts.
 export component SoundSheet inherits Rectangle {
     callback done();
-    Sheet {
+    sheet := Sheet {
         title: Tr.t("config.sound");
         done-text: Tr.t("action.done");
         finish => { root.done(); }
@@ -256,6 +256,9 @@ export component SoundSheet inherits Rectangle {
             RadioRow { text: Tr.t("config.no_sound"); selected: Ed.sound-none; clicked => { Ed.no-sound(); } }
         for row[i] in Ed.sound-rows: Rectangle {
             height: 52px;
+            // The keyboard comes up over the sheet: the row being renamed must not sit under it.
+            property <length> keyboard: Insets.bottom;
+            changed keyboard => { if (row.state == 1) { sheet.reveal(self.absolute-position.y, self.height); } }
             if row.state == 1: HorizontalLayout {
                 spacing: 4px;
                 TextField {

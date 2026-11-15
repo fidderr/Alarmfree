@@ -140,6 +140,13 @@ export component Sheet inherits Rectangle {
     property <length> done-room: root.done-text == "" ? 0px : 52px + 20px + Insets.bottom;
     property <length> wanted: 74px + body.preferred-height + (root.done-text == "" ? Insets.bottom + 20px : 24px + root.done-room);
     init => { shown = true; }
+    // Scroll a row (its top and height in window coordinates) clear of the pinned button and the
+    // keyboard: a text field in a row near the bottom would otherwise sit under them.
+    public function reveal(row-y: length, row-h: length) {
+        if (row-y + row-h + 8px > flick.absolute-position.y + flick.height) {
+            flick.viewport-y = max(flick.height - flick.viewport-height, flick.viewport-y - (row-y + row-h + 8px - flick.absolute-position.y - flick.height));
+        }
+    }
     background: #0000008c;
     TouchArea { clicked => { root.close(); } }
     panel := Rectangle {
@@ -199,7 +206,7 @@ export component Sheet inherits Rectangle {
                 TouchArea { clicked => { root.action(); } }
             }
         }
-        Flickable {
+        flick := Flickable {
             y: 74px;
             height: parent.height - 74px - root.done-room - (root.wanted > panel.height ? 8px : 0px);
             interactive: !root.locked;
