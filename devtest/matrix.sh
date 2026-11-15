@@ -1735,7 +1735,7 @@ s46() {
     big=$(sn ed_time_text)
     [ "$big" = "2:05 PM" ] || problems="$problems; editor says '$big'"
     # The time button opens the wheels; they say the hour with its AM/PM.
-    tap ":" 0 0.6
+    tap_time 0.6
     case "$(texts_of)" in
         *2*PM*05* | *2*PM*5*) ;;
         *) problems="$problems; wheels say '$(texts_of)'" ;;
@@ -2277,12 +2277,12 @@ s53() {
     on_editor || problems="$problems; the alarm from a template opens no editor"
     # Typed, then a tap on the wheel: the row under the middle is one more.
     note "s53: Typed, then a tap on the wheel: the row under the middle i @$SECONDS"
-    tap ":" 0 0.6
+    tap_time 0.6
     tap "Type it" 0 0.4
     set_field 0 835
     done_sheet
     has "$(sn ed_time_text)" ':35'
-    tap ":" 0 0.6
+    tap_time 0.6
     press ed-minute 36 0.3
     done_sheet
     has "$(sn ed_time_text)" ':36'
@@ -3399,6 +3399,7 @@ s62p() {
 }
 
 . "$(dirname "$0")/panels.sh"
+. "$(dirname "$0")/a11y_audit.sh"
 
 ALL="s01 s03 s04 s05 s06 s07 s10 s11 s13 s13b s13d s14 s15 s16 s16b s17 s19 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s34 s36 s37 s38 s39 s40 s42 s43 s44 s45 s46 s47 s48 s49 s50 s51 s52 s53 s55 s56 s57 s58 s59 s60 s61 s62 s63 big_screens s54"
 ON_A_PHONE="s01 s03 s04 s05 s06 s07 s10 s15 s16 s16b s17 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s36 s37 s38 s39 s42 s43 s45 s46 s47 s49 s50 s51 s52 s53 s55 s56 s57 s58 s59 s61 s62 s63 s60p_a s60p_b s62p"

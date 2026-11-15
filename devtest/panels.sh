@@ -558,7 +558,7 @@ s57() {
     tap "−1" 0 0.2
     [ "$before" != "$after" ] && [ "$(sn ed_time_text)" = "$before" ] ||
         panel_problem "the minute buttons do not move the time a minute and back"
-    tap ":" 0 0.4
+    tap_time 0.4
     panel_open editor_time
     tap_trash
     panel_open editor_delete

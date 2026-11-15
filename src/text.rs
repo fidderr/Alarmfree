@@ -133,6 +133,11 @@ pub fn day_letter(translations: &Translations, day: usize) -> String {
         .unwrap_or_default()
 }
 
+/// A day's full name, for what a screen reader says about a day button.
+pub fn day_full(translations: &Translations, day: usize) -> String {
+    t(translations, DAY_KEYS[day])
+}
+
 pub fn day_name(translations: &Translations, date: NaiveDate) -> String {
     t(
         translations,

@@ -30,17 +30,20 @@ a11y_size() {
     case "$A11Y_W$A11Y_H" in *[!0-9]* | "") A11Y_W=1080 A11Y_H=1920 ;; esac
 }
 
-# The tree of the window now, in A11Y_XML. A dump just taken (under 0.15 s ago) is reused, so a
-# check that asks several things does not dump for each.
+# The tree of the window now, in A11Y_XML. `uiautomator dump` waits until the window has been
+# quiet for a moment, so what it shows holds still (a panel that slides in has arrived): one dump
+# per question is enough. A dump under half a second old is reused unless a touch or a key came
+# after it.
 a11y_dump() {
-    local i xml
+    local i xml now
     a11y_size
-    if [ "${A11Y_FRESH:-0}" -gt 0 ] && [ $((SECONDS * 1000)) -lt $((A11Y_STAMP + 150)) ]; then return 0; fi
+    now=$(( ${EPOCHREALTIME/./} / 1000 ))
+    if [ $((now - A11Y_STAMP)) -lt 500 ] && [ -n "$A11Y_XML" ]; then return 0; fi
     for i in 1 2 3 4 5 6 7 8; do
-        xml=$(adb_ shell "uiautomator dump /sdcard/af_ui.xml > /dev/null 2>&1; cat /sdcard/af_ui.xml" 2> /dev/null | tr -d '\r')
+        xml=$(adb_ shell "uiautomator dump /sdcard/af_ui.xml > /dev/null 2>&1; cat /sdcard/af_ui.xml" 2> /dev/null | tr -d '')
         if [ "$(printf '%s' "$xml" | python -I "$A11Y_PY" ready "$A11Y_W" "$A11Y_H")" = ok ]; then
             A11Y_XML=$xml
-            A11Y_STAMP=$((SECONDS * 1000))
+            A11Y_STAMP=$(( ${EPOCHREALTIME/./} / 1000 ))
             return 0
         fi
         sleep 0.3
@@ -48,13 +51,28 @@ a11y_dump() {
     A11Y_XML=$xml
     return 1
 }
+# A touch, a key or a swipe changes the screen: the next question dumps again.
+a11y_changed() { A11Y_STAMP=0; }
 a11y_ask() { # mode [text [which]]
     a11y_dump
     printf '%s' "$A11Y_XML" | python -I "$A11Y_PY" "$1" "$A11Y_W" "$A11Y_H" "${2:-}" "${3:-}"
 }
 
 # ---- the functions of lib.sh, on the tree ----
-where() { a11y_ask find "$1" "${2:-}"; }
+eval "$(declare -f dev | sed '1s/dev/dev_before_a11y/')"
+dev() {
+    case "$1" in input | am | settings | wm | cmd) a11y_changed ;; esac
+    dev_before_a11y "$@"
+}
+eval "$(declare -f ui | sed '1s/ui/ui_before_a11y/')"
+ui() {
+    a11y_changed
+    ui_before_a11y "$@"
+}
+# One dump settles it, see a11y_dump.
+still_where() { "$1" "$2" "${3:-}"; }
+
+where() { local r; r=$(a11y_ask find "$1" "${2:-}"); [ -z "${A11Y_DEBUG:-}" ] || echo "where $1 ${2:-} -> $r" >&2; echo "$r"; }
 where_has() { a11y_ask findc "$1" "${2:-}"; }
 all_texts() { a11y_ask texts; }
 fields() { a11y_ask fields; }
@@ -81,6 +99,8 @@ for m in re.finditer(r"<node ([^>]*)>", xml):
 sys.exit(1)
 ' "$1" "$2"
 }
+# The time of the editor is one button, "Time: 7:00 AM".
+tap_time() { tap_has "Time:" 0 "${1:-0.6}"; }
 # What a_tap does through the debug channel before: the window's own event, now a real touch.
 tap_in() { tap "$@"; }
 

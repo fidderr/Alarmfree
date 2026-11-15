@@ -198,6 +198,7 @@ pub fn sync(ctx: &Ctx) {
         (0..7)
             .map(|day| DayCell {
                 letter: crate::text::day_letter(&tr, day).into(),
+                name: crate::text::day_full(&tr, day).into(),
                 on: day < 5,
             })
             .collect(),
