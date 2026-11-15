@@ -2972,10 +2972,21 @@ s61() {
 # Does the picture of the screen change in the next moment? Backgrounds move, and stand still with
 # less motion.
 screen_moves() {
+    # Below the status bar: on a phone its icons change by themselves (the Wi-Fi activity arrows).
+    local top
+    top=$(dev dumpsys window | grep -oE 'type=statusBars frame=\[0,0\]\[[0-9]+,[0-9]+\]' | head -1 | grep -oE '[0-9]+\]$' | tr -d ']')
+    case "$top" in '' | *[!0-9]*) top=150 ;; esac
     adb_ exec-out screencap -p > "$OUT/_move_a.png"
     sleep 0.7
     adb_ exec-out screencap -p > "$OUT/_move_b.png"
-    ! cmp -s "$OUT/_move_a.png" "$OUT/_move_b.png"
+    python -I -c '
+import sys
+from PIL import Image, ImageChops
+a, b = (Image.open(p).convert("RGB") for p in sys.argv[1:3])
+top = int(sys.argv[3])
+box = (0, top, a.width, a.height)
+sys.exit(0 if ImageChops.difference(a.crop(box), b.crop(box)).getbbox() else 1)
+' "$OUT/_move_a.png" "$OUT/_move_b.png" "$top"
 }
 # The size of the picture a ring look keeps (the newest file in ring_photos), as "WxH".
 kept_photo_size() {
