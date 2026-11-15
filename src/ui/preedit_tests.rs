@@ -7,6 +7,7 @@ use slint::platform::WindowEvent;
 use slint::ComponentHandle;
 
 slint::slint! {
+    #[edition = "1.20"]
     import { TextField } from "../../ui/widgets.slint";
     export component FieldWindow inherits Window {
         width: 300px;
