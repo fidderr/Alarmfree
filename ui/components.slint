@@ -110,6 +110,7 @@ export component SlimChip inherits Rectangle {
         border-radius: 17px;
         background: Pal.surface;
         Text {
+            accessible-role: AccessibleRole.none;
             text: root.text;
             color: Pal.text;
             font-size: 14px * Zoom.scale;
@@ -176,24 +177,32 @@ export component TabularText inherits Rectangle {
     in property <length> letter-spacing: 0px;
     in property <color> ink: Pal.text;
     in property <TextHorizontalAlignment> horizontal-alignment: center;
+    // The time is said by what holds it, not by this: no node of its own.
+    in property <bool> decorative: false;
     property <length> cell: max(max(max(max(m0.preferred-width, m1.preferred-width), max(m2.preferred-width, m3.preferred-width)), max(max(m4.preferred-width, m5.preferred-width), max(m6.preferred-width, m7.preferred-width))), max(m8.preferred-width, m9.preferred-width));
     preferred-width: row.preferred-width;
     preferred-height: m0.preferred-height;
-    m0 := Text { visible: false; text: "0"; font-size: root.font-size; font-weight: root.font-weight; font-family: root.font-family; letter-spacing: root.letter-spacing; }
-    m1 := Text { visible: false; text: "1"; font-size: root.font-size; font-weight: root.font-weight; font-family: root.font-family; letter-spacing: root.letter-spacing; }
-    m2 := Text { visible: false; text: "2"; font-size: root.font-size; font-weight: root.font-weight; font-family: root.font-family; letter-spacing: root.letter-spacing; }
-    m3 := Text { visible: false; text: "3"; font-size: root.font-size; font-weight: root.font-weight; font-family: root.font-family; letter-spacing: root.letter-spacing; }
-    m4 := Text { visible: false; text: "4"; font-size: root.font-size; font-weight: root.font-weight; font-family: root.font-family; letter-spacing: root.letter-spacing; }
-    m5 := Text { visible: false; text: "5"; font-size: root.font-size; font-weight: root.font-weight; font-family: root.font-family; letter-spacing: root.letter-spacing; }
-    m6 := Text { visible: false; text: "6"; font-size: root.font-size; font-weight: root.font-weight; font-family: root.font-family; letter-spacing: root.letter-spacing; }
-    m7 := Text { visible: false; text: "7"; font-size: root.font-size; font-weight: root.font-weight; font-family: root.font-family; letter-spacing: root.letter-spacing; }
-    m8 := Text { visible: false; text: "8"; font-size: root.font-size; font-weight: root.font-weight; font-family: root.font-family; letter-spacing: root.letter-spacing; }
-    m9 := Text { visible: false; text: "9"; font-size: root.font-size; font-weight: root.font-weight; font-family: root.font-family; letter-spacing: root.letter-spacing; }
+    // One node with the whole text; the digits are drawn one by one and are not nodes.
+    if !root.decorative: Rectangle {
+        accessible-role: AccessibleRole.text;
+        accessible-label: root.text;
+    }
+    m0 := Text { accessible-role: AccessibleRole.none; visible: false; text: "0"; font-size: root.font-size; font-weight: root.font-weight; font-family: root.font-family; letter-spacing: root.letter-spacing; }
+    m1 := Text { accessible-role: AccessibleRole.none; visible: false; text: "1"; font-size: root.font-size; font-weight: root.font-weight; font-family: root.font-family; letter-spacing: root.letter-spacing; }
+    m2 := Text { accessible-role: AccessibleRole.none; visible: false; text: "2"; font-size: root.font-size; font-weight: root.font-weight; font-family: root.font-family; letter-spacing: root.letter-spacing; }
+    m3 := Text { accessible-role: AccessibleRole.none; visible: false; text: "3"; font-size: root.font-size; font-weight: root.font-weight; font-family: root.font-family; letter-spacing: root.letter-spacing; }
+    m4 := Text { accessible-role: AccessibleRole.none; visible: false; text: "4"; font-size: root.font-size; font-weight: root.font-weight; font-family: root.font-family; letter-spacing: root.letter-spacing; }
+    m5 := Text { accessible-role: AccessibleRole.none; visible: false; text: "5"; font-size: root.font-size; font-weight: root.font-weight; font-family: root.font-family; letter-spacing: root.letter-spacing; }
+    m6 := Text { accessible-role: AccessibleRole.none; visible: false; text: "6"; font-size: root.font-size; font-weight: root.font-weight; font-family: root.font-family; letter-spacing: root.letter-spacing; }
+    m7 := Text { accessible-role: AccessibleRole.none; visible: false; text: "7"; font-size: root.font-size; font-weight: root.font-weight; font-family: root.font-family; letter-spacing: root.letter-spacing; }
+    m8 := Text { accessible-role: AccessibleRole.none; visible: false; text: "8"; font-size: root.font-size; font-weight: root.font-weight; font-family: root.font-family; letter-spacing: root.letter-spacing; }
+    m9 := Text { accessible-role: AccessibleRole.none; visible: false; text: "9"; font-size: root.font-size; font-weight: root.font-weight; font-family: root.font-family; letter-spacing: root.letter-spacing; }
     row := HorizontalLayout {
         alignment: root.horizontal-alignment == TextHorizontalAlignment.left ? LayoutAlignment.start : root.horizontal-alignment == TextHorizontalAlignment.right ? LayoutAlignment.end : LayoutAlignment.center;
         for g in Glyphs.split(root.text): Rectangle {
             width: g.digit ? root.cell : glyph.preferred-width;
             glyph := Text {
+                accessible-role: AccessibleRole.none;
                 width: parent.width;
                 text: g.text;
                 font-size: root.font-size;

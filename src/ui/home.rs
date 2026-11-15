@@ -144,12 +144,25 @@ pub fn refresh(ctx: &Ctx) {
             let next = next_fire.get(&alarm.id).copied();
             let one_time = schedule::is_one_time(alarm);
             let skip_active = alarm.skip_until_ms.is_some_and(|skip| skip > now_ms);
+            let when = when_text(ctx, alarm, next, now_ms, twenty_four);
+            let time = crate::text::clock(alarm.time_hour, alarm.time_minute, twenty_four);
+            let days_words = if one_time {
+                String::new()
+            } else {
+                crate::text::days_in_words(&tr, &alarm.days, week_start.day_order())
+            };
+            let describe = [time.as_str(), alarm.label.trim(), &days_words, &when]
+                .into_iter()
+                .filter(|part| !part.is_empty())
+                .collect::<Vec<_>>()
+                .join(", ");
             AlarmRow {
                 id: alarm.id.clone().into(),
-                time: crate::text::clock(alarm.time_hour, alarm.time_minute, twenty_four).into(),
+                describe: describe.into(),
+                time: time.into(),
                 twelve: !twenty_four,
                 label: alarm.label.clone().into(),
-                when: when_text(ctx, alarm, next, now_ms, twenty_four).into(),
+                when: when.into(),
                 days: super::refill(
                     shown.row_data(row).map(|old| old.days).unwrap_or_default(),
                     week_start
