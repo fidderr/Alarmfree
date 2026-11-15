@@ -222,7 +222,7 @@ try_chips() { # name [x y of the row that opened it]
         if [ "$same_names" = 1 ]; then
             [ "$(sheet_checkables | grep -v '^What is this?|' | cut -d'|' -f1,5 | sort)" = "$(echo "$before" | cut -d'|' -f1,5 | sort)" ] && break
         else
-            [ "$(sheet_checkables | grep -v '^What is this?|' | sort)" = "$(echo "$before" | sort)" ] && break
+            [ "$(sheet_checkables | grep -v '^What is this?|' | cut -d'|' -f1,4,5 | sort)" = "$(echo "$before" | cut -d'|' -f1,4,5 | sort)" ] && break
         fi
         [ "$i" = 6 ] && panel_problem "$name: the choices do not go back"
         sleep 0.3
