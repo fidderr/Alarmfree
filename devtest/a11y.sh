@@ -43,6 +43,7 @@ a11y_dump() {
         xml=$(adb_ shell "uiautomator dump /sdcard/af_ui.xml > /dev/null 2>&1; cat /sdcard/af_ui.xml" 2> /dev/null | tr -d '')
         if [ "$(printf '%s' "$xml" | python -I "$A11Y_PY" ready "$A11Y_W" "$A11Y_H")" = ok ]; then
             A11Y_XML=$xml
+            [ -z "${A11Y_SETTLE:-}" ] || sleep "$A11Y_SETTLE"
             A11Y_STAMP=$(( ${EPOCHREALTIME/./} / 1000 ))
             return 0
         fi

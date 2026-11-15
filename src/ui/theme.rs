@@ -188,6 +188,7 @@ pub fn sync(ctx: &Ctx) {
             .iter()
             .map(|preset| SwatchCell {
                 colour: color(shade(*preset, palette.light)),
+                name: t(&tr, preset.name_key()).into(),
                 selected: settings.prefs.accent == *preset,
             })
             .collect(),
@@ -242,6 +243,7 @@ fn sync_sheet(ctx: &Ctx, reset_field: bool) {
             .iter()
             .map(|preset| SwatchCell {
                 colour: color(shade(*preset, light)),
+                name: t(&tr, preset.name_key()).into(),
                 selected: settings.prefs.accent == *preset,
             })
             .collect(),
@@ -276,6 +278,7 @@ fn presets(list: &[Rgb], chosen: Option<Rgb>) -> Vec<SwatchCell> {
     list.iter()
         .map(|colour| SwatchCell {
             colour: color(*colour),
+            name: colour.to_css().into(),
             selected: chosen == Some(*colour),
         })
         .collect()

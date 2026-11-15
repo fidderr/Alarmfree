@@ -135,6 +135,7 @@ fn sync_colour(ctx: &Ctx, reset_field: bool) {
             let colour = if light { colours.1 } else { colours.0 };
             SwatchCell {
                 colour: color(colour),
+                name: t(&ctx.tr.borrow(), preset.name_key()).into(),
                 selected: look.colour == Some(colour),
             }
         })
