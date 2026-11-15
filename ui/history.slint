@@ -141,6 +141,9 @@ export component HistoryScreen inherits Rectangle {
             Rectangle {
                 width: 44px;
                 height: 44px;
+                accessible-role: button;
+                accessible-label: Tr.t("action.delete");
+                accessible-action-default => { root.delete-history(); }
                 Icon { name: IconName.trash; size: 20px; tint: Pal.text2; }
                 TouchArea { clicked => { root.delete-history(); } }
             }

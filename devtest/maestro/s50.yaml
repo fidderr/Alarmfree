@@ -1,0 +1,27 @@
+# s50: everything of an alarm, set through the screens, then shown again and deleted.
+# Needs a debug or a release build with the setup done; nothing else (no seed, no sql).
+appId: com.fidderr.alarmfree
+---
+- launchApp
+- tapOn: "Create new alarm"
+- tapOn: "+5"
+- tapOn: "+5"
+- tapOn: "Weekend"
+- tapOn: "Label.*"
+- tapOn: "Name"
+- inputText: "Morning"
+- tapOn: "A note for when it rings"
+- inputText: "Take pills"
+- hideKeyboard
+- tapOn: "Done"
+- tapOn: "Sound.*"
+- tapOn: "Funk"
+- scrollUntilVisible:
+    element: "2 min"
+- tapOn: "2 min"
+- tapOn: "Done"
+- tapOn: "Vibration.*"
+- tapOn: "Steady"
+- tapOn: "15 s"
+- tapOn: "Done"
+- tapOn: "Save"

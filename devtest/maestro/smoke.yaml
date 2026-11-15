@@ -1,0 +1,6 @@
+appId: com.fidderr.alarmfree
+---
+- launchApp
+- assertVisible: "Settings"
+- tapOn: "Settings"
+- assertVisible: "Theme.*"
