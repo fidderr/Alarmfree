@@ -1,0 +1,22 @@
+# s38: the accent colour and the name of an own sound.
+# Set before by run.sh: an alarm at 7:00 and the own sound mytune.ogg. Checked after: the saved prefs.
+appId: com.fidderr.alarmfree
+---
+- launchApp
+- tapOn: "Settings"
+- tapOn: "Theme.*"
+- scrollUntilVisible:
+    element: "Purple"
+- tapOn: "Purple"
+- stopApp
+- launchApp
+- tapOn: "7:00 AM a.*"
+- tapOn: "Sound.*"
+- scrollUntilVisible:
+    element: "mytune"
+    centerElement: true
+- tapOn: "Rename this sound"
+- eraseText: 20
+- inputText: "Morning"
+- pressKey: Enter
+- assertVisible: "Morning"

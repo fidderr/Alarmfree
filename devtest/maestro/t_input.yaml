@@ -1,0 +1,7 @@
+appId: com.fidderr.alarmfree
+---
+- launchApp
+- tapOn: "Create new alarm"
+- tapOn: "Label.*"
+- tapOn: "Name"
+- inputText: "Morning"

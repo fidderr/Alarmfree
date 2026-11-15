@@ -1,5 +1,6 @@
 # s50: everything of an alarm, set through the screens, then shown again and deleted.
-# Needs a debug or a release build with the setup done; nothing else (no seed, no sql).
+# Needs a build with the setup done; nothing else (no seed, no sql), so a release build runs it too.
+# Not in the flow: the volume slider (Maestro cannot set a slider).
 appId: com.fidderr.alarmfree
 ---
 - launchApp
@@ -8,20 +9,92 @@ appId: com.fidderr.alarmfree
 - tapOn: "+5"
 - tapOn: "Weekend"
 - tapOn: "Label.*"
-- tapOn: "Name"
+- tapOn: "Alarm name"
 - inputText: "Morning"
-- tapOn: "A note for when it rings"
+- tapOn: "Take the laptop charger"
 - inputText: "Take pills"
-- hideKeyboard
 - tapOn: "Done"
 - tapOn: "Sound.*"
 - tapOn: "Funk"
 - scrollUntilVisible:
     element: "2 min"
+    centerElement: true
 - tapOn: "2 min"
 - tapOn: "Done"
 - tapOn: "Vibration.*"
 - tapOn: "Steady"
 - tapOn: "15 s"
 - tapOn: "Done"
+- tapOn: "Snooze.*"
+- scrollUntilVisible:
+    element: "More How often"
+    centerElement: true
+- tapOn: "More How often"
+- scrollUntilVisible:
+    element: "More How long"
+    centerElement: true
+- tapOn: "More How long"
+- tapOn: "Done"
+- tapOn: "Challenges.*"
+- tapOn: "Add a challenge"
+- tapOn: "Math"
+- runFlow:
+    when:
+      visible: "Difficulty"
+    commands:
+      - tapOn: "Done"
+- tapOn: "Add a challenge"
+- tapOn: "Steps"
+- runFlow:
+    when:
+      visible: "Difficulty"
+    commands:
+      - tapOn: "Done"
+- tapOn: "Done"
+- scrollUntilVisible:
+    element: "Ring limit.*"
+    centerElement: true
+- tapOn: "Ring limit.*"
+- scrollUntilVisible:
+    element: "60 min"
+    centerElement: true
+- tapOn: "60 min"
+- tapOn: "Done"
+- scrollUntilVisible:
+    element: "Are you up.*"
+    centerElement: true
+- tapOn: "Are you up.*"
+- tapOn: ".*3 min"
+- tapOn: "Done"
+- tapOn: "Notice before.*"
+- tapOn: ".*10 min"
+- tapOn: "Done"
+- scrollUntilVisible:
+    element: "Full brightness.*"
+    centerElement: true
+- tapOn: "Full brightness.*"
 - tapOn: "Save"
+# Saved: the card shows it, and the editor shows it again.
+- assertVisible: "7:10 AM.*Morning.*"
+- tapOn: "7:10 AM.*Morning.*"
+- assertVisible: "Time: 7:10 AM"
+- assertVisible: "Label Morning"
+- assertVisible: "Sound Funk"
+- assertVisible: "Vibration Steady"
+- assertVisible: "Snooze 6 min, 4.*"
+- assertVisible: "Challenges.*Math.*"
+- scrollUntilVisible:
+    element: "Ring limit 60 min"
+    centerElement: true
+- assertVisible: "Are you up.*3 min"
+- assertVisible: "Notice before 10 min"
+# Off the list from here too, after asking.
+- scrollUntilVisible:
+    element: "Delete"
+    centerElement: true
+    direction: UP
+- tapOn: "Delete"
+- tapOn:
+    text: "Delete"
+    index: 1
+- assertVisible: "No alarms yet"

@@ -280,6 +280,11 @@ export component ThemeScreen inherits Rectangle {
                         border-width: 1px;
                         border-color: #80808080;
                         background: swatch.colour;
+                        accessible-role: button;
+                        accessible-label: swatch.name;
+                        accessible-checkable: true;
+                        accessible-checked: swatch.selected;
+                        accessible-action-default => { Thm.accent-picked(i); }
                         if swatch.selected: Rectangle {
                             x: -4px;
                             y: -4px;
