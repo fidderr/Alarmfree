@@ -153,8 +153,8 @@ You need Rust with the Android targets, the Android SDK, a JDK 17, and the NDK t
 `build/alarmfree-slint-<mode>.apk`. `cargo build --lib` makes `libalarmfree.so`, and the SDK's
 `build_sentinel` writes the whole Gradle project into `target/sentinel-android/` and runs Gradle:
 the app keeps no `android/` folder. `sentinel.toml` gives the build the Play app's application id
-`com.fidderr.alarmfree`, version code 12400 (Play has the Dioxus 0.4.1 line at 12356) and version name
-0.5.0, so it installs as an update over the Dioxus version and keeps its alarms, settings and history
+`com.fidderr.alarmfree`, version code 12401 (Play has the Dioxus 0.4.1 line at 12356) and version name
+0.5.1, so it installs as an update over the Dioxus version and keeps its alarms, settings and history
 (see "Upgrade test" below).
 
 `cargo run` starts the UI on a desktop.

@@ -1,4 +1,4 @@
-# What's new in 0.5.0 (Play "Release notes", max 500 characters per language)
+# What's new in 0.5.1 (Play "Release notes", max 500 characters per language)
 
 The same alarms, settings and history carry over from 0.4.1: it is an update of the same app.
 

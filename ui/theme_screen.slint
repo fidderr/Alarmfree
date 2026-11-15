@@ -1,4 +1,4 @@
-import { Pal, Tr, Insets, Zoom } from "theme.slint";
+import { Pal, Tr, Insets, Page, Zoom } from "theme.slint";
 import { Icon, IconName, AppSwitch, TabularText } from "components.slint";
 import { ScreenHeader, RowList, Separator, PrimaryButton, Sheet } from "widgets.slint";
 import { ColourControls, SwatchGrid, SwatchCell } from "colour.slint";
@@ -71,8 +71,8 @@ component ColourRow inherits Rectangle {
 component Preview inherits Rectangle {
     height: 16px + 33px + 16px + 33px + 16px;
     Rectangle {
-        x: 16px;
-        width: parent.width - 32px;
+        x: Page.margin;
+        width: parent.width - 2 * Page.margin;
         border-radius: 20px;
         background: Pal.surface;
         VerticalLayout {
@@ -201,10 +201,11 @@ export component ThemeScreen inherits Rectangle {
         Flickable {
             vertical-stretch: 1;
             content-height: body.preferred-height + Insets.bottom + 24px;
+            content-width: self.width;
             body := VerticalLayout {
                 alignment: start;
-                padding-left: 16px;
-                padding-right: 16px;
+                padding-left: Page.margin;
+                padding-right: Page.margin;
                 padding-top: 20px;
                 spacing: 16px;
                 VerticalLayout {

@@ -278,6 +278,64 @@ pub fn run(ui: &MainWindow, command: &str) -> Option<String> {
                 bad.join(", ")
             }
         }
+        // Every element of the window that is wider than where it sits: past the window at the
+        // sides (also when its middle is outside), or past the sides of a `Component` it is part of
+        // (`fit:AlarmCard`, `fit:RowList`; no argument: only the window). `none` when all is inside.
+        "fit" => {
+            let win = ui.window().size().width as f32 / scale(ui);
+            let drawn = |e: &ElementHandle| {
+                let size = e.size();
+                size.width > 0.5 && size.height > 0.5 && e.computed_opacity() > 0.01
+            };
+            let mut bad: Vec<String> = Vec::new();
+            let name = |e: &ElementHandle| {
+                e.accessible_label()
+                    .filter(|l| !l.is_empty())
+                    .or_else(|| e.type_name())
+                    .unwrap_or_default()
+                    .chars()
+                    .take(24)
+                    .collect::<String>()
+            };
+            for e in ElementQuery::from_root(ui)
+                .match_descendants()
+                .match_predicate(|e| e.accessible_label().is_some_and(|l| !l.is_empty()))
+                .find_all()
+            {
+                let (x, w) = (e.absolute_position().x, e.size().width);
+                if drawn(&e) && (x < -1.0 || x + w > win + 1.0) {
+                    bad.push(format!("{} past the window", name(&e)));
+                }
+            }
+            if !arg.is_empty() {
+                for parent in ElementQuery::from_root(ui)
+                    .match_descendants()
+                    .match_inherits(arg)
+                    .find_all()
+                {
+                    if !drawn(&parent) {
+                        continue;
+                    }
+                    let (left, right) = (
+                        parent.absolute_position().x,
+                        parent.absolute_position().x + parent.size().width,
+                    );
+                    for e in parent.query_descendants().match_descendants().find_all() {
+                        let (x, w) = (e.absolute_position().x, e.size().width);
+                        if drawn(&e) && (x < left - 1.0 || x + w > right + 1.0) {
+                            bad.push(format!("{} past {arg}", name(&e)));
+                        }
+                    }
+                }
+            }
+            bad.sort();
+            bad.dedup();
+            if bad.is_empty() {
+                "none".to_owned()
+            } else {
+                bad.join(", ")
+            }
+        }
         _ => return None,
     })
 }

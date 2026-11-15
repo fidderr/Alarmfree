@@ -18,6 +18,8 @@ use crate::{alarm_ops, custom_sounds};
 
 /// How long trying a sound or a vibration lasts.
 const PREVIEW_MS: u64 = 15_000;
+/// How long a tap on a sound plays it, as before the sheet had a Start button.
+const SOUND_TAP_MS: u64 = 5_000;
 
 pub(super) fn sound_ids() -> Vec<String> {
     custom_sounds::list_default_sounds()
@@ -304,11 +306,11 @@ pub fn stop_preview(ctx: &Ctx) {
 }
 
 /// Whatever started it, it stops after a while; a newer preview is left alone.
-fn stop_after_a_while(ctx: &Rc<Ctx>, token: u64) {
+fn stop_after_a_while(ctx: &Rc<Ctx>, token: u64, ms: u64) {
     let weak = Rc::downgrade(ctx);
     ctx.preview_timer.start(
         slint::TimerMode::SingleShot,
-        Duration::from_millis(PREVIEW_MS),
+        Duration::from_millis(ms),
         move || {
             if let Some(ctx) = weak.upgrade() {
                 let same = ctx
@@ -324,7 +326,7 @@ fn stop_after_a_while(ctx: &Rc<Ctx>, token: u64) {
     );
 }
 
-fn start_preview(ctx: &Rc<Ctx>) {
+fn start_preview(ctx: &Rc<Ctx>, ms: u64) {
     stop_preview(ctx);
     let sound = ctx
         .editor
@@ -343,7 +345,7 @@ fn start_preview(ctx: &Rc<Ctx>) {
         ed.preview = handle;
         ed.preview_token
     };
-    stop_after_a_while(ctx, token);
+    stop_after_a_while(ctx, token, ms);
     super::editor::sync(ctx);
 }
 
@@ -362,7 +364,7 @@ fn start_vibration(ctx: &Rc<Ctx>, pattern: u8) {
         ed.vibrating = true;
         ed.preview_token
     };
-    stop_after_a_while(ctx, token);
+    stop_after_a_while(ctx, token, PREVIEW_MS);
     super::editor::sync(ctx);
 }
 
@@ -372,21 +374,15 @@ pub fn pick_sound(ctx: &Rc<Ctx>, index: usize) {
     let Some(sound) = sound_ids().get(index).cloned() else {
         return;
     };
-    let playing = ctx
-        .editor
-        .borrow()
-        .as_ref()
-        .is_some_and(|ed| ed.preview != 0);
     edit(ctx, |ed| {
         ed.draft.sound = sound;
         if ed.draft.sound_mode == 2 {
             ed.draft.sound_mode = 0;
         }
     });
-    // Only a tap on Start makes a sound. While one plays, the sound picked takes over.
-    if playing {
-        start_preview(ctx);
-    }
+    // A tap picks the sound and plays it for a few seconds; a tap on another sound, or on the
+    // same one, starts that one over. Stop, Done and Back end it.
+    start_preview(ctx, SOUND_TAP_MS);
 }
 
 pub fn no_sound(ctx: &Rc<Ctx>) {
@@ -403,7 +399,7 @@ pub fn toggle_preview(ctx: &Rc<Ctx>) {
     if playing {
         stop_preview(ctx);
     } else {
-        start_preview(ctx);
+        start_preview(ctx, PREVIEW_MS);
     }
 }
 

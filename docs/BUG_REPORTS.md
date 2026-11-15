@@ -12,7 +12,7 @@ expect?" and "Roughly when?" (filled in with the last alarm that rang), and choo
   holds the names and notes of the alarms, so the screen says so.
 
 "Show what is sent" shows the whole report text. "Send with my email app" opens the user's own email app with the
-subject `AlarmFree 0.5.0 (12400): <first words>` and the files attached. Nothing leaves the phone unless the user
+subject `AlarmFree 0.5.1 (12401): <first words>` and the files attached. Nothing leaves the phone unless the user
 presses send there; the app has no internet permission. With no email app, the report is saved to Downloads
 (`alarmfree-report-<date>.txt`, and `alarmfree-setup-<date>.json`) and the screen shows where to send it.
 
@@ -28,7 +28,7 @@ The address is the constant `CONTACT_EMAIL` in `src/report.rs` (the public devel
 ```
 AlarmFree report
 Type: Problem            (or Idea)
-App: AlarmFree 0.5.0 (12400)
+App: AlarmFree 0.5.1 (12401)
 Created: <time with offset>
 What happened: / What did you expect: / Roughly when:      the user's words
 
