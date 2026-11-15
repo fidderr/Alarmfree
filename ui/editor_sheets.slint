@@ -119,7 +119,11 @@ component FieldLabel inherits VerticalLayout {
 component IconButton inherits Rectangle {
     in property <IconName> icon;
     in property <color> tint: Pal.text2;
+    in property <string> label;
     callback clicked();
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-action-default => { root.clicked(); }
     width: 44px;
     height: 44px;
     Icon { name: root.icon; size: 16px; tint: root.tint; }
@@ -268,7 +272,7 @@ export component SoundSheet inherits Rectangle {
                     edited(s) => { Ed.rename-edited(s); }
                     accepted => { Ed.rename-done(); }
                 }
-                IconButton { icon: IconName.check; tint: Pal.accent; clicked => { Ed.rename-done(); } }
+                IconButton { icon: IconName.check; tint: Pal.accent; label: Tr.t("action.done"); clicked => { Ed.rename-done(); } }
             }
             if row.state != 1: HorizontalLayout {
                 RadioRow {
@@ -282,9 +286,9 @@ export component SoundSheet inherits Rectangle {
                     ink: Pal.danger;
                     clicked => { Ed.delete-confirm(i); }
                 }
-                if row.state == 2: IconButton { icon: IconName.xmark; clicked => { Ed.delete-cancel(); } }
-                if row.state == 0 && row.custom: IconButton { icon: IconName.pencil; clicked => { Ed.rename-start(i); } }
-                if row.state == 0 && row.custom: IconButton { icon: IconName.xmark; clicked => { Ed.delete-ask(i); } }
+                if row.state == 2: IconButton { icon: IconName.xmark; label: Tr.t("action.cancel"); clicked => { Ed.delete-cancel(); } }
+                if row.state == 0 && row.custom: IconButton { icon: IconName.pencil; label: Tr.t("sound.rename"); clicked => { Ed.rename-start(i); } }
+                if row.state == 0 && row.custom: IconButton { icon: IconName.xmark; label: Tr.t("action.delete"); clicked => { Ed.delete-ask(i); } }
             }
         }
         }
