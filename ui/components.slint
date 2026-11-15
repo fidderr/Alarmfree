@@ -127,12 +127,17 @@ export component Toast inherits Rectangle {
     in property <string> text;
     in property <bool> error;
     in property <bool> has-undo;
+    // Always in the tree, empty and without height while nothing is said: a screen reader announces a
+    // live region when its text changes, not when a new element appears.
+    in property <bool> shown: true;
     callback undo();
     callback dismiss();
-    height: max(root.has-undo ? 52px : 48px, label.preferred-height + (root.error ? 16px : 8px));
+    height: root.shown ? max(root.has-undo ? 52px : 48px, label.preferred-height + (root.error ? 16px : 8px)) : 0px;
+    opacity: root.shown ? 1 : 0;
+    clip: true;
     border-radius: 14px;
     background: Pal.inverse;
-    TouchArea { clicked => { root.dismiss(); } }
+    TouchArea { enabled: root.shown; clicked => { root.dismiss(); } }
     HorizontalLayout {
         padding-left: 14px;
         padding-right: 4px;
@@ -142,13 +147,18 @@ export component Toast inherits Rectangle {
         label := Text {
             horizontal-stretch: 1;
             vertical-alignment: center;
-            text: root.text;
+            text: root.shown ? root.text : "";
             wrap: word-wrap;
             font-size: 14px * Zoom.scale;
             color: Pal.on-inverse;
+            accessible-role: AccessibleRole.text;
+            accessible-live-region: polite;
         }
-        if root.has-undo: Rectangle {
+        if root.has-undo && root.shown: Rectangle {
             min-width: undo-text.preferred-width + 20px;
+            accessible-role: button;
+            accessible-label: Tr.t("action.undo");
+            accessible-action-default => { root.undo(); }
             undo-text := Text {
                 text: Tr.t("action.undo");
                 font-size: 14px * Zoom.scale;
