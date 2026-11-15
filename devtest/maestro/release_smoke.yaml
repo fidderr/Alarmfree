@@ -16,7 +16,7 @@ appId: com.fidderr.alarmfree
 - tapOn: "Save"
 - assertVisible: ".*Release.*"
 - assertVisible: "On or off: Release"
-- tapOn: ".*Release.*"
+- tapOn: "[0-9:]+ [AP]M Release.*"
 - tapOn: "Delete alarm"
 - tapOn: "Delete"
 - assertVisible: "No alarms yet"
