@@ -12,6 +12,8 @@
 
 cd "$(dirname "$0")/.." || exit 1
 . devtest/lib.sh
+# A11Y=1: find and touch things through the accessibility tree (devtest/a11y.sh)
+[ "${A11Y:-0}" = 1 ] && . devtest/a11y.sh
 APK="${APK:-build/alarmfree-slint-debug.apk}"
 
 # What the window shows, from its snapshot (lib.sh: ui, sn, on_screen, tap, ...). The screens are
