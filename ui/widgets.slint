@@ -109,6 +109,7 @@ export component PrimaryButton inherits Rectangle {
     border-radius: 14px;
     background: quiet ? Pal.surface2 : Pal.accent;
     Text {
+        accessible-role: AccessibleRole.none;
         text: root.text;
         font-size: (root.compact ? 14px : 16px) * Zoom.scale;
         font-weight: 500;
@@ -543,10 +544,13 @@ export component LinkButton inherits Rectangle {
     callback clicked();
     min-width: 44px;
     height: 44px;
+    accessible-role: button;
+    accessible-label: root.text;
+    accessible-action-default => { root.clicked(); }
     HorizontalLayout {
         padding-left: 8px;
         padding-right: 8px;
-        Text { text: root.text; font-size: 14px * Zoom.scale; font-weight: 500; color: root.ink; vertical-alignment: center; }
+        Text { accessible-role: AccessibleRole.none; text: root.text; font-size: 14px * Zoom.scale; font-weight: 500; color: root.ink; vertical-alignment: center; }
     }
     TouchArea { clicked => { root.clicked(); } }
 }
