@@ -193,6 +193,14 @@ try_chips() { # name [x y of the row that opened it]
     while IFS='|' read -r text x y was role; do
         [ "$was" = true ] && [ "$role" != Switch ] && [ "$y" -lt "$floor" ] && { dev input tap "$x" "$y"; sleep 0.15; }
     done <<< "$before"
+    # A colour that was automatic (nothing ringed) goes back by Automatic: a swatch can not be taken off.
+    if ! printf '%s
+' "$before" | grep -q '|true|' && is_there Automatic; then
+        for i in 1 2 3; do
+            tap Automatic 0 0.6
+            [ "$(sheet_checkables | grep -v '^What is this?|' | sort)" = "$(echo "$before" | sort)" ] && break
+        done
+    fi
     [ "$(sheet_checkables | grep -v '^What is this?|' | sort)" = "$(echo "$before" | sort)" ] ||
         panel_problem "$name: the choices do not go back"
 }
@@ -235,6 +243,8 @@ tap_row() { # text
         case "$y" in '' | *[!0-9]*) ;; *) [ "$y" -lt "$floor" ] && break ;; esac
         sheet_scroll
     done
+    # What stands on this screen now (the labelled swatches of the theme screen under a panel) is no choice of the panel.
+    baseline_update
     tap_has "$1" 0 0.5
 }
 
