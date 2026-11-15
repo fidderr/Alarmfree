@@ -177,7 +177,12 @@ try_chips() { # name [x y of the row that opened it]
             wait_for 3 no_sheet_up || { panel_problem "$name: the choice that was on leaves the panel open"; press_back; }
             return 3
         fi
-        now=$(checkables | grep -F -m1 "$text|" | cut -d'|' -f4)
+        # A slow emulator draws the pick a moment after the touch: look again before saying it did not take.
+        for i in 1 2 3 4 5 6 7 8; do
+            now=$(checkables | grep -F -m1 "$text|" | cut -d'|' -f4)
+            if [ "$role" = Switch ] || [ "$now" = true ] || [ "$was" = true ]; then break; fi
+            sleep 0.25
+        done
         case "$role" in
             Switch)
                 [ "$now" != "$was" ] || panel_problem "$name: the switch '$text' does not switch"
@@ -201,8 +206,11 @@ try_chips() { # name [x y of the row that opened it]
             [ "$(sheet_checkables | grep -v '^What is this?|' | sort)" = "$(echo "$before" | sort)" ] && break
         done
     fi
-    [ "$(sheet_checkables | grep -v '^What is this?|' | sort)" = "$(echo "$before" | sort)" ] ||
-        panel_problem "$name: the choices do not go back"
+    for i in 1 2 3 4 5 6; do
+        [ "$(sheet_checkables | grep -v '^What is this?|' | sort)" = "$(echo "$before" | sort)" ] && break
+        [ "$i" = 6 ] && panel_problem "$name: the choices do not go back"
+        sleep 0.3
+    done
 }
 
 # The ? on top, if there is one: it opens the explanation in place, and closes it again.
