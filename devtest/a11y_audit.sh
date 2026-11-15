@@ -59,8 +59,14 @@ a11y_audit() {
 # by label_check.py (root named AlarmFree, no unnamed or duplicate interactive nodes). Findings are printed, not failed.
 label_dump_screen() { # name
     mkdir -p "$OUT/labels"
-    dev uiautomator dump /sdcard/ui.xml > /dev/null
-    adb_ exec-out cat /sdcard/ui.xml > "$OUT/labels/$1.xml"
+    # The tree of a window is built when something asks for it: the first dump can be empty.
+    local i
+    for i in 1 2 3 4 5; do
+        dev uiautomator dump /sdcard/ui.xml > /dev/null
+        adb_ exec-out cat /sdcard/ui.xml > "$OUT/labels/$1.xml"
+        [ "$(grep -c 'com.fidderr.alarmfree' "$OUT/labels/$1.xml")" -gt 6 ] && break
+        sleep 1
+    done
     python -I devtest/label_check.py "$1" < "$OUT/labels/$1.xml"
 }
 label_dump() {

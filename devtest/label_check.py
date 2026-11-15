@@ -1,5 +1,5 @@
 """What a screen reader gets on a screen: a `uiautomator dump` (stdin) checked for labels.
-Reports the root name (must be AlarmFree, not app_process64), interactive nodes without a name, and names that
+Reports a root named app_process64, interactive nodes without a name, and names that
 two or more interactive nodes of the screen share. usage: label_check.py SCREEN_NAME
 """
 import collections
@@ -17,12 +17,13 @@ for el in root.iter("node"):
         continue
     cls = el.get("class", "").split(".")[-1]
     label = el.get("text") or el.get("content-desc") or ""
-    if cls == "View" and el.get("bounds", "").startswith("[0,0]") and label in ("AlarmFree", "app_process64"):
+    if cls == "View" and el.get("bounds", "").startswith("[0,0]") and label in ("", "AlarmFree", "app_process64"):
         roots.append(label)
     if el.get("clickable") == "true" or el.get("checkable") == "true" or cls in ("Button", "ToggleButton", "Switch", "EditText"):
         interactive.append((cls, label, el.get("bounds")))
-if "AlarmFree" not in roots:
-    print(f"{name}: ROOT is {roots or 'missing'}, not AlarmFree")
+# Android names the window from the activity: the root node carries no label of its own, but never app_process64.
+if "app_process64" in roots or any("app_process64" in (el.get("text", "") + el.get("content-desc", "")) for el in root.iter("node")):
+    print(f"{name}: ROOT is named app_process64")
     bad += 1
 for cls, label, bounds in interactive:
     if not label.strip():
