@@ -886,7 +886,9 @@ s28() {
     scenario s28b_idle_challenge_rings_again
     fresh
     shorten idle_secs 4
-    next_minute
+    # A longer lead than the usual 6 s: on a busy emulator the seeding and arming took the whole of it
+    # now and then, and the alarm never rang in the 30 s that followed.
+    next_minute 14
     seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null air 0 0 3 1 '[["challenge.math","{\"difficulty\":\"easy\"}"]]')"
     arm a
     await_ring a 30 || { fail "never started"; return; }
