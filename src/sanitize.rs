@@ -8,7 +8,9 @@ pub fn sanitize_label(input: &str) -> String {
         .chars()
         .filter(|c| !c.is_control() || *c == '\n')
         .take(100)
-        .collect()
+        .collect::<String>()
+        .trim()
+        .to_string()
 }
 
 /// Sanitize a filename: reject path traversal, null bytes, and excessive length.
@@ -127,5 +129,11 @@ mod tests {
     fn reference_normal_input_unchanged() {
         let input = "1234567890123";
         assert_eq!(sanitize_reference_value(input), "1234567890123");
+    }
+
+    #[test]
+    fn sanitize_label_trims_the_ends() {
+        assert_eq!(sanitize_label("  Work "), "Work");
+        assert_eq!(sanitize_label("Wake up\n"), "Wake up");
     }
 }

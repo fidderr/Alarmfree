@@ -161,7 +161,7 @@ pub fn refresh(ctx: &Ctx) {
                 describe: describe.into(),
                 time: time.into(),
                 twelve: !twenty_four,
-                label: alarm.label.clone().into(),
+                label: alarm.label.trim().into(),
                 when: when.into(),
                 days: super::refill(
                     shown.row_data(row).map(|old| old.days).unwrap_or_default(),
