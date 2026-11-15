@@ -7,8 +7,19 @@ use crate::models::AlarmData;
 /// email app opens with no recipient and the user can type one.
 pub const CONTACT_EMAIL: &str = "r.fidder97@gmail.com";
 
-/// The Android versionCode of this build, as in `sentinel.toml`.
-pub const VERSION_CODE: u32 = 12401;
+/// The Android versionCode of this build, read from `sentinel.toml` by `build.rs`.
+pub const VERSION_CODE: u32 = parse_u32(env!("ALARMFREE_VERSION_CODE"));
+
+const fn parse_u32(s: &str) -> u32 {
+    let bytes = s.as_bytes();
+    let mut n = 0u32;
+    let mut i = 0;
+    while i < bytes.len() {
+        n = n * 10 + (bytes[i] - b'0') as u32;
+        i += 1;
+    }
+    n
+}
 
 /// The file the report is attached as.
 pub const REPORT_FILE: &str = "alarmfree-report.txt";
