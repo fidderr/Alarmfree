@@ -97,7 +97,23 @@ ask() { # pid in out command
 
 # As adb. What gives pages of output goes the old way: reading it line by line is slow. Filter
 # it on the device to have it both ways, like sound_on.
+# On a real phone an `input` command goes only to AlarmFree, its keyboard or its permission dialogs: when anything else
+# (the launcher, the shade, a picker) has the focus the command is refused and logged, so a touch never lands on the
+# owner's own screens. Not on an emulator.
+GUARD_LOG="${GUARD_LOG:-/tmp/af_guard.log}"
+guard_input() {
+    local f="" k=0
+    while [ -z "$f" ] && [ $k -lt 6 ]; do
+        f=$(timeout 8 "$ADB" -s "$SERIAL" shell dumpsys window 2> /dev/null | grep mCurrentFocus | grep -v '=null' | head -1)
+        [ -n "$f" ] || sleep 0.2
+        k=$((k + 1))
+    done
+    if echo "$f" | grep -Eq 'com\.fidderr\.alarmfree|nputMethod|inputmethod|permissioncontroller|packageinstaller'; then return 0; fi
+    echo "$(date +%T) REFUSED [$f] $*" >> "$GUARD_LOG"
+    return 1
+}
 dev() {
+    case "$SERIAL:$*" in emulator-*) ;; *"input "*) guard_input "$@" || return 1 ;; esac
     case "$1" in
         dumpsys | cat | uiautomator) adb_ shell "$@" | tr -d '\r' ;;
         *)
