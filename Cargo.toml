@@ -75,5 +75,7 @@ codegen-units = 16
 incremental = true
 
 [dev-dependencies]
+i-slint-backend-testing = { path = "C:/Git/slint-combined/internal/backends/testing", default-features = false }
+i-slint-core = { path = "C:/Git/slint-combined/internal/core", default-features = false, features = ["std"] }
 tempfile = "3"
 tokio = { version = "1", features = ["rt", "macros", "time"] }

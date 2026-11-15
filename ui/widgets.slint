@@ -555,6 +555,7 @@ export component TextField inherits Rectangle {
     in property <TextHorizontalAlignment> align: left;
     callback edited(string);
     callback accepted();
+    out property <bool> placeholder-shown: field.text == "" && field.preedit-text == "";
     height: 48px;
     border-radius: 14px;
     border-width: 1px;
@@ -584,7 +585,7 @@ export component TextField inherits Rectangle {
         accepted => { root.accepted(); }
         init => { if (root.focus-on-show) { self.focus(); } }
     }
-    if field.text == "": Text {
+    if root.placeholder-shown: Text {
         x: 12px;
         width: parent.width - 24px;
         text: root.placeholder;

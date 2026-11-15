@@ -35,6 +35,8 @@ mod home_sheets;
 mod look;
 mod palette;
 mod panel;
+#[cfg(test)]
+mod preedit_tests;
 mod reliability;
 mod ring;
 mod settings;

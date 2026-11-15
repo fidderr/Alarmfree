@@ -172,6 +172,7 @@ version = "0.5.1"
 dependencies = [
  "chrono",
  "i-slint-backend-testing",
+ "i-slint-core",
  "log",
  "mobile-sentinel",
  "rand 0.8.8",
