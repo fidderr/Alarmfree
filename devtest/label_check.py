@@ -16,7 +16,7 @@ for el in root.iter("node"):
     if el.get("package") != "com.fidderr.alarmfree":
         continue
     cls = el.get("class", "").split(".")[-1]
-    label = el.get("text") or el.get("content-desc") or ""
+    label = el.get("content-desc") or el.get("text") or ""
     if cls == "View" and el.get("bounds", "").startswith("[0,0]") and label in ("", "AlarmFree", "app_process64"):
         roots.append(label)
     if el.get("clickable") == "true" or el.get("checkable") == "true" or cls in ("Button", "ToggleButton", "Switch", "EditText"):
