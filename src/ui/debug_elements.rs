@@ -173,7 +173,9 @@ pub fn run(ui: &MainWindow, command: &str) -> Option<String> {
                 if loose {
                     s.text.contains(arg)
                 } else {
+                    // An alarm card says "07:00, name, days": its name is found by itself.
                     s.text == arg
+                        || (s.role == "ListItem" && s.text.split(", ").any(|part| part == arg))
                 }
             });
             let hit = if nth == usize::MAX {

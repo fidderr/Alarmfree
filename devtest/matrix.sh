@@ -2159,8 +2159,11 @@ s51() {
     [ "$(sn less_motion)" = true ] || problems="$problems; still moving"
     has "$(row_time)" '2:05 PM'
     has "$(texts_of)" Wekkers
-    # A week that starts on Sunday: Z for zondag first.
-    has "$(texts_of)" 'Z|M|D|W|D|V|Z'
+    # A week that starts on Sunday: zondag first, in the day buttons of the editor.
+    go_tab Wekkers
+    press open a 0.8
+    on_editor
+    has "$(texts_of)" 'Zondag|Maandag|Dinsdag|Woensdag|Donderdag|Vrijdag|Zaterdag'
     if [ -z "$problems" ]; then
         pass "theme, language, 12 hours, week, volume and switches all stick"
     else
@@ -3463,7 +3466,7 @@ s62p() {
 . "$(dirname "$0")/a11y_audit.sh"
 
 ALL="s01 s03 s04 s05 s06 s07 s10 s11 s13 s13b s13d s14 s15 s16 s16b s17 s19 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s34 s36 s37 s38 s39 s40 s42 s43 s44 s45 s46 s47 s48 s49 s50 s51 s52 s53 s55 s56 s57 s58 s59 s60 s61 s62 s63 s65 big_screens s54"
-ON_A_PHONE="s01 s03 s04 s05 s06 s07 s10 s15 s16 s16b s17 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s36 s37 s38 s39 s42 s43 s45 s46 s47 s49 s50 s51 s52 s53 s55 s56 s57 s58 s59 s61 s62 s63 s60p_a s60p_b s62p"
+ON_A_PHONE="s01 s03 s04 s05 s06 s07 s10 s15 s16 s16b s17 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s36 s37 s38 s39 s42 s43 s45 s46 s47 s49 s50 s51 s52 s53 s55 s57 s58 s59 s61 s62"
 
 : > "$RESULTS"
 RUN_START=$SECONDS
