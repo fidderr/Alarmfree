@@ -519,7 +519,8 @@ s57() {
         # The cards below the screen: scroll the list to the end, then count from the last one.
         if [ "$(where "More actions" "$i")" = none ]; then
             sheet_scroll
-            v=$(ui texts | python -I -c 'import json,sys; print(sum(1 for e in json.loads(sys.stdin.read()) if e["t"] == "More actions" and e["r"] == "Button"))' | tr -d '')
+            v=$(ui texts | python -I -c 'import json,sys; print(sum(1 for e in json.loads(sys.stdin.read()) if e["t"] == "More actions" and e["r"] == "Button"))' | tr -d '
+')
             j=$((i - n + ${v:-0}))
         fi
         tap "More actions" "$j" 0.4
@@ -569,10 +570,10 @@ s57() {
     done
     # Trying them is what the panels of sound and vibration are about: what it looks like then.
     tap_row Sound
-    if is_there Start; then
-        tap Start 0 0.3
+    if is_there 'Play preview'; then
+        tap 'Play preview' 0 0.3
         picture editor_sound_playing
-        tap Stop 0 0.3
+        tap 'Stop preview' 0 0.3
         press_back
         wait_for 3 editor_sheet_closed
     else
@@ -581,7 +582,7 @@ s57() {
     tap_row Vibration
     if is_there Steady; then
         tap Steady 0 0.3
-        is_there Stop || panel_problem "a tap on a pattern shows no way to stop it"
+        is_there 'Stop preview' || panel_problem "a tap on a pattern shows no way to stop it"
         picture editor_vibration_running
         press_back
         wait_for 3 editor_sheet_closed

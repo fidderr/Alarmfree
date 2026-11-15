@@ -325,6 +325,8 @@
   "accent.pink": "Rosa",
   "accent.amber": "Ámbar",
   "sound.rename": "Cambiar el nombre de este sonido",
+  "sound.preview_play": "Reproducir la prueba",
+  "sound.preview_stop": "Detener la prueba",
   "config.sound_delay": "El sonido empieza a los",
   "config.sound_together": "Enseguida",
   "config.max_brightness": "Brillo máximo",

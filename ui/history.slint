@@ -158,12 +158,18 @@ export component HistoryScreen inherits Rectangle {
                 spacing: 8px;
                 for label[i] in root.periods: Rectangle {
                     width: name.preferred-width + 24px;
+                    accessible-role: button;
+                    accessible-label: label;
+                    accessible-checkable: true;
+                    accessible-checked: root.period == i;
+                    accessible-action-default => { root.period-picked(i); }
                     Rectangle {
                         y: 5px;
                         height: 34px;
                         border-radius: 17px;
                         background: root.period == i ? Pal.accent : Pal.surface;
                         name := Text {
+                            accessible-role: AccessibleRole.none;
                             text: label;
                             font-size: 14px * Zoom.scale;
                             font-weight: 500;
