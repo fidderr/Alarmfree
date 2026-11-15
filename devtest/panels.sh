@@ -134,6 +134,9 @@ try_chips() { # name [x y of the row that opened it]
     [ -n "$before" ] || return 0
     while IFS='|' read -r text x y was role; do
         [ -n "$text" ] || continue
+        # A panel can change its size under a pick (Vibration Off takes a row away): where the choice is now.
+        line=$(sheet_checkables | grep -F -m1 -- "$text|")
+        [ -z "$line" ] || IFS='|' read -r _ x y _ <<< "$line"
         [ "$y" -lt "$floor" ] || continue
         dev input tap "$x" "$y"
         sleep 0.2
@@ -196,7 +199,10 @@ try_chips() { # name [x y of the row that opened it]
     done <<< "$before"
     # Choices go back by taking what was on, last.
     while IFS='|' read -r text x y was role; do
-        [ "$was" = true ] && [ "$role" != Switch ] && [ "$y" -lt "$floor" ] && { dev input tap "$x" "$y"; sleep 0.15; }
+        [ "$was" = true ] && [ "$role" != Switch ] || continue
+        line=$(sheet_checkables | grep -F -m1 -- "$text|")
+        [ -z "$line" ] || IFS='|' read -r _ x y _ <<< "$line"
+        [ "$y" -lt "$floor" ] && { dev input tap "$x" "$y"; sleep 0.15; }
     done <<< "$before"
     # A colour that was automatic (nothing ringed) goes back by Automatic: a swatch can not be taken off.
     if ! printf '%s
