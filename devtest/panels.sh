@@ -212,8 +212,18 @@ try_chips() { # name [x y of the row that opened it]
             [ "$(sheet_checkables | grep -v '^What is this?|' | sort)" = "$(echo "$before" | sort)" ] && break
         done
     fi
+    # A colour of one's own that is none of the swatches (the tour left one before) and has no Automatic (the
+    # background) has nothing to go back to: then the same choices is all there is to compare. Where a choice is can differ
+    # (a note under the swatches comes and goes), what it is and whether it is on is what counts.
+    local same_names=0
+    if ! printf '%s
+' "$before" | grep -q '|true|' && ! is_there Automatic; then same_names=1; fi
     for i in 1 2 3 4 5 6; do
-        [ "$(sheet_checkables | grep -v '^What is this?|' | sort)" = "$(echo "$before" | sort)" ] && break
+        if [ "$same_names" = 1 ]; then
+            [ "$(sheet_checkables | grep -v '^What is this?|' | cut -d'|' -f1,5 | sort)" = "$(echo "$before" | cut -d'|' -f1,5 | sort)" ] && break
+        else
+            [ "$(sheet_checkables | grep -v '^What is this?|' | sort)" = "$(echo "$before" | sort)" ] && break
+        fi
         [ "$i" = 6 ] && panel_problem "$name: the choices do not go back"
         sleep 0.3
     done
