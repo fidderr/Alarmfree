@@ -100,7 +100,7 @@ component Preview inherits Rectangle {
                         }
                     }
                 }
-                Rectangle { width: 44px; AppSwitch { on: true; y: (parent.height - self.height) / 2; } }
+                Rectangle { width: 44px; AppSwitch { on: true; label: Tr.t("home.switch_aria"); y: (parent.height - self.height) / 2; } }
             }
             HorizontalLayout {
                 height: 33px;
@@ -224,6 +224,9 @@ export component ThemeScreen inherits Rectangle {
                     RowList {
                         Rectangle {
                             height: 54px;
+                            accessible-role: button;
+                            accessible-label: Tr.t("theme.custom");
+                            accessible-action-default => { Thm.own-picked(); }
                             HorizontalLayout {
                                 padding-left: 16px;
                                 padding-right: 14px;
@@ -281,6 +284,11 @@ export component ThemeScreen inherits Rectangle {
                         border-width: 1px;
                         border-color: #80808080;
                         background: swatch.colour;
+                        accessible-role: button;
+                        accessible-label: swatch.name;
+                        accessible-checkable: true;
+                        accessible-checked: swatch.selected;
+                        accessible-action-default => { Thm.accent-picked(i); }
                         if swatch.selected: Rectangle {
                             x: -4px;
                             y: -4px;

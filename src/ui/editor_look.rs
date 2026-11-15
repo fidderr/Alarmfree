@@ -7,7 +7,7 @@ use std::rc::Rc;
 use slint::{ComponentHandle, SharedString};
 
 use super::colour::{color, Wheel};
-use super::editor::{edit, model, EditorState};
+use super::editor::{edit, EditorState};
 use super::{Ctx, Ed, EditorSheet, LookTile, SwatchCell};
 use crate::i18n::t;
 use crate::models::{Accent, Rgb, RingBackdrop, RingClock, RingLook};
@@ -91,12 +91,13 @@ fn sync_look(ctx: &Ctx) {
     let accent = super::look::accent(ctx);
     let tr = ctx.tr.borrow();
     let e = ui.global::<Ed>();
-    e.set_tiles(model(tiles));
+    e.set_tiles(super::refill(e.get_tiles(), tiles));
     e.set_photo_link(look.backdrop == RingBackdrop::Photo);
     e.set_colour_row(look.backdrop.takes_a_colour());
     e.set_colour_auto(look.colour.is_none());
     e.set_colour_dot(color(look.colours(accent)[0]));
-    e.set_clock_labels(model(
+    e.set_clock_labels(super::refill(
+        e.get_clock_labels(),
         RingClock::ALL
             .iter()
             .map(|clock| SharedString::from(t(&tr, clock.name_key())))
@@ -135,12 +136,13 @@ fn sync_colour(ctx: &Ctx, reset_field: bool) {
             let colour = if light { colours.1 } else { colours.0 };
             SwatchCell {
                 colour: color(colour),
+                name: t(&ctx.tr.borrow(), preset.name_key()).into(),
                 selected: look.colour == Some(colour),
             }
         })
         .collect();
     let e = ui.global::<Ed>();
-    e.set_swatches(model(swatches));
+    e.set_swatches(super::refill(e.get_swatches(), swatches));
     let base = look.colours(super::look::accent(ctx))[0];
     e.set_live(live_tile(ctx, &look));
     let hue = ui.global::<super::Hue>();

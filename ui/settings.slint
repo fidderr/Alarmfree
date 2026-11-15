@@ -81,7 +81,7 @@ component SetRow inherits Rectangle {
     }
     if !root.switch: Rectangle {
         accessible-role: button;
-        accessible-label: root.title + " " + root.value;
+        accessible-label: root.value == "" ? root.title : root.title + " " + root.value;
         accessible-action-default => { root.clicked(); }
     }
     TouchArea { clicked => { root.clicked(); } }
@@ -134,6 +134,9 @@ export component SettingsScreen inherits Rectangle {
                     height: 64px;
                     border-radius: 20px;
                     background: root.st.problems ? Pal.warn-soft : Pal.surface;
+                    accessible-role: button;
+                    accessible-label: Tr.t("reliability.title") + ", " + root.st.reliability;
+                    accessible-action-default => { root.open-row(9); }
                     HorizontalLayout {
                         padding-left: 16px;
                         padding-right: 14px;

@@ -349,7 +349,8 @@ export component MainWindow inherits Window {
 
     if Run.active: RunScreen { }
 
-    if root.toast-visible: Toast {
+    Toast {
+        shown: root.toast-visible;
         x: 16px + Insets.left;
         width: min(parent.width - 16px - Insets.left - (root.toast-error ? 16px : 88px) - Insets.right, 460px);
         // At the top while a panel has the bottom.

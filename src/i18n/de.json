@@ -325,6 +325,8 @@
   "accent.pink": "Rosa",
   "accent.amber": "Bernstein",
   "sound.rename": "Diesen Ton umbenennen",
+  "sound.preview_play": "Vorschau abspielen",
+  "sound.preview_stop": "Vorschau stoppen",
   "config.sound_delay": "Ton startet nach",
   "config.sound_together": "Sofort",
   "config.max_brightness": "Volle Helligkeit",

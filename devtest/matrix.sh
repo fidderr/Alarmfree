@@ -12,6 +12,8 @@
 
 cd "$(dirname "$0")/.." || exit 1
 . devtest/lib.sh
+# A11Y=1: find and touch things through the accessibility tree (devtest/a11y.sh)
+[ "${A11Y:-0}" = 1 ] && . devtest/a11y.sh
 APK="${APK:-build/alarmfree-slint-debug.apk}"
 
 # What the window shows, from its snapshot (lib.sh: ui, sn, on_screen, tap, ...). The screens are
@@ -1380,7 +1382,7 @@ s37() {
     on_card 3 || problems="$problems; card not back"
     wait_for 3 os_has_alarm || problems="$problems; not armed after undo"
     # A swipe does not get in the way of an ordinary tap.
-    tap_has "$(row_time)" L 0.6
+    tap_has "$(row_time), " L 0.6
     on_editor 3 || problems="$problems; no editor"
     if [ -z "$problems" ]; then
         pass "skip and delete by swiping, both undone"
@@ -1733,7 +1735,7 @@ s46() {
     big=$(sn ed_time_text)
     [ "$big" = "2:05 PM" ] || problems="$problems; editor says '$big'"
     # The time button opens the wheels; they say the hour with its AM/PM.
-    tap ":" 0 0.6
+    tap_time 0.6
     case "$(texts_of)" in
         *2*PM*05* | *2*PM*5*) ;;
         *) problems="$problems; wheels say '$(texts_of)'" ;;
@@ -1862,6 +1864,8 @@ s48() {
     [ -n "$file" ] || problems="$problems; no file in Downloads"
     [ "$(dev cat "/sdcard/Download/$file" | grep -c '"time_hour"')" -ge 1 ] || problems="$problems; no alarm in the file"
     # And back from it, as a second one.
+    # The picker lists what the media index knows: the file just written is not in it yet.
+    dev content call --uri content://media --method scan_volume --arg external_primary > /dev/null 2>&1
     wait_for 6 on_screen_no 3
     tap_scrolling "Back up"
     on_screen "Add alarms from a file" 4
@@ -2155,8 +2159,11 @@ s51() {
     [ "$(sn less_motion)" = true ] || problems="$problems; still moving"
     has "$(row_time)" '2:05 PM'
     has "$(texts_of)" Wekkers
-    # A week that starts on Sunday: Z for zondag first.
-    has "$(texts_of)" 'Z|M|D|W|D|V|Z'
+    # A week that starts on Sunday: zondag first, in the day buttons of the editor.
+    go_tab Wekkers
+    press open a 0.8
+    on_editor
+    has "$(texts_of)" 'Zondag|Maandag|Dinsdag|Woensdag|Donderdag|Vrijdag|Zaterdag'
     if [ -z "$problems" ]; then
         pass "theme, language, 12 hours, week, volume and switches all stick"
     else
@@ -2271,16 +2278,16 @@ s53() {
     tap_has "Weekdays at" 0 0.5
     [ "$(sn toast_visible)" = true ] || problems="$problems; a template says nothing"
     [ "$(alarm_count)" = 1 ] || problems="$problems; a template makes no alarm"
-    tap_has "$(row_time)" L 0.6
+    tap_has "$(row_time), " L 0.6
     on_editor || problems="$problems; the alarm from a template opens no editor"
     # Typed, then a tap on the wheel: the row under the middle is one more.
     note "s53: Typed, then a tap on the wheel: the row under the middle i @$SECONDS"
-    tap ":" 0 0.6
+    tap_time 0.6
     tap "Type it" 0 0.4
     set_field 0 835
     done_sheet
     has "$(sn ed_time_text)" ':35'
-    tap ":" 0 0.6
+    tap_time 0.6
     press ed-minute 36 0.3
     done_sheet
     has "$(sn ed_time_text)" ':36'
@@ -2621,7 +2628,10 @@ s55() {
     tap SCAN 0 0.3
     # The process lives through Home on Android 14 and later: a tap while the camera that Home closed is
     # still reporting back is ignored (it is still scanning for that long). A person taps again.
-    wait_for 3 scanner_on_top || { sleep 1; tap SCAN 0 0.3; }
+    # The challenge screen goes back to the ring after its idle time (8 s here): on a busy emulator that has happened
+    # by now, and a person would press Turn off and Scan again.
+    again() { is_there "Turn off" && tap "Turn off" 0 0.3; on_screen SCAN 8 && tap SCAN 0 0.3; }
+    wait_for 3 scanner_on_top || { sleep 1; again; }
     wait_for 8 scanner_on_top || {
         problems="$problems; the camera does not open after Home"
         note "after Home: focus=$(focused_window | cut -c1-90) scan_state=$(sn scan_state) screen=$(screen_no) texts=$(texts_of | head -c 160)"
@@ -2669,9 +2679,9 @@ vibrating_now() {
 not_vibrating() { ! vibrating_now; }
 # What the try button of the open panel says: true while it runs (it says Stop), false (Start), or none.
 start_stop_says() {
-    if is_there Stop; then echo true; elif is_there Start; then echo false; else echo none; fi
+    if is_there 'Stop preview'; then echo true; elif is_there 'Play preview'; then echo false; else echo none; fi
 }
-start_stop() { is_there Stop && tap Stop 0 0.3 || tap Start 0 0.3; }
+start_stop() { is_there 'Stop preview' && tap 'Stop preview' 0 0.3 || tap 'Play preview' 0 0.3; }
 
 # Trying a sound and a vibration: a tap picks a sound and plays it for a few seconds, Start plays it
 # for longer, and Stop, closing and time all end it. A tap on a pattern vibrates, for just as long.
@@ -3456,9 +3466,10 @@ s62p() {
 }
 
 . "$(dirname "$0")/panels.sh"
+. "$(dirname "$0")/a11y_audit.sh"
 
 ALL="s01 s03 s04 s05 s06 s07 s10 s11 s13 s13b s13d s14 s15 s16 s16b s17 s19 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s34 s36 s37 s38 s39 s40 s42 s43 s44 s45 s46 s47 s48 s49 s50 s51 s52 s53 s55 s56 s57 s58 s59 s60 s61 s62 s63 s65 big_screens s54"
-ON_A_PHONE="s01 s03 s04 s05 s06 s07 s10 s15 s16 s16b s17 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s36 s37 s38 s39 s42 s43 s45 s46 s47 s49 s50 s51 s52 s53 s55 s56 s57 s58 s59 s61 s62 s63 s60p_a s60p_b s62p"
+ON_A_PHONE="s01 s03 s04 s05 s06 s07 s10 s15 s16 s16b s17 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s36 s37 s38 s39 s42 s43 s45 s46 s47 s49 s50 s51 s52 s53 s55 s57 s58 s59 s61 s62"
 
 : > "$RESULTS"
 RUN_START=$SECONDS

@@ -116,6 +116,10 @@ for e in json.loads(sys.stdin.read()):
 '
 }
 
+# Only the cards and the text have an Automatic in their panel; the one of the theme screen behind a panel is not it.
+panel_has_automatic() { # panel name
+    case "$1" in theme_own_Cards | theme_own_Text) is_there Automatic ;; *) return 1 ;; esac
+}
 # Every choice and switch on screen does what it does: a switch goes over and back, a choice takes.
 # Then it is as it was.
 # A panel whose rows close it on a pick (language, time format, week start, new alarms, volume ...) gets
@@ -134,6 +138,9 @@ try_chips() { # name [x y of the row that opened it]
     [ -n "$before" ] || return 0
     while IFS='|' read -r text x y was role; do
         [ -n "$text" ] || continue
+        # A panel can change its size under a pick (Vibration Off takes a row away): where the choice is now.
+        line=$(sheet_checkables | grep -F -m1 -- "$text|")
+        [ -z "$line" ] || IFS='|' read -r _ x y _ <<< "$line"
         [ "$y" -lt "$floor" ] || continue
         dev input tap "$x" "$y"
         sleep 0.2
@@ -177,7 +184,12 @@ try_chips() { # name [x y of the row that opened it]
             wait_for 3 no_sheet_up || { panel_problem "$name: the choice that was on leaves the panel open"; press_back; }
             return 3
         fi
-        now=$(checkables | grep -F -m1 "$text|" | cut -d'|' -f4)
+        # A slow emulator draws the pick a moment after the touch: look again before saying it did not take.
+        for i in 1 2 3 4 5 6 7 8; do
+            now=$(checkables | grep -F -m1 "$text|" | cut -d'|' -f4)
+            if [ "$role" = Switch ] || [ "$now" = true ] || [ "$was" = true ]; then break; fi
+            sleep 0.25
+        done
         case "$role" in
             Switch)
                 [ "$now" != "$was" ] || panel_problem "$name: the switch '$text' does not switch"
@@ -191,10 +203,34 @@ try_chips() { # name [x y of the row that opened it]
     done <<< "$before"
     # Choices go back by taking what was on, last.
     while IFS='|' read -r text x y was role; do
-        [ "$was" = true ] && [ "$role" != Switch ] && [ "$y" -lt "$floor" ] && { dev input tap "$x" "$y"; sleep 0.15; }
+        [ "$was" = true ] && [ "$role" != Switch ] || continue
+        line=$(sheet_checkables | grep -F -m1 -- "$text|")
+        [ -z "$line" ] || IFS='|' read -r _ x y _ <<< "$line"
+        [ "$y" -lt "$floor" ] && { dev input tap "$x" "$y"; sleep 0.15; }
     done <<< "$before"
-    [ "$(sheet_checkables | grep -v '^What is this?|' | sort)" = "$(echo "$before" | sort)" ] ||
-        panel_problem "$name: the choices do not go back"
+    # A colour that was automatic (nothing ringed) goes back by Automatic: a swatch can not be taken off.
+    if ! printf '%s
+' "$before" | grep -q '|true|' && panel_has_automatic "$name"; then
+        for i in 1 2 3; do
+            tap Automatic 0 0.6
+            [ "$(sheet_checkables | grep -v '^What is this?|' | sort)" = "$(echo "$before" | sort)" ] && break
+        done
+    fi
+    # A colour of one's own that is none of the swatches (the tour left one before) and has no Automatic (the
+    # background) has nothing to go back to: then the same choices is all there is to compare. Where a choice is can differ
+    # (a note under the swatches comes and goes), what it is and whether it is on is what counts.
+    local same_names=0
+    if ! printf '%s
+' "$before" | grep -q '|true|' && ! panel_has_automatic "$name"; then same_names=1; fi
+    for i in 1 2 3 4 5 6; do
+        if [ "$same_names" = 1 ]; then
+            [ "$(sheet_checkables | grep -v '^What is this?|' | cut -d'|' -f1,5 | sort)" = "$(echo "$before" | cut -d'|' -f1,5 | sort)" ] && break
+        else
+            [ "$(sheet_checkables | grep -v '^What is this?|' | cut -d'|' -f1,4,5 | sort)" = "$(echo "$before" | cut -d'|' -f1,4,5 | sort)" ] && break
+        fi
+        [ "$i" = 6 ] && panel_problem "$name: the choices do not go back"
+        sleep 0.3
+    done
 }
 
 # The ? on top, if there is one: it opens the explanation in place, and closes it again.
@@ -235,6 +271,8 @@ tap_row() { # text
         case "$y" in '' | *[!0-9]*) ;; *) [ "$y" -lt "$floor" ] && break ;; esac
         sheet_scroll
     done
+    # What stands on this screen now (the labelled swatches of the theme screen under a panel) is no choice of the panel.
+    baseline_update
     tap_has "$1" 0 0.5
 }
 
@@ -519,7 +557,8 @@ s57() {
         # The cards below the screen: scroll the list to the end, then count from the last one.
         if [ "$(where "More actions" "$i")" = none ]; then
             sheet_scroll
-            v=$(ui texts | python -I -c 'import json,sys; print(sum(1 for e in json.loads(sys.stdin.read()) if e["t"] == "More actions" and e["r"] == "Button"))' | tr -d '')
+            v=$(ui texts | python -I -c 'import json,sys; print(sum(1 for e in json.loads(sys.stdin.read()) if e["t"] == "More actions" and e["r"] == "Button"))' | tr -d '
+')
             j=$((i - n + ${v:-0}))
         fi
         tap "More actions" "$j" 0.4
@@ -558,7 +597,7 @@ s57() {
     tap "−1" 0 0.2
     [ "$before" != "$after" ] && [ "$(sn ed_time_text)" = "$before" ] ||
         panel_problem "the minute buttons do not move the time a minute and back"
-    tap ":" 0 0.4
+    tap_time 0.4
     panel_open editor_time
     tap_trash
     panel_open editor_delete
@@ -569,10 +608,10 @@ s57() {
     done
     # Trying them is what the panels of sound and vibration are about: what it looks like then.
     tap_row Sound
-    if is_there Start; then
-        tap Start 0 0.3
+    if is_there 'Play preview'; then
+        tap 'Play preview' 0 0.3
         picture editor_sound_playing
-        tap Stop 0 0.3
+        tap 'Stop preview' 0 0.3
         press_back
         wait_for 3 editor_sheet_closed
     else
@@ -581,7 +620,7 @@ s57() {
     tap_row Vibration
     if is_there Steady; then
         tap Steady 0 0.3
-        is_there Stop || panel_problem "a tap on a pattern shows no way to stop it"
+        is_there 'Stop preview' || panel_problem "a tap on a pattern shows no way to stop it"
         picture editor_vibration_running
         press_back
         wait_for 3 editor_sheet_closed

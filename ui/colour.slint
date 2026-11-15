@@ -1,7 +1,7 @@
 import { Pal, Tr, Zoom } from "theme.slint";
 import { AppSlider, TextField } from "widgets.slint";
 
-export struct SwatchCell { colour: color, selected: bool }
+export struct SwatchCell { colour: color, name: string, selected: bool }
 
 // Round colour choices, five to a row, the chosen one ringed.
 export component SwatchGrid inherits Rectangle {
@@ -20,6 +20,7 @@ export component SwatchGrid inherits Rectangle {
         border-color: #80808080;
         background: swatch.colour;
         accessible-role: button;
+        accessible-label: swatch.name;
         accessible-checkable: true;
         accessible-checked: swatch.selected;
         accessible-action-default => { root.picked(i); }

@@ -133,6 +133,32 @@ pub fn day_letter(translations: &Translations, day: usize) -> String {
         .unwrap_or_default()
 }
 
+/// A day's full name, for what a screen reader says about a day button.
+pub fn day_full(translations: &Translations, day: usize) -> String {
+    t(translations, FULL_DAY_KEYS[day])
+}
+
+/// The repeat days of an alarm in words, for what a screen reader says about it: "Every day",
+/// "Weekdays", "Weekend", or the names of the days in the week's order.
+pub fn days_in_words(translations: &Translations, days: &[bool; 7], order: [usize; 7]) -> String {
+    let weekdays = [true, true, true, true, true, false, false];
+    let weekend = [false, false, false, false, false, true, true];
+    if *days == [true; 7] {
+        t(translations, "config.every_day")
+    } else if *days == weekdays {
+        t(translations, "config.weekdays")
+    } else if *days == weekend {
+        t(translations, "config.weekend")
+    } else {
+        order
+            .into_iter()
+            .filter(|&day| days[day])
+            .map(|day| day_full(translations, day))
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+}
+
 pub fn day_name(translations: &Translations, date: NaiveDate) -> String {
     t(
         translations,
@@ -218,6 +244,26 @@ mod tests {
         assert_eq!(clock(0, 0, false), "12:00 AM");
         assert_eq!(clock(12, 30, false), "12:30 PM");
         assert_eq!(clock(23, 59, false), "11:59 PM");
+    }
+
+    #[test]
+    fn repeat_days_in_words() {
+        let en = crate::i18n::load_translations(crate::models::Locale::English);
+        let order = [0, 1, 2, 3, 4, 5, 6];
+        assert_eq!(days_in_words(&en, &[true; 7], order), "Every day");
+        assert_eq!(
+            days_in_words(&en, &[true, true, true, true, true, false, false], order),
+            "Weekdays"
+        );
+        assert_eq!(
+            days_in_words(&en, &[false, false, false, false, false, true, true], order),
+            "Weekend"
+        );
+        assert_eq!(
+            days_in_words(&en, &[true, false, true, false, false, false, false], order),
+            "Monday, Wednesday"
+        );
+        assert_eq!(day_full(&en, 0), "Monday");
     }
 
     #[test]

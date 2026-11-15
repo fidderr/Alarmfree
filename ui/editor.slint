@@ -15,7 +15,7 @@ component TimeShift inherits Rectangle {
     height: 36px;
     border-radius: 18px;
     background: Pal.surface;
-    Text { text: root.text; font-size: 14px * Zoom.scale; font-weight: 500; color: Pal.text; }
+    Text { accessible-role: AccessibleRole.none; text: root.text; font-size: 14px * Zoom.scale; font-weight: 500; color: Pal.text; }
     TouchArea { clicked => { root.clicked(); } }
 }
 
@@ -80,6 +80,9 @@ export component EditorScreen inherits Rectangle {
             back => { root.back(); }
             if root.deletable: Rectangle {
                 width: 44px;
+                accessible-role: button;
+                accessible-label: Tr.t("alarm.delete");
+                accessible-action-default => { root.open(EditorSheet.delete); }
                 Icon { name: IconName.trash; size: 20px; tint: Pal.text2; }
                 TouchArea { clicked => { root.open(EditorSheet.delete); } }
             }
@@ -106,8 +109,12 @@ export component EditorScreen inherits Rectangle {
                         }
                         Rectangle {
                             horizontal-stretch: 1;
+                            accessible-role: button;
+                            accessible-label: Tr.t("config.time") + ": " + root.time-text;
+                            accessible-action-default => { root.open(EditorSheet.time); }
                             min-width: 0px;
                             TabularText {
+                                decorative: true;
                                 width: parent.width;
                                 height: parent.height;
                                 text: root.time-text;
@@ -166,7 +173,7 @@ export component EditorScreen inherits Rectangle {
                                 max-width: 44px;
                                 horizontal-stretch: 1;
                                 accessible-role: button;
-                                accessible-label: day.letter;
+                                accessible-label: day.name;
                                 accessible-checkable: true;
                                 accessible-checked: day.on;
                                 accessible-action-default => { root.day-toggled(i); }
@@ -176,6 +183,7 @@ export component EditorScreen inherits Rectangle {
                                     border-radius: self.width / 2;
                                     background: day.on ? Pal.accent : Pal.surface;
                                     Text {
+                                        accessible-role: AccessibleRole.none;
                                         text: day.letter;
                                         font-size: 14px * Zoom.scale;
                                         font-weight: 500;

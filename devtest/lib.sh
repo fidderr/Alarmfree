@@ -97,7 +97,23 @@ ask() { # pid in out command
 
 # As adb. What gives pages of output goes the old way: reading it line by line is slow. Filter
 # it on the device to have it both ways, like sound_on.
+# On a real phone an `input` command goes only to AlarmFree, its keyboard or its permission dialogs: when anything else
+# (the launcher, the shade, a picker) has the focus the command is refused and logged, so a touch never lands on the
+# owner's own screens. Not on an emulator.
+GUARD_LOG="${GUARD_LOG:-/tmp/af_guard.log}"
+guard_input() {
+    local f="" k=0
+    while [ -z "$f" ] && [ $k -lt 6 ]; do
+        f=$(timeout 8 "$ADB" -s "$SERIAL" shell dumpsys window 2> /dev/null | grep mCurrentFocus | grep -v '=null' | head -1)
+        [ -n "$f" ] || sleep 0.2
+        k=$((k + 1))
+    done
+    if echo "$f" | grep -Eq 'com\.fidderr\.alarmfree|nputMethod|inputmethod|permissioncontroller|packageinstaller|RequestIgnoreBatteryOptimizations'; then return 0; fi
+    echo "$(date +%T) REFUSED [$f] $*" >> "$GUARD_LOG"
+    return 1
+}
 dev() {
+    case "$SERIAL:$*" in emulator-*) ;; *"input "*) guard_input "$@" || return 1 ;; esac
     case "$1" in
         dumpsys | cat | uiautomator) adb_ shell "$@" | tr -d '\r' ;;
         *)
@@ -329,6 +345,12 @@ reboot_only() {
             # It boots to its lock screen. The app shows over it, so a run can go a long way
             # before a system page, which does not, stays hidden behind it.
             timeout 20 "$ADB" -s "$SERIAL" shell wm dismiss-keyguard
+            # A user has no accessibility service: the suite runs without one (A11Y=on keeps what the emulator has,
+            # for a run with a screen reader's tree being built).
+            if [ "${A11Y:-off}" = off ]; then
+                timeout 20 "$ADB" -s "$SERIAL" shell settings put secure enabled_accessibility_services null
+                timeout 20 "$ADB" -s "$SERIAL" shell settings put secure accessibility_enabled 0
+            fi
             ;;
     esac
 }
@@ -614,6 +636,8 @@ tap() { # text [which of them] [seconds to wait]
     dev input tap $xy
     sleep "${3:-0.2}"
 }
+# The time of the editor, which a touch there opens the time sheet.
+tap_time() { tap_has "Time:" 0 "${1:-0.6}"; }
 tap_has() { # text [which] [seconds]
     local xy
     xy=$(still_where where_has "$1" "${2:-}")

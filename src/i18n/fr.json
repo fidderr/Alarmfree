@@ -325,6 +325,8 @@
   "accent.pink": "Rose",
   "accent.amber": "Ambre",
   "sound.rename": "Renommer ce son",
+  "sound.preview_play": "Lire l'aperçu",
+  "sound.preview_stop": "Arrêter l'aperçu",
   "config.sound_delay": "Le son démarre après",
   "config.sound_together": "Tout de suite",
   "config.max_brightness": "Luminosité maximale",

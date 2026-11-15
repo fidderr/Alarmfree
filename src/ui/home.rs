@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use chrono::{TimeZone, Timelike};
-use slint::{ModelRc, SharedString, VecModel};
+use slint::{Model, SharedString};
 
 use super::{AlarmRow, Ctx, DayCell};
 use crate::i18n::t;
@@ -136,35 +136,52 @@ pub fn refresh(ctx: &Ctx) {
     let next_fire = next_fire_times(&alarms);
     let list = sorted_for_list(&alarms, settings.prefs.sort, &next_fire);
 
+    let shown = ui.get_rows();
     let rows: Vec<AlarmRow> = list
         .iter()
-        .map(|alarm| {
+        .enumerate()
+        .map(|(row, alarm)| {
             let next = next_fire.get(&alarm.id).copied();
             let one_time = schedule::is_one_time(alarm);
             let skip_active = alarm.skip_until_ms.is_some_and(|skip| skip > now_ms);
+            let when = when_text(ctx, alarm, next, now_ms, twenty_four);
+            let time = crate::text::clock(alarm.time_hour, alarm.time_minute, twenty_four);
+            let days_words = if one_time {
+                String::new()
+            } else {
+                crate::text::days_in_words(&tr, &alarm.days, week_start.day_order())
+            };
+            let describe = [time.as_str(), alarm.label.trim(), &days_words, &when]
+                .into_iter()
+                .filter(|part| !part.is_empty())
+                .collect::<Vec<_>>()
+                .join(", ");
             AlarmRow {
                 id: alarm.id.clone().into(),
-                time: crate::text::clock(alarm.time_hour, alarm.time_minute, twenty_four).into(),
+                describe: describe.into(),
+                time: time.into(),
                 twelve: !twenty_four,
-                label: alarm.label.clone().into(),
-                when: when_text(ctx, alarm, next, now_ms, twenty_four).into(),
-                days: ModelRc::from(Rc::new(VecModel::from(
+                label: alarm.label.trim().into(),
+                when: when.into(),
+                days: super::refill(
+                    shown.row_data(row).map(|old| old.days).unwrap_or_default(),
                     week_start
                         .day_order()
                         .into_iter()
                         .map(|day| DayCell {
                             letter: crate::text::day_letter(&tr, day).into(),
+                            name: crate::text::day_full(&tr, day).into(),
                             on: alarm.days[day],
                         })
                         .collect::<Vec<_>>(),
-                ))),
+                ),
                 on: alarm.enabled,
                 can_skip: alarm.enabled && !one_time && (skip_active || next.is_some()),
                 skip_active,
             }
         })
         .collect();
-    ui.set_rows(ModelRc::from(Rc::new(VecModel::from(rows))));
+    ui.set_rows(super::refill(ui.get_rows(), rows));
     ui.set_can_reorder(settings.prefs.sort == SortMode::Own);
 
     let next_ms = schedule::earliest_future(now_ms, next_fire.values().copied());
@@ -189,11 +206,13 @@ pub fn refresh(ctx: &Ctx) {
     ui.set_next_sub(sub.into());
     ui.set_paused(alarm_ops::all_paused_until(&alarms, now_ms).is_some());
 
-    let labels: Vec<SharedString> = QUICK_MINUTES
-        .iter()
-        .map(|minutes| format!("+{minutes}").into())
-        .collect();
-    ui.set_quick_labels(ModelRc::from(Rc::new(VecModel::from(labels))));
+    ui.set_quick_labels(super::refill(
+        ui.get_quick_labels(),
+        QUICK_MINUTES
+            .iter()
+            .map(|minutes| format!("+{minutes}").into())
+            .collect(),
+    ));
     let template_label = |(key, hour, _): &(&str, u8, [bool; 7])| -> SharedString {
         t(&tr, key)
             .replace("{time}", &crate::text::clock(*hour, 0, twenty_four))

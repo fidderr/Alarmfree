@@ -249,7 +249,7 @@ export component ChallengeDetailSheet inherits Rectangle {
                     vertical-alignment: center;
                     edited => { Cfg.code-edited(self.text); }
                 }
-                if code.text == "": Text {
+                if code.text == "" && code.preedit-text == "": Text {
                     x: 12px;
                     width: parent.width - 24px;
                     text: Tr.t("challenge.config.scan_placeholder");

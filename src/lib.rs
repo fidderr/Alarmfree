@@ -32,7 +32,11 @@ pub mod ui;
 #[cfg(target_os = "android")]
 #[no_mangle]
 fn android_main(app: slint::android::AndroidApp) {
-    slint::android::init(app).expect("start the UI backend");
+    // mobile-sentinel's `foregrounding::on_back` handles Back, so Slint registers no
+    // `OnBackInvokedCallback` of its own.
+    let options = slint::android::InitOptions::new()
+        .with_back_invoked_callback(slint::android::BackInvokedCallback::Disabled);
+    slint::android::init_with_options(app, options).expect("start the UI backend");
     if let Err(e) = ui::run() {
         log::error!("[AlarmFree] the UI stopped: {e}");
     }

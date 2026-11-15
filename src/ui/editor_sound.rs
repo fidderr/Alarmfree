@@ -8,8 +8,8 @@ use std::time::Duration;
 use slint::{ComponentHandle, SharedString};
 
 use super::editor::{
-    edit, model, seconds_label, EditorState, CHECK_MINUTES, FADE_SECONDS, LIMIT_MINUTES,
-    NOTICE_MINUTES, SOUND_DELAY_SECONDS, VIBRATION_KEYS,
+    edit, seconds_label, EditorState, CHECK_MINUTES, FADE_SECONDS, LIMIT_MINUTES, NOTICE_MINUTES,
+    SOUND_DELAY_SECONDS, VIBRATION_KEYS,
 };
 use super::{Ctx, Ed, EditorSheet, MainWindow, SoundRow, UsedChip};
 use crate::i18n::{t, Translations};
@@ -87,7 +87,8 @@ pub(super) fn sync(
     );
     e.set_sound_none(vibrate_only);
     e.set_sounding(ed.preview != 0);
-    e.set_sound_rows(model(
+    e.set_sound_rows(super::refill(
+        e.get_sound_rows(),
         sound_ids()
             .into_iter()
             .map(|sound| {
@@ -119,7 +120,8 @@ pub(super) fn sync(
             .volume_percent
             .unwrap_or(settings.min_volume_percent),
     ));
-    e.set_fade_labels(model(
+    e.set_fade_labels(super::refill(
+        e.get_fade_labels(),
         FADE_SECONDS
             .iter()
             .map(|secs| SharedString::from(seconds_label(tr, *secs)))
@@ -133,7 +135,8 @@ pub(super) fn sync(
     );
 
     // Vibration.
-    e.set_vib_labels(model(
+    e.set_vib_labels(super::refill(
+        e.get_vib_labels(),
         std::iter::once(t(tr, "vibration.off"))
             .chain(VIBRATION_KEYS.iter().map(|key| t(tr, key)))
             .map(SharedString::from)
@@ -147,7 +150,8 @@ pub(super) fn sync(
     e.set_vibrating(ed.vibrating);
     e.set_vib_can_try(current.sound_mode != 1);
     e.set_delay_visible(current.sound_mode == 0);
-    e.set_delay_labels(model(
+    e.set_delay_labels(super::refill(
+        e.get_delay_labels(),
         SOUND_DELAY_SECONDS
             .iter()
             .map(|secs| {
@@ -174,7 +178,8 @@ pub(super) fn sync(
         (width - 32.0).max(120.0),
     );
     e.set_used_lines(lines.iter().copied().max().map_or(0, |last| last + 1));
-    e.set_used(model(
+    e.set_used(super::refill(
+        e.get_used(),
         used.into_iter()
             .zip(lines)
             .map(|(text, line)| UsedChip {
@@ -236,7 +241,10 @@ pub(super) fn sync_options(ctx: &Ctx, sheet: EditorSheet) {
         ),
     };
     let e = ui.global::<Ed>();
-    e.set_opt_labels(model(labels.into_iter().map(SharedString::from).collect()));
+    e.set_opt_labels(super::refill(
+        e.get_opt_labels(),
+        labels.into_iter().map(SharedString::from).collect(),
+    ));
     e.set_opt_selected(selected);
 }
 

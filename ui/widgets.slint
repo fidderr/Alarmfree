@@ -39,7 +39,7 @@ export component Row inherits Rectangle {
     in property <string> value;
     callback clicked();
     accessible-role: button;
-    accessible-label: root.title + " " + root.value;
+    accessible-label: root.value == "" ? root.title : root.title + " " + root.value;
     accessible-action-default => { root.clicked(); }
     height: 54px;
     HorizontalLayout {
@@ -109,6 +109,7 @@ export component PrimaryButton inherits Rectangle {
     border-radius: 14px;
     background: quiet ? Pal.surface2 : Pal.accent;
     Text {
+        accessible-role: AccessibleRole.none;
         text: root.text;
         font-size: (root.compact ? 14px : 16px) * Zoom.scale;
         font-weight: 500;
@@ -121,6 +122,8 @@ export component PrimaryButton inherits Rectangle {
 export component Sheet inherits Rectangle {
     in property <string> title;
     in property <string> action-text;
+    // What a screen reader says for the action when the text alone does not tell.
+    in property <string> action-label;
     // A filled icon before the action: play to start something, stop while it runs.
     in property <IconName> action-icon: IconName.play;
     in property <bool> action-has-icon: false;
@@ -147,6 +150,9 @@ export component Sheet inherits Rectangle {
             flick.content-y = max(flick.height - flick.content-height, flick.content-y - (row-y + row-h + 8px - flick.absolute-position.y - flick.height));
         }
     }
+    accessible-role: region;
+    accessible-label: root.title;
+    accessible-modal: true;
     background: #0000008c;
     TouchArea { clicked => { root.close(); } }
     panel := Rectangle {
@@ -192,7 +198,7 @@ export component Sheet inherits Rectangle {
             if root.action-text != "": Rectangle {
                 width: action-row.preferred-width + 16px;
                 accessible-role: button;
-                accessible-label: root.action-text;
+                accessible-label: root.action-label != "" ? root.action-label : root.action-text;
                 accessible-action-default => { root.action(); }
                 action-row := HorizontalLayout {
                     alignment: center;
@@ -201,7 +207,7 @@ export component Sheet inherits Rectangle {
                         width: 14px;
                         Icon { name: root.action-icon; size: 14px; tint: Pal.accent; filled: true; }
                     }
-                    Text { text: root.action-text; font-size: 14px * Zoom.scale; font-weight: 500; color: Pal.accent; vertical-alignment: center; }
+                    Text { accessible-role: AccessibleRole.none; text: root.action-text; font-size: 14px * Zoom.scale; font-weight: 500; color: Pal.accent; vertical-alignment: center; }
                 }
                 TouchArea { clicked => { root.action(); } }
             }
@@ -243,7 +249,7 @@ export component Sheet inherits Rectangle {
             accessible-role: button;
             accessible-label: root.done-text;
             accessible-action-default => { root.finish(); }
-            Text { text: root.done-text; font-size: 16px * Zoom.scale; font-weight: 500; color: root.done-quiet ? Pal.text : Pal.on-accent; }
+            Text { accessible-role: AccessibleRole.none; text: root.done-text; font-size: 16px * Zoom.scale; font-weight: 500; color: root.done-quiet ? Pal.text : Pal.on-accent; }
             TouchArea { clicked => { root.finish(); } }
         }
     }
@@ -274,7 +280,7 @@ export component RadioRow inherits Rectangle {
                 border-color: root.selected ? Pal.accent : Pal.text2;
             }
         }
-        Text { horizontal-stretch: 1; text: root.text; font-size: 14px * Zoom.scale; font-weight: root.selected ? 500 : 400; color: Pal.text; vertical-alignment: center; overflow: elide; }
+        Text { accessible-role: AccessibleRole.none; horizontal-stretch: 1; text: root.text; font-size: 14px * Zoom.scale; font-weight: root.selected ? 500 : 400; color: Pal.text; vertical-alignment: center; overflow: elide; }
     }
     TouchArea { clicked => { root.clicked(); } }
 }
@@ -508,6 +514,7 @@ export component ChoiceChips inherits Rectangle {
             border-radius: root.small ? 15px : 14px;
             background: root.small ? (root.selected == i ? Pal.accent-soft : Pal.surface) : (root.selected == i ? Pal.accent : Pal.surface2);
             Text {
+                accessible-role: AccessibleRole.none;
                 x: 6px;
                 width: parent.width - 12px;
                 text: label;
@@ -537,10 +544,13 @@ export component LinkButton inherits Rectangle {
     callback clicked();
     min-width: 44px;
     height: 44px;
+    accessible-role: button;
+    accessible-label: root.text;
+    accessible-action-default => { root.clicked(); }
     HorizontalLayout {
         padding-left: 8px;
         padding-right: 8px;
-        Text { text: root.text; font-size: 14px * Zoom.scale; font-weight: 500; color: root.ink; vertical-alignment: center; }
+        Text { accessible-role: AccessibleRole.none; text: root.text; font-size: 14px * Zoom.scale; font-weight: 500; color: root.ink; vertical-alignment: center; }
     }
     TouchArea { clicked => { root.clicked(); } }
 }
@@ -555,6 +565,7 @@ export component TextField inherits Rectangle {
     in property <TextHorizontalAlignment> align: left;
     callback edited(string);
     callback accepted();
+    out property <bool> placeholder-shown: field.text == "" && field.preedit-text == "";
     height: 48px;
     border-radius: 14px;
     border-width: 1px;
@@ -571,6 +582,7 @@ export component TextField inherits Rectangle {
     }
     field := TextInput {
         accessible-label: root.label != "" ? root.label : root.placeholder;
+        accessible-placeholder-text: root.label != "" ? root.placeholder : "";
         x: 12px;
         width: parent.width - 24px;
         text: root.text;
@@ -584,7 +596,8 @@ export component TextField inherits Rectangle {
         accepted => { root.accepted(); }
         init => { if (root.focus-on-show) { self.focus(); } }
     }
-    if field.text == "": Text {
+    if root.placeholder-shown: Text {
+        accessible-role: AccessibleRole.none;
         x: 12px;
         width: parent.width - 24px;
         text: root.placeholder;

@@ -325,6 +325,8 @@
   "accent.pink": "Pink",
   "accent.amber": "Amber",
   "sound.rename": "Rename this sound",
+  "sound.preview_play": "Play preview",
+  "sound.preview_stop": "Stop preview",
   "config.sound_delay": "Sound starts after",
   "config.sound_together": "Right away",
   "config.max_brightness": "Full brightness",

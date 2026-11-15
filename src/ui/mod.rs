@@ -16,6 +16,8 @@ use crate::models::{AlarmData, AppSettings};
 
 slint::include_modules!();
 
+#[cfg(test)]
+mod a11y_tests;
 mod challenge_run;
 mod challenge_sheets;
 mod chipflow;
@@ -33,8 +35,12 @@ mod history;
 mod home;
 mod home_sheets;
 mod look;
+#[cfg(test)]
+mod modal_tests;
 mod palette;
 mod panel;
+#[cfg(test)]
+mod preedit_tests;
 mod reliability;
 mod ring;
 mod settings;
@@ -296,6 +302,58 @@ fn connect_editor_sheets(ctx: &Rc<Ctx>, ui: &MainWindow) {
     feedback::connect(ctx, ui);
 }
 
+/// The model to hand to a property: `current` itself with `items` put in it row by row when it
+/// is one of ours, so the items on screen stay the same objects and a screen reader keeps its
+/// focus on them. A property that is given the model it already has does nothing.
+pub(crate) fn refill<T: Clone + PartialEq + 'static>(
+    current: slint::ModelRc<T>,
+    items: Vec<T>,
+) -> slint::ModelRc<T> {
+    use slint::Model;
+    let Some(model) = current.as_any().downcast_ref::<slint::VecModel<T>>() else {
+        return slint::ModelRc::from(Rc::new(slint::VecModel::from(items)));
+    };
+    while model.row_count() > items.len() {
+        model.remove(model.row_count() - 1);
+    }
+    for (row, item) in items.into_iter().enumerate() {
+        if row >= model.row_count() {
+            model.push(item);
+        } else if model.row_data(row).as_ref() != Some(&item) {
+            model.set_row_data(row, item);
+        }
+    }
+    current
+}
+
+/// The shared state for a window.
+fn new_ctx(ui: &MainWindow, settings: AppSettings, alarms: Vec<AlarmData>) -> Rc<Ctx> {
+    Rc::new(Ctx {
+        ui: ui.as_weak(),
+        tr: RefCell::new(i18n::load_translations(settings.locale)),
+        settings: RefCell::new(settings),
+        alarms: RefCell::new(alarms),
+        system_dark: Cell::new(mobile_sentinel::display::system_dark()),
+        toast_undo: RefCell::new(None),
+        toast_timer: slint::Timer::default(),
+        timers: RefCell::new(Vec::new()),
+        editor: RefCell::new(None),
+        editor_trail: RefCell::new(Vec::new()),
+        home_sheet: RefCell::new(home_sheets::SheetState::default()),
+        panel: RefCell::new(panel::PanelState::default()),
+        history: history::HistoryState::default(),
+        preview_timer: slint::Timer::default(),
+        ring: RefCell::new(None),
+        run: RefCell::new(None),
+        firing_watch: RefCell::new(crate::firing_state::FiringWatch::default()),
+        ticks: Cell::new(0),
+        problem: Cell::new(None),
+        reliability: RefCell::new(reliability::State::default()),
+        theme: RefCell::new(theme::State::default()),
+        feedback: RefCell::new(feedback::State::default()),
+    })
+}
+
 pub fn run() -> Result<(), slint::PlatformError> {
     // First, so the alarm list below already reflects one-time alarms it switched off.
     crate::platform::init_platform();
@@ -322,30 +380,7 @@ pub fn run() -> Result<(), slint::PlatformError> {
     crate::ring_photos::prune(&alarms, settings.prefs.alarm_defaults.as_ref());
 
     let ui = MainWindow::new()?;
-    let ctx = Rc::new(Ctx {
-        ui: ui.as_weak(),
-        tr: RefCell::new(i18n::load_translations(settings.locale)),
-        settings: RefCell::new(settings),
-        alarms: RefCell::new(alarms),
-        system_dark: Cell::new(mobile_sentinel::display::system_dark()),
-        toast_undo: RefCell::new(None),
-        toast_timer: slint::Timer::default(),
-        timers: RefCell::new(Vec::new()),
-        editor: RefCell::new(None),
-        editor_trail: RefCell::new(Vec::new()),
-        home_sheet: RefCell::new(home_sheets::SheetState::default()),
-        panel: RefCell::new(panel::PanelState::default()),
-        history: history::HistoryState::default(),
-        preview_timer: slint::Timer::default(),
-        ring: RefCell::new(None),
-        run: RefCell::new(None),
-        firing_watch: RefCell::new(crate::firing_state::FiringWatch::default()),
-        ticks: Cell::new(0),
-        problem: Cell::new(None),
-        reliability: RefCell::new(reliability::State::default()),
-        theme: RefCell::new(theme::State::default()),
-        feedback: RefCell::new(feedback::State::default()),
-    });
+    let ctx = new_ctx(&ui, settings, alarms);
     CTX.with(|slot| *slot.borrow_mut() = Rc::downgrade(&ctx));
 
     {

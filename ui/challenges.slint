@@ -256,7 +256,7 @@ component TypingBody inherits VerticalLayout {
             }
             init => { self.focus(); }
         }
-        if root.empty: Text {
+        if root.empty && input.preedit-text == "": Text {
             x: 12px;
             y: 12px;
             text: Tr.t("challenge.typing.placeholder");

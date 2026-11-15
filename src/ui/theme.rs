@@ -6,7 +6,6 @@ use std::rc::Rc;
 use slint::ComponentHandle;
 
 use super::colour::{color, Wheel};
-use super::editor::model;
 use super::{Ctx, DayCell, Hue, SwatchCell, ThemeTile, Thm, SCREEN_THEME};
 use crate::i18n::t;
 use crate::models::theme::{BACKGROUND_PRESETS, CARD_PRESETS, TEXT_PRESETS};
@@ -152,7 +151,8 @@ pub fn sync(ctx: &Ctx) {
     let palette = settings.palette(dark);
     let thm = ui.global::<Thm>();
 
-    thm.set_tiles(model(
+    thm.set_tiles(super::refill(
+        thm.get_tiles(),
         ThemeMode::PRESETS
             .iter()
             .map(|mode| {
@@ -183,21 +183,25 @@ pub fn sync(ctx: &Ctx) {
     thm.set_own_ink(color(palette.text));
     thm.set_card_auto(chosen_colour(&settings, Role::Card, dark).is_none());
     thm.set_ink_auto(chosen_colour(&settings, Role::Text, dark).is_none());
-    thm.set_accents(model(
+    thm.set_accents(super::refill(
+        thm.get_accents(),
         Accent::PRESETS
             .iter()
             .map(|preset| SwatchCell {
                 colour: color(shade(*preset, palette.light)),
+                name: t(&tr, preset.name_key()).into(),
                 selected: settings.prefs.accent == *preset,
             })
             .collect(),
     ));
     thm.set_custom_accent(settings.prefs.accent == Accent::Custom);
     thm.set_custom_accent_colour(color(palette.accent));
-    thm.set_days(model(
+    thm.set_days(super::refill(
+        thm.get_days(),
         (0..7)
             .map(|day| DayCell {
                 letter: crate::text::day_letter(&tr, day).into(),
+                name: crate::text::day_full(&tr, day).into(),
                 on: day < 5,
             })
             .collect(),
@@ -241,6 +245,7 @@ fn sync_sheet(ctx: &Ctx, reset_field: bool) {
             .iter()
             .map(|preset| SwatchCell {
                 colour: color(shade(*preset, light)),
+                name: t(&tr, preset.name_key()).into(),
                 selected: settings.prefs.accent == *preset,
             })
             .collect(),
@@ -260,7 +265,7 @@ fn sync_sheet(ctx: &Ctx, reset_field: bool) {
         )
         .into(),
     );
-    thm.set_sheet_swatches(model(swatches));
+    thm.set_sheet_swatches(super::refill(thm.get_sheet_swatches(), swatches));
     thm.set_adjusted(chosen.is_some_and(|colour| colour != shown));
     thm.set_sheet_open(true);
     let hue = ui.global::<Hue>();
@@ -275,6 +280,7 @@ fn presets(list: &[Rgb], chosen: Option<Rgb>) -> Vec<SwatchCell> {
     list.iter()
         .map(|colour| SwatchCell {
             colour: color(*colour),
+            name: colour.to_css().into(),
             selected: chosen == Some(*colour),
         })
         .collect()

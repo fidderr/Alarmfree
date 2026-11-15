@@ -79,7 +79,8 @@ pub fn refresh(ctx: &Ctx) {
         && crate::history_persistence::query_history(&HistoryFilter::LastDays(EVER_DAYS))
             .is_empty();
 
-    ui.set_h_periods(model(
+    ui.set_h_periods(super::refill(
+        ui.get_h_periods(),
         PERIODS
             .iter()
             .map(|key| SharedString::from(t(&tr, key)))
@@ -99,7 +100,8 @@ pub fn refresh(ctx: &Ctx) {
     ui.set_h_has_bars(bars.is_some());
     let bars = bars.unwrap_or_default();
     let longest = bars.iter().map(|bar| bar.seconds).max().unwrap_or(0).max(1);
-    ui.set_h_bars(model(
+    ui.set_h_bars(super::refill(
+        ui.get_h_bars(),
         bars.into_iter()
             .map(|bar| BarCell {
                 height: view::bar_height(bar.seconds, longest) as i32,
@@ -108,7 +110,8 @@ pub fn refresh(ctx: &Ctx) {
             })
             .collect(),
     ));
-    ui.set_h_stats(model(
+    ui.set_h_stats(super::refill(
+        ui.get_h_stats(),
         view::stat_rows(&tr, &metrics)
             .into_iter()
             .map(|(name, value)| StatLine {
@@ -117,7 +120,8 @@ pub fn refresh(ctx: &Ctx) {
             })
             .collect(),
     ));
-    ui.set_h_events(model(
+    ui.set_h_events(super::refill(
+        ui.get_h_events(),
         events
             .iter()
             .map(|event| {
@@ -195,6 +199,7 @@ pub fn open_delete(ctx: &Ctx) {
                 ),
             ],
             chip_selected: -1,
+            done: Some((t(&tr, "action.cancel"), Act::Close)),
             ..Panel::default()
         },
     );
