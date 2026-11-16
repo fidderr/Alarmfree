@@ -2630,7 +2630,8 @@ s55() {
     # still reporting back is ignored (it is still scanning for that long). A person taps again.
     # The challenge screen goes back to the ring after its idle time (8 s here): on a busy emulator that has happened
     # by now, and a person would press Turn off and Scan again.
-    again() { is_there "Turn off" && tap "Turn off" 0 0.3; on_screen SCAN 8 && tap SCAN 0 0.3; }
+    # (The ring screen's Turn off is listed behind the challenge screen too: it is pressed only without a Scan on screen.)
+    again() { is_there SCAN || { is_there "Turn off" && tap "Turn off" 0 0.3; }; on_screen SCAN 8 && tap SCAN 0 0.3; }
     wait_for 3 scanner_on_top || { sleep 1; again; }
     wait_for 8 scanner_on_top || {
         problems="$problems; the camera does not open after Home"
