@@ -2339,6 +2339,14 @@ s53() {
     note "s53: The history over your own number of days: only the one wit @$SECONDS"
     go_tab History
     wait_for 5 on_screen_no 2
+    # The period chips scroll sideways; the last one is past the edge of a narrow window.
+    local chip_y
+    chip_y=$(where "This week" | cut -d' ' -f2)
+    for _ in 1 2 3; do
+        is_there "Your own days" && break
+        dev input swipe 900 "$chip_y" 150 "$chip_y" 400
+        sleep 0.6
+    done
     tap "Your own days" 0 0.5
     set_field 0 7
     press h-custom-accepted "" 0.3
