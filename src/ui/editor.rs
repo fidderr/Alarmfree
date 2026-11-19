@@ -10,18 +10,39 @@ use super::datepicker::{DateView, Move};
 use super::editor_sound::stop_preview;
 use super::{Ctx, DayCell, Ed, EditorSheet, SCREEN_SETTINGS};
 use crate::i18n::{t, Translations};
-use crate::models::{AlarmData, ChallengeSetup};
+use crate::models::{AlarmData, ChallengeSetup, Reminder};
 use crate::{alarm_ops, schedule};
 
 pub const FADE_SECONDS: [u16; 6] = [0, 15, 30, 60, 120, 300];
 pub const SOUND_DELAY_SECONDS: [u16; 4] = [0, 15, 30, 60];
 pub const LIMIT_MINUTES: [u32; 4] = [30, 60, 90, 120];
 pub const CHECK_MINUTES: [u8; 4] = [0, 3, 5, 10];
-pub const NOTICE_MINUTES: [u8; 5] = [0, 5, 10, 30, 60];
 
 /// Translation keys of the vibration patterns, in the order of `platform::VIBRATION_PATTERNS`.
 pub const VIBRATION_KEYS: [&str; 3] =
     ["vibration.pulse", "vibration.steady", "vibration.heartbeat"];
+
+/// "15 min" or "8 h": how long before the ring a reminder comes.
+pub fn reminder_time_label(tr: &Translations, minutes: u16) -> String {
+    if minutes < 60 {
+        t(tr, "text.minutes").replace("{minutes}", &minutes.to_string())
+    } else {
+        t(tr, "text.hours").replace("{hours}", &(minutes / 60).to_string())
+    }
+}
+
+/// What the row of the reminder says: off, or when, and with sound when it makes one.
+pub fn reminder_summary(tr: &Translations, reminder: &Reminder) -> String {
+    if reminder.before_ms().is_none() {
+        return t(tr, "config.fade_off");
+    }
+    let key = if reminder.sound {
+        "config.reminder_before_sound"
+    } else {
+        "config.reminder_before"
+    };
+    t(tr, key).replace("{time}", &reminder_time_label(tr, reminder.minutes))
+}
 
 pub fn seconds_label(tr: &Translations, secs: u16) -> String {
     match secs {
@@ -61,6 +82,8 @@ pub struct EditorState {
     /// Bumped to make a field or the wheels start over from the draft.
     pub(super) time_rev: i32,
     pub(super) label_rev: i32,
+    /// Changes when the reminder text is set from here, so its field starts over.
+    pub(super) reminder_rev: i32,
     /// The colour sheet of the ring look.
     pub(super) wheel: super::colour::Wheel,
     pub(super) typed_colour: Option<String>,
@@ -125,6 +148,7 @@ fn start(ctx: &Rc<Ctx>, id: &str) {
         preview_token: 0,
         time_rev: 0,
         label_rev: 0,
+        reminder_rev: 0,
         wheel: super::colour::Wheel::of(crate::models::Rgb::new(0, 0, 0)),
         typed_colour: None,
         photo: None,
@@ -148,6 +172,7 @@ fn build(ctx: &Ctx, ed: &EditorState) -> AlarmData {
     alarm.challenges = ed.setups.iter().map(ChallengeSetup::to_stored).collect();
     alarm.label = crate::sanitize::sanitize_label(&alarm.label);
     alarm.note = crate::sanitize::sanitize_label(&alarm.note);
+    alarm.reminder.text = crate::sanitize::sanitize_reminder_text(&alarm.reminder.text);
     if ed.one_time {
         alarm.days = [false; 7];
         alarm.date = Some(ed.date_value.clone());
@@ -385,14 +410,7 @@ pub fn sync(ctx: &Ctx) {
         }
         .into(),
     );
-    rows.set_notice_summary(
-        if !current.reminder.on {
-            t(&tr, "config.fade_off")
-        } else {
-            t(&tr, "text.minutes").replace("{minutes}", &current.reminder.minutes.to_string())
-        }
-        .into(),
-    );
+    rows.set_notice_summary(reminder_summary(&tr, &current.reminder).into());
     rows.set_bright(current.max_brightness);
 
     // The sheets.
@@ -533,9 +551,10 @@ pub fn sheet_opened(ctx: &Rc<Ctx>, sheet: EditorSheet) {
             }
             sync(ctx);
         }
-        EditorSheet::Limit | EditorSheet::WakeCheck | EditorSheet::Notice => {
+        EditorSheet::Limit | EditorSheet::WakeCheck => {
             super::editor_sound::sync_options(ctx, sheet)
         }
+        EditorSheet::Reminder => super::editor_sound::sync_reminder(ctx),
         EditorSheet::RingLook | EditorSheet::RingColour => {
             super::editor_look::sheet_opened(ctx, sheet)
         }

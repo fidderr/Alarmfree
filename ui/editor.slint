@@ -3,7 +3,7 @@ import { Icon, IconName, TabularText } from "components.slint";
 import { ScreenHeader, Row, SwitchRow, RowList, Separator, PrimaryButton, ChoiceChips, Sheet } from "widgets.slint";
 import { DayCell } from "home.slint";
 import { Cfg, ChallengesSheet, AddChallengeSheet, ChallengeDetailSheet } from "challenge_sheets.slint";
-import { Ed, TimeSheet, DateSheet, LabelSheet, SoundSheet, VibrationSheet, SnoozeSheet, OptionsSheet, RingLookSheet, RingColourSheet } from "editor_sheets.slint";
+import { Ed, TimeSheet, DateSheet, LabelSheet, SoundSheet, VibrationSheet, SnoozeSheet, OptionsSheet, ReminderSheet, RingLookSheet, RingColourSheet } from "editor_sheets.slint";
 
 // The step of the time: a pill, 56 by 36 dp.
 component TimeShift inherits Rectangle {
@@ -32,7 +32,7 @@ component DangerItem inherits Rectangle {
 }
 
 // Which panel is open over the editor.
-export enum EditorSheet { none, time, date, label, sound, vibration, snooze, delete, discard, challenges, add-challenge, detail, limit, wake-check, notice, ring-look, ring-colour }
+export enum EditorSheet { none, time, date, label, sound, vibration, snooze, delete, discard, challenges, add-challenge, detail, limit, wake-check, reminder, ring-look, ring-colour }
 
 // Making and changing an alarm: the time and the days are right there; everything else is one
 // summary row that opens a sheet.
@@ -240,7 +240,7 @@ export component EditorScreen inherits Rectangle {
                         Separator { }
                         Row { title: Tr.t("config.wake_check"); value: Ed.check-summary; clicked => { root.open(EditorSheet.wake-check); } }
                         Separator { }
-                        Row { title: Tr.t("config.notice"); value: Ed.notice-summary; clicked => { root.open(EditorSheet.notice); } }
+                        Row { title: Tr.t("config.notice"); value: Ed.notice-summary; clicked => { root.open(EditorSheet.reminder); } }
                         Separator { }
                         SwitchRow { title: Tr.t("config.max_brightness"); on: Ed.bright; toggled(on) => { Ed.bright-toggled(on); } }
                     }
@@ -276,11 +276,7 @@ export component EditorScreen inherits Rectangle {
         help: Tr.t("config.wake_check_note");
         done => { root.close-sheet(); }
     }
-    if root.sheet == EditorSheet.notice: OptionsSheet {
-        title: Tr.t("config.notice");
-        help: Tr.t("config.notice_note");
-        done => { root.close-sheet(); }
-    }
+    if root.sheet == EditorSheet.reminder: ReminderSheet { done => { root.close-sheet(); } }
     if root.sheet == EditorSheet.ring-look: RingLookSheet { done => { root.close-sheet(); } }
     if root.sheet == EditorSheet.ring-colour: RingColourSheet { back => { root.open(EditorSheet.ring-look); } }
     if root.sheet == EditorSheet.delete: Sheet {

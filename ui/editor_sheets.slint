@@ -84,7 +84,19 @@ export global Ed {
     callback vib-picked(int);
     callback vib-preview();
     callback delay-picked(int);
-    // The sheets with one row of choices: ring limit, wake-up check, notice.
+    // The reminder: Off and the times before the ring, the text, and silent or with sound.
+    in property <[string]> rem-labels;
+    in property <int> rem-selected: -1;
+    in property <bool> rem-on;
+    in property <string> rem-text;
+    // Changes when the text is set from Rust (a cut-off), so the field starts over.
+    in property <int> rem-rev;
+    in property <[string]> rem-sound-labels;
+    in property <int> rem-sound-selected: -1;
+    callback rem-picked(int);
+    callback rem-text-edited(string);
+    callback rem-sound-picked(int);
+    // The sheets with one row of choices: ring limit, wake-up check.
     in property <[string]> opt-labels;
     in property <int> opt-selected: -1;
     callback opt-picked(int);
@@ -376,7 +388,7 @@ export component SnoozeSheet inherits Rectangle {
     }
 }
 
-// One row of choices: the ring limit, the wake-up check, the notice before.
+// One row of choices: the ring limit, the wake-up check.
 export component OptionsSheet inherits Rectangle {
     in property <string> title;
     in property <string> help;
@@ -388,6 +400,40 @@ export component OptionsSheet inherits Rectangle {
         help: root.help;
         close => { root.done(); }
         ChoiceChips { labels: Ed.opt-labels; selected: Ed.opt-selected; picked(i) => { Ed.opt-picked(i); } }
+    }
+}
+
+// The reminder before the ring: when, what it says, and whether it makes a sound.
+export component ReminderSheet inherits Rectangle {
+    callback done();
+    Sheet {
+        title: Tr.t("config.notice");
+        done-text: Tr.t("action.done");
+        finish => { root.done(); }
+        help: Tr.t("config.notice_note");
+        close => { root.done(); }
+        FieldLabel {
+            first: true;
+            text: Tr.t("config.reminder_when");
+            ChoiceChips { labels: Ed.rem-labels; selected: Ed.rem-selected; picked(i) => { Ed.rem-picked(i); } }
+        }
+        if Ed.rem-on: VerticalLayout {
+            for r in [Ed.rem-rev]: FieldLabel {
+                names-field: true;
+                text: Tr.t("config.reminder_text");
+                TextField {
+                    text: Ed.rem-text;
+                    label: Tr.t("config.reminder_text");
+                    placeholder: Tr.t("config.reminder_placeholder");
+                    edited(s) => { Ed.rem-text-edited(s); }
+                    accepted => { root.done(); }
+                }
+            }
+            FieldLabel {
+                text: Tr.t("config.reminder_sound");
+                ChoiceChips { labels: Ed.rem-sound-labels; selected: Ed.rem-sound-selected; picked(i) => { Ed.rem-sound-picked(i); } }
+            }
+        }
     }
 }
 

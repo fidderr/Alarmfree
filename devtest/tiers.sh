@@ -8,7 +8,7 @@
 #
 # Every scenario in QUICK is also in FULL (FULL is matrix.sh's own list).
 
-QUICK="s01 s03 s04 s05 s06 s07 s10 s11 s14 s16 s16b s25 s26x2 s28 s33 s42"
+QUICK="s01 s03 s04 s05 s06 s07 s10 s11 s14 s16 s16b s25 s26x2 s28 s33 s42 s66"
 
 # FULL runs what does not depend on Android itself on the oldest of a run only, and what depends on the size on the
 # newest only: from Android 16 on an app has no say in how it turns on a big screen. The restarts with a PIN

@@ -1,5 +1,5 @@
 //! The editor's sheets for how it sounds and feels: the sound, the vibration, and the small
-//! ones with one row of choices (ring limit, wake-up check, notice). Also the label sheet's
+//! ones with one row of choices (ring limit, wake-up check), and the reminder's. Also the label sheet's
 //! chips of labels used before, and trying a sound or a vibration.
 
 use std::rc::Rc;
@@ -8,12 +8,12 @@ use std::time::Duration;
 use slint::{ComponentHandle, SharedString};
 
 use super::editor::{
-    edit, seconds_label, EditorState, CHECK_MINUTES, FADE_SECONDS, LIMIT_MINUTES, NOTICE_MINUTES,
-    SOUND_DELAY_SECONDS, VIBRATION_KEYS,
+    edit, reminder_time_label, seconds_label, EditorState, CHECK_MINUTES, FADE_SECONDS,
+    LIMIT_MINUTES, SOUND_DELAY_SECONDS, VIBRATION_KEYS,
 };
 use super::{Ctx, Ed, EditorSheet, MainWindow, SoundRow, UsedChip};
 use crate::i18n::{t, Translations};
-use crate::models::{AlarmData, AppSettings};
+use crate::models::{AlarmData, AppSettings, REMINDER_MINUTES, REMINDER_TEXT_MAX};
 use crate::{alarm_ops, custom_sounds};
 
 /// How long trying a sound or a vibration lasts.
@@ -203,7 +203,7 @@ pub(super) fn sync(
     ));
 }
 
-/// The choices of the limit, wake-up check and notice sheets.
+/// The choices of the limit and wake-up check sheets.
 pub(super) fn sync_options(ctx: &Ctx, sheet: EditorSheet) {
     let Some(ui) = ctx.ui.upgrade() else {
         return;
@@ -241,18 +241,7 @@ pub(super) fn sync_options(ctx: &Ctx, sheet: EditorSheet) {
                 .position(|m| *m == ed.draft.wake_check_minutes)
                 .map_or(-1, |i| i as i32),
         ),
-        _ => (
-            NOTICE_MINUTES
-                .iter()
-                .map(|m| off_or(u32::from(*m)))
-                .collect(),
-            NOTICE_MINUTES
-                .iter()
-                .position(|m| {
-                    u16::from(*m) == ed.draft.reminder.minutes * u16::from(ed.draft.reminder.on)
-                })
-                .map_or(-1, |i| i as i32),
-        ),
+        _ => return,
     };
     let e = ui.global::<Ed>();
     e.set_opt_labels(super::refill(
@@ -276,15 +265,91 @@ pub fn opt_picked(ctx: &Rc<Ctx>, index: usize) {
                 ed.draft.wake_check_minutes = *m;
             }
         }
-        EditorSheet::Notice => {
-            if let Some(m) = NOTICE_MINUTES.get(index) {
-                ed.draft.reminder.on = *m > 0;
-                ed.draft.reminder.minutes = u16::from(*m);
-            }
-        }
         _ => {}
     });
     sync_options(ctx, sheet);
+}
+
+// ---- The reminder ------------------------------------------------------------------------
+
+/// Fill the reminder sheet from the alarm being edited.
+pub(super) fn sync_reminder(ctx: &Ctx) {
+    let Some(ui) = ctx.ui.upgrade() else {
+        return;
+    };
+    let editor = ctx.editor.borrow();
+    let Some(ed) = editor.as_ref() else {
+        return;
+    };
+    let tr = ctx.tr.borrow();
+    let reminder = &ed.draft.reminder;
+    let labels = std::iter::once(t(&tr, "config.fade_off"))
+        .chain(
+            REMINDER_MINUTES
+                .iter()
+                .map(|m| reminder_time_label(&tr, *m)),
+        )
+        .map(SharedString::from)
+        .collect::<Vec<_>>();
+    let selected = if reminder.on {
+        REMINDER_MINUTES
+            .iter()
+            .position(|m| *m == reminder.minutes)
+            .map_or(-1, |i| i as i32 + 1)
+    } else {
+        0
+    };
+    let e = ui.global::<Ed>();
+    e.set_rem_labels(super::refill(e.get_rem_labels(), labels));
+    e.set_rem_selected(selected);
+    e.set_rem_on(reminder.on);
+    e.set_rem_text(reminder.text.as_str().into());
+    e.set_rem_rev(ed.reminder_rev);
+    e.set_rem_sound_labels(super::refill(
+        e.get_rem_sound_labels(),
+        [
+            t(&tr, "config.reminder_silent"),
+            t(&tr, "config.reminder_tone"),
+        ]
+        .into_iter()
+        .map(SharedString::from)
+        .collect(),
+    ));
+    e.set_rem_sound_selected(i32::from(reminder.sound));
+}
+
+/// A time (or Off) was picked in the reminder sheet. Off keeps the text and the sound for later.
+pub fn reminder_picked(ctx: &Rc<Ctx>, index: usize) {
+    edit(ctx, |ed| match index.checked_sub(1) {
+        None => ed.draft.reminder.on = false,
+        Some(step) => {
+            if let Some(minutes) = REMINDER_MINUTES.get(step) {
+                ed.draft.reminder.on = true;
+                ed.draft.reminder.minutes = *minutes;
+            }
+        }
+    });
+    sync_reminder(ctx);
+}
+
+pub fn reminder_sound_picked(ctx: &Rc<Ctx>, index: usize) {
+    edit(ctx, |ed| ed.draft.reminder.sound = index == 1);
+    sync_reminder(ctx);
+}
+
+/// The text of the reminder was typed. No `sync` of the text: it would replace what is being
+/// typed. A text that is too long (pasted) is cut and the field starts over.
+pub fn reminder_text_edited(ctx: &Rc<Ctx>, text: &str) {
+    let too_long = text.chars().count() > REMINDER_TEXT_MAX;
+    if let Some(ed) = ctx.editor.borrow_mut().as_mut() {
+        ed.draft.reminder.text = text.chars().take(REMINDER_TEXT_MAX).collect();
+        if too_long {
+            ed.reminder_rev += 1;
+        }
+    }
+    if too_long {
+        sync_reminder(ctx);
+    }
 }
 
 // ---- Trying a sound or a vibration -----------------------------------------------------

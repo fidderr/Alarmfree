@@ -2,15 +2,26 @@
 //! Prevents control character injection, path traversal, and excessive lengths.
 //! Called at input boundaries before storage.
 
-/// Sanitize an alarm label: strip control characters, truncate to 100 chars.
-pub fn sanitize_label(input: &str) -> String {
+/// Strip control characters, truncate to `max` chars, trim.
+fn sanitize_text(input: &str, max: usize) -> String {
     input
         .chars()
         .filter(|c| !c.is_control() || *c == '\n')
-        .take(100)
+        .take(max)
         .collect::<String>()
         .trim()
         .to_string()
+}
+
+/// Sanitize an alarm label: strip control characters, truncate to 100 chars.
+pub fn sanitize_label(input: &str) -> String {
+    sanitize_text(input, 100)
+}
+
+/// Sanitize the text of a reminder: the same as a label, up to
+/// [`crate::models::REMINDER_TEXT_MAX`] chars.
+pub fn sanitize_reminder_text(input: &str) -> String {
+    sanitize_text(input, crate::models::REMINDER_TEXT_MAX)
 }
 
 /// Sanitize a filename: reject path traversal, null bytes, and excessive length.
@@ -60,6 +71,14 @@ mod tests {
     fn label_preserves_newline() {
         let input = "Line 1\nLine 2";
         assert_eq!(sanitize_label(input), "Line 1\nLine 2");
+    }
+
+    #[test]
+    fn a_reminder_text_is_cleaned_like_a_label_and_cut_at_120() {
+        assert_eq!(sanitize_reminder_text("  go\x00 to bed\x07 "), "go to bed");
+        let long = "ab".repeat(100);
+        assert_eq!(sanitize_reminder_text(&long).chars().count(), 120);
+        assert_eq!(sanitize_label(&long).chars().count(), 100);
     }
 
     #[test]

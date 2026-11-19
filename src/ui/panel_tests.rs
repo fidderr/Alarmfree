@@ -772,7 +772,7 @@ fn editor_walk(t: &Tour) {
         "Alarm screen",
         "Ring limit",
         "Are you up?",
-        "Notice before",
+        "Reminder",
     ] {
         t.row_panel(&format!("editor_{name}"), name, 0);
     }
@@ -1136,7 +1136,7 @@ const EXPECTED: [&str; 22] = [
     "editor_Alarm screen",
     "editor_Ring limit",
     "editor_Are you up?",
-    "editor_Notice before",
+    "editor_Reminder",
     "editor_Challenges",
     "history_delete",
     "settings_Language",
