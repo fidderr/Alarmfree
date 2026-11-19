@@ -18,13 +18,20 @@ APK="${APK:-build/alarmfree-slint-debug.apk}"
 
 # What the window shows, from its snapshot (lib.sh: ui, sn, on_screen, tap, ...). The screens are
 # 0 alarms, 1 editor, 2 history, 3 settings, 4 reliability, 5 theme.
-on_home() { wait_for "${1:-6}" on_screen_no 0; }
+on_home() { await_ui "${1:-6}" "screen=0"; }
 has_rows() { ui snapshot | grep -q '"rows":\[{'; }
 on_card() { wait_for "${1:-6}" has_rows; }
 # What the first card of the list says it does next, and its time.
 row_when() { ui snapshot | grep -oE '"when":"[^"]*"' | head -1 | sed -E 's/^"when":"//; s/"$//'; }
 row_time() { ui snapshot | grep -oE '"time":"[^"]*"' | head -1 | sed -E 's/^"time":"//; s/"$//'; }
 row_labels() { ui snapshot | grep -oE '"label":"[^"]*","on"' | sed -E 's/^"label":"//; s/","on"$//' | tr '\n' ' ' | sed 's/ $//'; }
+
+# A scenario that only looks at the window and what it saves now runs headless, in `cargo test`
+# (src/ui/flow_tests.rs): it stays a name here so that lists and results still show it.
+moved_to_cargo() { # scenario name, test name
+    scenario "$1"
+    skip "moved to cargo test: ui::flow_tests::$2 (docs/test-moves.md)"
+}
 
 # ---- Rings with nothing running ----
 
@@ -944,7 +951,7 @@ s28() {
     wait_for 4 sound_off
     solve_math
     solved() { state_is a scheduled && [ "$(outcomes solved)" = 1 ]; }
-    if wait_for 8 solved && wait_for 8 on_screen_no 2 && ! sound_on; then
+    if wait_for 8 solved && await_ui 8 "screen=2" && ! sound_on; then
         screenshot s28_after
         pass "$SUM = $ANSWER turned it off, recorded, on history"
     else
@@ -994,7 +1001,7 @@ preview_up() { [ "$(sn ed_preview)" = true ]; }
 preview_down() { [ "$(sn ed_preview)" = false ]; }
 editor_sheet_open() { [ "$(sn ed_sheet)" != None ] && [ -n "$(sn ed_sheet)" ]; }
 editor_sheet_closed() { [ "$(sn ed_sheet)" = None ]; }
-on_editor() { wait_for "${1:-6}" on_screen_no 1; }
+on_editor() { await_ui "${1:-6}" "screen=1"; }
 
 # Back from the editor stays in the app.
 s25() {
@@ -1004,58 +1011,23 @@ s25() {
     seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
     arm a
     on_card 10
-    local p0 problems="" time
+    local p0 problems=""
     p0=$(main_pid)
-    time=$(row_time)
-    # A sheet closes first, and the screen stays.
-    tap "More actions" 0 0.5
-    wait_for 3 sheet_open || problems="$problems; no menu"
+    # Sheets, editor, question and the main screens are checked in cargo test
+    # (ui::flow_tests::s25_back_navigation). What needs the phone: Back on Home sends the app to
+    # the background, without ending anything.
     press_back
-    wait_for 3 sheet_closed || problems="$problems; Back left the menu open"
-    on_home 3 || problems="$problems; Back from the menu left Home"
-    # Then the screen.
-    tap_has "$time" L 0.5
-    on_editor || problems="$problems; no editor"
-    tap_has Label 0 0.5
-    wait_for 3 editor_sheet_open || problems="$problems; no editor sheet"
-    press_back
-    wait_for 3 editor_sheet_closed || problems="$problems; Back left the editor sheet open"
-    on_editor 2 || problems="$problems; Back from the sheet left the editor"
-    press_back
-    on_home 4 || problems="$problems; Back from the editor did not reach Home"
-    # With changes it asks first.
-    tap_has "$time" L 0.5
-    on_editor
-    tap "+1" 0 0.4
-    press_back
-    wait_for 3 editor_sheet_open || problems="$problems; no question about discarding"
-    is_there "Keep editing" && is_there Discard || problems="$problems; the question has no buttons: $(texts_of)"
-    press_back
-    wait_for 3 editor_sheet_closed || problems="$problems; Back from the question stayed"
-    on_editor 2 || problems="$problems; Back from the question left the editor"
-    press_back
-    wait_for 3 editor_sheet_open
-    tap Discard 0 0.5
-    on_home 4 || problems="$problems; discarding did not reach Home"
-    # The main screens do not stack up.
-    go_tab History
-    go_tab Settings
-    wait_for 3 on_screen_no 3 || problems="$problems; no settings"
-    press_back
-    on_home 4 || problems="$problems; Back from settings did not reach Home"
-    # And Home goes to the background, without ending anything.
-    press_back
-    sleep 0.5
-    top_is_app && problems="$problems; Back on Home stayed on top"
+    wait_for 5 not_on_top || problems="$problems; Back on Home stayed on top"
     [ "$(main_pid)" = "$p0" ] || problems="$problems; main $p0 to $(main_pid)"
     start_app
     on_home 20 || problems="$problems; not back on Home"
     if [ -z "$problems" ]; then
-        pass "sheet, screen, Home, background, same process"
+        pass "Back on Home goes to the background, same process"
     else
         fail "${problems#; }"
     fi
 }
+not_on_top() { ! top_is_app; }
 
 # A nap in two taps, and Undo.
 s30() {
@@ -1129,9 +1101,9 @@ open_new_editor() {
 # The bottom bar and the reliability screen.
 open_reliability() {
     go_tab Settings
-    wait_for 5 on_screen_no 3 || return 1
+    await_ui 5 "screen=3" || return 1
     tap Reliability 0 0.3
-    wait_for 5 on_screen_no 4
+    await_ui 5 "screen=4"
 }
 
 # The test alarm can be called off, rings for real, leaves nothing behind, and its record can be saved.
@@ -1226,11 +1198,11 @@ s34() {
         result=$(clipped)
         [ -z "$result" ] || problems="$problems $locale/home: $result;"
         press open a 0.6
-        wait_for 5 on_screen_no 1
+        await_ui 5 "screen=1"
         result=$(clipped)
         [ -z "$result" ] || problems="$problems $locale/editor: $result;"
         press back
-        wait_for 5 on_screen_no 0
+        await_ui 5 "screen=0"
         press go 1 0.5
         result=$(clipped)
         # The period chips are a row that scrolls: what sticks out has to come into the window by a swipe.
@@ -1375,7 +1347,7 @@ s37() {
     swipe_card
     tap Delete 0 0.5
     [ "$(db_count '"id":"a"')" = 0 ] || problems="$problems; not deleted"
-    wait_for 4 sheet_closed
+    await_ui 4 'home_sheet=None'
     has_rows && problems="$problems; card still there"
     tap Undo 0 0.5
     [ "$(db_count '"id":"a"')" = 1 ] || problems="$problems; delete not undone"
@@ -1401,9 +1373,9 @@ s38() {
     on_home 10
     local problems="" accent
     go_tab Settings
-    wait_for 5 on_screen_no 3
+    await_ui 5 "screen=3"
     tap_has Theme 0 0.5
-    wait_for 5 on_screen_no 5 || problems="$problems; no theme screen"
+    await_ui 5 "screen=5" || problems="$problems; no theme screen"
     screenshot s38_swatches
     # The second row of swatches sits below the window on a screen with a navigation bar.
     scroll_to "Choose your own colour" || problems="$problems; no swatches: $(texts_of)"
@@ -1493,7 +1465,7 @@ s40() {
         dev cat /sdcard/af_ui.xml | tr '>' '\n' | grep -oE ' text="[^"]+"' | sed -E 's/ text="(.*)"/\1/'
     }
     go_tab Settings
-    wait_for 5 on_screen_no 3 || { fail "no settings"; return; }
+    await_ui 5 "screen=3" || { fail "no settings"; return; }
     tap_has "Add widget" 0 0.5
     # The launcher asks the user first.
     local add x1 y1 x2 y2 problems="" minute texts
@@ -1600,47 +1572,7 @@ panel_down() { [ "$(sn panel_open)" = false ]; }
 
 # A period of the history and all of it each go only after asking again.
 s43() {
-    scenario s43_delete_history
-    fresh
-    history_row old 200
-    history_row new 1
-    start_app
-    on_home 20
-    local problems=""
-    go_tab History
-    wait_for 5 on_screen_no 2
-    # A period asks first: Back is no, and the answer takes only that period.
-    press h-delete-history "" 0.5
-    wait_for 3 panel_up || problems="$problems; no sheet"
-    tap "Older than 30 days" 0 0.5
-    is_there Delete || problems="$problems; older than 30 days went without asking"
-    press_back
-    wait_for 3 panel_down || problems="$problems; Back left the period question open"
-    [ "$(history_count)" = 2 ] || problems="$problems; Back on the period question deleted"
-    press h-delete-history "" 0.5
-    on_screen "Older than 30 days"
-    tap "Older than 30 days" 0 0.5
-    tap Delete 0 0.5
-    [ "$(history_count)" = 1 ] || problems="$problems; older than 30 days left $(history_count)"
-    [ "$(sn toast_visible)" = true ] || problems="$problems; nothing said about it"
-    press h-delete-history "" 0.5
-    on_screen Everything
-    tap Everything 0 0.5
-    [ "$(history_count)" = 1 ] || problems="$problems; everything went without asking again"
-    screenshot s43_asking
-    press_back
-    wait_for 3 panel_down || problems="$problems; Back left the question open"
-    [ "$(history_count)" = 1 ] || problems="$problems; Back deleted it"
-    press h-delete-history "" 0.5
-    on_screen Everything
-    tap Everything 0 0.4
-    tap Delete 0 0.5
-    [ "$(history_count)" = 0 ] || problems="$problems; left $(history_count) after confirming"
-    if [ -z "$problems" ]; then
-        pass "a period and everything, each after asking, and Back is no"
-    else
-        fail "${problems#; }"
-    fi
+    moved_to_cargo s43_delete_history s43_delete_history
 }
 
 # Two shake challenges in a row: the second starts its sensor after the first stopped its
@@ -1721,68 +1653,12 @@ s45() {
 
 # A 12-hour clock everywhere: the list, the editor, the wheels, and what gets saved.
 s46() {
-    scenario s46_twelve_hours
-    fresh
-    use_settings '"Dark"' '"English"' '"setup_done":true,"language_follows_phone":false,"time_format":"H12"'
-    seed a "$(alarm_json a 14 5 "$EVERY_DAY" null)"
-    arm a
-    on_card 10
-    local problems="" card big
-    card=$(row_time)
-    [ "$card" = "2:05 PM" ] || problems="$problems; card says '$card'"
-    press open a 0.8
-    on_editor
-    big=$(sn ed_time_text)
-    [ "$big" = "2:05 PM" ] || problems="$problems; editor says '$big'"
-    # The time button opens the wheels; they say the hour with its AM/PM.
-    tap_time 0.6
-    case "$(texts_of)" in
-        *2*PM*05* | *2*PM*5*) ;;
-        *) problems="$problems; wheels say '$(texts_of)'" ;;
-    esac
-    if [ -z "$problems" ]; then
-        pass "the list, the editor and the wheels say $card"
-    else
-        fail "${problems#; }"
-    fi
+    moved_to_cargo s46_twelve_hours s46_twelve_hours
 }
 
 # From an alarm's menu: new alarms start like this one, without its name.
 s47() {
-    scenario s47_use_for_new_alarms
-    fresh
-    ALARM_EXTRA=',"note":"Keep out"'
-    seed a "$(alarm_json a 7 0 "$EVERY_DAY" null lofi 0 60 2 9)"
-    ALARM_EXTRA=
-    arm a
-    on_card 10
-    local problems="" rows
-    tap "More actions" 0 0.5
-    on_screen "Use for new alarms" 4
-    tap "Use for new alarms" 0 0.5
-    [ "$(sn toast_visible)" = true ] || problems="$problems; nothing said about it"
-    open_new_editor
-    rows=$(texts_of)
-    case "$rows" in
-        *Sound*Lofi*) ;;
-        *) problems="$problems; sound not taken over: $rows" ;;
-    esac
-    case "$rows" in
-        *"9 min, 2"*) ;;
-        *) problems="$problems; snooze not taken over: $rows" ;;
-    esac
-    case "$rows" in
-        *Keep\ out* | *"Label a"*) problems="$problems; its name came along: $rows" ;;
-    esac
-    tap_has Sound 0 0.6
-    wait_for 3 editor_sheet_open
-    sheet_scroll
-    is_on "1 min" || problems="$problems; fade not taken over"
-    if [ -z "$problems" ]; then
-        pass "sound, fade and snooze taken over, its name not"
-    else
-        fail "${problems#; }"
-    fi
+    moved_to_cargo s47_use_for_new_alarms s47_use_for_new_alarms
 }
 
 # What goes through the phone's own file picker, in the build that R8 went over: a sound of
@@ -1887,7 +1763,7 @@ s48() {
     on_home 10
     # Alarms to a file: only the one alarm in it, under today's name.
     go_tab Settings
-    wait_for 5 on_screen_no 3
+    await_ui 5 "screen=3"
     tap_scrolling "Back up"
     on_screen "Save to a file" 4
     tap "Save to a file" 0 1
@@ -1900,7 +1776,7 @@ s48() {
     # The toast that says where it went sits over the Back up row.
     saved_toast_gone() { ! has_there "Saved to"; }
     wait_for 8 saved_toast_gone
-    wait_for 6 on_screen_no 3
+    await_ui 6 "screen=3"
     tap_scrolling "Back up"
     on_screen "Add alarms from a file" 4
     tap "Add alarms from a file" 0 1
@@ -1944,7 +1820,7 @@ s49() {
     press open a 0.8
     on_editor
     tap_has Label 0 0.6
-    wait_for 3 editor_sheet_open || problems="$problems; no label panel"
+    await_ui 3 'editor_sheet!=None' || problems="$problems; no label panel"
     read -r x y <<< "$(field_xy)"
     dev input tap "$x" "$y"
     made_room() {
@@ -1973,7 +1849,7 @@ s49() {
     # The challenge. It has to show the passage and the box together. (The first Back closed the
     # keyboard, the second the panel, a third asks about the change.)
     press_back
-    wait_for 4 editor_sheet_open
+    await_ui 4 'editor_sheet!=None'
     tap Discard 0 0.5
     on_home 4 || problems="$problems; not back on Home"
     tap "More actions" 0 0.5
@@ -2006,7 +1882,7 @@ done_sheet() {
     local i=0
     while [ "$i" -lt 3 ]; do
         tap_in Done L 0.3
-        wait_for 2 editor_sheet_closed && return 0
+        await_ui 2 'editor_sheet=None' && return 0
         i=$((i + 1))
     done
     return 1
@@ -2015,7 +1891,7 @@ done_sheet() {
 open_row() {
     has_there "$1" || sheet_scroll
     tap_has "$1" 0 0.4
-    wait_for 4 editor_sheet_open
+    await_ui 4 'editor_sheet!=None'
 }
 # The number of an own sound's row in the sound sheet: the bundled ones first, then the own ones by
 # name. Counted from the files, because a scrolled list shows only part of its rows.
@@ -2125,7 +2001,7 @@ s50() {
     # Off the list from here too, after asking.
     sheet_scroll_up
     tap_trash
-    wait_for 3 editor_sheet_open || problems="$problems; delete does not ask"
+    await_ui 3 'editor_sheet!=None' || problems="$problems; delete does not ask"
     tap Delete 0 0.5
     [ "$(alarm_count)" = 0 ] || problems="$problems; not deleted"
     on_home 4 || problems="$problems; delete did not go back"
@@ -2146,27 +2022,27 @@ s51() {
     on_home 10
     local problems="" row columns
     go_tab Settings
-    wait_for 5 on_screen_no 3
+    await_ui 5 "screen=3"
     pick() { # row, then the choice of what it opens
         tap_has "$1" 0 0.5 || note "no row $1 on: $(texts_of | cut -c1-300)"
-        wait_for 3 panel_up
+        await_ui 3 'panel=true'
         tap_in "$2" "${3:-}" 0.3
         # A choice closes its panel; one that does not is closed by Back.
-        wait_for 2 panel_down || press_back
-        wait_for 3 panel_down
+        await_ui 2 'panel=false' || press_back
+        await_ui 3 'panel=false'
     }
     tap_has Theme 0 0.5
-    wait_for 5 on_screen_no 5
+    await_ui 5 "screen=5"
     tap Light 0 0.4
     press_back
-    wait_for 5 on_screen_no 3
+    await_ui 5 "screen=3"
     pick 'Time format' '12 hours'
     pick 'Week starts on' Sunday
     tap_has 'Minimum volume' 0 0.5
-    wait_for 3 panel_up
+    await_ui 3 'panel=true'
     tap_in "75%" 0 0.3
     tap Done 0 0.3
-    wait_for 3 panel_down
+    await_ui 3 'panel=false'
     # The last rows sit under the bottom bar until the screen is scrolled.
     centre_row "Touch feedback"
     tap "Touch feedback" 0 0.3
@@ -2276,7 +2152,7 @@ s52() {
     [ "$(db_enabled a)" = true ] && await_state a scheduled 3 || problems="$problems; not back on: $(db_enabled a) $(state a)"
     # One row of the history.
     go_tab History
-    wait_for 5 on_screen_no 2
+    await_ui 5 "screen=2"
     local before xy
     before=$(history_count)
     # The first row of the list (its text ends with the alarm's label) opens its details.
@@ -2289,7 +2165,7 @@ print("%d %d" % (rows[0]["x"], rows[0]["y"]) if rows else "")
     [ -z "$xy" ] || dev input tap $xy
     sleep 0.5
     tap "Delete this one" 0 0.5
-    wait_for 3 panel_up || problems="$problems; deleting one row does not ask"
+    await_ui 3 'panel=true' || problems="$problems; deleting one row does not ask"
     tap Delete 0 0.5
     [ "$(history_count)" = $((before - 1)) ] || problems="$problems; history went from $before to $(history_count)"
     if [ -z "$problems" ]; then
@@ -2374,19 +2250,18 @@ s53() {
     # The history over your own number of days: only the one within them.
     note "s53: The history over your own number of days: only the one wit @$SECONDS"
     go_tab History
-    wait_for 5 on_screen_no 2
+    await_ui 5 "screen=2"
     # The period chips scroll sideways; the last one is past the edge of a narrow window.
     local chip_y
     chip_y=$(where "This week" | cut -d' ' -f2)
     for _ in 1 2 3; do
         is_there "Your own days" && break
         dev input swipe 900 "$chip_y" 150 "$chip_y" 400
-        sleep 0.6
+        after_input
     done
     tap "Your own days" 0 0.5
     set_field 0 7
-    press h-custom-accepted "" 0.3
-    sleep 0.4
+    press h-custom-accepted ""
     local rows
     rows=$(all_texts | grep -c -E ' a$')
     [ "$rows" = 1 ] || problems="$problems; $rows rows in the last 7 days: $(texts_of)"
@@ -2414,7 +2289,7 @@ s53() {
         tap_has "Fix " "$i" 0.3
         wait_for 15 away || problems="$problems; fix button $i stays in the app"
         wait_for 12 back_in_app || problems="$problems; Back from fix button $i leaves the keys with:$(focused_window)"
-        wait_for 20 on_screen_no 4 || problems="$problems; not back from fix button $i"
+        await_ui 20 "screen=4" || problems="$problems; not back from fix button $i"
         sleep 1
         i=$((i + 1))
     done
@@ -2627,8 +2502,8 @@ s55() {
     # Shorter than the camera stays up, and longer than a cold start takes: Android 12 takes the
     # task away on Home and the app comes back from nothing, which on a busy emulator is 6 s.
     shorten ui_timeout_ms 10000
-    shorten scan_camera_secs 8
-    shorten idle_secs 8
+    shorten scan_camera_secs 5
+    shorten idle_secs 5
     next_minute
     seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null air 0 0 3 1 '[["challenge.scan","{}"]]')"
     arm a
@@ -2739,33 +2614,37 @@ start_stop() { is_there 'Stop preview' && tap 'Stop preview' 0 0.3 || tap 'Play 
 s58() {
     scenario s58_trying_sound_and_vibration
     fresh
+    # A tap plays 2 s and a try 4 s here, not 5 s and 15 s: the app takes the numbers from the
+    # files (`preview_ms`, `sound_tap_ms`), and the real ones are checked by a unit test.
+    shorten sound_tap_ms 2000
+    shorten preview_ms 4000
     seed a "$(alarm_json a 7 0 "$EVERY_DAY" null)"
     arm a
     on_card 10
     local problems="" started took
-    press open a 0.8
+    press open a
     on_editor
     open_row Sound
-    tap_in Funk 0 0.6
+    tap_in Funk
     wait_for 4 sound_on || problems="$problems; a tap on a sound is silent"
     [ "$(start_stop_says)" = true ] || problems="$problems; a tap plays but does not say Stop: $(start_stop_says)"
     screenshot s58_playing
     # While it plays, another sound takes over, and the same one starts over.
-    tap_in Happy 0 0.6
+    tap_in Happy
     sound_on || problems="$problems; another sound stopped it"
     [ "$(start_stop_says)" = true ] || problems="$problems; another sound ended it"
-    tap_in Happy 0 0.6
+    tap_in Happy
     sound_on || problems="$problems; the same sound again stopped it"
     start_stop
     wait_for 4 sound_off || problems="$problems; Stop does not stop it"
     [ "$(start_stop_says)" = false ] || problems="$problems; says it runs after Stop: $(start_stop_says)"
-    # A tap plays a few seconds and ends by itself.
-    tap_in Happy 0 0.6
+    # A tap plays a moment and ends by itself.
+    tap_in Happy
     started=$SECONDS
     wait_for 4 sound_on || problems="$problems; a tap after Stop is silent"
-    wait_for 12 sound_off || problems="$problems; a tap does not end by itself"
+    wait_for 8 sound_off || problems="$problems; a tap does not end by itself"
     took=$((SECONDS - started))
-    [ "$took" -ge 3 ] && [ "$took" -le 9 ] || problems="$problems; a tap played ${took}s"
+    [ "$took" -ge 1 ] && [ "$took" -le 5 ] || problems="$problems; a tap played ${took}s"
     # Start plays it as well.
     start_stop
     wait_for 4 sound_on || problems="$problems; Start is silent"
@@ -2776,9 +2655,10 @@ s58() {
     start_stop
     wait_for 4 sound_on
     started=$SECONDS
-    wait_for 22 sound_off || problems="$problems; does not end by itself"
+    wait_for 10 sound_off || problems="$problems; does not end by itself"
     took=$((SECONDS - started))
-    [ "$took" -ge 12 ] && [ "$took" -le 19 ] || problems="$problems; lasted ${took}s"
+    [ "$took" -ge 3 ] && [ "$took" -le 8 ] || problems="$problems; lasted ${took}s"
+    await_ui 3 'ed_preview=false' || problems="$problems; still says Stop after it ended"
     [ "$(start_stop_says)" = false ] || problems="$problems; still says Stop after it ended"
     # Closing the panel ends it, by Done and by Back.
     start_stop
@@ -2789,49 +2669,48 @@ s58() {
     start_stop
     wait_for 4 sound_on
     press_back
-    wait_for 3 editor_sheet_closed
+    await_ui 3 'editor_sheet=None'
     wait_for 4 sound_off || problems="$problems; Back does not stop it"
 
     open_row Vibration
-    tap_in Heartbeat 0 0.6
+    tap_in Heartbeat
     vibrating_now || problems="$problems; a tap on a pattern does not vibrate"
     [ "$(start_stop_says)" = true ] || problems="$problems; no way to stop the vibration"
     screenshot s58_vibrating
     started=$SECONDS
-    sleep 8
+    sleep 2
     vibrating_now || problems="$problems; stopped after one beat"
-    wait_for 12 not_vibrating || problems="$problems; vibration does not end by itself"
+    wait_for 8 not_vibrating || problems="$problems; vibration does not end by itself"
     took=$((SECONDS - started))
-    [ "$took" -ge 12 ] && [ "$took" -le 19 ] || problems="$problems; vibrated ${took}s"
-    tap_in Pulse 0 0.6
+    [ "$took" -ge 3 ] && [ "$took" -le 8 ] || problems="$problems; vibrated ${took}s"
+    tap_in Pulse
     vibrating_now || problems="$problems; the next pattern does not vibrate"
     start_stop
     wait_for 3 not_vibrating || problems="$problems; Stop does not stop the vibration"
-    tap_in Steady 0 0.6
-    tap_in Off 0 0.6
+    tap_in Steady
+    tap_in Off
     wait_for 3 not_vibrating || problems="$problems; Off does not stop the vibration"
     [ "$(start_stop_says)" = none ] || problems="$problems; a button to try nothing"
-    tap_in Pulse 0 0.6
+    tap_in Pulse
     done_sheet
     wait_for 3 not_vibrating || problems="$problems; closing does not stop the vibration"
     # Turning the touch feedback off has nothing to do with this.
     press_back
-    wait_for 4 editor_sheet_open
-    tap Discard 0 0.4
+    await_ui 4 'editor_sheet!=None'
+    tap Discard
     on_home 5
     go_tab Settings
-    wait_for 5 on_screen_no 3
-    tap "Touch feedback" 0 0.4
+    tap "Touch feedback"
     go_tab Alarms
     on_card 5
-    press open a 0.8
+    press open a
     on_editor
     open_row Vibration
-    tap_in Steady 0 0.6
+    tap_in Steady
     vibrating_now || problems="$problems; touch feedback off silences the preview"
     done_sheet
     if [ -z "$problems" ]; then
-        pass "a tap plays 5 s, Start and Stop work, 15 s, closing ends it, vibration too (${took}s)"
+        pass "a tap plays, Start and Stop work, it ends by itself, closing ends it, vibration too (${took}s)"
     else
         fail "${problems#; }"
     fi
@@ -2841,26 +2720,30 @@ s58() {
 s59() {
     scenario s59_alarm_during_a_preview
     fresh
-    next_minute 45
+    # The ring comes while a try of 6 s is still playing: the clock moves to just before it.
+    shorten preview_ms 6000
+    next_minute 320
     seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null air 0 0 3 1)"
     arm a
     on_card 10
     local problems=""
-    press open a 0.8
+    press open a
     on_editor
     open_row Sound
     start_stop
     wait_for 4 sound_on || problems="$problems; no preview"
     done_sheet
     open_row Vibration
-    tap_in Pulse 0 0.3
-    if await_ring a 70 && on_screen "Turn off" 15; then
-        # Past when the preview would have stopped things.
-        sleep 16
+    tap_in Pulse
+    jump_to $((T - 3))
+    if await_ring a 40 && on_screen "Turn off" 15; then
+        # Past when the preview stops itself: that must not take the ring's sound with it.
+        await_ui 12 'ed_preview=false' || problems="$problems; the preview never ended"
+        sleep 1
         sound_on || problems="$problems; the ring went silent"
         vibrating_now || problems="$problems; the ring stopped vibrating"
         state_is a firing || problems="$problems; state $(state a)"
-        tap "Turn off" 0 0.3
+        tap "Turn off"
         wait_for 5 sound_off || problems="$problems; still ringing after turning it off"
     else
         problems="$problems; did not ring: state=$(state a)"
@@ -2964,9 +2847,9 @@ s61() {
     on_home 10
     local problems="" token_n
     go_tab Settings
-    wait_for 5 on_screen_no 3
+    await_ui 5 "screen=3"
     tap_has Theme 0 0.5
-    wait_for 5 on_screen_no 5 || problems="$problems; no theme screen"
+    await_ui 5 "screen=5" || problems="$problems; no theme screen"
     [ "$(all_texts | grep -c -E '^(Same as the phone|Dark|Light|Pure black|Midnight|Forest|Plum|Sand|Mist)$')" -ge 9 ] || problems="$problems; not all themes: $(texts_of)"
     # The second row of swatches sits below the window on a screen with a navigation bar.
     scroll_to "Choose your own colour" || problems="$problems; not all accents"
@@ -2991,16 +2874,15 @@ s61() {
     y=$((y - h / 2 + $(awk -v s="$scale" 'BEGIN { printf "%d", 108 * s }')))
     x=$((x - $(awk -v s="$scale" 'BEGIN { printf "%d", 70 * s }')))
     # A panel takes touches once it holds still.
-    sleep 0.8
+    await_settled
     dev input swipe "$x" "$y" "$((x + 20))" "$((y + 20))" 300
-    sleep 0.4
+    after_input
     [ "$(sn pal_accent)" != "$before" ] || problems="$problems; the wheel does nothing"
     screenshot s61_wheel
     # In a code.
     set_field 0 '#c06020'
-    sleep 0.3
     [ "$(sn pal_accent)" = "#c06020" ] || problems="$problems; the code gives $(sn pal_accent)"
-    done_sheet_theme() { hide_keyboard; tap Done 0 0.4; }
+    done_sheet_theme() { hide_keyboard; tap Done; }
     done_sheet_theme
     # A theme of one's own, from what is on screen.
     tap "Your own theme" 0 0.5
@@ -3008,7 +2890,6 @@ s61() {
     screenshot s61_own
     tap Background 0 0.5
     set_field 0 '#102030'
-    sleep 0.3
     [ "$(sn pal_bg)" = "#102030" ] || problems="$problems; background is $(sn pal_bg)"
     [ "$(sn pal_light)" = false ] || problems="$problems; a dark background is not a dark theme"
     [ "$(sn pal_text)" != "$(sn pal_bg)" ] || problems="$problems; text like the background"
@@ -3017,7 +2898,6 @@ s61() {
     scroll_to Text L
     tap Text L 0.5
     set_field 0 '#102030'
-    sleep 0.3
     [ "$(sn pal_text)" != "#102030" ] || problems="$problems; text as dark as the page can be chosen"
     on_screen "Changed a little so everything stays readable." 3 || problems="$problems; does not say it changed the colour"
     screenshot s61_adjusted
@@ -3077,7 +2957,7 @@ kept_photo_size() {
 s62() {
     scenario s62_ring_screen_of_ones_own
     fresh
-    next_minute 50
+    next_minute 320
     seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
     arm a
     on_card 10
@@ -3095,14 +2975,13 @@ s62() {
     tap_in Waves 0 0.3
     tap_clear Colour has 300
     set_field_clear 0 '#c06020'
-    sleep 0.3
     hide_keyboard
     tap Done 0 0.4
     scroll_to Mono
     tap_in Mono 0 0.2
     # A preview: as it will look, without a sound, and it closes by a tap and by Back.
     tap Preview L 0.6
-    wait_for 3 preview_up || problems="$problems; no preview"
+    await_ui 3 'ed_preview=true' || problems="$problems; no preview"
     [ "$(sn look_kind)" = 3 ] || problems="$problems; the preview has not got the background: $(sn look_kind)"
     [ "$(sn look_clock)" = 4 ] || problems="$problems; the preview has not got the clock: $(sn look_clock)"
     [ "$(sn look_c1)" = "#c06020" ] || problems="$problems; the preview's colour is $(sn look_c1)"
@@ -3110,16 +2989,17 @@ s62() {
     sound_on && problems="$problems; the preview makes a sound"
     screenshot s62_preview
     tap "Preview. Tap to close." 0 0.4
-    wait_for 3 preview_down || problems="$problems; a tap does not close the preview"
+    await_ui 3 'ed_preview=false' || problems="$problems; a tap does not close the preview"
     tap Preview L 0.5
-    wait_for 3 preview_up
+    await_ui 3 'ed_preview=true'
     press_back
-    wait_for 3 preview_down
+    await_ui 3 'ed_preview=false'
     editor_sheet_open || problems="$problems; Back does more than close the preview"
     done_sheet
-    tap Save 0 0.4
-    # The real thing.
-    if await_ring a 70 && on_screen "Turn off" 15; then
+    tap Save
+    # The real thing: the clock goes to just before it.
+    jump_to $((T - 5))
+    if await_ring a 40 && on_screen "Turn off" 15; then
         [ "$(sn look_kind)" = 3 ] || problems="$problems; the ring has not got the background"
         [ "$(sn look_clock)" = 4 ] || problems="$problems; the ring has not got the clock"
         [ "$(sn look_c1)" = "#c06020" ] || problems="$problems; the ring's colour is $(sn look_c1)"
@@ -3139,7 +3019,7 @@ s62() {
     on_card 10
     open_look
     tap Preview L 0.6
-    wait_for 3 preview_up
+    await_ui 3 'ed_preview=true'
     screen_moves && problems="$problems; things move with less motion on"
     screenshot s62_still
     press_back
@@ -3154,11 +3034,11 @@ s62() {
     id=b
     open_look
     tap Preview L 0.6
-    wait_for 3 preview_up || problems="$problems; no preview for a photo that is gone"
+    await_ui 3 'ed_preview=true' || problems="$problems; no preview for a photo that is gone"
     [ "$(sn look_photo)" = false ] || problems="$problems; dressed for a photo that is gone"
     is_there "Turn off" || has_there "to turn it off" || problems="$problems; a photo that is gone takes the screen with it"
     press_back
-    wait_for 3 preview_down
+    await_ui 3 'ed_preview=false'
     # A photo of one's own, through the phone's picker: it differs per phone, and this looks for its
     # words. Larger than a screen needs: it comes in small.
     if on_emulator && [ -f "$OUT/s62_ring.png" ]; then
@@ -3191,9 +3071,9 @@ s62() {
         if photo_tap; then
             chosen() { [ -n "$(as_app "ls files/ring_photos 2> /dev/null")" ]; }
             wait_for 20 chosen || problems="$problems; the photo was not kept"
-            sleep 0.5
-            tap Preview L 0.8
-            wait_for 5 preview_up
+            await_settled
+            tap Preview L
+            await_ui 5 'ed_preview=true'
             [ "$(sn look_photo)" = true ] || problems="$problems; the photo does not show"
             local dims
             dims=$(kept_photo_size)
@@ -3268,17 +3148,18 @@ s65() {
         local n=0
         said=$(ui "$1")
         while [ "$said" != none ] && [ "$n" -lt 8 ]; do
-            sleep 0.5
+            await_settled 5
             said=$(ui "$1")
             n=$((n + 1))
         done
     }
     old_font=$(dev settings get system font_scale)
     dev wm size 1080x2376
-    for look in "560 1.3" "640 1.15"; do
+    # One look on the phone (a real window changing its density); both looks and every row are
+    # checked in cargo test (ui::flow_tests::s65_large_size_fits).
+    for look in "560 1.3"; do
         dev wm density "${look% *}"
         dev settings put system font_scale "${look#* }"
-        sleep 2
         start_app
         on_card 15 || problems="$problems; no list at $look"
         fits fit:AlarmCard
@@ -3498,7 +3379,7 @@ s62p() {
         sleep 1
         echo "kept: $(as_app "ls -l files/ring_photos 2> /dev/null | tail -1" | awk '{print $5}') bytes"
         tap Preview L 0.8
-        wait_for 8 preview_up
+        await_ui 8 'ed_preview=true'
         [ "$(sn look_photo)" = true ] || problems="$problems; the photo does not show"
         size=$(kept_photo_size)
         echo "shown at $size"
