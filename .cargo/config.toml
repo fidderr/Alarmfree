@@ -1,11 +1,10 @@
-# This machine's NDK 30 (Slint's prebuilt Skia needs it) and the 16 KB page size Android 15+ wants.
+# The 16 KB page size Android 15+ wants. build.sh sets the linker (NDK 30, which Slint's prebuilt Skia needs,
+# at the API level of min_sdk in sentinel.toml).
 [target.aarch64-linux-android]
-linker = "C:/Users/rfidd/AppData/Local/Android/Sdk/ndk/30.0.16248370/toolchains/llvm/prebuilt/windows-x86_64/bin/aarch64-linux-android31-clang.cmd"
 rustflags = ["-C", "link-arg=-Wl,-z,max-page-size=16384", "-C", "link-arg=-llog", "-C", "link-arg=-Wl,--icf=all"]
 
 # Emulators.
 [target.x86_64-linux-android]
-linker = "C:/Users/rfidd/AppData/Local/Android/Sdk/ndk/30.0.16248370/toolchains/llvm/prebuilt/windows-x86_64/bin/x86_64-linux-android31-clang.cmd"
 rustflags = ["-C", "link-arg=-Wl,-z,max-page-size=16384", "-C", "link-arg=-llog", "-C", "link-arg=-Wl,--icf=all"]
 
 # SQLite (bundled by rusqlite) without what the app never uses: full-text search, R-tree, the JSON

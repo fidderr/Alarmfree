@@ -28,10 +28,14 @@ export ANDROID_HOME="$SDK_HOME"
 export ANDROID_NDK_ROOT="$SDK_HOME/ndk/30.0.16248370" ANDROID_NDK_HOME="$SDK_HOME/ndk/30.0.16248370"
 export JAVA_HOME="${JAVA_HOME:-C:/Program Files/Microsoft/jdk-17.0.21.21-hotspot}"
 NDK_BIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/windows-x86_64/bin"
-# What C code in dependencies (SQLite) is compiled with.
+# The oldest Android the app runs on, from sentinel.toml: what the native code is linked and compiled for.
+MIN_SDK=$(sed -n 's/^min_sdk *= *\([0-9][0-9]*\).*/\1/p' sentinel.toml)
+[ -n "$MIN_SDK" ] || { echo "ERROR: sentinel.toml has no min_sdk"; exit 1; }
+# What C code in dependencies (SQLite) is compiled with, and what links the library.
 for triple in aarch64-linux-android x86_64-linux-android; do
   var="${triple//-/_}"
-  export "CC_$var=$NDK_BIN/${triple}31-clang.cmd" "CXX_$var=$NDK_BIN/${triple}31-clang++.cmd" "AR_$var=$NDK_BIN/llvm-ar.exe"
+  export "CC_$var=$NDK_BIN/${triple}${MIN_SDK}-clang.cmd" "CXX_$var=$NDK_BIN/${triple}${MIN_SDK}-clang++.cmd" "AR_$var=$NDK_BIN/llvm-ar.exe"
+  export "CARGO_TARGET_$(echo "$var" | tr a-z A-Z)_LINKER=$NDK_BIN/${triple}${MIN_SDK}-clang.cmd"
 done
 TARGET="${TARGET:-aarch64-linux-android}"
 SENTINEL_MANIFEST="${SENTINEL_MANIFEST:-../mobile-sentinel/Cargo.toml}"
