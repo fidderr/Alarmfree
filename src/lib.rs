@@ -5,6 +5,7 @@
 pub mod alarm_ops;
 pub mod calendar;
 pub mod challenges;
+pub mod clock;
 pub mod custom_sounds;
 pub mod db;
 #[cfg(debug_assertions)]

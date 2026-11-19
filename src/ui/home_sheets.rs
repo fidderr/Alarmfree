@@ -39,7 +39,7 @@ pub struct SheetState {
 
 /// Start of this day, `days` from today, in unix ms.
 fn start_of_day_ms(days: i64) -> Option<i64> {
-    let day = chrono::Local::now().date_naive() + Duration::days(days);
+    let day = crate::clock::local_now().date_naive() + Duration::days(days);
     start_of(day)
 }
 
@@ -99,7 +99,7 @@ pub fn open_sort(ctx: &Ctx) {
 }
 
 pub fn open_pause_all(ctx: &Ctx) {
-    let now_ms = chrono::Local::now().timestamp_millis();
+    let now_ms = crate::clock::local_now().timestamp_millis();
     let paused = alarm_ops::all_paused_until(&ctx.alarms.borrow(), now_ms).is_some();
     let (rows, title) = {
         let tr = ctx.tr.borrow();
@@ -129,7 +129,7 @@ pub fn open_menu(ctx: &Ctx, id: &str) {
     let Some(alarm) = ctx.alarms.borrow().iter().find(|a| a.id == id).cloned() else {
         return;
     };
-    let now_ms = chrono::Local::now().timestamp_millis();
+    let now_ms = crate::clock::local_now().timestamp_millis();
     let next = super::home::next_fire_times(std::slice::from_ref(&alarm))
         .get(id)
         .copied();
@@ -208,7 +208,7 @@ pub fn open_menu(ctx: &Ctx, id: &str) {
 }
 
 fn show_pause_date(ctx: &Ctx, only: Option<String>) {
-    let today = chrono::Local::now().date_naive();
+    let today = crate::clock::local_now().date_naive();
     let view = DateView::new(today + Duration::days(7), today + Duration::days(1));
     view.show(ctx);
     {
@@ -248,7 +248,7 @@ pub fn pause_apply(ctx: &Rc<Ctx>) {
                 .and_then(start_of),
         )
     };
-    let now_ms = chrono::Local::now().timestamp_millis();
+    let now_ms = crate::clock::local_now().timestamp_millis();
     if let Some(until) = until.filter(|until| *until > now_ms) {
         pause(ctx, only, until);
     }

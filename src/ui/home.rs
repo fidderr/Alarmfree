@@ -81,7 +81,7 @@ fn when_text(
     let Some(date) = date else {
         return String::new();
     };
-    let today = chrono::Local::now().date_naive();
+    let today = crate::clock::local_now().date_naive();
     match schedule::day_label(today, date) {
         schedule::DayLabel::Today => t(&tr, "home.today"),
         schedule::DayLabel::Tomorrow => t(&tr, "home.tomorrow"),
@@ -132,7 +132,7 @@ pub fn refresh(ctx: &Ctx) {
     let tr = ctx.tr.borrow();
     let twenty_four = crate::text::uses_24_hours(&settings);
     let week_start = settings.prefs.week_start;
-    let now_ms = chrono::Local::now().timestamp_millis();
+    let now_ms = crate::clock::local_now().timestamp_millis();
     let next_fire = next_fire_times(&alarms);
     let list = sorted_for_list(&alarms, settings.prefs.sort, &next_fire);
 
@@ -249,7 +249,7 @@ fn has_room(ctx: &Rc<Ctx>) -> bool {
 }
 
 pub fn toggle(ctx: &Rc<Ctx>, id: &str) {
-    let now = chrono::Local::now().naive_local();
+    let now = crate::clock::local_now().naive_local();
     let mut message = String::new();
     change(ctx, String::new(), &mut |list| {
         let tr = ctx.tr.borrow();
@@ -281,7 +281,7 @@ pub fn quick(ctx: &Rc<Ctx>, index: usize) {
         )
     };
     let defaults = ctx.settings.borrow().prefs.alarm_defaults.clone();
-    let now = chrono::Local::now().naive_local();
+    let now = crate::clock::local_now().naive_local();
     let mut alarm = alarm_ops::quick_alarm(now, minutes, label, defaults.as_ref());
     alarm.order = crate::ordering::order_for_new(&ctx.alarms.borrow());
     change(ctx, message, &mut |list| list.push(alarm.clone()));
@@ -353,7 +353,7 @@ pub fn skip_from_swipe(ctx: &Rc<Ctx>, id: &str) {
     let Some(alarm) = ctx.alarms.borrow().iter().find(|a| a.id == id).cloned() else {
         return;
     };
-    let now_ms = chrono::Local::now().timestamp_millis();
+    let now_ms = crate::clock::local_now().timestamp_millis();
     let next = next_fire_times(std::slice::from_ref(&alarm))
         .get(id)
         .copied();

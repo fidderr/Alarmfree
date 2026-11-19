@@ -67,7 +67,7 @@ impl DateView {
         };
         let tr = ctx.tr.borrow();
         let week_start = ctx.settings.borrow().prefs.week_start;
-        let today = chrono::Local::now().date_naive();
+        let today = crate::clock::local_now().date_naive();
         let cells: Vec<DateCell> = calendar::month_grid(self.month, week_start)
             .into_iter()
             .map(|day| match day {

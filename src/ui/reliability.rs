@@ -202,7 +202,7 @@ pub fn save_record(ctx: &Rc<Ctx>) {
 
 /// A hidden alarm in a minute: the only check that holds on any phone.
 pub fn test(ctx: &Rc<Ctx>) {
-    let now = chrono::Local::now().naive_local();
+    let now = crate::clock::local_now().naive_local();
     let label = t(&ctx.tr.borrow(), "reliability.test_label");
     let alarm = crate::alarm_ops::test_alarm(now, TEST_SECONDS, label);
     ctx.alarms.borrow_mut().push(alarm);

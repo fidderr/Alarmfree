@@ -79,7 +79,7 @@ pub fn hour_label(hour: u8, twenty_four: bool) -> String {
 /// "Rings in 7 h 12 min", for an alarm that is on, or until when it is paused. Empty if
 /// nothing is ahead.
 pub fn rings_in(translations: &Translations, alarm: &AlarmData) -> String {
-    let now = chrono::Local::now();
+    let now = crate::clock::local_now();
     let now_ms = now.timestamp_millis();
     if let Some(until) = alarm.pause_until_ms.filter(|until| *until > now_ms) {
         return chrono::Local
@@ -102,7 +102,7 @@ pub fn rings_in(translations: &Translations, alarm: &AlarmData) -> String {
         .and_then(|skip| chrono::Local.timestamp_millis_opt(skip).single())
         .map_or(now.naive_local(), |skip| skip.naive_local());
     schedule::next_ring_moment(alarm.time_hour, alarm.time_minute, alarm.days, date, from)
-        .and_then(|moment| chrono::Local.from_local_datetime(&moment).earliest())
+        .and_then(|moment| schedule::instant_in(&chrono::Local, moment))
         .map(|at| {
             let time = time_left(
                 translations,

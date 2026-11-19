@@ -305,7 +305,7 @@ fn row_to_event(row: &rusqlite::Row) -> Result<AlarmEvent, rusqlite::Error> {
 
 /// The period in the user's own time: "this week" starts at their midnight.
 fn filter_to_date_range(filter: &HistoryFilter) -> (DateTime<Utc>, DateTime<Utc>) {
-    let now = Local::now();
+    let now = crate::clock::local_now();
     let now_utc = now.with_timezone(&Utc);
     let safe_midnight = |date: NaiveDate| -> DateTime<Utc> {
         date.and_hms_opt(0, 0, 0)
@@ -470,7 +470,7 @@ mod tests {
     use super::*;
 
     fn ended(id: &str, outcome: AlarmOutcome) -> AlarmEvent {
-        let at = Utc::now();
+        let at = crate::clock::utc_now();
         AlarmEvent {
             id: id.to_owned(),
             alarm_id: AlarmId("a".to_owned()),

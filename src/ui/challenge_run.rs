@@ -150,7 +150,7 @@ fn begin(ctx: &Rc<Ctx>, mode: Mode, challenges: Vec<ChallengeToRun>) {
         challenges,
         index: 0,
         solves: Vec::new(),
-        started_at: chrono::Utc::now(),
+        started_at: crate::clock::utc_now(),
         fallback: false,
         celebrating: false,
         idle_secs: 0,
@@ -1085,7 +1085,7 @@ fn solved_one(ctx: &Rc<Ctx>) {
             return;
         }
         let item = &run.challenges[run.index];
-        let duration = (chrono::Utc::now() - run.started_at)
+        let duration = (crate::clock::utc_now() - run.started_at)
             .to_std()
             .unwrap_or_default();
         run.solves.push(ChallengeSolve {
@@ -1135,7 +1135,7 @@ fn celebration_over(ctx: &Rc<Ctx>) {
         } else {
             run.index = next;
             run.idle_secs = 0;
-            run.started_at = chrono::Utc::now();
+            run.started_at = crate::clock::utc_now();
             Next::Another
         }
     });

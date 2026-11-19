@@ -97,7 +97,7 @@ fn start(ctx: &Rc<Ctx>, id: &str) {
         alarm
     };
     // Its date if it rings once. Only today while its time is still ahead.
-    let now = chrono::Local::now().naive_local();
+    let now = crate::clock::local_now().naive_local();
     let start_date = schedule::resolve_one_time_date(&original, now).unwrap_or_else(|| {
         schedule::next_occurrence(original.time_hour, original.time_minute, now)
     });
@@ -109,7 +109,7 @@ fn start(ctx: &Rc<Ctx>, id: &str) {
         calendar: DateView::new(
             chrono::NaiveDate::parse_from_str(&start_date, "%Y-%m-%d")
                 .unwrap_or_else(|_| now.date()),
-            chrono::Local::now().date_naive(),
+            crate::clock::local_now().date_naive(),
         ),
         date_value: start_date.clone(),
         start_date,
@@ -187,7 +187,7 @@ fn has_changes(ctx: &Ctx, ed: &EditorState) -> bool {
 
 /// "Rings tomorrow, in 7 h 12 min" for the settings as they are right now.
 fn rings_text(tr: &Translations, current: &AlarmData, one_time: bool, date_value: &str) -> String {
-    let now = chrono::Local::now();
+    let now = crate::clock::local_now();
     let days = if one_time { [false; 7] } else { current.days };
     let date = if one_time {
         chrono::NaiveDate::parse_from_str(date_value, "%Y-%m-%d").ok()
@@ -422,7 +422,7 @@ pub fn sync(ctx: &Ctx) {
     rows.set_label_text(current.label.clone().into());
     rows.set_note_text(current.note.clone().into());
     rows.set_label_rev(ed.label_rev);
-    let today = chrono::Local::now().date_naive();
+    let today = crate::clock::local_now().date_naive();
     rows.set_quick_labels(super::refill(
         rows.get_quick_labels(),
         ["home.today", "home.tomorrow", "config.next_week"]
@@ -497,7 +497,7 @@ pub fn preset(ctx: &Rc<Ctx>, index: usize) {
             return;
         }
         // One date: today while its time is still ahead, else the next day it comes.
-        let now = chrono::Local::now().naive_local();
+        let now = crate::clock::local_now().naive_local();
         let (hour, minute) = (ed.draft.time_hour, ed.draft.time_minute);
         let ahead = chrono::NaiveDate::parse_from_str(&ed.date_value, "%Y-%m-%d")
             .ok()
@@ -564,7 +564,7 @@ pub fn date_action(ctx: &Rc<Ctx>, action: Move) {
 /// Today, tomorrow or a week on, in the date sheet.
 pub fn date_quick(ctx: &Rc<Ctx>, index: usize) {
     let days = [0, 1, 7].get(index).copied().unwrap_or(0);
-    let day = chrono::Local::now().date_naive() + chrono::Duration::days(days);
+    let day = crate::clock::local_now().date_naive() + chrono::Duration::days(days);
     if let Some(ed) = ctx.editor.borrow_mut().as_mut() {
         ed.date_value = day.format("%Y-%m-%d").to_string();
         ed.error.clear();
@@ -724,7 +724,7 @@ pub fn save(ctx: &Rc<Ctx>) {
             .and_then(|d| {
                 d.and_hms_opt(u32::from(alarm.time_hour), u32::from(alarm.time_minute), 0)
             })
-            .is_some_and(|at| at > chrono::Local::now().naive_local());
+            .is_some_and(|at| at > crate::clock::local_now().naive_local());
         (!ahead).then(|| t(&ctx.tr.borrow(), "validation.date_past"))
     } else {
         (!alarm.days.iter().any(|d| *d)).then(|| t(&ctx.tr.borrow(), "validation.select_day"))

@@ -230,7 +230,7 @@ fn full_text(ctx: &Ctx) -> String {
             log: &mobile_sentinel::diag::read(),
             include_log,
             backup_attached,
-            created: &chrono::Local::now().to_rfc3339(),
+            created: &crate::clock::local_now().to_rfc3339(),
         },
     )
 }
@@ -339,7 +339,7 @@ pub fn send(ctx: &Rc<Ctx>) {
     let body = report::summary(
         &answers,
         env!("CARGO_PKG_VERSION"),
-        &chrono::Local::now().to_rfc3339(),
+        &crate::clock::local_now().to_rfc3339(),
     );
     let report_path = report_path.to_string_lossy().into_owned();
     let setup_path = setup_path.to_string_lossy().into_owned();
@@ -357,7 +357,7 @@ pub fn send(ctx: &Rc<Ctx>) {
         }
         Err(e) => {
             log::warn!("[AlarmFree] no email app: {e:?}");
-            let stamp = chrono::Local::now().format("%Y%m%d-%H%M");
+            let stamp = crate::clock::local_now().format("%Y%m%d-%H%M");
             let name = format!("alarmfree-report-{stamp}.txt");
             let saved = crate::platform::save_to_downloads(&text, &name, "text/plain");
             if attach_setup {

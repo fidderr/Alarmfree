@@ -7,6 +7,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+#[cfg(not(test))]
 use std::sync::LazyLock;
 
 use crate::db::Database;
@@ -32,7 +33,23 @@ struct Opened {
     recovery: DbRecovery,
 }
 
+#[cfg(not(test))]
 static DB: LazyLock<Opened> = LazyLock::new(open_database);
+
+#[cfg(not(test))]
+fn opened() -> &'static Opened {
+    &DB
+}
+
+/// Every test runs on a thread of its own and gets a database of its own, so what one saves is
+/// not there for the next (tests run side by side).
+#[cfg(test)]
+fn opened() -> &'static Opened {
+    thread_local! {
+        static DB: &'static Opened = Box::leak(Box::new(open_database()));
+    }
+    DB.with(|db| *db)
+}
 
 #[cfg(not(test))]
 fn open_database() -> Opened {
@@ -54,13 +71,13 @@ fn open_database() -> Opened {
 }
 
 pub fn database() -> &'static Arc<Database> {
-    &DB.db
+    &opened().db
 }
 
 /// How the database was opened at startup, so the UI can tell the user when
 /// their data was reset or is not being saved.
 pub fn db_recovery() -> &'static DbRecovery {
-    &DB.recovery
+    &opened().recovery
 }
 
 fn open_healthy(path: &Path) -> Result<Database, String> {
@@ -75,7 +92,7 @@ fn open_healthy(path: &Path) -> Result<Database, String> {
 /// Move a bad database (and its WAL/SHM sidecars) out of the way, keeping it
 /// for manual recovery. Returns the path the main file now lives at.
 fn quarantine(path: &Path) -> Option<PathBuf> {
-    let ts = chrono::Utc::now().format("%Y%m%d-%H%M%S");
+    let ts = crate::clock::utc_now().format("%Y%m%d-%H%M%S");
     let name = path.file_name()?.to_string_lossy().into_owned();
     let backup = path.with_file_name(format!("{name}.corrupt-{ts}"));
     std::fs::rename(path, &backup).ok()?;
@@ -158,7 +175,7 @@ fn changes<'a>(
 
 /// Save the alarm list and bring AlarmKit in line with whatever changed.
 pub fn save_alarms(alarms: &[AlarmData]) {
-    let db = DB.db.as_ref();
+    let db = opened().db.as_ref();
     let existing = db.list_alarms().unwrap_or_default();
     let (removed, changed) = changes(&existing, alarms);
     for line in crate::diag_log::alarm_changes(&existing, alarms) {
@@ -184,18 +201,18 @@ pub fn save_alarms(alarms: &[AlarmData]) {
 
 /// Load all alarms from the database.
 pub fn load_alarms() -> Vec<AlarmData> {
-    DB.db.list_alarms().unwrap_or_default()
+    opened().db.list_alarms().unwrap_or_default()
 }
 
 pub fn save_settings(settings: &AppSettings) {
-    if let Err(e) = DB.db.save_settings(settings) {
+    if let Err(e) = opened().db.save_settings(settings) {
         log::error!("[AlarmFree] Failed to save settings: {e}");
         note_save_failure();
     }
 }
 
 pub fn load_settings() -> AppSettings {
-    match DB.db.load_settings() {
+    match opened().db.load_settings() {
         Ok(Some(mut settings)) => {
             if settings.prefs.language_follows_phone {
                 if let Some(locale) =
@@ -221,7 +238,7 @@ pub fn load_settings() -> AppSettings {
 
 /// How many saved alarms cannot be read.
 pub fn unreadable_alarms() -> usize {
-    DB.db.list_alarms_reporting().map_or(0, |(_, n)| n)
+    opened().db.list_alarms_reporting().map_or(0, |(_, n)| n)
 }
 
 /// Set when something could not be saved; see [`take_save_failure`].

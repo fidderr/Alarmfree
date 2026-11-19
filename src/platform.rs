@@ -112,7 +112,7 @@ fn handle_ring_ends() {
     let mut list = crate::persistence::load_alarms();
     let mut switched_off = false;
     for (id, end) in &ended {
-        record_outcome(&list, &id.0, outcome_of(*end), chrono::Utc::now());
+        record_outcome(&list, &id.0, outcome_of(*end), crate::clock::utc_now());
         switched_off |= crate::schedule::finish_if_one_time(&mut list, &id.0);
     }
     if switched_off {
@@ -199,7 +199,7 @@ pub fn refresh_outside_app() {
     let translations = crate::i18n::load_translations(settings.locale);
     let text = |key: &str| translations.get(key).cloned().unwrap_or_default();
     let twenty_four = crate::text::uses_24_hours(&settings);
-    let now_ms = chrono::Utc::now().timestamp_millis();
+    let now_ms = crate::clock::utc_now().timestamp_millis();
     let mut soonest: Option<(i64, AlarmData)> = None;
     for alarm in crate::persistence::load_alarms() {
         let id = InstanceId::new(alarm.id.clone());
@@ -419,7 +419,7 @@ fn sync_alarms(kit: &'static AlarmKit, woken: bool) {
         log::error!("[AlarmFree] alarms could not be read: {e}");
         Vec::new()
     });
-    if crate::schedule::date_undated_one_time(&mut list, Local::now().naive_local()) {
+    if crate::schedule::date_undated_one_time(&mut list, crate::clock::local_now().naive_local()) {
         crate::persistence::save_alarms(&list);
     }
     // Only with a list that can be trusted. Otherwise the alarm simply rings, and what was
@@ -460,7 +460,7 @@ fn sync_alarms(kit: &'static AlarmKit, woken: bool) {
             report.finished.len()
         ),
     );
-    let now = chrono::Utc::now();
+    let now = crate::clock::utc_now();
     for id in &report.ended_by_reboot {
         record_outcome(&list, &id.0, AlarmOutcome::Reboot, now);
     }
@@ -704,7 +704,7 @@ pub fn alarm_data_to_spec(alarm: &AlarmData) -> AlarmSpec {
         // ringing or snoozed one-time alarm as edited. Dates are set when an
         // alarm is saved or switched on, and at startup for ones that have none.
         let date = alarm.date.clone().unwrap_or_else(|| {
-            let now = Local::now().naive_local();
+            let now = crate::clock::local_now().naive_local();
             crate::schedule::next_occurrence(alarm.time_hour, alarm.time_minute, now)
         });
         ScheduleSpec::OneTime {

@@ -114,6 +114,15 @@ pub fn next_ring_moment(
     at(date?).filter(|moment| *moment > now)
 }
 
+/// The instant a wall-clock moment is in a time zone. When the clocks go back that moment happens
+/// twice: the first one. When they go forward it never happens: `None`.
+pub fn instant_in<Tz: chrono::TimeZone>(
+    zone: &Tz,
+    moment: NaiveDateTime,
+) -> Option<chrono::DateTime<Tz>> {
+    zone.from_local_datetime(&moment).earliest()
+}
+
 /// Time left until an alarm rings, in whole days, hours and minutes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Countdown {

@@ -23,7 +23,7 @@ struct RingTimes {
 
 impl RingTimes {
     fn load(alarm_id: &str) -> Self {
-        let now = chrono::Utc::now();
+        let now = crate::clock::utc_now();
         let session = crate::platform::alarm_kit_optional()
             .and_then(|kit| kit.session(&mobile_sentinel::InstanceId::new(alarm_id.to_owned())));
         let at = |ms: i64| chrono::DateTime::from_timestamp_millis(ms).unwrap_or(now);
@@ -52,7 +52,7 @@ impl RingTimes {
         snooze_interval_minutes: u8,
         challenge_solves: Vec<ChallengeSolve>,
     ) -> AlarmEvent {
-        let now = chrono::Utc::now();
+        let now = crate::clock::utc_now();
         AlarmEvent {
             id: uuid::Uuid::new_v4().to_string(),
             alarm_id: AlarmId(alarm_id.to_owned()),
@@ -110,7 +110,7 @@ fn finish_alarm(ctx: &Ctx, id: &str) {
         .iter()
         .find(|a| a.id == id && a.wake_check_minutes > 0)
         .map(|a| {
-            crate::alarm_ops::wake_check_alarm(a, chrono::Local::now().naive_local(), check_label)
+            crate::alarm_ops::wake_check_alarm(a, crate::clock::local_now().naive_local(), check_label)
         });
     let mut changed = crate::schedule::finish_if_one_time(&mut list, id);
     if let Some(check) = check {
@@ -133,7 +133,7 @@ fn show_texts(ctx: &Ctx) {
     };
     let settings = ctx.settings.borrow();
     let tr = ctx.tr.borrow();
-    let moment = chrono::Local::now();
+    let moment = crate::clock::local_now();
     let twenty_four = crate::text::uses_24_hours(&settings);
     ui.set_ring_clock(
         crate::text::clock(moment.hour() as u8, moment.minute() as u8, twenty_four).into(),
@@ -368,7 +368,7 @@ pub fn turn_off(ctx: &Rc<Ctx>) {
             return;
         };
         if ring.first_interaction.is_none() {
-            ring.first_interaction = Some(chrono::Utc::now());
+            ring.first_interaction = Some(crate::clock::utc_now());
         }
         (ring.id.clone(), ring.setups.clone())
     };

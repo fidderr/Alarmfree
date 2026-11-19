@@ -89,6 +89,26 @@ fn screen(ui: &MainWindow) -> String {
     )
 }
 
+fn clock(command: &str) -> String {
+    let mut parts = command.split(':').skip(1);
+    let (what, number) = (parts.next(), parts.next().and_then(|n| n.parse::<i64>().ok()));
+    match (what, number) {
+        (Some("offset"), Some(ms)) => crate::clock::set_offset(ms),
+        (Some("fixed"), Some(ms)) => crate::clock::set_fixed(Some(ms)),
+        (Some("reset"), _) => {
+            crate::clock::set_offset(0);
+            crate::clock::set_fixed(None);
+        }
+        (None, _) => {}
+        _ => return "ERR clock: offset:<ms>, fixed:<unix ms> or reset".to_owned(),
+    }
+    format!(
+        "now_ms={} offset_ms={}",
+        crate::clock::now_ms(),
+        crate::clock::offset()
+    )
+}
+
 /// `name` and `arg` of `ui:press:<name>:<arg>`.
 fn press(ui: &MainWindow, name: &str, arg: &str) -> String {
     let number = || arg.parse::<i32>().unwrap_or(-1);
@@ -156,6 +176,9 @@ pub fn run(ctx: &Rc<Ctx>, command: &str) -> String {
     }
     match command {
         "screen" => screen(&ui),
+        // The app's own clock (see `crate::clock`): `clock` says it, `clock:offset:<ms>` runs it
+        // ahead of the system clock, `clock:fixed:<unix ms>` stops it, `clock:reset` lets it go.
+        _ if command == "clock" || command.starts_with("clock:") => clock(command),
         "snapshot" => snapshot(&ui),
         // The scan challenge's button: it needs the run, not just the window.
         "press:scan" => {

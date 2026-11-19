@@ -76,7 +76,7 @@ pub fn delete_history(older_than_days: Option<u32>) {
     let db = persistence::database();
     match older_than_days {
         Some(days) => {
-            let cutoff = Utc::now() - chrono::Duration::days(days as i64);
+            let cutoff = crate::clock::utc_now() - chrono::Duration::days(days as i64);
             if let Err(e) = db.delete_events_before(&cutoff) {
                 log::error!("[AlarmFree] Failed to delete old history: {e}");
             }

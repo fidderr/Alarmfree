@@ -70,7 +70,7 @@ pub fn refresh(ctx: &Ctx) {
     let filter = view::period_filter(PERIODS[period], ctx.history.custom_days.get(), week_start);
     let events = crate::history_persistence::query_history(&filter);
     let metrics = crate::history_persistence::aggregate_history(&filter);
-    let today = chrono::Local::now().date_naive();
+    let today = crate::clock::local_now().date_naive();
     let streak_days = view::streak(
         &crate::history_persistence::query_history(&HistoryFilter::LastDays(STREAK_LOOKBACK_DAYS)),
         today,
