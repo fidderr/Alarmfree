@@ -26,6 +26,30 @@ check_apk() {
     done
 }
 
+# The start of a leg. A cold boot takes 30 s or more (the first boot of a new AVD 90 s); an emulator snapshot of
+# the booted, untouched system (taken here the first time, 2.5 GB in the AVD's folder) loads in 7 s. Only for this
+# first start: the restarts the scenarios do themselves (s11, s13) stay cold boots, which is the point of them.
+# NO_SNAPSHOT_BOOT=1 turns it off; a snapshot goes stale with a new system image: delete <avd>.avd/snapshots/suite_clean.
+boot_leg() {
+    local dir="$USERPROFILE/.android/avd/$AVD.avd/snapshots/suite_clean"
+    if [ -n "${NO_SNAPSHOT_BOOT:-}" ]; then
+        reboot_and_wait
+        return
+    fi
+    if [ -d "$dir" ]; then
+        emulator_stop
+        powershell.exe -NoProfile -Command "Start-Process -WindowStyle Hidden -FilePath '$(cygpath -w "$EMULATOR")' -ArgumentList '-avd $AVD -no-window -no-audio -no-boot-anim -snapshot suite_clean -no-snapshot-save -gpu ${EMULATOR_GPU:-host} -port ${SERIAL#emulator-}'"
+        timeout 120 "$ADB" -s "$SERIAL" wait-for-device &&
+            timeout 120 "$ADB" -s "$SERIAL" shell 'while [ -z "$(getprop sys.boot_completed)" ]; do sleep 0.3; done' || return 1
+        # The guest clock stays at the time of the snapshot for a while: the host's time now.
+        timeout 20 "$ADB" -s "$SERIAL" shell cmd alarm set-time $(($(date +%s) * 1000)) > /dev/null
+        open_shells
+        return 0
+    fi
+    reboot_and_wait || return 1
+    timeout 60 "$ADB" -s "$SERIAL" emu avd snapshot save suite_clean > /dev/null 2>&1 || note "no snapshot saved"
+}
+
 # run_leg name tier avd port: one emulator from boot to shutdown. Its own folder, log and meta file.
 run_leg() {
     local name=$1 tier=$2 avd=$3 port=$4
@@ -41,7 +65,7 @@ run_leg() {
         . devtest/lib.sh
         claim_device
         local b=$SECONDS
-        reboot_and_wait || { echo "FAIL  $avd did not start"; exit 1; }
+        boot_leg || { echo "FAIL  $avd did not start"; exit 1; }
         boot_s=$((SECONDS - b))
         echo "android=$(adb_ shell getprop ro.build.version.release | tr -d '\r') boot_s=$boot_s" >> "$meta"
         # A failed install would go on to test what is already on it.
