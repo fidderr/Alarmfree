@@ -442,21 +442,8 @@ impl Tour {
                     self.problem(format!("{name}: the choice '{}' does not take", c.t));
                 }
                 *self.taken.borrow_mut() += 1;
-                // As it was: take what was on, which closes the panel again.
-                if let Some(b) = self.checkables(under).into_iter().find(|e| {
-                    before
-                        .iter()
-                        .any(|b| b.t == e.t && b.on == Some(true) && b.role != "Switch")
-                }) {
-                    self.tap_el(&b);
-                    if self.sheet_up() {
-                        self.problem(format!(
-                            "{name}: the choice that was on leaves the panel open"
-                        ));
-                        self.back();
-                    }
-                }
-                return false;
+                // The next choice is taken from the panel as it is now; what was on comes back at the end.
+                continue;
             }
             let now = self
                 .checkables(under)
