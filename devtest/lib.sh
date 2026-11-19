@@ -602,6 +602,32 @@ n = int(sys.argv[1])
 print(rows[n]["t"] if n < len(rows) else "")
 ' "$1" 2> /dev/null; }
 
+# Type text with the phone's own keyboard (`adb input text` drops characters on some Androids:
+# "aMoring"). The text goes in short pieces, then the field is read back through the element
+# channel; when it does not hold the text it is emptied and typed again in shorter pieces.
+type_real() { # field text
+    local n=$1 text=$2 try=0 chunk=4 i got dels="67 67 67 67 67 67 67 67 67 67 67 67 67 67 67 67 67 67 67 67"
+    while [ "$try" -lt 3 ]; do
+        i=0
+        while [ "$i" -lt "${#text}" ]; do
+            dev input text "${text:i:chunk}"
+            i=$((i + chunk))
+        done
+        UI_QUIET=1 await_settled 3
+        got=$(field_value "$n")
+        case "${got,,}" in *"${text,,}"*) return 0 ;; esac
+        note "typed [$text] but the field holds [$got]: emptied, typed again in pieces of $((chunk > 1 ? chunk / 2 : 1))"
+        dev input keyevent KEYCODE_MOVE_END
+        # shellcheck disable=SC2086
+        dev input keyevent $dels
+        dev input keyevent $dels
+        chunk=$((chunk > 1 ? chunk / 2 : 1))
+        try=$((try + 1))
+    done
+    echo "the field does not take [$text]: it holds [$(field_value "$n")]" >&2
+    return 1
+}
+
 # A property of the window from the snapshot: numbers, booleans and strings (not the lists).
 sn() {
     ui snapshot | sed -nE 's/.*"'"$1"'":("([^"]*)"|([^,}]*)).*/\2\3/p' | head -1

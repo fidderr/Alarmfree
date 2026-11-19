@@ -1832,13 +1832,7 @@ s49() {
     read -r x y <<< "$(field_xy)"
     [ "${y:-9999}" -le "$free" ] && [ "$(text_y Done)" -le "$free" ] 2> /dev/null ||
         problems="$problems; the field or Done is under the keyboard ($y, $(text_y Done), free $free)"
-    dev input text Morning
-    sleep 0.6
-    typed=$(ui inputs)
-    case "${typed,,}" in
-        *morning*) ;;
-        *) problems="$problems; typed text did not arrive: $typed" ;;
-    esac
+    type_real 0 Morning || problems="$problems; typed text did not arrive: $(ui inputs)"
     press_back
     press_back
     room_back() {
@@ -1864,8 +1858,7 @@ s49() {
     [ "${y:-9999}" -le "$free" ] || problems="$problems; the box is under the keyboard ($y, free $free)"
     # The keyboard shows the first word of it arriving (a phone's own typing drops what comes after
     # a space on this emulator), the rest goes in as keys of the window.
-    dev input text "$(sn type_passage | cut -d' ' -f1)"
-    sleep 0.3
+    type_real 0 "$(sn type_passage | cut -d' ' -f1)" || problems="$problems; the first word did not arrive: $(ui inputs)"
     type_field 0 "$(sn type_passage)"
     finished() { [ "$(ui inputs)" = "[]" ]; }
     wait_for 10 finished || problems="$problems; typing it all did not finish: '$(ui inputs)'"
@@ -2201,9 +2194,12 @@ s53() {
     esac
     [ -z "$(as_app "ls files/sounds/custom")" ] || problems="$problems; file still there"
     done_sheet
+    # Without changes to the alarm, Back leaves at once; with them it asks first.
     press_back
-    await_ui 4 'editor_sheet!=None'
-    tap Discard
+    if [ "$(screen_no)" = 1 ]; then
+        await_ui 4 'editor_sheet!=None'
+        tap Discard
+    fi
     on_home 5
     open_reliability || problems="$problems; no reliability screen"
     local i=0 n
@@ -2226,6 +2222,7 @@ s53() {
         sleep 1
         i=$((i + 1))
     done
+    scroll_to "This app in the phone's settings" || problems="$problems; no button for the app's settings"
     tap "This app in the phone's settings"
     wait_for 15 away || problems="$problems; the app's settings stay in the app"
     wait_for 12 back_in_app || problems="$problems; Back from the app's settings leaves the keys with:$(focused_window)"
