@@ -1897,6 +1897,9 @@ s48() {
     # And back from it, as a second one.
     # The picker lists what the media index knows: the file just written is not in it yet.
     dev content call --uri content://media --method scan_volume --arg external_primary > /dev/null 2>&1
+    # The toast that says where it went sits over the Back up row.
+    saved_toast_gone() { ! has_there "Saved to"; }
+    wait_for 8 saved_toast_gone
     wait_for 6 on_screen_no 3
     tap_scrolling "Back up"
     on_screen "Add alarms from a file" 4
@@ -1908,6 +1911,7 @@ s48() {
         [ "$(alarm_count)" = 1 ] || problems="$problems; undo left $(alarm_count) alarms"
     else
         problems="$problems; the picker never showed the backup"
+        screenshot s48_no_backup
         press_back
     fi
     dev rm -f /sdcard/Download/mytune.ogg
