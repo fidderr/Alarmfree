@@ -1967,6 +1967,9 @@ s50() {
     open_row Label
     type_field 0 Morning
     type_field 1 'Take pills'
+    # On a slow emulator the keyboard comes up late and stays over the lower half of everything after this
+    # (the whole editor then failed at once, 156 s, with the keyboard in the picture).
+    on_emulator && hide_keyboard
     done_sheet
     open_row Sound
     tap_in Funk

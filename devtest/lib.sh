@@ -447,7 +447,14 @@ force_idle() {
     esac
 }
 
+# Android 13 tells even a stopped app of a clock change (TIME_SET), and the process that starts for it can read
+# the database before a row is seeded: the app started afterwards keeps what that process read (nothing armed,
+# "state=none"). So an app that is up while rows were seeded is stopped before it starts.
 start_app() {
+    if [ -n "${SEEDED:-}" ]; then
+        SEEDED=""
+        no_process || dev am force-stop "$PKG"
+    fi
     dev am start -n "$PKG/$ACTIVITY" > /dev/null
     STARTED_AT=$SECONDS
 }
@@ -472,6 +479,7 @@ EVERY_DAY='[true,true,true,true,true,true,true]'
 NO_DAYS='[false,false,false,false,false,false,false]'
 
 seed() { # seed id json (app must be stopped)
+    SEEDED=1
     printf "INSERT OR REPLACE INTO alarms (id, data) VALUES ('%s', '%s');\n" "$1" "$2" | sql
 }
 
