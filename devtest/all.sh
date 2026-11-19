@@ -1,69 +1,10 @@
 #!/bin/bash
-# The whole suite on the newest, the oldest and Android 12 (min_sdk is 29, so Android 10 is the oldest), with the APK that is
-# already built (APK says which, for a release). Two emulators: that is what 16 GB has room for.
+# The whole suite (every scenario) on the release pair, Android 16 and 12, two emulators at the same time, with the APK that is
+# already built (APK says which, for a release). min_sdk is 29, so Android 10 is the oldest the app runs on.
 #
-# Usage: bash devtest/all.sh [name]    (AVD_NEW / PORT_NEW, AVD_OLD / PORT_OLD and AVD_TEN / PORT_TEN pick other emulators; the legs run one after the other, default afg16 and afg12 on port 5558, then msd29 (Android 10) on port 5590; LEG=afg16, LEG=afg12 or LEG=msd29 runs one; Android 11 is msd30 on port 5592, AVD_ELEVEN / PORT_ELEVEN)  results in devtest-out/<name>_<avd>/ and <name>_<avd>.log
+# Usage: bash devtest/all.sh [name]    results in devtest-out/<name>_<avd>/ and <name>_<avd>.log, a table at the end
+#   AVDS="afg16 afg14 afg12" bash devtest/all.sh    other emulators (the matrix is in tiers.sh); LEG=afg12 runs one; LANES=1 one at a time
 cd "$(dirname "$0")/.." || exit 1
-export APK="${APK:-build/alarmfree-slint-debug.apk}"
-NAME=${1:-full}
-# What does not depend on Android itself, on the oldest only. What depends on the size, on the newest only: from Android 16 on an app has no say in
-# how it turns on a big screen. Also the restart with a PIN, which works the same on all of them
-# and takes a minute.
-# A build that fails leaves the last APK where it was: this would then test something older.
-built=$(stat -c %Y "$APK") || exit 1
-for repo in . ../mobile-sentinel; do
-    # A snapshot copy of devtest/ (not a repository) has nothing to compare.
-    git -C "$repo" rev-parse --git-dir > /dev/null 2>&1 || continue
-    if [ "$built" -lt "$(git -C "$repo" log -1 --format=%ct)" ]; then
-        echo "$APK is older than the last commit in $repo: build first"
-        exit 1
-    fi
-done
-
-OLDEST_ONLY="s29 s30 s31 s32 s34 s38 s43 s44 s45 s46 s47 s50 s51 s52"
-NEWEST_ONLY="s13 s13b s13d big_screens"
-
-run_on() { # avd port scenarios...
-    local avd=$1 port=$2
-    shift 2
-    (
-        export AVD=$avd SERIAL=emulator-$port OUT="devtest-out/${NAME}_$avd"
-        . devtest/lib.sh
-        claim_device
-        reboot_and_wait || { echo "FAIL  $avd did not start"; exit 1; }
-        # A failed install would go on to test what is already on it.
-        said=$(adb_ install -r -g "$APK" 2>&1)
-        case "$said" in
-            *Success*) ;;
-            *)
-                echo "STOP  $avd: the install failed: $said"
-                exit 1
-                ;;
-        esac
-        # Without a working window nearly everything fails, and slowly: stop the run at once.
-        fresh
-        export CLEAN_COPY
-        start_app
-        wait_for 60 page_is_up && wait_for 30 on_screen_no 0 || { echo "STOP  $avd: the window does not come up on the alarm list"; exit 1; }
-        bash devtest/matrix.sh "$@"
-        emulator_stop
-    ) > "devtest-out/${NAME}_$avd.log" 2>&1
-    echo "=== $avd"
-    sed -n '/===== SUMMARY/,$p' "devtest-out/${NAME}_$avd.log" | grep -E '^(FAIL|STOP|passed:|over a minute)'
-}
-
-START=$SECONDS
-leg() { [ -z "${LEG:-}" ] || [ "$LEG" = "$1" ]; }
-# The big screens first: next to the other emulator's tour of every panel, late in its run, Android
-# 16 starved to the point of its own system UI freezing.
-# The restarts with a PIN last: the older ones are done by then, and they stay under a minute.
-# One emulator lane (2 GB each): the legs run one after the other.
-leg afg16 && FIRST=big_screens LAST="s13d s13b s13" SKIP=$OLDEST_ONLY run_on "${AVD_NEW:-afg16}" "${PORT_NEW:-5558}"
-# Android 12's graphics on the host's GPU crashed the emulator now and then, in the middle of a run.
-leg afg12 && EMULATOR_GPU=swiftshader_indirect SKIP=$NEWEST_ONLY run_on "${AVD_OLD:-afg12}" "${PORT_OLD:-5558}"
-# Android 10 is the oldest the app runs on (min_sdk in sentinel.toml). TEN_SKIP: scenarios that cannot apply there, each with its reason.
-TEN_SKIP=""
-leg msd29 && EMULATOR_GPU=swiftshader_indirect SKIP="$NEWEST_ONLY $TEN_SKIP" run_on "${AVD_TEN:-msd29}" "${PORT_TEN:-5590}"
-# Android 11: scoped storage is enforced, package visibility, the insets controller.
-leg msd30 && EMULATOR_GPU=swiftshader_indirect SKIP="$NEWEST_ONLY" run_on "${AVD_ELEVEN:-msd30}" "${PORT_ELEVEN:-5592}"
-echo "all of it in $(((SECONDS - START) / 60)) min $(((SECONDS - START) % 60)) s"
+. devtest/suite.sh
+read -ra avds <<< "${LEG:-${AVDS:-afg16 afg12}}"
+suite_main "${1:-full}" full "${avds[@]}"

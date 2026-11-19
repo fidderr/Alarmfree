@@ -297,8 +297,20 @@ locked_ring() {
     shorten unlock_quiet_secs "${1:-60}"
     on_emulator && set_clock "$(date +%s)"
     next_minute 3600
-    seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null air 0 0 3 1 '[]' "${2:-1800}")"
-    arm a
+    if [ -n "${SECOND_ALARM:-}" ]; then
+        # Two rings in one restart: a rings at the boot (it was due 2 minutes ago and comes again tomorrow), b is due an hour
+        # on and rings when the clock is moved there, the phone still locked. B_T is its time.
+        local a_h a_m
+        read -r a_h a_m <<< "$(at_hm $((T - 7200)))"
+        seed a "$(alarm_json a "$a_h" "$a_m" "$EVERY_DAY" null air 0 0 3 1 '[]' "${2:-1800}")"
+        seed b "$(alarm_json b "$T_H" "$T_M" "$EVERY_DAY" null air 0 0 3 1)"
+        B_T=$T
+        arm a
+        wait_file files/sentinel/armed/b.armed 5
+    else
+        seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null air 0 0 3 1 '[]' "${2:-1800}")"
+        arm a
+    fi
     dev locksettings set-pin 1234 > /dev/null
     dead
     # Now and not during the restart's own wait: a clock change that wakes the app up meanwhile
@@ -391,11 +403,28 @@ s13() {
 
 # Not the button but the lock screen itself: the alarm's own screen still comes up by itself,
 # and before that the ring comes back after its service is killed in the quiet.
+# In the same restart, first: nobody comes, the ring ends at its limit with the phone still locked, the unlock
+# screen goes with it, and the history tells after the unlock (s13d_locked_restart_limit, its verdict comes
+# at the end, when the unlock has made the history readable). Two rings, one restart instead of two.
 s13b() {
     no_lock_here s13b && return
+    scenario s13d_locked_restart_limit
+    SECOND_ALARM=1 locked_ring 60 8 || { no_pin; return; }
+    local problems="" limit_problems="" rang=$SOUND_AT
+    await_silence 60 || limit_problems="$limit_problems; still ringing 60s after the boot with a limit of 8s"
+    local stopped=$STOPPED_AT
+    unlock_gone() { ! top_is_unlock; }
+    wait_for 6 unlock_gone || limit_problems="$limit_problems; the unlock screen stayed after the ring ended"
+    user_unlocked && limit_problems="$limit_problems; the phone unlocked by itself"
+    local d_took
+    d_took=$(took)
+    S13D_DONE=1
+
     scenario s13b_locked_restart_lock_screen
-    locked_ring 60 || { no_pin; return; }
-    local problems=""
+    T=$B_T
+    set_clock $((B_T - 3))
+    await_sound 30 || { fail "b did not ring in the locked phone after the clock moved: main=$(main_pid) os_alarm=$(os_has_alarm && echo yes || echo NO)"; no_pin; return; }
+    wait_for 15 top_is_unlock || { fail "rang, but the unlock screen is not on top: $(top_activity)"; no_pin; return; }
     tap_text Unlock || problems="$problems; no Unlock button on the screen"
     wait_for 4 sound_off || problems="$problems; still sounding after Unlock"
     kill_sentinel
@@ -417,12 +446,23 @@ s13b() {
     fi
     sound_on || problems="$problems; silent on the alarm's own screen"
     tap "Turn off" 0 0.5
-    finished() { sound_off && state_is a scheduled && [ "$(outcomes solved)" = 1 ]; }
-    wait_for 8 finished || problems="$problems; after turning it off: sound=$(sound_on && echo ON || echo off) state=$(state a) solved=$(outcomes solved)"
+    finished() { sound_off && state_is b scheduled && [ "$(outcomes solved)" = 1 ]; }
+    wait_for 8 finished || problems="$problems; after turning it off: sound=$(sound_on && echo ON || echo off) state=$(state b) solved=$(outcomes solved)"
     if [ -z "$problems" ]; then
         pass "the ring came back after its service died in the quiet, and unlocking on the lock screen brought the alarm's own screen"
     else
         fail "${problems#; }"
+    fi
+
+    # Only now can the history be read.
+    CURRENT=s13d_locked_restart_limit
+    recorded() { [ "$(outcomes limit)" = 1 ] && state_is a scheduled; }
+    wait_for 15 recorded || limit_problems="$limit_problems; after the unlock: limit=$(outcomes limit) state=$(state a)"
+    if [ -z "$limit_problems" ]; then
+        echo "PASS  $CURRENT  [$d_took] stopped at its limit ${stopped}s after the boot while locked (rang ${rang}s after it), and the history says so" | tee -a "$RESULTS"
+    else
+        echo "FAIL  $CURRENT  [$d_took] ${limit_problems#; }" | tee -a "$RESULTS"
+        write_log
     fi
     no_pin
 }
@@ -465,6 +505,8 @@ s13c() {
 # with it, and the history tells after the unlock.
 s13d() {
     no_lock_here s13d && return
+    # s13b did it in its restart; by name alone it runs on its own.
+    [ -z "${S13D_DONE:-}" ] || return 0
     scenario s13d_locked_restart_limit
     locked_ring 60 8 || { no_pin; return; }
     local problems=""
@@ -3382,7 +3424,14 @@ for s in ${LAST:-}; do
         *" $s "*) RUN_LIST="$RUN_LIST $s" ;;
     esac
 done
+# A scenario whose restart failed must not leave the next one on a half-booted device.
+boot_done() { [ "$(adb_ shell getprop sys.boot_completed 2> /dev/null | tr -d '\r')" = 1 ] && device_ok; }
 for s in $RUN_LIST; do
+    if on_emulator && ! boot_done; then
+        note "the device is not booted before $s: waiting"
+        wait_for 180 boot_done
+        open_shells
+    fi
     "$s"
 done
 dev am force-stop "$PKG"

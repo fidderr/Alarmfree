@@ -333,8 +333,12 @@ reboot_only() {
             ;;
     esac
     timeout 240 "$ADB" -s "$SERIAL" wait-for-device || { note "device did not come back"; return 1; }
-    timeout 240 "$ADB" -s "$SERIAL" shell 'while [ -z "$(getprop sys.boot_completed)" ]; do sleep 0.5; done' ||
-        { note "boot did not complete"; return 1; }
+    # Asked again when the connection drops: adbd restarts early in a boot ("error: closed").
+    local boot_deadline=$((SECONDS + 240))
+    until [ "$(timeout 20 "$ADB" -s "$SERIAL" shell getprop sys.boot_completed 2> /dev/null | tr -d '\r')" = 1 ]; do
+        [ "$SECONDS" -lt "$boot_deadline" ] || { note "boot did not complete"; return 1; }
+        sleep 1
+    done
     # A tap from the page is no activity to Android: left to itself, an emulator's screen went
     # dark ten minutes into a run, and every picture after that was black. A phone keeps its own.
     case "$SERIAL" in
