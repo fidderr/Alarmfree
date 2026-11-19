@@ -1798,10 +1798,40 @@ ui_tap() { # the middle of the first element with this in its description
     read -r x1 y1 x2 y2 <<< "$bounds"
     dev input tap $(((x1 + x2) / 2)) $(((y1 + y2) / 2))
 }
+# Android 11's file picker ignores a tap on a file, from `input tap` as from a finger-like swipe, and
+# answers the keys: move the focus onto the file, then Enter.
+picker_keys() { # what the file is called in the dump, as in ui_tap
+    local k bounds x1 y1 x2 y2 fx1 fy1 fx2 fy2
+    dev uiautomator dump /sdcard/af_ui.xml > /dev/null 2>&1
+    bounds=$(dev cat /sdcard/af_ui.xml | tr '>' '\n' | grep -m1 "$1" | sed -E 's/.*bounds="\[([0-9]+),([0-9]+)\]\[([0-9]+),([0-9]+)\].*/\1 \2 \3 \4/')
+    [ -n "$bounds" ] || return 1
+    read -r x1 y1 x2 y2 <<< "$bounds"
+    for k in 1 2 3 4 5 6 7 8; do
+        dev input keyevent KEYCODE_DPAD_DOWN
+        sleep 0.4
+        dev uiautomator dump /sdcard/af_ui.xml > /dev/null 2>&1
+        # The list itself takes the focus first: the item is the focused node no bigger than a row or a card.
+        bounds=$(dev cat /sdcard/af_ui.xml | tr '>' '\n' | grep 'focused="true"' |
+            sed -E 's/.*bounds="\[([0-9]+),([0-9]+)\]\[([0-9]+),([0-9]+)\].*/\1 \2 \3 \4/' |
+            awk '$4 - $2 < 700 { print; exit }')
+        [ -n "$bounds" ] || continue
+        read -r fx1 fy1 fx2 fy2 <<< "$bounds"
+        if [ "$fx1" -le "$x1" ] && [ "$fy1" -le "$y1" ] && [ "$fx2" -ge "$x2" ] && [ "$fy2" -ge "$y2" ]; then
+            dev input keyevent KEYCODE_ENTER
+            return 0
+        fi
+    done
+    return 1
+}
 picker_tap() { # file name
     local i=0
     while [ "$i" -lt 8 ]; do
-        ui_tap "text=\"$1\"" && return 0
+        if ui_tap "text=\"$1\""; then
+            sleep 1.5
+            # Still the picker: it did not take the tap.
+            focused_window | grep -q documentsui && picker_keys "text=\"$1\""
+            return 0
+        fi
         # It opens on its recent files. Over to Downloads.
         if ui_tap 'content-desc="Show roots"'; then
             sleep 1
@@ -2685,7 +2715,8 @@ big_screens() {
 # Android. Filtered on the device, in one go: a pipe with a `dev` on both sides has two readers on
 # the one open shell, and hangs.
 vibrating_now() {
-    dev "dumpsys vibrator_manager | grep -A1 'CurrentVibration:' | grep -v 'CurrentVibration:' | grep -vE '^ *null *\$' | grep -q ."
+    # Android 10 and 11 call the service `vibrator` and put it on one line: mCurrentVibration=null.
+    dev "{ dumpsys vibrator_manager | grep -A1 'CurrentVibration:' | grep -v 'CurrentVibration:' | grep -vE '^ *null *\$'; dumpsys vibrator | grep 'mCurrentVibration=' | grep -v 'mCurrentVibration=null'; } 2> /dev/null | grep -q ."
 }
 not_vibrating() { ! vibrating_now; }
 # What the try button of the open panel says: true while it runs (it says Stop), false (Start), or none.
@@ -3132,12 +3163,17 @@ s62() {
         photo_tap() {
             local i=0
             while [ "$i" -lt 8 ]; do
-                ui_tap 'content-desc="af_photo.png' && return 0
-                ui_tap 'text="af_photo.png"' && return 0
+                if ui_tap 'content-desc="af_photo.png' || ui_tap 'text="af_photo.png"'; then
+                    sleep 1.5
+                    focused_window | grep -q documentsui && picker_keys 'af_photo.png'
+                    return 0
+                fi
                 if ui_tap 'content-desc="Show roots"'; then
                     sleep 1
                     ui_tap 'text="Downloads"'
                 fi
+                # Android 11's picker of images has no Downloads root: a Download folder inside Images.
+                ui_tap 'text="Download"'
                 sleep 1.5
                 i=$((i + 1))
             done

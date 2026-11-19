@@ -150,6 +150,12 @@ try_chips() { # name [x y of the row that opened it]
             # window and the log kept to see what it was.
             sleep 1
             window=$(focused_window | grep -o '[A-Za-z.]*/[A-Za-z.]*' | head -1)
+            # Between two windows nothing has the focus: Android 11's picker takes a few seconds to come up.
+            for _ in 1 2 3 4 5 6; do
+                [ -z "$window" ] || break
+                sleep 1
+                window=$(focused_window | grep -o '[A-Za-z.]*/[A-Za-z.]*' | head -1)
+            done
             case "$window" in
                 *[Pp]icker* | *[Dd]ocuments* | *MediaProvider* | *[Gg]allery*)
                     note "$name: '$text' opens $window"
