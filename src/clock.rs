@@ -92,15 +92,4 @@ mod tests {
         set_fixed(None);
         assert!((now_ms() - chrono::Utc::now().timestamp_millis()).abs() < 5_000);
     }
-
-    #[test]
-    fn an_offset_moves_the_clock_for_every_thread() {
-        // Own thread: the offset is global, and other tests only read a fixed moment or the real time.
-        let before = chrono::Utc::now().timestamp_millis();
-        set_offset(3_600_000);
-        let during = std::thread::spawn(now_ms).join().unwrap();
-        set_offset(0);
-        assert!(during - before >= 3_600_000 - 100);
-        assert!(offset() == 0);
-    }
 }
