@@ -65,6 +65,14 @@ layout_sig() {
     ui texts | python -I -c 'import json,sys; print(sorted(e["y"] for e in json.loads(sys.stdin.read())))' | md5sum | cut -d' ' -f1
 }
 look_through() { # name
+    # The short walk: one look at the screen, no pictures and no scrolling.
+    if [ -n "${S57_LITE:-}" ]; then
+        local seen
+        baseline_update
+        seen=$(panel_check)
+        [ -z "$seen" ] || panel_problem "$1: $seen"
+        return 0
+    fi
     local name=$1 stop=0 moved=0 found prev="" sig first_sig="" size w h
     size=$(window_size)
     w=${size%% *}
@@ -127,7 +135,7 @@ panel_has_automatic() { # panel name
 # taken again. Returns 3 when the panel closed itself that way, and is closed again then.
 try_chips() { # name [x y of the row that opened it]
     local ox=${2:-} oy=${3:-} window
-    local name=$1 line text x y was now role floor before=$(sheet_checkables | grep -v '^What is this?|')
+    local name=$1 line text x y was now role floor taps=0 before=$(sheet_checkables | grep -v '^What is this?|')
     # What is below the window (a long list in a panel) is not touched.
     floor=$(( $(window_size | cut -d' ' -f2) - 200 ))
     # The buttons that stay at the bottom of a panel cover what is under them.
@@ -138,6 +146,12 @@ try_chips() { # name [x y of the row that opened it]
     [ -n "$before" ] || return 0
     while IFS='|' read -r text x y was role; do
         [ -n "$text" ] || continue
+        # The short walk (s57 without S57_FULL): the first choice that is not on, or the first switch.
+        if [ -n "${CHIPS_MAX:-}" ]; then
+            [ "$taps" -lt "$CHIPS_MAX" ] || break
+            [ "$was" != true ] || [ "$role" = Switch ] || continue
+        fi
+        taps=$((taps + 1))
         # A panel can change its size under a pick (Vibration Off takes a row away): where the choice is now.
         line=$(sheet_checkables | grep -F -m1 -- "$text|")
         [ -z "$line" ] || IFS='|' read -r _ x y _ <<< "$line"
@@ -257,7 +271,14 @@ panel_help() { # name
     [ "$(layout_sig)" = "$sig0" ] || panel_problem "$name: the ? does not close"
 }
 
-any_sheet_up() { sheet_open || panel_up || editor_sheet_open || [ "$(sn theme_sheet)" = true ]; }
+# One snapshot for all four kinds of panel (each `sn` is a call to the app).
+any_sheet_up() {
+    local snap
+    snap=$(ui snapshot)
+    case "$snap" in *'"home_sheet"'*) ;; *) return 1 ;; esac
+    [[ "$snap" == *'"home_sheet":"None"'* && "$snap" == *'"panel_open":false'* && "$snap" == *'"theme_sheet":false'* && "$snap" == *'"ed_sheet":"None"'* ]] && return 1
+    return 0
+}
 no_sheet_up() { ! any_sheet_up; }
 
 # A row of a screen that scrolls: where it is, wherever the screen was left.
@@ -307,6 +328,7 @@ try_language() { # name [x y of the row that opened it]
 # A panel that opened: all of it, and what closes it closes it and nothing else: Done from a row,
 # Back from anywhere else.
 panel_open() { # name [x y of the row that opened it, for panels that close themselves]
+    [ -z "${S57_LITE:-}" ] || { lite_panel "$@"; return; }
     local name=$1
     if ! wait_for 4 any_sheet_up; then
         panel_problem "$name: no panel"
@@ -492,7 +514,7 @@ panel_theme_stops() {
     theme_tap Dark
 }
 
-s57() {
+s57_full() {
     scenario s57_every_panel
     panel_look
     PANEL_N=0
@@ -800,6 +822,185 @@ s57() {
 
     if [ -z "$PANEL_PROBLEMS" ]; then
         pass "$PANEL_N pictures in $PANEL_THEME $PANEL_LANGUAGE, nothing cut off, covered or stuck"
+    else
+        fail "${PANEL_PROBLEMS#; }"
+    fi
+}
+
+# The short walk for a real screen: every panel opens, one choice is taken and goes back, and nothing
+# is cut off. Every choice, every size and the layout of each panel are the cargo test `panel_tests`
+# (src/ui/panel_tests.rs). The ring screen with its challenge is only in the full tour: S57_FULL=1.
+lite_panel() { # name [x y of the row that opened it]
+    local name=$1 found
+    if ! wait_for 4 any_sheet_up; then
+        panel_problem "$name: no panel"
+        return 1
+    fi
+    found=$(panel_check)
+    [ -z "$found" ] || panel_problem "$name: $found"
+    case "$name" in
+        *Language*)
+            try_language "$name" "${2:-}" "${3:-}"
+            sleep 0.6
+            return 0
+            ;;
+        *)
+            [ -n "${OPEN_ONLY:-}" ] || CHIPS_MAX=1 try_chips "$name" "${2:-}" "${3:-}" || { sleep 0.6; return 0; }
+            ;;
+    esac
+    hide_keyboard
+    if is_there Done; then
+        tap Done 0 0.3
+        wait_for 3 no_sheet_up || { panel_problem "$name: Done leaves it open"; press_back; }
+    else
+        press_back
+        wait_for 3 no_sheet_up || { panel_problem "$name: Back leaves it open"; press_back; }
+    fi
+    sleep 0.6
+}
+
+s57() {
+    [ -z "${S57_FULL:-}" ] || { s57_full; return; }
+    scenario s57_every_panel
+    panel_look
+    PANEL_N=0
+    PANEL_PROBLEMS=""
+    S57_LITE=1
+    mkdir -p "$OUT/panels${VARIANT:-}"
+    rm -f "$OUT/panels${VARIANT:-}"/*
+    local found name old_font
+    old_font=$(dev settings get system font_scale)
+    if on_emulator; then
+        dev settings put system font_scale "$PANEL_FONT"
+        if [ -z "${VARIANT:-}" ]; then
+            dev wm size 1080x2376
+            dev wm density 480
+        fi
+    fi
+    fresh
+    panel_settings true
+    panel_alarms
+    panel_history_rows
+    start_app
+    on_card 15 || panel_problem "no list"
+    sleep 1
+    found=$(panel_check)
+    [ -z "$found" ] || panel_problem "home: $found"
+    # The list.
+    local t0=$SECONDS
+    baseline_update
+    tap "Sort alarms" 0 0.4
+    lite_panel home_sort
+    tap "Pause all alarms until a date" 0 0.4
+    lite_panel home_pause
+    tap "More actions" 0 0.4
+    lite_panel home_menu0
+    # The editor of an alarm with everything on it.
+    note "s57 list: $((SECONDS - t0)) s"
+    press open work 0.8
+    on_editor 5 || panel_problem "no editor"
+    found=$(panel_check)
+    [ -z "$found" ] || panel_problem "editor: $found"
+    baseline_update
+    tap_time 0.4
+    lite_panel editor_time
+    tap_trash
+    lite_panel editor_delete
+    # A choice is taken in the panels of sound, vibration and snooze; the others only open (the
+    # cargo test takes every choice of every one). The first four rows are on screen without scrolling.
+    for name in Label Sound Vibration Snooze 'Ring limit' 'Are you up?' 'Notice before'; do
+        case "$name" in
+            Label | Sound | Vibration | Snooze) tap_has "$name" 0 0.4 ;;
+            *) tap_row "$name" ;;
+        esac
+        case "$name" in Sound | Vibration | Snooze) OPEN_ONLY= ;; *) OPEN_ONLY=1 ;; esac
+        lite_panel "editor_$(echo "$name" | tr -c 'a-zA-Z0-9\n' _)"
+        wait_for 4 no_sheet_up
+    done
+    OPEN_ONLY=
+    # The ring screen as it will be, once.
+    note "s57 editor rows: $((SECONDS - t0)) s"
+    tap_row 'Alarm screen'
+    if wait_for 3 editor_sheet_open; then
+        tap Preview L 0.5
+        if wait_for 3 preview_up; then
+            sleep 0.8
+            found=$(panel_check)
+            [ -z "$found" ] || panel_problem "ring look: $found"
+            tap "Preview. Tap to close." 0 0.4
+            wait_for 3 preview_down || panel_problem "ring look: not back from the preview"
+        else
+            panel_problem "ring look: no preview"
+        fi
+        press_back
+        wait_for 3 editor_sheet_closed
+    else
+        panel_problem "no panel for the ring screen"
+    fi
+    wait_for 4 no_sheet_up
+    sleep 0.8
+    tap_row Challenges
+    if wait_for 3 editor_sheet_open; then
+        tap "Try all" 0 0.4
+        if wait_for 5 run_up; then
+            found=$(panel_check)
+            [ -z "$found" ] || panel_problem "a challenge: $found"
+            press_back
+            wait_for 4 editor_sheet_open || panel_problem "not back from trying a challenge"
+        else
+            panel_problem "a challenge cannot be tried"
+        fi
+        press_back
+        wait_for 3 editor_sheet_closed || panel_problem "Back leaves the challenges open"
+    else
+        panel_problem "no challenges panel"
+    fi
+    press_back
+    wait_for 4 editor_sheet_open && tap Discard 0 0.3
+    on_home 5 || panel_problem "not back on the list from the editor"
+    # History.
+    note "s57 ring look and challenges: $((SECONDS - t0)) s"
+    go_tab History
+    wait_for 5 on_screen_no 2
+    baseline_update
+    press h-delete-history "" 0.5
+    lite_panel history_delete
+    tap "Last week" 0 0.3
+    found=$(panel_check)
+    [ -z "$found" ] || panel_problem "history: $found"
+    # Settings: every row, a panel or a screen.
+    note "s57 history: $((SECONDS - t0)) s"
+    go_tab Settings
+    wait_for 5 on_screen_no 3
+    panel_rows settings 3
+    note "s57 settings rows: $((SECONDS - t0)) s"
+    # The theme screen: one theme takes, and the panels of the colours.
+    tap_has Theme 0 0.5
+    if wait_for 5 on_screen_no 5; then
+        tap Light 0 1.0
+        wait_for 3 is_on Light || panel_problem "theme Light does not take"
+        tap Dark 0 0.6
+        tap_row "Choose your own colour"
+        lite_panel theme_accent_wheel
+        tap_row "Your own theme"
+        tap_row Background
+        lite_panel theme_own_Background
+        press_back
+        wait_for 5 on_screen_no 3 || panel_problem "not back from the theme screen"
+    else
+        panel_problem "no theme screen"
+    fi
+    dev am force-stop "$PKG"
+    S57_LITE=
+    if on_emulator; then
+        dev settings put system font_scale "$old_font"
+        if [ -z "${VARIANT:-}" ]; then
+            dev wm size reset
+            dev wm density reset
+        fi
+    fi
+    if [ -z "$PANEL_PROBLEMS" ]; then
+        pass "panels opened, a choice taken and back in each, nothing cut off"
     else
         fail "${PANEL_PROBLEMS#; }"
     fi
