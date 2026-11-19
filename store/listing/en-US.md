@@ -54,7 +54,7 @@ AND
 • Works on tablets and foldables
 • Open source (MIT)
 
-Needs Android 12 or newer on a 64-bit phone.
+Needs Android 10 or newer on a 64-bit phone.
 
 ## What's new (max 500)
 

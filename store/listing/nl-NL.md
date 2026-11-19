@@ -54,7 +54,7 @@ EN VERDER
 • Werkt op tablets en vouwtelefoons
 • Open source (MIT)
 
-Vereist Android 12 of nieuwer op een 64-bit telefoon.
+Vereist Android 10 of nieuwer op een 64-bit telefoon.
 
 ## Wat is er nieuw (max 500)
 

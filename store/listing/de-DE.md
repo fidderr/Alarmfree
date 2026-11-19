@@ -54,7 +54,7 @@ UND
 • Funktioniert auf Tablets und Foldables
 • Open Source (MIT)
 
-Benötigt Android 12 oder neuer auf einem 64-Bit-Telefon.
+Benötigt Android 10 oder neuer auf einem 64-Bit-Telefon.
 
 ## Neuigkeiten (max. 500)
 
