@@ -25,7 +25,7 @@ mod colour;
 mod datepicker;
 #[cfg(debug_assertions)]
 mod debug;
-#[cfg(all(debug_assertions, feature = "devtest"))]
+#[cfg(any(test, all(debug_assertions, feature = "devtest")))]
 mod debug_elements;
 mod editor;
 mod editor_look;
@@ -39,6 +39,8 @@ mod look;
 mod modal_tests;
 mod palette;
 mod panel;
+#[cfg(test)]
+mod panel_tests;
 #[cfg(test)]
 mod preedit_tests;
 mod reliability;
@@ -354,52 +356,14 @@ fn new_ctx(ui: &MainWindow, settings: AppSettings, alarms: Vec<AlarmData>) -> Rc
     })
 }
 
-pub fn run() -> Result<(), slint::PlatformError> {
-    // First, so the alarm list below already reflects one-time alarms it switched off.
-    crate::platform::init_platform();
-    crate::diag_log::event(
-        "start",
-        &format!(
-            "screen opened, {}",
-            if crate::platform::PROCESS_STARTED_BY_WAKE.load(std::sync::atomic::Ordering::Relaxed) {
-                "warm: the process was already up for a wake-up"
-            } else {
-                "cold or already running"
-            }
-        ),
-    );
-    // A native window may stay at 60 Hz otherwise; the original's WebView gets the fast rate itself.
-    mobile_sentinel::display::set_preferred_frame_rate(
-        mobile_sentinel::display::PreferredFrameRate::Highest,
-    );
-
-    let settings = crate::persistence::load_settings();
-    let alarms = crate::persistence::load_alarms();
-    crate::feedback::set_enabled(settings.prefs.touch_feedback);
-    crate::history_persistence::delete_history(Some(HISTORY_KEEP_DAYS));
-    crate::ring_photos::prune(&alarms, settings.prefs.alarm_defaults.as_ref());
-
-    let ui = MainWindow::new()?;
-    let ctx = new_ctx(&ui, settings, alarms);
-    CTX.with(|slot| *slot.borrow_mut() = Rc::downgrade(&ctx));
-
-    {
-        let ctx = Rc::downgrade(&ctx);
-        ui.global::<Tr>().on_lookup(move |key, _| {
-            ctx.upgrade()
-                .map(|ctx| i18n::t(&ctx.tr.borrow(), key.as_str()))
-                .unwrap_or_else(|| key.to_string())
-                .into()
-        });
-    }
+/// The text and chip layout the window asks the code for.
+fn connect_layout(ui: &MainWindow) {
     ui.global::<ChipLayout>().on_positions(chipflow::positions);
     ui.global::<Glyphs>().on_split(chipflow::glyphs);
-    apply_theme(&ctx);
-    settings::apply_motion(&ctx);
-    reliability::refresh_banner(&ctx);
-    home::refresh(&ctx);
-    let first_run = !ctx.settings.borrow().prefs.setup_done;
+}
 
+/// What a touch on the window does: every callback of the window, to the screen that handles it.
+fn connect(ctx: &Rc<Ctx>, ui: &MainWindow) {
     macro_rules! on {
         ($setter:ident, |$ctx:ident $(, $arg:ident)*| $body:expr) => {{
             let weak = Rc::downgrade(&ctx);
@@ -465,17 +429,65 @@ pub fn run() -> Result<(), slint::PlatformError> {
     on!(on_ed_sheet_opened, |ctx, sheet| editor::sheet_opened(
         &ctx, sheet
     ));
-    connect_editor_sheets(&ctx, &ui);
+    connect_editor_sheets(ctx, ui);
     on!(on_ed_delete_confirmed, |ctx| editor::delete(&ctx));
     on!(on_ed_discard_confirmed, |ctx| editor::discard(&ctx));
     on!(on_ed_sheet_closed, |ctx| editor::sheet_closed(&ctx));
     on!(on_ring_snooze, |ctx| ring::snooze(&ctx));
     on!(on_ring_turn_off, |ctx| ring::turn_off(&ctx));
     on!(on_ring_activity, |_ctx| ring::note_activity());
-    challenge_run::connect(&ctx, &ui);
-    challenge_sheets::connect(&ctx, &ui);
+    challenge_run::connect(ctx, ui);
+    challenge_sheets::connect(ctx, ui);
     on!(on_toast_undo, |ctx| toast::undo(&ctx));
     on!(on_toast_dismiss, |ctx| toast::dismiss(&ctx));
+}
+
+pub fn run() -> Result<(), slint::PlatformError> {
+    // First, so the alarm list below already reflects one-time alarms it switched off.
+    crate::platform::init_platform();
+    crate::diag_log::event(
+        "start",
+        &format!(
+            "screen opened, {}",
+            if crate::platform::PROCESS_STARTED_BY_WAKE.load(std::sync::atomic::Ordering::Relaxed) {
+                "warm: the process was already up for a wake-up"
+            } else {
+                "cold or already running"
+            }
+        ),
+    );
+    // A native window may stay at 60 Hz otherwise; the original's WebView gets the fast rate itself.
+    mobile_sentinel::display::set_preferred_frame_rate(
+        mobile_sentinel::display::PreferredFrameRate::Highest,
+    );
+
+    let settings = crate::persistence::load_settings();
+    let alarms = crate::persistence::load_alarms();
+    crate::feedback::set_enabled(settings.prefs.touch_feedback);
+    crate::history_persistence::delete_history(Some(HISTORY_KEEP_DAYS));
+    crate::ring_photos::prune(&alarms, settings.prefs.alarm_defaults.as_ref());
+
+    let ui = MainWindow::new()?;
+    let ctx = new_ctx(&ui, settings, alarms);
+    CTX.with(|slot| *slot.borrow_mut() = Rc::downgrade(&ctx));
+
+    {
+        let ctx = Rc::downgrade(&ctx);
+        ui.global::<Tr>().on_lookup(move |key, _| {
+            ctx.upgrade()
+                .map(|ctx| i18n::t(&ctx.tr.borrow(), key.as_str()))
+                .unwrap_or_else(|| key.to_string())
+                .into()
+        });
+    }
+    connect_layout(&ui);
+    apply_theme(&ctx);
+    settings::apply_motion(&ctx);
+    reliability::refresh_banner(&ctx);
+    home::refresh(&ctx);
+    let first_run = !ctx.settings.borrow().prefs.setup_done;
+
+    connect(&ctx, &ui);
 
     // The setup comes before anything else, once.
     if first_run {
@@ -602,7 +614,12 @@ pub fn run() -> Result<(), slint::PlatformError> {
                 }
             });
         });
-        on!(on_back, |ctx| back(&ctx));
+        let weak = Rc::downgrade(&ctx);
+        ui.on_back(move || {
+            if let Some(ctx) = weak.upgrade() {
+                back(&ctx);
+            }
+        });
     }
 
     ui.run()

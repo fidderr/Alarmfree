@@ -32,14 +32,26 @@ struct Opened {
     recovery: DbRecovery,
 }
 
-static DB: LazyLock<Opened> = LazyLock::new(|| {
+static DB: LazyLock<Opened> = LazyLock::new(open_database);
+
+#[cfg(not(test))]
+fn open_database() -> Opened {
     let path = mobile_sentinel::app_files_dir().join("alarmfree.db");
     let (db, recovery) = open_with_recovery(&path);
     Opened {
         db: Arc::new(db),
         recovery,
     }
-});
+}
+
+/// The UI tests tap through every panel: what they save must not land in a file next to the code.
+#[cfg(test)]
+fn open_database() -> Opened {
+    Opened {
+        db: Arc::new(Database::open_in_memory().expect("in-memory SQLite must always open")),
+        recovery: DbRecovery::None,
+    }
+}
 
 pub fn database() -> &'static Arc<Database> {
     &DB.db
