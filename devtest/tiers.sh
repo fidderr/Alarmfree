@@ -40,6 +40,11 @@ tier_setup() {
         LEG_LIST=$QUICK
         return
     fi
+    # The design walk (walk.sh): s57's full tour, pictures of every panel for a person to look over. Not a test, in no tier.
+    if [ "$tier" = walk ]; then
+        LEG_LIST=s57
+        return
+    fi
     if [ "$avd" = "$NEWEST_AVD" ]; then
         # The big screens first: next to the other emulator's tour of every panel, late in its run, Android
         # 16 starved to the point of its own system UI freezing. The restarts with a PIN last: the others are
