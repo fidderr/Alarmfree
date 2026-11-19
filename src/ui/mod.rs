@@ -31,6 +31,8 @@ mod editor;
 mod editor_look;
 mod editor_sound;
 mod feedback;
+#[cfg(test)]
+mod flow_tests;
 mod history;
 mod home;
 mod home_sheets;
@@ -43,6 +45,8 @@ mod panel;
 mod panel_tests;
 #[cfg(test)]
 mod preedit_tests;
+#[cfg(any(test, all(debug_assertions, feature = "devtest")))]
+mod ready;
 mod reliability;
 mod ring;
 mod settings;
@@ -102,6 +106,16 @@ fn with_ctx(f: impl FnOnce(&Rc<Ctx>)) {
 #[cfg(debug_assertions)]
 pub fn debug_command(command: String, reply: impl FnOnce(String) + Send + 'static) {
     let _ = slint::invoke_from_event_loop(move || {
+        #[cfg(feature = "devtest")]
+        if let Some(spec) = command.strip_prefix("await:") {
+            let mut ui = None;
+            with_ctx(|ctx| ui = Some(ctx.ui.clone()));
+            match ui {
+                Some(ui) => ready::start_await(ui, spec, reply),
+                None => reply("ERR the UI is not up".to_owned()),
+            }
+            return;
+        }
         let mut answer = String::from("ERR the UI is not up");
         with_ctx(|ctx| answer = debug::run(ctx, &command));
         reply(answer);
@@ -468,6 +482,8 @@ pub fn run() -> Result<(), slint::PlatformError> {
     crate::ring_photos::prune(&alarms, settings.prefs.alarm_defaults.as_ref());
 
     let ui = MainWindow::new()?;
+    #[cfg(all(debug_assertions, feature = "devtest"))]
+    ready::install(&ui);
     let ctx = new_ctx(&ui, settings, alarms);
     CTX.with(|slot| *slot.borrow_mut() = Rc::downgrade(&ctx));
 

@@ -72,6 +72,20 @@ fn texts(ui: &MainWindow) -> Vec<Seen> {
     found
 }
 
+/// Is there a text on screen that says this (`exact`) or has it in it?
+pub(super) fn has_text(ui: &MainWindow, wanted: &str, exact: bool) -> bool {
+    texts(ui)
+        .iter()
+        .any(|s| {
+            if exact {
+                s.text == wanted
+                    || (s.role == "ListItem" && s.text.split(", ").any(|part| part == wanted))
+            } else {
+                s.text.contains(wanted)
+            }
+        })
+}
+
 fn inputs(ui: &MainWindow) -> Vec<(ElementHandle, Seen)> {
     let mut found: Vec<(ElementHandle, Seen)> = ElementQuery::from_root(ui)
         .match_descendants()
@@ -164,6 +178,8 @@ pub fn run(ui: &MainWindow, command: &str) -> Option<String> {
     };
     Some(match name {
         "texts" => json(&texts(ui)),
+        // The readiness signals: first frame, screen, sheet and panel (see `ready`).
+        "ready" => super::ready::state(ui),
         // The first text that says exactly this (`findc`: has it in it); `find@2:` takes the
         // third one. `tap` and `tapc` touch it.
         "find" | "findc" | "tap" | "tapc" => {

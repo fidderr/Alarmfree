@@ -21,6 +21,15 @@ const PREVIEW_MS: u64 = 15_000;
 /// How long a tap on a sound plays it, as before the sheet had a Start button.
 const SOUND_TAP_MS: u64 = 5_000;
 
+/// The times above, or shorter ones in a build for testing (`debug_preview_ms.txt`,
+/// `debug_sound_tap_ms.txt`): a scenario need not sit through a real 15 s.
+fn preview_ms() -> u64 {
+    u64::from(crate::platform::shortened("preview_ms", PREVIEW_MS as u32))
+}
+fn sound_tap_ms() -> u64 {
+    u64::from(crate::platform::shortened("sound_tap_ms", SOUND_TAP_MS as u32))
+}
+
 pub(super) fn sound_ids() -> Vec<String> {
     custom_sounds::list_default_sounds()
         .into_iter()
@@ -362,7 +371,8 @@ fn start_vibration(ctx: &Rc<Ctx>, pattern: u8) {
     let pattern = crate::platform::VIBRATION_PATTERNS
         [usize::from(pattern).min(crate::platform::VIBRATION_PATTERNS.len() - 1)];
     mobile_sentinel::haptics::vibrate_pattern(&crate::platform::repeated_pattern(
-        pattern, PREVIEW_MS,
+        pattern,
+        preview_ms(),
     ));
     let token = {
         let mut editor = ctx.editor.borrow_mut();
@@ -372,7 +382,7 @@ fn start_vibration(ctx: &Rc<Ctx>, pattern: u8) {
         ed.vibrating = true;
         ed.preview_token
     };
-    stop_after_a_while(ctx, token, PREVIEW_MS);
+    stop_after_a_while(ctx, token, preview_ms());
     super::editor::sync(ctx);
 }
 
@@ -390,7 +400,7 @@ pub fn pick_sound(ctx: &Rc<Ctx>, index: usize) {
     });
     // A tap picks the sound and plays it for a few seconds; a tap on another sound, or on the
     // same one, starts that one over. Stop, Done and Back end it.
-    start_preview(ctx, SOUND_TAP_MS);
+    start_preview(ctx, sound_tap_ms());
 }
 
 pub fn no_sound(ctx: &Rc<Ctx>) {
@@ -407,7 +417,7 @@ pub fn toggle_preview(ctx: &Rc<Ctx>) {
     if playing {
         stop_preview(ctx);
     } else {
-        start_preview(ctx, PREVIEW_MS);
+        start_preview(ctx, preview_ms());
     }
 }
 
@@ -614,6 +624,11 @@ pub fn delay_picked(ctx: &Ctx, index: usize) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn trying_a_sound_lasts_5_s_and_15_s_when_nothing_shortens_it() {
+        assert_eq!((sound_tap_ms(), preview_ms()), (5_000, 15_000));
+    }
 
     #[test]
     fn chips_flow_to_a_new_line_when_the_line_is_full() {

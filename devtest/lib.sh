@@ -548,7 +548,7 @@ sq_escape() {
 }
 ui() { # command: its answer, or "no answer from the app"
     local out
-    out=$(as_app "cd files && rm -f debug_script_result.txt && print -r -- 'ui:$(sq_escape "$1")' > debug_action.tmp && mv debug_action.tmp debug_action.txt && i=0; while [ ! -e debug_script_result.txt ] && [ \$i -lt 300 ]; do sleep 0.01; i=\$((i + 1)); done; cat debug_script_result.txt 2> /dev/null")
+    out=$(as_app "cd files && rm -f debug_script_result.txt && print -r -- 'ui:$(sq_escape "$1")' > debug_action.tmp && mv debug_action.tmp debug_action.txt && i=0; while [ ! -e debug_script_result.txt ] && [ \$i -lt ${UI_WAIT:-300} ]; do sleep 0.01; i=\$((i + 1)); done; cat debug_script_result.txt 2> /dev/null")
     if [ -n "$out" ]; then
         echo "$out"
         return 0
@@ -556,6 +556,48 @@ ui() { # command: its answer, or "no answer from the app"
     echo "no answer from the app"
     return 1
 }
+
+# ---- Readiness signals ----
+# The app tells when it is ready (src/ui/ready.rs), so a scenario waits for that and not for a
+# guess. `ui:await` runs inside the app: it answers when every condition holds and the layout has
+# stood still for a moment (no panel sliding, nothing fading), or when the time is up.
+# Conditions: key=value or key!=value of `ui ready` (screen, home_sheet, panel, editor_sheet,
+# theme_sheet, ringing, toast, first_frame), key>N, text=, textc=, gone=. UI_QUIET=1: no message.
+await_ms() { # milliseconds condition...
+    local ms=$1 out
+    shift
+    out=$(UI_WAIT=$((ms / 10 + 400)) ui "await:$ms:$(IFS=';'; echo "$*")")
+    case "$out" in OK*) return 0 ;; esac
+    [ -n "${UI_QUIET:-}" ] || echo "WAIT  $CURRENT  gave up after ${ms}ms waiting for [$*]: $out" >&2
+    return 1
+}
+await_ui() { local s=$1; shift; await_ms $((s * 1000)) "$@"; }
+await_settled() { await_ui "${1:-3}"; }
+await_first_frame() { await_ui "${1:-30}" 'first_frame=1'; }
+await_screen() { await_ui "${2:-6}" "screen=$1"; }
+await_sheet_open() { await_ui "${1:-6}" 'home_sheet!=None'; }
+await_sheet_closed() { await_ui "${1:-6}" 'home_sheet=None'; }
+await_panel_open() { await_ui "${1:-6}" 'panel=true'; }
+await_panel_closed() { await_ui "${1:-6}" 'panel=false'; }
+await_text() { await_ui "${2:-6}" "text=$1"; }
+await_text_has() { await_ui "${2:-6}" "textc=$1"; }
+await_gone() { await_ui "${2:-6}" "gone=$1"; }
+ui_frames() { ui ready | sed -nE 's/.*frames=([0-9]+).*/\1/p'; }
+# After a touch or key: the app has drawn something new (a touch that changes nothing draws
+# nothing: then the short wait ends quietly) and the layout stands still.
+after_input() {
+    await_ms 5000 '~moved'
+}
+# Type into text field n and check what the field holds, again (up to 3 times) when it does not
+# hold the text: the keys go through the window's own events (settext), and the check is the
+# element channel's reading of the field, not a hope.
+field_value() { ui inputs | python -I -c '
+import json, sys
+rows = json.loads(sys.stdin.read())
+n = int(sys.argv[1])
+print(rows[n]["t"] if n < len(rows) else "")
+' "$1" 2> /dev/null; }
+
 # A property of the window from the snapshot: numbers, booleans and strings (not the lists).
 sn() {
     ui snapshot | sed -nE 's/.*"'"$1"'":("([^"]*)"|([^,}]*)).*/\2\3/p' | head -1
@@ -568,7 +610,8 @@ press() { # callback [argument]
     local said
     said=$(ui "press:$1:${2:-}")
     [ "$said" = OK ] || echo "press $1: $said" >&2
-    sleep "${3:-0.15}"
+    # The callback has run when the app says OK; what it moved is still settling.
+    UI_QUIET=1 await_settled 3
     [ "$said" = OK ]
 }
 # The middle of the first text on screen that says this, in device pixels ("x y"), or "none".
@@ -593,17 +636,17 @@ page_is_up() { [ "$(ui window)" != "no answer from the app" ]; }
 # busy with something else, which the results then say.
 PAGE_WAITED=""
 on_screen() { # text [seconds]
-    wait_for "${2:-6}" is_there "$1" && return 0
+    UI_QUIET=1 await_text "$1" "${2:-6}" && return 0
     [ -z "$PAGE_WAITED" ] || return 1
     PAGE_WAITED=1
     page_is_up && return 1
     local t0=$SECONDS
-    wait_for 60 page_is_up || return 1
+    UI_QUIET=1 await_first_frame 60 || return 1
     echo "NOTE  $CURRENT  the window was not up for another $((SECONDS - t0))s" | tee -a "$RESULTS"
-    wait_for "${2:-6}" is_there "$1"
+    UI_QUIET=1 await_text "$1" "${2:-6}"
 }
 on_screen_has() { wait_for "${2:-6}" has_there "$1"; }
-gone() { wait_for "${2:-6}" is_not_there "$1"; }
+gone() { UI_QUIET=1 await_gone "$1" "${2:-6}"; }
 # Every text on screen, one per line, top to bottom.
 all_texts() { ui texts | grep -oE '"t":"([^"\]|\.)*"' | sed -E 's/^"t":"//; s/"$//; s/\\"/"/g'; }
 texts_of() { all_texts | tr '\n' '|' | sed 's/|$//'; }
@@ -611,16 +654,8 @@ texts_of() { all_texts | tr '\n' '|' | sed 's/|$//'; }
 # from 0), as a finger does it. With `c` in front of the pause, the text only has to have this in it.
 # Where the text is once it holds still: a panel slides in, and a touch on the way would miss.
 still_where() { # command text [which]
-    local a b i=0
-    a=$("$1" "$2" "${3:-}")
-    while [ "$i" -lt 8 ]; do
-        sleep 0.1
-        b=$("$1" "$2" "${3:-}")
-        [ "$a" = "$b" ] && break
-        a=$b
-        i=$((i + 1))
-    done
-    echo "$a"
+    UI_QUIET=1 await_settled 2
+    "$1" "$2" "${3:-}"
 }
 tap() { # text [which of them] [seconds to wait]
     local xy
@@ -634,7 +669,7 @@ tap() { # text [which of them] [seconds to wait]
     esac
     # shellcheck disable=SC2086
     dev input tap $xy
-    sleep "${3:-0.2}"
+    after_input
 }
 # The time of the editor, which a touch there opens the time sheet.
 tap_time() { tap_has "Time:" 0 "${1:-0.6}"; }
@@ -650,14 +685,14 @@ tap_has() { # text [which] [seconds]
     esac
     # shellcheck disable=SC2086
     dev input tap $xy
-    sleep "${3:-0.2}"
+    after_input
 }
 # The same through the window's own events, with no finger on the glass: where only the outcome counts.
 tap_in() { # text [which] [seconds]
     local said
     still_where where "$1" "${2:-}" > /dev/null
     said=$(ui "tap${2:+@$2}:$1")
-    sleep "${3:-0.15}"
+    UI_QUIET=1 await_settled 3
     [ "$said" = OK ] || echo "nothing says $1" >&2
     [ "$said" = OK ]
 }
@@ -666,20 +701,21 @@ click_text() { tap_in "$@"; }
 set_field() { type_field "$@"; }
 # The same through the keys, which runs the field's own handler for what is typed.
 type_field() { # n text
-    local said before after i
-    # The keyboard moves the sheet: tap a field only once the fields stand still, or the tap
+    local said try=0
+    # The keyboard moves the sheet: tap a field only once the layout stands still, or the tap
     # lands where the field was (the second text went into the first field).
-    before=$(ui inputs)
-    for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
-        sleep 0.25
-        after=$(ui inputs)
-        [ "$after" = "$before" ] && break
-        before=$after
+    await_settled 6 || return 1
+    while [ "$try" -lt 3 ]; do
+        said=$(ui "settext:$1:$2")
+        [ "$said" = OK ] || { echo "no field $1" >&2; return 1; }
+        await_settled 3
+        # What the field says now, from the element channel: not what was sent.
+        [ "$(field_value "$1")" = "$2" ] && return 0
+        try=$((try + 1))
+        note "field $1 holds [$(field_value "$1")], not [$2]: typed again"
     done
-    said=$(ui "settext:$1:$2")
-    sleep 0.2
-    [ "$said" = OK ] || echo "no field $1" >&2
-    [ "$said" = OK ]
+    echo "field $1 does not take [$2]: it holds [$(field_value "$1")]" >&2
+    return 1
 }
 fields() { ui inputs; }
 # Slider n (from the top) to this fraction (0 to 1) of its track, by a touch there.
@@ -692,7 +728,7 @@ set_slider() { # n fraction
     w=$(echo "$row" | sed -E 's/.*"w":([0-9]+).*/\1/')
     scale=$(window_size | cut -d' ' -f3)
     dev input tap "$(awk -v x="$x" -v w="$w" -v s="$scale" -v f="$2" 'BEGIN { printf "%d", x - w / 2 + 12 * s + (w - 24 * s) * f }')" "$y"
-    sleep 0.15
+    after_input
 }
 # The number of a choice in a list of radio rows (from the top), by its text.
 radio_index() {
@@ -711,7 +747,7 @@ window_size() { ui window; }
 
 press_back() {
     dev input keyevent KEYCODE_BACK
-    sleep 0.2
+    after_input
 }
 db_count() { printf "SELECT count(*) FROM alarms WHERE data LIKE '%%%s%%';\n" "$1" | sql; }
 alarm_count() { printf 'SELECT count(*) FROM alarms;\n' | sql; }
@@ -997,7 +1033,7 @@ swipe_ys() { # scroll | back -> x y x y in device pixels
 sheet_scroll() {
     # shellcheck disable=SC2046
     dev input swipe $(swipe_ys scroll) 400
-    sleep 0.8
+    after_input
 }
 # A tap on what the text names, once it is clear of the bottom of the window: on a window with a
 # navigation bar (3-button navigation) or a Done button that stays at the bottom of a panel, what is
@@ -1030,7 +1066,7 @@ set_field_clear() { # n text
         [ "$f" -lt $((d - 80)) ] && break
         read -r x1 y1 x2 y2 <<< "$(swipe_ys scroll)"
         dev input swipe 26 "$y1" 26 "$y2" 400
-        sleep 0.8
+        after_input
     done
     set_field "$1" "$2"
 }
@@ -1040,7 +1076,7 @@ sheet_nudge() {
     h=$(window_size | cut -d' ' -f2)
     case "$h" in '' | *[!0-9]*) h=1920 ;; esac
     dev input swipe 540 $((h * 70 / 100)) 540 $((h * 45 / 100)) 700
-    sleep 0.8
+    after_input
 }
 # A row of a long list into the middle of the window, by short swipes (a fling carries a long one
 # past it, by a different distance each time): there it is neither under the title nor under the
@@ -1072,7 +1108,7 @@ centre_row() { # text [has]
                 fi
                 ;;
         esac
-        sleep 0.8
+        after_input
     done
     return 1
 }
@@ -1099,10 +1135,10 @@ tap_scrolling() { # text
 hide_keyboard() {
     dev dumpsys input_method | grep -q 'mInputShown=true' || return 0
     dev input keyevent KEYCODE_BACK
-    sleep 0.6
+    after_input
 }
 sheet_scroll_up() {
     # shellcheck disable=SC2046
     dev input swipe $(swipe_ys back) 400
-    sleep 0.8
+    after_input
 }
