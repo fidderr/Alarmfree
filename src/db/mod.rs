@@ -79,7 +79,10 @@ impl Database {
         let mut alarms = Vec::with_capacity(total);
         for (id, data) in rows {
             match serde_json::from_str::<AlarmData>(&data) {
-                Ok(alarm) => alarms.push(alarm),
+                Ok(mut alarm) => {
+                    alarm.migrate();
+                    alarms.push(alarm);
+                }
                 Err(e) => log::error!("[AlarmFree] alarm {id} cannot be read: {e}"),
             }
         }
@@ -222,7 +225,12 @@ impl Database {
         );
 
         match result {
-            Ok(settings) => Ok(Some(settings)),
+            Ok(mut settings) => {
+                if let Some(defaults) = settings.prefs.alarm_defaults.as_mut() {
+                    defaults.migrate();
+                }
+                Ok(Some(settings))
+            }
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
             Err(e) => Err(e),
         }
@@ -536,6 +544,7 @@ mod tests {
             vibration: 0,
             volume_percent: None,
             notify_before_minutes: 0,
+            reminder: Default::default(),
             ring_look: Default::default(),
             wake_check_minutes: 0,
             max_brightness: false,
@@ -551,6 +560,24 @@ mod tests {
 
         assert_eq!(alarms, vec![good]);
         assert_eq!(unreadable, 1);
+    }
+
+    #[test]
+    fn alarms_saved_with_an_old_notice_come_back_with_a_reminder() {
+        let db = Database::open_in_memory().unwrap();
+        {
+            let conn = db.conn.lock().unwrap();
+            conn.execute(
+                "INSERT INTO alarms (id, data) VALUES ('old', ?1)",
+                [r#"{"id":"old","time_hour":6,"time_minute":15,"label":"","days":[true,true,true,true,true,true,true],"enabled":true,"sound":"air","sound_mode":0,"challenges":[],"snooze_count":0,"snooze_interval":1,"notify_before_minutes":60}"#],
+            )
+            .unwrap();
+        }
+        let (alarms, unreadable) = db.list_alarms_reporting().unwrap();
+        assert_eq!(unreadable, 0);
+        assert!(alarms[0].reminder.on);
+        assert_eq!(alarms[0].reminder.minutes, 60);
+        assert!(!alarms[0].reminder.sound);
     }
 
     #[test]

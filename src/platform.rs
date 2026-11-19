@@ -209,7 +209,7 @@ pub fn refresh_outside_app() {
                 soonest = Some((at, alarm.clone()));
             }
         }
-        let before_ms = i64::from(alarm.notify_before_minutes) * 60_000;
+        let before_ms = alarm.reminder.before_ms().unwrap_or(0);
         let wanted = next.filter(|_| {
             before_ms > 0 && alarm.enabled && !alarm.hidden && kit.snoozed_until(&id).is_none()
         });
@@ -851,6 +851,7 @@ mod tests {
             vibration: 0,
             volume_percent: None,
             notify_before_minutes: 0,
+            reminder: Default::default(),
             ring_look: Default::default(),
             wake_check_minutes: 0,
             max_brightness: false,

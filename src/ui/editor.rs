@@ -386,10 +386,10 @@ pub fn sync(ctx: &Ctx) {
         .into(),
     );
     rows.set_notice_summary(
-        if current.notify_before_minutes == 0 {
+        if !current.reminder.on {
             t(&tr, "config.fade_off")
         } else {
-            t(&tr, "text.minutes").replace("{minutes}", &current.notify_before_minutes.to_string())
+            t(&tr, "text.minutes").replace("{minutes}", &current.reminder.minutes.to_string())
         }
         .into(),
     );

@@ -248,7 +248,9 @@ pub(super) fn sync_options(ctx: &Ctx, sheet: EditorSheet) {
                 .collect(),
             NOTICE_MINUTES
                 .iter()
-                .position(|m| *m == ed.draft.notify_before_minutes)
+                .position(|m| {
+                    u16::from(*m) == ed.draft.reminder.minutes * u16::from(ed.draft.reminder.on)
+                })
                 .map_or(-1, |i| i as i32),
         ),
     };
@@ -276,7 +278,8 @@ pub fn opt_picked(ctx: &Rc<Ctx>, index: usize) {
         }
         EditorSheet::Notice => {
             if let Some(m) = NOTICE_MINUTES.get(index) {
-                ed.draft.notify_before_minutes = *m;
+                ed.draft.reminder.on = *m > 0;
+                ed.draft.reminder.minutes = u16::from(*m);
             }
         }
         _ => {}

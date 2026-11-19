@@ -56,9 +56,13 @@ pub struct AlarmData {
     /// The screen goes to full brightness while it rings.
     #[serde(default)]
     pub max_brightness: bool,
-    /// A silent notice this long before it rings, from which the ring can be skipped (0 = off).
-    #[serde(default)]
+    /// What alarms saved before the reminder had: a silent notice this many minutes before.
+    /// Read once and turned into `reminder` by [`AlarmData::migrate`]; never written again.
+    #[serde(default, skip_serializing)]
     pub notify_before_minutes: u8,
+    /// A notification before it rings, from which the ring can be skipped.
+    #[serde(default)]
+    pub reminder: Reminder,
     /// How the screen looks while it rings.
     #[serde(default)]
     pub ring_look: crate::models::RingLook,
@@ -78,6 +82,52 @@ pub struct AlarmData {
     /// Not in the list: wake-up checks and test alarms.
     #[serde(default)]
     pub hidden: bool,
+}
+
+/// How long before the ring a reminder can come, in minutes.
+pub const REMINDER_MINUTES: [u16; 19] = [
+    5, 10, 15, 30, 45, 60, 120, 180, 240, 300, 360, 420, 480, 540, 600, 660, 720, 960, 1440,
+];
+/// The longest text a reminder can carry, in characters.
+pub const REMINDER_TEXT_MAX: usize = 120;
+
+/// The notification before an alarm: when, what it says, and whether it makes a sound.
+#[derive(Clone, PartialEq, Eq, Debug, Default, serde::Serialize, serde::Deserialize)]
+pub struct Reminder {
+    #[serde(default)]
+    pub on: bool,
+    /// How long before the ring, one of [`REMINDER_MINUTES`].
+    #[serde(default)]
+    pub minutes: u16,
+    /// What it says under the alarm's time; empty is the alarm's label.
+    #[serde(default)]
+    pub text: String,
+    /// The phone's notification sound, instead of silence.
+    #[serde(default)]
+    pub sound: bool,
+}
+
+impl Reminder {
+    /// How long before the ring it comes, in milliseconds; `None` when there is none.
+    pub fn before_ms(&self) -> Option<i64> {
+        (self.on && self.minutes > 0).then(|| i64::from(self.minutes) * 60_000)
+    }
+}
+
+impl AlarmData {
+    /// Bring an alarm saved by an older version up to date. Every way an alarm is read goes
+    /// through here.
+    pub fn migrate(&mut self) {
+        if self.notify_before_minutes > 0 && !self.reminder.on {
+            self.reminder = Reminder {
+                on: true,
+                minutes: u16::from(self.notify_before_minutes),
+                text: String::new(),
+                sound: false,
+            };
+        }
+        self.notify_before_minutes = 0;
+    }
 }
 
 fn default_ring_limit_secs() -> Option<u32> {

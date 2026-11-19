@@ -79,6 +79,7 @@ mod tests {
             vibration: 0,
             volume_percent: None,
             notify_before_minutes: 0,
+            reminder: Default::default(),
             ring_look: Default::default(),
             wake_check_minutes: 0,
             max_brightness: false,
