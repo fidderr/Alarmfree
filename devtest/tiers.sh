@@ -46,7 +46,7 @@ tier_setup() {
         # done by then.
         LEG_SKIP=$OLDEST_ONLY
         LEG_FIRST=big_screens
-        LEG_LAST="s13b s13"
+        LEG_LAST="s13b s13d s13"
     else
         LEG_SKIP=$NEWEST_ONLY
     fi
