@@ -80,6 +80,8 @@ i-slint-backend-testing = { git = "https://github.com/fidderr/slint", rev = "f08
 i-slint-core = { git = "https://github.com/fidderr/slint", rev = "f0890e242d8b529782239ac6af39a5d03f3fc730", default-features = false, features = ["std", "accessibility-text"] }
 accesskit = "0.25"
 tempfile = "3"
+proptest = "1"
+chrono-tz = "0.10"
 tokio = { version = "1", features = ["rt", "macros", "time"] }
 
 [patch.crates-io]
