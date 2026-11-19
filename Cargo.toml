@@ -95,3 +95,4 @@ accesskit_android = { git = "https://github.com/fidderr/accesskit", rev = "764f0
 opt-level = 2
 [profile.dev.package.i-slint-backend-testing]
 opt-level = 2
+mobile-sentinel = { path = "../ms-reminder" }
