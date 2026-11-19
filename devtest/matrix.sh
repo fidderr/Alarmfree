@@ -2676,7 +2676,12 @@ s55() {
     # by now, and a person would press Turn off and Scan again.
     # (The ring screen's Turn off is listed behind the challenge screen too: it is pressed only without a Scan on screen.)
     again() { is_there SCAN || { is_there "Turn off" && tap "Turn off" 0 0.3; }; on_screen SCAN 8 && tap SCAN 0 0.3; }
-    wait_for 3 scanner_on_top || { sleep 1; again; }
+    # Android 10 to 13 keep the camera that Home paused until its limit: a person taps a few times.
+    for _ in 1 2 3; do
+        wait_for 3 scanner_on_top && break
+        sleep 1
+        again
+    done
     wait_for 8 scanner_on_top || {
         problems="$problems; the camera does not open after Home"
         note "after Home: focus=$(focused_window | cut -c1-90) scan_state=$(sn scan_state) screen=$(screen_no) texts=$(texts_of | head -c 160)"
