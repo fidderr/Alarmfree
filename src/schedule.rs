@@ -6,7 +6,7 @@
 
 use chrono::{Duration, NaiveDate, NaiveDateTime};
 
-use crate::models::AlarmData;
+use crate::models::{AlarmData, Reminder};
 
 const DATE_FORMAT: &str = "%Y-%m-%d";
 
@@ -183,6 +183,32 @@ pub fn day_label(today: NaiveDate, ring_day: NaiveDate) -> DayLabel {
         0 => DayLabel::Today,
         1 => DayLabel::Tomorrow,
         _ => DayLabel::Weekday(ring_day.weekday()),
+    }
+}
+
+/// What to do with the reminder of an alarm.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReminderPlan {
+    /// None wanted: take away what is set.
+    Clear,
+    /// Wanted, but its moment has passed for this ring: what shows now stays until the ring.
+    Keep,
+    /// Come at this moment (unix ms), and be gone when the ring is due.
+    Set { at_ms: i64, before_ms: i64 },
+}
+
+/// The reminder for the next ring, which is `next_ring_ms` (unix ms, from whatever knows about
+/// repeats, skips, pauses and time zones): that moment minus the reminder's time, in real time.
+/// `None` for the ring when the alarm has none to come or is not to be reminded of (off,
+/// snoozing). A reminder already past when this is called is not set for this ring: the next one
+/// comes with the ring after.
+pub fn reminder_plan(reminder: &Reminder, next_ring_ms: Option<i64>, now_ms: i64) -> ReminderPlan {
+    let (Some(before_ms), Some(ring_ms)) = (reminder.before_ms(), next_ring_ms) else {
+        return ReminderPlan::Clear;
+    };
+    match ring_ms - before_ms {
+        at_ms if at_ms > now_ms => ReminderPlan::Set { at_ms, before_ms },
+        _ => ReminderPlan::Keep,
     }
 }
 
@@ -443,5 +469,122 @@ mod tests {
         let mut off = vec![alarm(NO_DAYS, None, 16, 0)];
         off[0].enabled = false;
         assert!(!date_undated_one_time(&mut off, now));
+    }
+
+    fn reminder(minutes: u16) -> Reminder {
+        Reminder {
+            on: true,
+            minutes,
+            ..Reminder::default()
+        }
+    }
+
+    const HOUR: i64 = 3_600_000;
+
+    #[test]
+    fn a_reminder_comes_its_time_before_the_ring() {
+        let ring = 100 * HOUR;
+        for (minutes, before) in [(15u16, 15 * 60_000), (480, 8 * HOUR), (1440, 24 * HOUR)] {
+            assert_eq!(
+                reminder_plan(&reminder(minutes), Some(ring), 0),
+                ReminderPlan::Set {
+                    at_ms: ring - before,
+                    before_ms: before
+                }
+            );
+        }
+    }
+
+    #[test]
+    fn a_reminder_already_past_is_not_set_for_this_ring() {
+        let ring = 100 * HOUR;
+        // Seven hours to go and the reminder is 8 hours before.
+        assert_eq!(
+            reminder_plan(&reminder(480), Some(ring), ring - 7 * HOUR),
+            ReminderPlan::Keep
+        );
+        // Exactly at its moment is too late as well.
+        assert_eq!(
+            reminder_plan(&reminder(480), Some(ring), ring - 8 * HOUR),
+            ReminderPlan::Keep
+        );
+        // A minute earlier it still comes.
+        assert!(matches!(
+            reminder_plan(&reminder(480), Some(ring), ring - 8 * HOUR - 60_000),
+            ReminderPlan::Set { .. }
+        ));
+    }
+
+    #[test]
+    fn no_reminder_when_off_or_nothing_rings() {
+        let mut off = reminder(30);
+        off.on = false;
+        assert_eq!(reminder_plan(&off, Some(HOUR), 0), ReminderPlan::Clear);
+        assert_eq!(reminder_plan(&reminder(30), None, 0), ReminderPlan::Clear);
+        assert_eq!(
+            reminder_plan(&Reminder::default(), Some(HOUR), 0),
+            ReminderPlan::Clear
+        );
+    }
+
+    fn ms(moment: NaiveDateTime) -> i64 {
+        moment.and_utc().timestamp_millis()
+    }
+
+    #[test]
+    fn a_reminder_across_midnight_is_the_evening_before() {
+        let now = at("2026-11-01", 12, 0);
+        let ring = next_ring_moment(0, 30, [true; 7], None, now).unwrap();
+        assert_eq!(ring, at("2026-11-02", 0, 30));
+        assert_eq!(
+            reminder_plan(&reminder(480), Some(ms(ring)), ms(now)),
+            ReminderPlan::Set {
+                at_ms: ms(at("2026-11-01", 16, 30)),
+                before_ms: 8 * HOUR
+            }
+        );
+    }
+
+    #[test]
+    fn a_skipped_ring_moves_the_reminder_to_the_next_one() {
+        let now = at("2026-11-02", 21, 0);
+        let first = next_ring_moment(7, 0, [true; 7], None, now).unwrap();
+        // Skipping asks for the ring after it: the schedule is asked again from that ring on.
+        let second = next_ring_moment(7, 0, [true; 7], None, first).unwrap();
+        let r = reminder(60);
+        let plan = |ring| reminder_plan(&r, Some(ms(ring)), ms(now));
+        assert_eq!(
+            plan(first),
+            ReminderPlan::Set {
+                at_ms: ms(at("2026-11-03", 6, 0)),
+                before_ms: HOUR
+            }
+        );
+        assert_eq!(
+            plan(second),
+            ReminderPlan::Set {
+                at_ms: ms(at("2026-11-04", 6, 0)),
+                before_ms: HOUR
+            }
+        );
+    }
+
+    #[test]
+    fn a_one_date_alarm_is_reminded_once_before_its_date() {
+        let now = at("2026-11-01", 12, 0);
+        let one = alarm(NO_DAYS, Some("2026-11-05"), 9, 0);
+        let ring = ms(one_time_moment(&one).unwrap());
+        assert_eq!(
+            reminder_plan(&reminder(1440), Some(ring), ms(now)),
+            ReminderPlan::Set {
+                at_ms: ms(at("2026-11-04", 9, 0)),
+                before_ms: 24 * HOUR
+            }
+        );
+        // Once it has rung there is no next ring, so nothing to remind of.
+        assert_eq!(
+            reminder_plan(&reminder(1440), None, ms(at("2026-11-05", 9, 1))),
+            ReminderPlan::Clear
+        );
     }
 }

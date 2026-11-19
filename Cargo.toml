@@ -85,6 +85,7 @@ chrono-tz = "0.10"
 tokio = { version = "1", features = ["rt", "macros", "time"] }
 
 [patch.crates-io]
+mobile-sentinel = { path = "../ms-reminder" }
 accesskit = { git = "https://github.com/fidderr/accesskit", rev = "764f0513e287de757b9c6c5ef3b91474dafac64f" }
 accesskit_consumer = { git = "https://github.com/fidderr/accesskit", rev = "764f0513e287de757b9c6c5ef3b91474dafac64f" }
 accesskit_android = { git = "https://github.com/fidderr/accesskit", rev = "764f0513e287de757b9c6c5ef3b91474dafac64f" }
@@ -95,4 +96,3 @@ accesskit_android = { git = "https://github.com/fidderr/accesskit", rev = "764f0
 opt-level = 2
 [profile.dev.package.i-slint-backend-testing]
 opt-level = 2
-mobile-sentinel = { path = "../ms-reminder" }

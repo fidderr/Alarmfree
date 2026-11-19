@@ -4,11 +4,14 @@
 //! SDK and its AlarmKit. This file says what AlarmFree wants of it: the policy (lockdown,
 //! texts, limits), and how a saved alarm becomes an [`AlarmSpec`].
 
+use crate::schedule::ReminderPlan;
 use chrono::Local;
 use mobile_sentinel::context::schema::{ChallengeSpec, ScheduleSpec, SnoozePolicy, SoundIdSpec};
 use mobile_sentinel::jobs::RingEnd;
 use mobile_sentinel::recipes::alarm_class::AlarmClassConfig;
-use mobile_sentinel::{AlarmKit, AlarmSpec, InstanceId, ReminderButton, ReminderTap};
+use mobile_sentinel::{
+    AlarmKit, AlarmSpec, InstanceId, ReminderButton, ReminderSound, ReminderTap,
+};
 use std::sync::OnceLock;
 
 use crate::models::AlarmData;
@@ -209,32 +212,37 @@ pub fn refresh_outside_app() {
                 soonest = Some((at, alarm.clone()));
             }
         }
-        let before_ms = alarm.reminder.before_ms().unwrap_or(0);
-        let wanted = next.filter(|_| {
-            before_ms > 0 && alarm.enabled && !alarm.hidden && kit.snoozed_until(&id).is_none()
-        });
-        match wanted {
-            Some(at) if at - before_ms > now_ms => {
+        let usable = alarm.enabled && !alarm.hidden && kit.snoozed_until(&id).is_none();
+        match crate::schedule::reminder_plan(&alarm.reminder, next.filter(|_| usable), now_ms) {
+            ReminderPlan::Set { at_ms, before_ms } => {
                 let time = crate::text::clock(alarm.time_hour, alarm.time_minute, twenty_four);
                 let done_title = text("reminder.skipped").replace("{time}", &time);
                 let (skip, undo) = (text("reminder.skip"), text("action.undo"));
+                let (title, body) =
+                    reminder_words(&alarm, &text("reminder.title").replace("{time}", &time));
+                let (channel, sound) = if alarm.reminder.sound {
+                    (text("reminder.channel_sound"), ReminderSound::Notification)
+                } else {
+                    (text("reminder.channel"), ReminderSound::Silent)
+                };
                 kit.set_reminder(
                     &id,
-                    at - before_ms,
-                    &text("reminder.title").replace("{time}", &time),
-                    &alarm.label,
-                    &text("reminder.channel"),
+                    at_ms,
+                    &title,
+                    &body,
+                    &channel,
                     before_ms,
                     Some(ReminderButton {
                         label: &skip,
                         done_title: &done_title,
                         undo_label: &undo,
                     }),
+                    sound,
                 );
             }
             // Its time has come: what shows now stays until the alarm takes over.
-            Some(_) => {}
-            None => kit.clear_reminder(&id),
+            ReminderPlan::Keep => {}
+            ReminderPlan::Clear => kit.clear_reminder(&id),
         }
     }
     let (title, detail) = widget_text(
@@ -246,6 +254,17 @@ pub fn refresh_outside_app() {
         now_ms,
     );
     mobile_sentinel::home_widget::set_text(&title, &detail);
+}
+
+/// The title and the body of a reminder: the alarm's time (and its label next to it when the
+/// user's own text takes the body), and the user's text or else the label.
+pub fn reminder_words(alarm: &AlarmData, time_title: &str) -> (String, String) {
+    let text = alarm.reminder.text.trim();
+    match (text.is_empty(), alarm.label.trim()) {
+        (true, label) => (time_title.to_owned(), label.to_owned()),
+        (false, "") => (time_title.to_owned(), text.to_owned()),
+        (false, label) => (format!("{time_title} \u{b7} {label}"), text.to_owned()),
+    }
 }
 
 /// What the home-screen widget says about the next ring. It stays up with the app gone,
