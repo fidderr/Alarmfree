@@ -237,6 +237,22 @@ if [ -z "$KEY_PASS" ]; then
 fi
 
 echo ""
+echo "Removing any signature already on the AAB..."
+# The generated Gradle project signs release builds with the debug key, and Play rejects an AAB
+# with more than one certificate chain. Sign a stripped copy, never the build output itself.
+CLEAN_AAB="${UNSIGNED_AAB%.aab}-to-sign.aab"
+python -I - "$UNSIGNED_AAB" "$CLEAN_AAB" <<'PY'
+import re, sys, zipfile
+src, dst = sys.argv[1], sys.argv[2]
+sig = re.compile(r"^META-INF/(MANIFEST\.MF|[^/]+\.(SF|RSA|DSA|EC))$", re.I)
+with zipfile.ZipFile(src) as zin, zipfile.ZipFile(dst, "w") as zout:
+    for info in zin.infolist():
+        if not sig.match(info.filename):
+            zout.writestr(info, zin.read(info.filename))
+PY
+UNSIGNED_AAB="$CLEAN_AAB"
+
+echo ""
 echo "Signing the AAB with jarsigner..."
 echo "(This may take a moment)"
 
@@ -270,7 +286,13 @@ TIMESTAMP=$(date +%Y%m%d-%H%M)
 SIGNED_NAME="AlarmFree-InternalTesting-${TIMESTAMP}.aab"
 SIGNED_PATH="$RELEASE_DIR/$SIGNED_NAME"
 
-cp "$UNSIGNED_AAB" "$SIGNED_PATH"
+SIGNERS=$(python -I -c "import re,sys,zipfile; print(sum(1 for n in zipfile.ZipFile(sys.argv[1]).namelist() if re.match(r'^META-INF/[^/]+\.(RSA|DSA|EC)$', n, re.I)))" "$UNSIGNED_AAB")
+if [ "$SIGNERS" != "1" ]; then
+  echo "ERROR: the signed AAB has $SIGNERS signatures; Play needs exactly 1."
+  exit 1
+fi
+
+mv "$UNSIGNED_AAB" "$SIGNED_PATH"
 
 echo ""
 echo "✅ SUCCESS!"
