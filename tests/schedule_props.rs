@@ -298,11 +298,7 @@ fn eight_hours_before_a_ring_after_the_clocks_went_forward_is_eight_real_hours()
         .unwrap()
         .and_hms_opt(12, 0, 0)
         .unwrap();
-    let ring = instant_in(
-        &zone,
-        next_ring_moment(7, 0, [true; 7], None, now).unwrap() + Duration::days(1),
-    )
-    .unwrap();
+    let ring = instant_in(&zone, next_ring_moment(7, 0, [true; 7], None, now).unwrap()).unwrap();
     assert_eq!(
         ring.date_naive(),
         NaiveDate::from_ymd_opt(2026, 3, 29).unwrap()

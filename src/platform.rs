@@ -789,6 +789,31 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_reminder_says_the_users_text_or_else_the_label() {
+        let mut alarm = crate::alarm_ops::factory_alarm();
+        let title = "Alarm at 7:00";
+        alarm.label = "Work".to_owned();
+        assert_eq!(
+            reminder_words(&alarm, title),
+            (title.to_owned(), "Work".to_owned()),
+            "no text of its own: the label, as before"
+        );
+        alarm.reminder.text = "  Go to bed ".to_owned();
+        assert_eq!(
+            reminder_words(&alarm, title),
+            (
+                "Alarm at 7:00 \u{b7} Work".to_owned(),
+                "Go to bed".to_owned()
+            )
+        );
+        alarm.label.clear();
+        assert_eq!(
+            reminder_words(&alarm, title),
+            (title.to_owned(), "Go to bed".to_owned())
+        );
+    }
+
+    #[test]
     fn a_pattern_keeps_its_rhythm_when_it_repeats() {
         // Heartbeat: buzz, pause, buzz, rest, and the next beat starts right after the rest.
         assert_eq!(
