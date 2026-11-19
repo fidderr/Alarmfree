@@ -338,6 +338,25 @@ impl Tour {
                 s.x + s.w / 2.0
             ));
         }
+        // Anything wider than where it sits, also when its middle is outside the window, which the
+        // texts above do not show (s65 asks the same through `fit`).
+        if !name.ends_with(" help") {
+            let scale = f64::from(self.ui.window().scale_factor());
+            for (text, line) in self.past_window() {
+                let on_a_strip = all
+                    .iter()
+                    .filter(|o| (o.y - line * scale).abs() < 20.0 && o.t != text)
+                    .count()
+                    >= 2;
+                if !on_a_strip
+                    && !KNOWN_OUTSIDE.iter().any(|(look, screen, t)| {
+                        *look == self.look.name && name.starts_with(screen) && *t == text
+                    })
+                {
+                    self.problem(format!("{name}: '{text}' is wider than the window"));
+                }
+            }
+        }
         let els: Vec<El> = all
             .into_iter()
             .filter(|e| !under.contains(&(e.t.clone(), e.role.clone())))
@@ -370,6 +389,36 @@ impl Tour {
                 }
             }
         }
+    }
+
+    /// What lies past the sides of the window, with the line it is on (logical px).
+    fn past_window(&self) -> Vec<(String, f64)> {
+        let window = self.ui.window();
+        let win = window.size().width as f32 / window.scale_factor();
+        let mut found: Vec<(String, f64)> = Vec::new();
+        for e in i_slint_backend_testing::ElementQuery::from_root(&self.ui)
+            .match_descendants()
+            .match_predicate(|e| e.accessible_label().is_some_and(|l| !l.is_empty()))
+            .find_all()
+        {
+            let size = e.size();
+            if size.width <= 0.5 || size.height <= 0.5 || e.computed_opacity() <= 0.01 {
+                continue;
+            }
+            let at = e.absolute_position();
+            if at.x < -1.0 || at.x + size.width > win + 1.0 {
+                let text: String = e
+                    .accessible_label()
+                    .unwrap_or_default()
+                    .chars()
+                    .take(24)
+                    .collect();
+                found.push((text, f64::from(at.y + size.height / 2.0)));
+            }
+        }
+        found.sort_by(|a, b| a.0.cmp(&b.0));
+        found.dedup_by(|a, b| a.0 == b.0);
+        found
     }
 
     fn opened(&self, name: &str) {
