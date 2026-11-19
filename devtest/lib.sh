@@ -887,6 +887,16 @@ set_alarm_volume() {
     dev media volume --stream 4 --set "$1" > /dev/null 2>&1
 }
 
+# What the app saved in Downloads has a row in MediaStore. Removing only the file leaves it, and
+# Android 10 then saves the next one of that name as "name (1).txt".
+rm_download() {
+    local name
+    for name in "$@"; do
+        dev rm -f "/sdcard/Download/$name"
+        dev "content delete --uri content://media/external/downloads --where \"_display_name like '${name//\*/%}'\"" > /dev/null 2>&1
+    done
+}
+
 set_zone() { dev cmd alarm set-timezone "$1" > /dev/null 2>&1; }
 
 # ---- results ----

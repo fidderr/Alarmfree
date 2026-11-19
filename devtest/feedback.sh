@@ -111,7 +111,7 @@ s71() {
     printf "UPDATE alarms SET data = replace(data, '\"label\":\"a\"', '\"label\":\"Secret errand\"') WHERE id='a';
 " | sql
     as_app "mkdir -p files/sentinel && printf '2026-11-14T07:00:01.000+01:00 ring started id=aaaaaaaa 1s after its time challenges=0\n2026-11-14T07:00:09.000+01:00 ring stopped id=aaaaaaaa how=solved challenges_solved=0\nleak Secret errand\n' > files/sentinel/diag.log"
-    dev rm -f /sdcard/Download/alarmfree-report-*.txt /sdcard/Download/alarmfree-setup-*.json
+    rm_download 'alarmfree-report-*.txt' 'alarmfree-setup-*.json'
     local problems=""
     open_settings || problems="$problems; no settings"
     settings_row "Report a problem or idea"

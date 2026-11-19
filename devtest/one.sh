@@ -6,7 +6,7 @@ export APK="${APK:-build/alarmfree-slint-debug.apk}"
 avd=$1 port=$2
 shift 2
 export AVD=$avd SERIAL=emulator-$port OUT="devtest-out/one_$avd"
-case "$avd" in afg12 | msd29) export EMULATOR_GPU=swiftshader_indirect ;; esac
+case "$avd" in afg12 | msd29 | msd30) export EMULATOR_GPU=swiftshader_indirect ;; esac
 . devtest/lib.sh
 claim_device
 if [ -z "${NO_BOOT:-}" ]; then

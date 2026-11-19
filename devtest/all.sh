@@ -2,7 +2,7 @@
 # The whole suite on the newest, the oldest and Android 12 (min_sdk is 29, so Android 10 is the oldest), with the APK that is
 # already built (APK says which, for a release). Two emulators: that is what 16 GB has room for.
 #
-# Usage: bash devtest/all.sh [name]    (AVD_NEW / PORT_NEW, AVD_OLD / PORT_OLD and AVD_TEN / PORT_TEN pick other emulators; the legs run one after the other, default afg16 and afg12 on port 5558, then msd29 (Android 10) on port 5590; LEG=afg16, LEG=afg12 or LEG=msd29 runs one)  results in devtest-out/<name>_<avd>/ and <name>_<avd>.log
+# Usage: bash devtest/all.sh [name]    (AVD_NEW / PORT_NEW, AVD_OLD / PORT_OLD and AVD_TEN / PORT_TEN pick other emulators; the legs run one after the other, default afg16 and afg12 on port 5558, then msd29 (Android 10) on port 5590; LEG=afg16, LEG=afg12 or LEG=msd29 runs one; Android 11 is msd30 on port 5592, AVD_ELEVEN / PORT_ELEVEN)  results in devtest-out/<name>_<avd>/ and <name>_<avd>.log
 cd "$(dirname "$0")/.." || exit 1
 export APK="${APK:-build/alarmfree-slint-debug.apk}"
 NAME=${1:-full}
@@ -64,4 +64,6 @@ leg afg12 && EMULATOR_GPU=swiftshader_indirect SKIP=$NEWEST_ONLY run_on "${AVD_O
 # Android 10 is the oldest the app runs on (min_sdk in sentinel.toml). TEN_SKIP: scenarios that cannot apply there, each with its reason.
 TEN_SKIP=""
 leg msd29 && EMULATOR_GPU=swiftshader_indirect SKIP="$NEWEST_ONLY $TEN_SKIP" run_on "${AVD_TEN:-msd29}" "${PORT_TEN:-5590}"
+# Android 11: scoped storage is enforced, package visibility, the insets controller.
+leg msd30 && EMULATOR_GPU=swiftshader_indirect SKIP="$NEWEST_ONLY" run_on "${AVD_ELEVEN:-msd30}" "${PORT_ELEVEN:-5592}"
 echo "all of it in $(((SECONDS - START) / 60)) min $(((SECONDS - START) % 60)) s"

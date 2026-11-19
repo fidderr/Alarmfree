@@ -1162,7 +1162,7 @@ s32() {
     on_screen "Turn off" 10
     tap "Turn off" 0 0.5
     wait_for 5 sound_off
-    dev rm -f /sdcard/Download/alarmfree-rings.txt
+    rm_download alarmfree-rings.txt
     start_app
     wait_for 20 page_is_up
     # The window is up before its bottom bar has painted, on a loaded emulator.
@@ -1174,7 +1174,7 @@ s32() {
     tap_scrolling "Save the record of how fast alarms rang"
     sleep 0.5
     [ "$(dev cat /sdcard/Download/alarmfree-rings.txt | grep -c ' sound ')" -ge 1 ] && record=yes
-    dev rm -f /sdcard/Download/alarmfree-rings.txt
+    rm_download alarmfree-rings.txt
     if ! sound_on && [ "$(db_count '"hidden":true')" = 0 ] && [ "$(outcomes solved)" = 0 ] && [ "$record" = yes ]; then
         pass "rang ${SOUND_AT}s after its time, nothing left, nothing in history, its record saved"
     elif [ "$record" != yes ]; then
@@ -1819,7 +1819,8 @@ s48() {
     fi
     scenario s48_files_in_and_out
     fresh
-    dev rm -f /sdcard/Download/mytune.ogg '/sdcard/Download/alarmfree-*'
+    dev rm -f /sdcard/Download/mytune.ogg
+    rm_download 'alarmfree-*'
     adb_ push assets/sounds/default/air.ogg /sdcard/Download/mytune.ogg > /dev/null
     dev content call --uri content://media --method scan_volume --arg external_primary > /dev/null 2>&1
     seed a "$(alarm_json a 7 0 "$EVERY_DAY" null)"
@@ -1879,7 +1880,8 @@ s48() {
         problems="$problems; the picker never showed the backup"
         press_back
     fi
-    dev rm -f /sdcard/Download/mytune.ogg "/sdcard/Download/$file"
+    dev rm -f /sdcard/Download/mytune.ogg
+    rm_download "$file"
     if [ -z "$problems" ]; then
         pass "own sound in, alarms out to $file and back"
     else
