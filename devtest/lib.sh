@@ -874,14 +874,17 @@ focused_window() { dev "dumpsys window displays | grep -m1 mCurrentFocus"; }
 focus_in_app() { focused_window | grep -q "$PKG/"; }
 armed_at_ms() { as_app "head -n 1 files/sentinel/armed/$1.armed 2>/dev/null"; }
 os_has_alarm() { dev "dumpsys alarm | grep -qE '$PKG.*ALARM_DISPATCH|ALARM_DISPATCH.*$PKG|walarm\\*:com.mobilesentinel.ALARM_DISPATCH'" > /dev/null; }
+# Android 10 to 12 have the old `media volume` command and no `cmd media_session volume`.
 alarm_volume() {
-    dev cmd media_session volume --stream 4 --get 2> /dev/null |
+    { dev cmd media_session volume --stream 4 --get 2> /dev/null
+      dev media volume --stream 4 --get 2> /dev/null; } |
         grep -oE 'volume is [0-9]+' | grep -oE '[0-9]+' | sed -n 1p
 }
-# Android 16 only listens to the first of these, older ones to the second.
+# Android 16 only listens to the first of these, Android 12 to the second, Android 10 to the third.
 set_alarm_volume() {
     dev cmd audio set-volume 4 "$1" > /dev/null 2>&1
     dev cmd media_session volume --stream 4 --set "$1" > /dev/null 2>&1
+    dev media volume --stream 4 --set "$1" > /dev/null 2>&1
 }
 
 set_zone() { dev cmd alarm set-timezone "$1" > /dev/null 2>&1; }

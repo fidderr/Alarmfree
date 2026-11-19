@@ -1,8 +1,8 @@
 #!/bin/bash
-# The whole suite on the newest and the oldest Android at the same time, with the APK that is
+# The whole suite on the newest, the oldest and Android 12 (min_sdk is 29, so Android 10 is the oldest), with the APK that is
 # already built (APK says which, for a release). Two emulators: that is what 16 GB has room for.
 #
-# Usage: bash devtest/all.sh [name]    (AVD_NEW / PORT_NEW and AVD_OLD / PORT_OLD pick other emulators; the legs run one after the other, default afg16 then afg12 on port 5558, LEG=afg16 or LEG=afg12 runs one)  results in devtest-out/<name>_<avd>/ and <name>_<avd>.log
+# Usage: bash devtest/all.sh [name]    (AVD_NEW / PORT_NEW, AVD_OLD / PORT_OLD and AVD_TEN / PORT_TEN pick other emulators; the legs run one after the other, default afg16 and afg12 on port 5558, then msd29 (Android 10) on port 5590; LEG=afg16, LEG=afg12 or LEG=msd29 runs one)  results in devtest-out/<name>_<avd>/ and <name>_<avd>.log
 cd "$(dirname "$0")/.." || exit 1
 export APK="${APK:-build/alarmfree-slint-debug.apk}"
 NAME=${1:-full}
@@ -53,11 +53,15 @@ run_on() { # avd port scenarios...
 }
 
 START=$SECONDS
+leg() { [ -z "${LEG:-}" ] || [ "$LEG" = "$1" ]; }
 # The big screens first: next to the other emulator's tour of every panel, late in its run, Android
 # 16 starved to the point of its own system UI freezing.
-# The restarts with a PIN last: Android 12 is done by then, and they stay under a minute.
+# The restarts with a PIN last: the older ones are done by then, and they stay under a minute.
 # One emulator lane (2 GB each): the legs run one after the other.
-[ "${LEG:-}" = afg12 ] || FIRST=big_screens LAST="s13d s13b s13" SKIP=$OLDEST_ONLY run_on "${AVD_NEW:-afg16}" "${PORT_NEW:-5558}"
+leg afg16 && FIRST=big_screens LAST="s13d s13b s13" SKIP=$OLDEST_ONLY run_on "${AVD_NEW:-afg16}" "${PORT_NEW:-5558}"
 # Android 12's graphics on the host's GPU crashed the emulator now and then, in the middle of a run.
-[ "${LEG:-}" = afg16 ] || EMULATOR_GPU=swiftshader_indirect SKIP=$NEWEST_ONLY run_on "${AVD_OLD:-afg12}" "${PORT_OLD:-5558}"
+leg afg12 && EMULATOR_GPU=swiftshader_indirect SKIP=$NEWEST_ONLY run_on "${AVD_OLD:-afg12}" "${PORT_OLD:-5558}"
+# Android 10 is the oldest the app runs on (min_sdk in sentinel.toml). TEN_SKIP: scenarios that cannot apply there, each with its reason.
+TEN_SKIP=""
+leg msd29 && EMULATOR_GPU=swiftshader_indirect SKIP="$NEWEST_ONLY $TEN_SKIP" run_on "${AVD_TEN:-msd29}" "${PORT_TEN:-5590}"
 echo "all of it in $(((SECONDS - START) / 60)) min $(((SECONDS - START) % 60)) s"
