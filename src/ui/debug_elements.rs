@@ -72,18 +72,30 @@ fn texts(ui: &MainWindow) -> Vec<Seen> {
     found
 }
 
+/// Where everything that says something stands: the same twice in a row means the layout holds
+/// still, also on a screen that is drawn all the time (a ring screen's backdrop moves).
+pub(super) fn fingerprint(ui: &MainWindow) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    for s in texts(ui) {
+        (
+            &s.text, s.x as i32, s.y as i32, s.w as i32, s.h as i32, s.on,
+        )
+            .hash(&mut h);
+    }
+    h.finish()
+}
+
 /// Is there a text on screen that says this (`exact`) or has it in it?
 pub(super) fn has_text(ui: &MainWindow, wanted: &str, exact: bool) -> bool {
-    texts(ui)
-        .iter()
-        .any(|s| {
-            if exact {
-                s.text == wanted
-                    || (s.role == "ListItem" && s.text.split(", ").any(|part| part == wanted))
-            } else {
-                s.text.contains(wanted)
-            }
-        })
+    texts(ui).iter().any(|s| {
+        if exact {
+            s.text == wanted
+                || (s.role == "ListItem" && s.text.split(", ").any(|part| part == wanted))
+        } else {
+            s.text.contains(wanted)
+        }
+    })
 }
 
 fn inputs(ui: &MainWindow) -> Vec<(ElementHandle, Seen)> {

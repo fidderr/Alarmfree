@@ -585,8 +585,12 @@ await_gone() { await_ui "${2:-6}" "gone=$1"; }
 ui_frames() { ui ready | sed -nE 's/.*frames=([0-9]+).*/\1/p'; }
 # After a touch or key: the app has drawn something new (a touch that changes nothing draws
 # nothing: then the short wait ends quietly) and the layout stands still.
+# SETTLED_AT: the second in which the window was last seen at rest, so the next touch need not
+# ask again.
+SETTLED_AT=""
 after_input() {
     await_ms 5000 '~moved'
+    SETTLED_AT=$SECONDS
 }
 # Type into text field n and check what the field holds, again (up to 3 times) when it does not
 # hold the text: the keys go through the window's own events (settext), and the check is the
@@ -612,6 +616,7 @@ press() { # callback [argument]
     [ "$said" = OK ] || echo "press $1: $said" >&2
     # The callback has run when the app says OK; what it moved is still settling.
     UI_QUIET=1 await_settled 3
+    SETTLED_AT=$SECONDS
     [ "$said" = OK ]
 }
 # The middle of the first text on screen that says this, in device pixels ("x y"), or "none".
@@ -654,7 +659,7 @@ texts_of() { all_texts | tr '\n' '|' | sed 's/|$//'; }
 # from 0), as a finger does it. With `c` in front of the pause, the text only has to have this in it.
 # Where the text is once it holds still: a panel slides in, and a touch on the way would miss.
 still_where() { # command text [which]
-    UI_QUIET=1 await_settled 2
+    [ "$SETTLED_AT" = "$SECONDS" ] || UI_QUIET=1 await_settled 2
     "$1" "$2" "${3:-}"
 }
 tap() { # text [which of them] [seconds to wait]
@@ -693,6 +698,7 @@ tap_in() { # text [which] [seconds]
     still_where where "$1" "${2:-}" > /dev/null
     said=$(ui "tap${2:+@$2}:$1")
     UI_QUIET=1 await_settled 3
+    SETTLED_AT=$SECONDS
     [ "$said" = OK ] || echo "nothing says $1" >&2
     [ "$said" = OK ]
 }

@@ -110,7 +110,11 @@ fn finish_alarm(ctx: &Ctx, id: &str) {
         .iter()
         .find(|a| a.id == id && a.wake_check_minutes > 0)
         .map(|a| {
-            crate::alarm_ops::wake_check_alarm(a, crate::clock::local_now().naive_local(), check_label)
+            crate::alarm_ops::wake_check_alarm(
+                a,
+                crate::clock::local_now().naive_local(),
+                check_label,
+            )
         });
     let mut changed = crate::schedule::finish_if_one_time(&mut list, id);
     if let Some(check) = check {

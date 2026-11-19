@@ -2181,123 +2181,56 @@ s53() {
     scenario s53_the_rest_of_the_screens
     fresh
     as_app "mkdir -p files/sounds/custom && cp files/sounds/default/air.ogg files/sounds/custom/mytune.ogg"
-    history_row near 3
-    history_row far 30
+    seed a "$(alarm_json a 7 0 "$EVERY_DAY" null)"
     start_app
-    on_screen "No alarms yet" 15
+    on_card 20
     local problems="" row
-    is_there "No alarms yet" || problems="$problems; no empty state"
-    tap_has "Weekdays at" 0 0.5
-    [ "$(sn toast_visible)" = true ] || problems="$problems; a template says nothing"
-    [ "$(alarm_count)" = 1 ] || problems="$problems; a template makes no alarm"
-    tap_has "$(row_time), " L 0.6
-    on_editor || problems="$problems; the alarm from a template opens no editor"
-    # Typed, then a tap on the wheel: the row under the middle is one more.
-    note "s53: Typed, then a tap on the wheel: the row under the middle i @$SECONDS"
-    tap_time 0.6
-    tap "Type it" 0 0.4
-    set_field 0 835
-    done_sheet
-    has "$(sn ed_time_text)" ':35'
-    tap_time 0.6
-    press ed-minute 36 0.3
-    done_sheet
-    has "$(sn ed_time_text)" ':36'
-    # One date.
-    note "s53: One date. @$SECONDS"
-    tap "One date" 0 0.5
-    on_screen Tomorrow 4
-    # The quick dates sit under the calendar: half behind Done with a navigation bar, until it scrolls.
-    tap_clear Tomorrow "" 400
-    done_sheet
-    # A challenge with a setting, and one taken away again.
-    note "s53: A challenge with a setting, and one taken away again. @$SECONDS"
-    open_row Challenges
-    tap "Add a challenge" 0 0.4
-    tap_in Math L 0.5
-    on_screen Hard 3 || { tap_has Math 0 0.5; }
-    tap_in Hard 0 0.3
-    is_there Done && tap Done 0 0.4
-    tap "Add a challenge" 0 0.4
-    tap_in Shake L 0.5
-    is_there Done && tap Done 0 0.4
-    [ "$(all_texts | grep -c -E '^(Math|Shake)$')" -ge 2 ] || problems="$problems; added: $(texts_of)"
-    press challenge-remove 1 0.4
-    all_texts | grep -q '^Shake$' && problems="$problems; not taken away: $(texts_of)"
-    done_sheet
-    # A sound of one's own: asks first, then it is gone.
-    note "s53: A sound of one's own: asks first, then it is gone. @$SECONDS"
+    # Templates, the typed time, the wheels, one date and a challenge's settings are checked in
+    # cargo test (ui::flow_tests::s53_the_rest_of_the_screens). On the phone: a sound of one's
+    # own is a file that goes, and the reliability screen's buttons leave for the phone's own
+    # screens and come back.
+    press open a
+    on_editor
     open_row Sound
     scroll_until mytune
     has "$(texts_of)" mytune
-    press sound-delete "$(sound_row mytune)" 0.4
-    tap Delete L 0.5
+    press sound-delete "$(sound_row mytune)"
+    tap Delete L
     case "$(texts_of)" in
         *mytune*) problems="$problems; sound still listed" ;;
     esac
     [ -z "$(as_app "ls files/sounds/custom")" ] || problems="$problems; file still there"
     done_sheet
-    tap Save 0 0.8
-    row=$(printf 'SELECT data FROM alarms;\n' | sql)
-    has "$row" '"time_hour":8'
-    has "$row" '"time_minute":36'
-    has "$row" "\"date\":\"$(local_date_in 1)"
-    has "$row" '"days":[false,false,false,false,false,false,false]'
-    has "$row" 'hard'
-    case "$row" in
-        *challenge.shake*) problems="$problems; the taken away challenge was saved" ;;
-    esac
-    # The history over your own number of days: only the one within them.
-    note "s53: The history over your own number of days: only the one wit @$SECONDS"
-    go_tab History
-    await_ui 5 "screen=2"
-    # The period chips scroll sideways; the last one is past the edge of a narrow window.
-    local chip_y
-    chip_y=$(where "This week" | cut -d' ' -f2)
-    for _ in 1 2 3; do
-        is_there "Your own days" && break
-        dev input swipe 900 "$chip_y" 150 "$chip_y" 400
-        after_input
-    done
-    tap "Your own days" 0 0.5
-    set_field 0 7
-    press h-custom-accepted ""
-    local rows
-    rows=$(all_texts | grep -c -E ' a$')
-    [ "$rows" = 1 ] || problems="$problems; $rows rows in the last 7 days: $(texts_of)"
-    # The reliability screen's buttons leave for the phone's own screens, and come back.
-    note "s53: The reliability screen's buttons leave for the phone's own @$SECONDS"
+    press_back
+    await_ui 4 'editor_sheet!=None'
+    tap Discard
+    on_home 5
     open_reliability || problems="$problems; no reliability screen"
     local i=0 n
     n=$(all_texts | grep -c -E '^Fix .')
     # Another app has the keys. A system screen can take a while to start, and Back goes nowhere
-    note "s53: Another app has the keys. A system screen can take a while @$SECONDS"
     # until it has.
-    note "s53: until it has. @$SECONDS"
     away() { focused_window | grep -v null | grep -qv "$PKG/"; }
     # And a second Back in the middle of the change closes the screen it comes back to.
-    note "s53: And a second Back in the middle of the change closes the s @$SECONDS"
     back_in_app() {
         press_back
         wait_for 4 focus_in_app
     }
     # A moment between two of the phone's screens: asked for the same one again at once, a slow
-    note "s53: A moment between two of the phone's screens: asked for the @$SECONDS"
     # device's Settings can freeze, and that is its own trouble.
-    note "s53: device's Settings can freeze, and that is its own trouble. @$SECONDS"
     while [ "$i" -lt "${n:-0}" ] 2> /dev/null; do
-        tap_has "Fix " "$i" 0.3
+        tap_has "Fix " "$i"
         wait_for 15 away || problems="$problems; fix button $i stays in the app"
         wait_for 12 back_in_app || problems="$problems; Back from fix button $i leaves the keys with:$(focused_window)"
         await_ui 20 "screen=4" || problems="$problems; not back from fix button $i"
         sleep 1
         i=$((i + 1))
     done
-    tap "This app in the phone's settings" 0 0.4
+    tap "This app in the phone's settings"
     wait_for 15 away || problems="$problems; the app's settings stay in the app"
     wait_for 12 back_in_app || problems="$problems; Back from the app's settings leaves the keys with:$(focused_window)"
     if [ -z "$problems" ]; then
-        pass "templates, time, wheels, date, challenge settings, deleting a sound, own days, $n fix buttons"
+        pass "deleting a sound, $n fix buttons"
     else
         fail "${problems#; }"
     fi
@@ -2502,8 +2435,8 @@ s55() {
     # Shorter than the camera stays up, and longer than a cold start takes: Android 12 takes the
     # task away on Home and the app comes back from nothing, which on a busy emulator is 6 s.
     shorten ui_timeout_ms 10000
-    shorten scan_camera_secs 5
-    shorten idle_secs 5
+    shorten scan_camera_secs 8
+    shorten idle_secs 8
     next_minute
     seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null air 0 0 3 1 '[["challenge.scan","{}"]]')"
     arm a
@@ -2700,6 +2633,7 @@ s58() {
     tap Discard
     on_home 5
     go_tab Settings
+    centre_row "Touch feedback"
     tap "Touch feedback"
     go_tab Alarms
     on_card 5
@@ -2786,7 +2720,7 @@ s60() {
         while [ "$i" -lt 8 ]; do
             dev cmd statusbar expand-notifications
             # Only once it has finished opening is the shade what counts as on screen.
-            sleep 1.5
+            sleep 0.7
             UI_WINDOWS=--windows ui_tap "text=\"$1\"" && return 0
             UI_WINDOWS=--windows ui_tap "text=\"${1^^}\"" && return 0
             i=$((i + 1))
@@ -2818,16 +2752,17 @@ s60() {
     wait_for 8 says_it || problems="$problems; the list says '$has_text'"
     # No ring at its time.
     dev am force-stop "$PKG"
-    jump_to $((T - 5))
+    jump_to $((T - 3))
     start_app
     on_card 10
-    sleep 15
+    # Past its time: the clock has to get there.
+    until_past $((T + 5))
     sound_on && problems="$problems; rang although skipped"
     state_is a firing && problems="$problems; firing although skipped"
     # And the next one does ring.
     T=$((T + 86400))
-    jump_to $((T - 20))
-    if ! await_ring a 90; then
+    jump_to $((T - 4))
+    if ! await_ring a 40; then
         problems="$problems; the ring after the skipped one did not come: state=$(state a)"
     fi
     if [ -z "$problems" ]; then

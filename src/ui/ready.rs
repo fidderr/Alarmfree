@@ -7,7 +7,8 @@
 //! * which sheet or panel is open, which screen: the keys of [`state`].
 //! * layout settled, animations finished: the renderer drew no frame for a moment. Slint draws
 //!   only while something changes or moves (a sliding panel, a fading toast, a pulsing ring), so
-//!   an idle window is a settled one, and reading it costs no walk through the element tree.
+//!   an idle window is a settled one. On a screen that is drawn all the time the texts have to
+//!   stand where they stood on the poll before.
 //!
 //! `ui:ready` answers [`state`] at once. `ui:await:<ms>:<cond>;<cond>` answers when every
 //! condition holds and the layout is settled, or when the time is up, from the app itself (one adb
@@ -33,6 +34,8 @@ static FRAMES: AtomicU64 = AtomicU64::new(0);
 static MARK: AtomicU64 = AtomicU64::new(0);
 /// A condition with `~` in front gives up quietly after this long: a touch that changes nothing.
 const SOFT_MS: u128 = 400;
+/// A screen that is drawn and moves all the time counts as settled this long after its conditions hold.
+const ANIMATING_MS: Duration = Duration::from_millis(500);
 
 /// Count the frames the renderer finishes. Without a renderer that tells (a test window) it stays 0.
 pub fn install(ui: &MainWindow) {
@@ -119,6 +122,8 @@ pub fn start_await(
     let timer = Rc::new(slint::Timer::default());
     let mut reply = Some(reply);
     let mut last = frames();
+    let mut last_print = 0u64;
+    let mut met_since: Option<Instant> = None;
     let mut still = 0;
     let handle = timer.clone();
     timer.start(
@@ -148,11 +153,28 @@ pub fn start_await(
             if drawn == last {
                 still += 1;
             } else {
-                still = 0;
                 last = drawn;
+                // Drawn all the time (a ring screen's backdrop): then the texts have to hold still.
+                let print = debug_elements::fingerprint(&ui);
+                if print == last_print {
+                    still += 1;
+                } else {
+                    still = 0;
+                    last_print = print;
+                }
             }
+            if unmet.is_empty() {
+                met_since.get_or_insert_with(Instant::now);
+            } else {
+                met_since = None;
+            }
+            // A screen that never holds still (the ring screen's backdrop and clock) is as ready as
+            // it will get a moment after what was waited for is true.
+            let animating = met_since.is_some_and(|at| at.elapsed() >= ANIMATING_MS);
             let answer = if unmet.is_empty() && still >= 2 {
                 format!("OK {}ms", started.elapsed().as_millis())
+            } else if animating {
+                format!("OK {}ms (still moving)", started.elapsed().as_millis())
             } else if started.elapsed() >= limit {
                 let why = if unmet.is_empty() {
                     "frames kept being drawn: something keeps moving".to_owned()

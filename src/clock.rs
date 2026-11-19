@@ -22,9 +22,9 @@ mod imp {
     }
 
     pub fn now_ms() -> i64 {
-        FIXED_MS
-            .with(Cell::get)
-            .unwrap_or_else(|| chrono::Utc::now().timestamp_millis() + OFFSET_MS.load(Ordering::Relaxed))
+        FIXED_MS.with(Cell::get).unwrap_or_else(|| {
+            chrono::Utc::now().timestamp_millis() + OFFSET_MS.load(Ordering::Relaxed)
+        })
     }
     pub fn set_fixed(ms: Option<i64>) {
         FIXED_MS.with(|f| f.set(ms));

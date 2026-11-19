@@ -91,7 +91,10 @@ fn screen(ui: &MainWindow) -> String {
 
 fn clock(command: &str) -> String {
     let mut parts = command.split(':').skip(1);
-    let (what, number) = (parts.next(), parts.next().and_then(|n| n.parse::<i64>().ok()));
+    let (what, number) = (
+        parts.next(),
+        parts.next().and_then(|n| n.parse::<i64>().ok()),
+    );
     match (what, number) {
         (Some("offset"), Some(ms)) => crate::clock::set_offset(ms),
         (Some("fixed"), Some(ms)) => crate::clock::set_fixed(Some(ms)),

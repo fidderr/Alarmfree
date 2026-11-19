@@ -14,7 +14,10 @@ use proptest::prelude::*;
 /// Any minute between 2023 and 2031: it holds two leap days (2024-02-29, 2028-02-29) and every
 /// month end.
 fn any_now() -> impl Strategy<Value = NaiveDateTime> {
-    let start = NaiveDate::from_ymd_opt(2023, 1, 1).unwrap().and_hms_opt(0, 0, 0).unwrap();
+    let start = NaiveDate::from_ymd_opt(2023, 1, 1)
+        .unwrap()
+        .and_hms_opt(0, 0, 0)
+        .unwrap();
     (0i64..(8 * 366 * 24 * 60)).prop_map(move |m| start + Duration::minutes(m))
 }
 
@@ -151,7 +154,10 @@ proptest! {
 fn a_time_that_happens_twice_rings_the_first_time() {
     // 2026-10-25: at 03:00 summer time the Netherlands go back to 02:00.
     let nl = chrono_tz::Europe::Amsterdam;
-    let moment = NaiveDate::from_ymd_opt(2026, 10, 25).unwrap().and_hms_opt(2, 30, 0).unwrap();
+    let moment = NaiveDate::from_ymd_opt(2026, 10, 25)
+        .unwrap()
+        .and_hms_opt(2, 30, 0)
+        .unwrap();
     let first = instant_in(&nl, moment).expect("an ambiguous time has an instant");
     assert_eq!(first.offset().to_string(), "CEST");
     let both = nl.from_local_datetime(&moment);
@@ -163,9 +169,15 @@ fn a_time_that_happens_twice_rings_the_first_time() {
 fn a_time_the_clocks_skip_has_no_instant() {
     // 2026-03-29: at 02:00 the Netherlands go forward to 03:00.
     let nl = chrono_tz::Europe::Amsterdam;
-    let moment = NaiveDate::from_ymd_opt(2026, 3, 29).unwrap().and_hms_opt(2, 30, 0).unwrap();
+    let moment = NaiveDate::from_ymd_opt(2026, 3, 29)
+        .unwrap()
+        .and_hms_opt(2, 30, 0)
+        .unwrap();
     assert!(instant_in(&nl, moment).is_none());
-    let after = NaiveDate::from_ymd_opt(2026, 3, 29).unwrap().and_hms_opt(3, 0, 0).unwrap();
+    let after = NaiveDate::from_ymd_opt(2026, 3, 29)
+        .unwrap()
+        .and_hms_opt(3, 0, 0)
+        .unwrap();
     assert!(instant_in(&nl, after).is_some());
 }
 
@@ -173,7 +185,10 @@ fn a_time_the_clocks_skip_has_no_instant() {
 fn a_daily_alarm_follows_the_wall_across_a_clock_change_not_the_24_hours() {
     let nl = chrono_tz::Europe::Amsterdam;
     let ring = |day: u32, month: u32| {
-        let now = NaiveDate::from_ymd_opt(2026, month, day).unwrap().and_hms_opt(8, 0, 0).unwrap();
+        let now = NaiveDate::from_ymd_opt(2026, month, day)
+            .unwrap()
+            .and_hms_opt(8, 0, 0)
+            .unwrap();
         let at = next_ring_moment(7, 0, [true; 7], None, now).unwrap();
         (instant_in(&nl, now).unwrap(), instant_in(&nl, at).unwrap())
     };
@@ -187,13 +202,25 @@ fn a_daily_alarm_follows_the_wall_across_a_clock_change_not_the_24_hours() {
 
 #[test]
 fn a_leap_day_is_a_day_like_any_other() {
-    let now = NaiveDate::from_ymd_opt(2028, 2, 28).unwrap().and_hms_opt(23, 0, 0).unwrap();
+    let now = NaiveDate::from_ymd_opt(2028, 2, 28)
+        .unwrap()
+        .and_hms_opt(23, 0, 0)
+        .unwrap();
     let at = next_ring_moment(6, 30, [true; 7], None, now).unwrap();
     assert_eq!(at.date(), NaiveDate::from_ymd_opt(2028, 2, 29).unwrap());
-    let now = NaiveDate::from_ymd_opt(2028, 2, 29).unwrap().and_hms_opt(23, 0, 0).unwrap();
+    let now = NaiveDate::from_ymd_opt(2028, 2, 29)
+        .unwrap()
+        .and_hms_opt(23, 0, 0)
+        .unwrap();
     let at = next_ring_moment(6, 30, [true; 7], None, now).unwrap();
     assert_eq!(at.date(), NaiveDate::from_ymd_opt(2028, 3, 1).unwrap());
     // Not a leap year: February ends on the 28th.
-    let now = NaiveDate::from_ymd_opt(2027, 2, 28).unwrap().and_hms_opt(23, 0, 0).unwrap();
-    assert_eq!(next_occurrence_date(6, 30, now), NaiveDate::from_ymd_opt(2027, 3, 1).unwrap());
+    let now = NaiveDate::from_ymd_opt(2027, 2, 28)
+        .unwrap()
+        .and_hms_opt(23, 0, 0)
+        .unwrap();
+    assert_eq!(
+        next_occurrence_date(6, 30, now),
+        NaiveDate::from_ymd_opt(2027, 3, 1).unwrap()
+    );
 }

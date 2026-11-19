@@ -27,12 +27,7 @@ impl Flow {
     }
 
     /// The density and text size of the large sizes the owner's testers had (s65), or a phone's.
-    fn with_look(
-        mut settings: AppSettings,
-        alarms: Vec<AlarmData>,
-        scale: f32,
-        font: f32,
-    ) -> Flow {
+    fn with_look(mut settings: AppSettings, alarms: Vec<AlarmData>, scale: f32, font: f32) -> Flow {
         thread_local!(static INIT: () = i_slint_backend_testing::init_no_event_loop());
         INIT.with(|_| {});
         settings.prefs.less_motion = true;
@@ -255,7 +250,8 @@ fn event(id: &str, days_ago: i64) -> crate::models::AlarmEvent {
 }
 
 fn history_count() -> usize {
-    crate::history_persistence::query_history(&crate::models::HistoryFilter::LastDays(100_000)).len()
+    crate::history_persistence::query_history(&crate::models::HistoryFilter::LastDays(100_000))
+        .len()
 }
 
 /// s43: a period of the history and all of it each go only after asking again, and Back is no.
@@ -271,17 +267,17 @@ fn s43_delete_history() {
     f.press("h-delete-history", "");
     f.expect(f.panel_open(), "no sheet");
     f.expect(f.tap("Older than 30 days"), "no 'Older than 30 days'");
-    f.expect(
-        f.has("Delete"),
-        "older than 30 days went without asking",
-    );
+    f.expect(f.has("Delete"), "older than 30 days went without asking");
     f.back();
     f.expect(!f.panel_open(), "Back left the period question open");
     f.expect(history_count() == 2, "Back on the period question deleted");
     f.press("h-delete-history", "");
     f.tap("Older than 30 days");
     f.expect(f.tap("Delete"), "no Delete");
-    f.expect(history_count() == 1, format!("older than 30 days left {}", history_count()));
+    f.expect(
+        history_count() == 1,
+        format!("older than 30 days left {}", history_count()),
+    );
     f.expect(f.sn("toast_visible") == true, "nothing said about it");
     f.press("h-delete-history", "");
     f.expect(f.tap("Everything"), "no Everything");
@@ -292,7 +288,10 @@ fn s43_delete_history() {
     f.press("h-delete-history", "");
     f.tap("Everything");
     f.tap("Delete");
-    f.expect(history_count() == 0, format!("left {} after confirming", history_count()));
+    f.expect(
+        history_count() == 0,
+        format!("left {} after confirming", history_count()),
+    );
     f.finish();
 }
 
@@ -328,7 +327,10 @@ fn s30_quick_alarm_and_undo() {
 fn s31_pause_all() {
     let f = Flow::new(vec![daily("a", 7, 0, "a")]);
     f.expect(f.tap("Pause all alarms until a date"), "no pause button");
-    f.expect(f.tap("For a week"), format!("no 'For a week': {:?}", f.texts()));
+    f.expect(
+        f.tap("For a week"),
+        format!("no 'For a week': {:?}", f.texts()),
+    );
     let until = saved("a").pause_until_ms;
     let week = 6 * 24 * 3600 * 1000;
     f.expect(
@@ -356,8 +358,14 @@ fn s47_use_for_new_alarms() {
     f.expect(f.tap("Create new alarm"), "no create button");
     f.expect(f.screen() == 1, "no editor");
     let rows = f.texts().join("|");
-    f.expect(rows.contains("Lofi"), format!("sound not taken over: {rows}"));
-    f.expect(rows.contains("9 min, 2"), format!("snooze not taken over: {rows}"));
+    f.expect(
+        rows.contains("Lofi"),
+        format!("sound not taken over: {rows}"),
+    );
+    f.expect(
+        rows.contains("9 min, 2"),
+        format!("snooze not taken over: {rows}"),
+    );
     f.expect(
         !rows.contains("Keep out") && !rows.contains("Label a"),
         format!("its name came along: {rows}"),
@@ -370,7 +378,12 @@ fn s47_use_for_new_alarms() {
 #[test]
 fn s65_large_size_fits() {
     for (scale, font) in [(3.5, 1.3), (4.0, 1.15)] {
-        let f = Flow::with_look(AppSettings::default(), vec![daily("a", 7, 0, "a")], scale, font);
+        let f = Flow::with_look(
+            AppSettings::default(),
+            vec![daily("a", 7, 0, "a")],
+            scale,
+            font,
+        );
         let said = f.cmd("fit:AlarmCard");
         f.expect(said == "none", format!("home at {scale}/{font}: {said}"));
         f.press("open", "a");
@@ -390,11 +403,284 @@ fn s61_colours_of_ones_own() {
     f.expect(f.tap_has("Theme"), "no Theme row");
     f.expect(f.ui.get_screen() == SCREEN_THEME, "no theme screen");
     let names = f.texts();
-    for theme in ["Dark", "Light", "Pure black", "Midnight", "Forest", "Plum", "Sand", "Mist"] {
-        f.expect(names.iter().any(|t| t == theme), format!("no theme {theme}"));
+    for theme in [
+        "Dark",
+        "Light",
+        "Pure black",
+        "Midnight",
+        "Forest",
+        "Plum",
+        "Sand",
+        "Mist",
+    ] {
+        f.expect(
+            names.iter().any(|t| t == theme),
+            format!("no theme {theme}"),
+        );
     }
     f.expect(f.tap("Sand"), "no Sand");
-    f.expect(f.sn("pal_bg") == "#f3ede2", format!("Sand is {}", f.sn("pal_bg")));
+    f.expect(
+        f.sn("pal_bg") == "#f3ede2",
+        format!("Sand is {}", f.sn("pal_bg")),
+    );
     f.expect(f.sn("pal_light") == true, "Sand is not light");
+    f.finish();
+}
+
+fn row_labels(f: &Flow) -> String {
+    f.sn("rows")
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| r["label"].as_str().unwrap().to_owned())
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// s52 (without the pause calendar and the skip, which need the OS's next ring): sort, duplicate and
+/// the switch.
+#[test]
+fn s52_alarm_menu() {
+    let mut a = daily("a", 9, 0, "a");
+    a.order = 1;
+    let mut b = daily("b", 7, 0, "b");
+    b.order = 2;
+    let f = Flow::new(vec![a, b]);
+    f.expect(
+        row_labels(&f) == "a b",
+        format!("own order: {}", row_labels(&f)),
+    );
+    f.expect(f.tap("Sort alarms") && f.tap("By time"), "no sort menu");
+    f.expect(
+        row_labels(&f) == "b a",
+        format!("by time: {}", row_labels(&f)),
+    );
+    f.expect(
+        f.tap("Sort alarms") && f.tap("Your own order"),
+        "no own order",
+    );
+    f.expect(
+        row_labels(&f) == "a b",
+        format!("back to own: {}", row_labels(&f)),
+    );
+    // Duplicate: an editor with the copy, that saves as one more.
+    f.expect(f.tap("More actions"), "no menu for duplicate");
+    f.expect(f.tap("Duplicate"), "no Duplicate");
+    f.expect(f.screen() == 1, "no editor for the copy");
+    f.expect(
+        f.has_part("a (copy)"),
+        format!("no copy name: {:?}", f.texts()),
+    );
+    f.expect(f.tap("Save"), "no Save");
+    f.expect(
+        crate::persistence::load_alarms().len() == 3,
+        format!(
+            "{} alarms after duplicating",
+            crate::persistence::load_alarms().len()
+        ),
+    );
+    // The switch.
+    f.expect(f.tap("On or off: a"), "no switch");
+    f.expect(!saved("a").enabled, "the switch left it on");
+    f.expect(f.tap("On or off: a"), "no switch again");
+    f.expect(saved("a").enabled, "not back on");
+    f.finish();
+}
+
+impl Flow {
+    fn set_field(&self, n: usize, text: &str) {
+        let said = self.cmd(&format!("settext:{n}:{text}"));
+        assert_eq!(said, "OK", "field {n}");
+        self.settle();
+    }
+    fn done(&self) {
+        assert!(self.tap_last("Done"), "no Done: {:?}", self.texts());
+    }
+    fn open_row(&self, row: &str) {
+        assert!(self.tap_has(row), "no row {row}: {:?}", self.texts());
+    }
+}
+
+/// s50 (the settings that need no scroll, slider or bundled sound): a new alarm made through the screens, what is
+/// saved, what the editor says when it is opened again, and deleting it after asking.
+#[test]
+fn s50_editor_saves_it_all() {
+    let f = Flow::new(Vec::new());
+    f.expect(f.tap("Create new alarm"), "no create button");
+    f.expect(f.screen() == 1, "no editor");
+    f.expect(f.tap("+5") && f.tap("+5"), "no +5");
+    f.expect(f.tap("Weekend"), "no Weekend");
+    f.open_row("Label");
+    f.set_field(0, "Morning");
+    f.set_field(1, "Take pills");
+    f.done();
+    f.open_row("Vibration");
+    f.expect(f.tap("Steady"), "no Steady");
+    f.done();
+    f.expect(f.tap("Full brightness"), "no Full brightness");
+    f.expect(f.tap("Save"), "no Save");
+    f.expect(f.screen() == 0, "Save did not go back");
+    let all = crate::persistence::load_alarms();
+    f.expect(all.len() == 1, format!("{} alarms saved", all.len()));
+    let a = all.first().cloned().unwrap_or_else(|| alarm("x", 0, ""));
+    f.expect(
+        a.time_hour == 7 && a.time_minute == 10,
+        format!("time {}:{}", a.time_hour, a.time_minute),
+    );
+    f.expect(
+        a.label == "Morning" && a.note == "Take pills",
+        format!("label {:?} note {:?}", a.label, a.note),
+    );
+    f.expect(
+        a.days == [false, false, false, false, false, true, true],
+        format!("days {:?}", a.days),
+    );
+    f.expect(a.vibration == 1, format!("vibration {}", a.vibration));
+    f.expect(a.max_brightness, "full brightness not saved");
+    // What it says when opened again.
+    f.press("open", &a.id);
+    let shown = f.texts().join("|");
+    for want in ["Morning", "Steady"] {
+        f.expect(
+            shown.contains(want),
+            format!("no {want} when opened again: {shown}"),
+        );
+    }
+    f.expect(
+        f.sn("ed_time_text")
+            .as_str()
+            .is_some_and(|t| t.ends_with(":10")),
+        "time not shown",
+    );
+    f.finish();
+}
+
+/// s51 (until the restart): every setting through its own screen is saved.
+#[test]
+fn s51_settings_stick() {
+    let f = Flow::new(vec![daily("a", 14, 5, "a")]);
+    f.expect(f.tap_last("Settings"), "no Settings tab");
+    f.expect(f.screen() == 3, "no settings");
+    let pick = |row: &str, choice: &str| {
+        f.expect(f.tap_has(row), format!("no row {row}: {:?}", f.texts()));
+        f.expect(f.panel_open(), format!("{row} opens no panel"));
+        f.expect(
+            f.tap(choice),
+            format!("no choice {choice}: {:?}", f.texts()),
+        );
+        if f.panel_open() {
+            f.back();
+        }
+    };
+    pick("Time format", "12 hours");
+    pick("Week starts on", "Sunday");
+    f.expect(f.tap_has("Minimum volume"), "no minimum volume row");
+    f.expect(f.tap("75%"), "no 75%");
+    f.expect(f.tap_last("Done"), "no Done");
+    f.expect(f.tap("Touch feedback"), "no Touch feedback");
+    f.expect(f.tap("Less motion"), "no Less motion");
+    f.expect(f.tap("Confetti"), "no Confetti");
+    let saved = crate::persistence::load_settings();
+    f.expect(
+        saved.prefs.time_format == TimeFormat::H12,
+        "12 hours not saved",
+    );
+    f.expect(
+        saved.min_volume_percent == 75,
+        format!("volume {}", saved.min_volume_percent),
+    );
+    f.expect(!saved.prefs.touch_feedback, "touch feedback still on");
+    // The flows start with less motion on (no animations): the switch turns it off.
+    f.expect(!saved.prefs.less_motion, "less motion still on");
+    f.expect(!saved.prefs.confetti, "confetti still on");
+    f.expect(
+        format!("{:?}", saved.prefs.week_start) == "Sunday",
+        format!("week starts on {:?}", saved.prefs.week_start),
+    );
+    f.finish();
+}
+
+/// s53 (the part without a phone's own screens): a template makes an alarm, a typed time, a tap on
+/// the wheel, one date, a challenge with a setting and one taken away, saved as set.
+#[test]
+fn s53_the_rest_of_the_screens() {
+    let f = Flow::new(Vec::new());
+    f.expect(f.has("No alarms yet"), "no empty state");
+    f.expect(f.tap_has("Weekdays at"), "no template");
+    f.expect(f.sn("toast_visible") == true, "a template says nothing");
+    f.expect(
+        crate::persistence::load_alarms().len() == 1,
+        "a template makes no alarm",
+    );
+    let id = crate::persistence::load_alarms()[0].id.clone();
+    f.press("open", &id);
+    f.expect(f.screen() == 1, "the alarm from a template opens no editor");
+    // Typed, then a tap on the wheel.
+    f.expect(f.tap_has("Time:"), "no time button");
+    f.expect(f.tap("Type it"), "no Type it");
+    f.set_field(0, "835");
+    f.done();
+    f.expect(
+        f.sn("ed_time_text")
+            .as_str()
+            .is_some_and(|t| t.ends_with(":35")),
+        format!("typed time shows {}", f.sn("ed_time_text")),
+    );
+    f.expect(f.tap_has("Time:"), "no time button again");
+    f.press("ed-minute", "36");
+    f.done();
+    f.expect(
+        f.sn("ed_time_text")
+            .as_str()
+            .is_some_and(|t| t.ends_with(":36")),
+        format!("wheel time shows {}", f.sn("ed_time_text")),
+    );
+    // One date.
+    f.expect(f.tap("One date"), "no One date");
+    f.expect(f.tap("Tomorrow"), "no Tomorrow");
+    f.done();
+    // A challenge with a setting, and one taken away again.
+    f.open_row("Challenges");
+    f.expect(f.tap("Add a challenge"), "no add");
+    f.expect(f.tap_last("Math"), "no Math");
+    if f.has("Hard") {
+        f.tap("Hard");
+    }
+    if f.has("Done") {
+        f.done();
+    }
+    f.expect(f.tap("Add a challenge"), "no add again");
+    f.expect(f.tap_last("Shake"), "no Shake");
+    if f.has("Done") {
+        f.done();
+    }
+    let shown = f.texts();
+    f.expect(
+        shown
+            .iter()
+            .filter(|t| *t == "Math" || *t == "Shake")
+            .count()
+            >= 2,
+        format!("added: {shown:?}"),
+    );
+    f.press("challenge-remove", "1");
+    f.expect(
+        !f.texts().iter().any(|t| t == "Shake"),
+        "Shake not taken away",
+    );
+    f.done();
+    f.expect(f.tap("Save"), "no Save");
+    let a = crate::persistence::load_alarms()[0].clone();
+    f.expect(a.time_minute == 36, format!("minute {}", a.time_minute));
+    f.expect(a.days == [false; 7], format!("days {:?}", a.days));
+    f.expect(
+        a.date.as_deref() == Some("2026-11-19"),
+        format!("date {:?}", a.date),
+    );
+    let json = serde_json::to_string(&a.challenges).unwrap();
+    f.expect(
+        json.contains("challenge.math") && !json.contains("challenge.shake"),
+        format!("challenges {json}"),
+    );
     f.finish();
 }

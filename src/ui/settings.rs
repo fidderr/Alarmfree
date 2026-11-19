@@ -325,7 +325,10 @@ fn open_about(ctx: &Ctx) {
 
 /// Write the alarms to a file in Downloads. Returns where it went.
 fn write_backup(alarms: &[AlarmData]) -> Result<String, String> {
-    let name = format!("alarmfree-{}.json", crate::clock::local_now().format("%Y-%m-%d"));
+    let name = format!(
+        "alarmfree-{}.json",
+        crate::clock::local_now().format("%Y-%m-%d")
+    );
     crate::platform::save_to_downloads(&alarm_ops::export_json(alarms), &name, "application/json")
 }
 

@@ -27,7 +27,10 @@ fn preview_ms() -> u64 {
     u64::from(crate::platform::shortened("preview_ms", PREVIEW_MS as u32))
 }
 fn sound_tap_ms() -> u64 {
-    u64::from(crate::platform::shortened("sound_tap_ms", SOUND_TAP_MS as u32))
+    u64::from(crate::platform::shortened(
+        "sound_tap_ms",
+        SOUND_TAP_MS as u32,
+    ))
 }
 
 pub(super) fn sound_ids() -> Vec<String> {
