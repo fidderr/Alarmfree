@@ -401,6 +401,25 @@ mod tests {
     }
 
     #[test]
+    fn a_squat_challenge_survives_a_backup() {
+        let mut alarm = factory_alarm();
+        alarm.challenges = vec![
+            ("challenge.squat".to_owned(), r#"{"count":25}"#.to_owned()),
+            ("challenge.shake".to_owned(), r#"{"count":5}"#.to_owned()),
+        ];
+        let json = export_json(&[alarm.clone()]);
+        let back = import_json(&json, |_| true, at(7, 0, 0)).unwrap();
+        assert_eq!(back[0].challenges, alarm.challenges);
+        assert_eq!(
+            crate::models::ChallengeSetup::list_from_stored(&back[0].challenges),
+            [
+                crate::models::ChallengeSetup::Squat { count: 25 },
+                crate::models::ChallengeSetup::Shake { count: 5 }
+            ]
+        );
+    }
+
+    #[test]
     fn an_alarm_for_a_date_that_has_passed_comes_back_switched_off() {
         let mut once = factory_alarm();
         once.days = [false; 7];

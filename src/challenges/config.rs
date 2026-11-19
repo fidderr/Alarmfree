@@ -37,6 +37,9 @@ pub fn summary(translations: &Translations, setup: &ChallengeSetup) -> String {
         ChallengeSetup::Steps { count } => {
             t(translations, "challenge.summary.steps").replace("{count}", &count.to_string())
         }
+        ChallengeSetup::Squat { count } => {
+            t(translations, "challenge.summary.squats").replace("{count}", &count.to_string())
+        }
         ChallengeSetup::Hold { count, secs } => {
             crate::text::counted(translations, "challenge.summary.hold", *count)
                 .replace("{secs}", &secs.to_string())
@@ -121,6 +124,9 @@ pub fn steppers(setup: &ChallengeSetup) -> Vec<Stepper> {
         ChallengeSetup::Steps { count } => {
             vec![stepper("challenge.config.how_many_steps", false, *count)]
         }
+        ChallengeSetup::Squat { count } => {
+            vec![stepper("challenge.config.how_many_squats", false, *count)]
+        }
         ChallengeSetup::Hold { count, secs } => vec![
             stepper("challenge.config.how_many_holds", false, *count),
             stepper("challenge.config.hold_duration", true, *secs),
@@ -151,6 +157,7 @@ pub fn step(setup: &mut ChallengeSetup, which: usize, up: bool) {
         (ChallengeSetup::Shake { count } | ChallengeSetup::Steps { count }, 0) => {
             by(count, 5, 5, 200)
         }
+        (ChallengeSetup::Squat { count }, 0) => by(count, 5, 5, 100),
         (ChallengeSetup::Hold { count, .. }, 0) => by(count, 1, 1, 30),
         (ChallengeSetup::Hold { secs, .. }, 1) => by(secs, 1, 1, 15),
         (ChallengeSetup::Reaction { targets, .. }, 0) => by(targets, 1, 3, 30),
@@ -196,6 +203,7 @@ mod tests {
             Some("android.permission.CAMERA")
         );
         assert_eq!(permission_for(&ChallengeSetup::Shake { count: 5 }), None);
+        assert_eq!(permission_for(&ChallengeSetup::Squat { count: 5 }), None);
     }
 
     #[test]
@@ -255,6 +263,22 @@ mod tests {
     }
 
     #[test]
+    fn squat_goes_by_five_between_five_and_a_hundred() {
+        let mut setup = ChallengeSetup::new("challenge.squat").unwrap();
+        assert_eq!(setup, ChallengeSetup::Squat { count: 10 });
+        step(&mut setup, 0, true);
+        assert_eq!(setup, ChallengeSetup::Squat { count: 15 });
+        for _ in 0..30 {
+            step(&mut setup, 0, true);
+        }
+        assert_eq!(setup, ChallengeSetup::Squat { count: 100 });
+        for _ in 0..30 {
+            step(&mut setup, 0, false);
+        }
+        assert_eq!(setup, ChallengeSetup::Squat { count: 5 });
+    }
+
+    #[test]
     fn a_stepper_that_does_not_exist_changes_nothing() {
         let mut setup = ChallengeSetup::Shake { count: 20 };
         step(&mut setup, 3, true);
@@ -270,6 +294,7 @@ mod tests {
         assert_eq!(count("challenge.math"), 0);
         assert_eq!(count("challenge.scan"), 0);
         assert_eq!(count("challenge.shake"), 1);
+        assert_eq!(count("challenge.squat"), 1);
         assert_eq!(count("challenge.hold"), 2);
         assert_eq!(count("challenge.reaction"), 3);
     }
@@ -291,6 +316,10 @@ mod tests {
         assert_eq!(
             summary(&tr, &ChallengeSetup::Shake { count: 25 }),
             "25 shakes"
+        );
+        assert_eq!(
+            summary(&tr, &ChallengeSetup::Squat { count: 10 }),
+            "10 squats"
         );
         assert_eq!(
             summary(&tr, &ChallengeSetup::Hold { count: 1, secs: 3 }),

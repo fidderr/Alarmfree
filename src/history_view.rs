@@ -178,6 +178,7 @@ pub fn challenge_name(translations: &Translations, kind: ChallengeType) -> Strin
         ChallengeType::Typing => "challenge.typing",
         ChallengeType::ShakeToWake => "challenge.shake",
         ChallengeType::StepCount => "challenge.steps",
+        ChallengeType::Squat => "challenge.squat",
         ChallengeType::Scan => "challenge.scan",
         ChallengeType::HoldButton => "challenge.hold",
         ChallengeType::Reaction => "challenge.reaction",

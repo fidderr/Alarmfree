@@ -25,6 +25,9 @@ pub enum ChallengeSetup {
     Steps {
         count: u32,
     },
+    Squat {
+        count: u32,
+    },
     Hold {
         count: u32,
         secs: u32,
@@ -41,7 +44,7 @@ pub enum ChallengeSetup {
 
 /// The type keys, in the order the "add a challenge" sheet lists them. Each is also
 /// the translation key of the challenge's name.
-pub const CHALLENGE_TYPES: [&str; 8] = [
+pub const CHALLENGE_TYPES: [&str; 9] = [
     "challenge.math",
     "challenge.typing",
     "challenge.memory",
@@ -49,6 +52,7 @@ pub const CHALLENGE_TYPES: [&str; 8] = [
     "challenge.hold",
     "challenge.steps",
     "challenge.shake",
+    "challenge.squat",
     "challenge.scan",
 ];
 
@@ -67,6 +71,7 @@ impl ChallengeSetup {
             },
             "challenge.shake" => Self::Shake { count: 20 },
             "challenge.steps" => Self::Steps { count: 20 },
+            "challenge.squat" => Self::Squat { count: 10 },
             "challenge.hold" => Self::Hold { count: 10, secs: 3 },
             "challenge.reaction" => Self::Reaction {
                 targets: 10,
@@ -87,6 +92,7 @@ impl ChallengeSetup {
             Self::Typing { .. } => "challenge.typing",
             Self::Shake { .. } => "challenge.shake",
             Self::Steps { .. } => "challenge.steps",
+            Self::Squat { .. } => "challenge.squat",
             Self::Hold { .. } => "challenge.hold",
             Self::Reaction { .. } => "challenge.reaction",
             Self::Scan { .. } => "challenge.scan",
@@ -116,7 +122,7 @@ impl ChallengeSetup {
             Self::Math { difficulty: d }
             | Self::Memory { difficulty: d }
             | Self::Typing { difficulty: d } => *d = difficulty(),
-            Self::Shake { count } | Self::Steps { count } => {
+            Self::Shake { count } | Self::Steps { count } | Self::Squat { count } => {
                 *count = number("count").unwrap_or(*count);
             }
             Self::Hold { count, secs } => {
@@ -151,7 +157,9 @@ impl ChallengeSetup {
             | Self::Typing { difficulty } => {
                 json!({ "difficulty": difficulty_name(*difficulty) })
             }
-            Self::Shake { count } | Self::Steps { count } => json!({ "count": count }),
+            Self::Shake { count } | Self::Steps { count } | Self::Squat { count } => {
+                json!({ "count": count })
+            }
             Self::Hold { count, secs } => json!({ "count": count, "hold_ms": secs * 1000 }),
             Self::Reaction {
                 targets,
@@ -203,6 +211,10 @@ mod tests {
         assert_eq!(
             stored(ChallengeSetup::Shake { count: 25 }),
             r#"{"count":25}"#
+        );
+        assert_eq!(
+            stored(ChallengeSetup::Squat { count: 12 }),
+            r#"{"count":12}"#
         );
         assert_eq!(
             stored(ChallengeSetup::Hold { count: 8, secs: 4 }),

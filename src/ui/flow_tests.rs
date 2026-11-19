@@ -684,3 +684,68 @@ fn s53_the_rest_of_the_screens() {
     );
     f.finish();
 }
+
+/// The squat challenge: in the picker, its settings, tried out with squats counted by the sensor
+/// (injected), and saved with the alarm.
+#[test]
+fn squat_challenge_from_picker_to_try_out() {
+    let f = Flow::new(Vec::new());
+    f.expect(f.tap("Create new alarm"), "no create button");
+    f.open_row("Challenges");
+    f.expect(f.tap("Add a challenge"), "no add");
+    f.expect(
+        f.has("Squat") && f.has("Do squats"),
+        format!("the picker has no Squat: {:?}", f.texts()),
+    );
+    f.expect(f.tap_last("Squat"), "no Squat");
+    f.expect(
+        f.has("How many squats") && f.has("10"),
+        format!("the settings of Squat: {:?}", f.texts()),
+    );
+    f.expect(f.tap_has("More How many squats"), "no increase");
+    f.expect(f.has("15"), "15 after one step up");
+    // Tried: the counter screen, then the counts the sensor reports.
+    super::challenge_run::inject_counts([0, 0, 0]);
+    f.expect(f.tap("Try"), "no Try");
+    let run = f.ui.global::<Run>();
+    f.expect(run.get_active(), "the try-out did not start");
+    f.expect(
+        run.get_ring_text() == "0 / 15",
+        format!("ring says {}", run.get_ring_text()),
+    );
+    f.expect(
+        f.has("Hold your phone steady and squat!"),
+        format!("instruction: {:?}", f.texts()),
+    );
+    super::challenge_run::inject_counts([0, 0, 7]);
+    f.settle();
+    f.expect(
+        run.get_ring_text() == "7 / 15",
+        format!("ring says {} at 7", run.get_ring_text()),
+    );
+    f.expect(!run.get_celebrating(), "done at 7 of 15");
+    super::challenge_run::inject_counts([0, 0, 15]);
+    f.settle();
+    f.expect(run.get_celebrating(), "15 of 15 is not celebrated");
+    i_slint_backend_testing::mock_elapsed_time(std::time::Duration::from_millis(2500));
+    f.expect(
+        f.has("That is how it will go. Nothing was recorded."),
+        format!("no end of the try-out: {:?}", f.texts()),
+    );
+    super::challenge_run::inject_counts([0; 3]);
+    f.tap("Exit");
+    f.expect(!run.get_active(), "Exit leaves the try-out up");
+    // Saved with the alarm.
+    for _ in 0..2 {
+        if f.has("Done") {
+            f.done();
+        }
+    }
+    f.expect(f.tap("Save"), "no Save");
+    let stored = crate::persistence::load_alarms()[0].challenges.clone();
+    f.expect(
+        stored == vec![("challenge.squat".to_owned(), r#"{"count":15}"#.to_owned())],
+        format!("stored {stored:?}"),
+    );
+    f.finish();
+}

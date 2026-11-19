@@ -564,4 +564,34 @@ mod tests {
 
         assert_eq!(metrics.total_events, 1);
     }
+
+    #[test]
+    fn a_squat_solve_has_its_own_timing_row_in_the_history() {
+        let db = Database::open_in_memory().unwrap();
+        let mut event = ended("1", AlarmOutcome::Solved);
+        event.challenge_solves = vec![
+            crate::models::ChallengeSolve {
+                challenge_type: crate::models::ChallengeType::Squat,
+                difficulty: crate::models::Difficulty::Easy,
+                duration: Duration::from_secs(40),
+            },
+            crate::models::ChallengeSolve {
+                challenge_type: crate::models::ChallengeType::ShakeToWake,
+                difficulty: crate::models::Difficulty::Easy,
+                duration: Duration::from_secs(10),
+            },
+        ];
+        db.insert_event(&event).unwrap();
+
+        let events = db.query_events(&HistoryFilter::LastDays(1)).unwrap();
+        assert_eq!(events[0].challenge_solves, event.challenge_solves);
+        let metrics = db.aggregate_metrics(&HistoryFilter::LastDays(1)).unwrap();
+        let en = crate::i18n::load_translations(crate::models::Locale::English);
+        let rows = crate::history_view::stat_rows(&en, &metrics);
+        assert!(
+            rows.iter().any(|(name, _)| name == "Squat"),
+            "no Squat row in {rows:?}"
+        );
+        assert!(rows.iter().any(|(name, _)| name == "Shake"));
+    }
 }

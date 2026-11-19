@@ -32,6 +32,9 @@ pub enum Challenge {
     Steps {
         count: u32,
     },
+    Squat {
+        count: u32,
+    },
     Hold {
         count: u32,
         hold_ms: u32,
@@ -78,6 +81,9 @@ fn prepare_one(engine: &mut ChallengeEngine, setup: &ChallengeSetup) -> Challeng
         ),
         ChallengeSetup::Steps { count } => {
             plain(Challenge::Steps { count: *count }, ChallengeType::StepCount)
+        }
+        ChallengeSetup::Squat { count } => {
+            plain(Challenge::Squat { count: *count }, ChallengeType::Squat)
         }
         ChallengeSetup::Hold { count, secs } => plain(
             Challenge::Hold {
@@ -157,7 +163,7 @@ pub const CELEBRATION_MS: u64 = 1800;
 pub const FALLBACK_HOLDS: u32 = 20;
 pub const FALLBACK_HOLD_MS: u32 = 3000;
 
-/// How far a counting challenge (shake, steps, the idle clock) has come, from 0 to 1.
+/// How far a counting challenge (shake, steps, squats, the idle clock) has come, from 0 to 1.
 pub fn fraction(count: u32, required: u32) -> f32 {
     (count as f32 / required.max(1) as f32).min(1.0)
 }
@@ -197,17 +203,19 @@ mod tests {
             ChallengeSetup::Shake { count: 1 },
             ChallengeSetup::Steps { count: 2 },
             ChallengeSetup::Hold { count: 3, secs: 1 },
+            ChallengeSetup::Squat { count: 4 },
         ];
         let counts: Vec<u32> = prepare(&setups, Locale::English)
             .into_iter()
             .map(|c| match c.challenge {
                 Challenge::Shake { count }
                 | Challenge::Steps { count }
+                | Challenge::Squat { count }
                 | Challenge::Hold { count, .. } => count,
                 other => panic!("did not ask for {other:?}"),
             })
             .collect();
-        assert_eq!(counts, [1, 2, 3]);
+        assert_eq!(counts, [1, 2, 3, 4]);
     }
 
     #[test]
