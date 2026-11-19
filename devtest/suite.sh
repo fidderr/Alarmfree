@@ -103,6 +103,7 @@ run_leg() {
         export CLEAN_COPY
         start_app
         wait_for 60 page_is_up && wait_for 30 on_screen_no 0 || { echo "STOP  $avd: the window does not come up on the alarm list"; exit 1; }
+        [ -z "$LEG_SKIP" ] || echo "SKIP  by tier on $avd: $LEG_SKIP (what does not depend on Android runs on the oldest only, the s13 restarts with a PIN and the big screens on the newest only: tiers.sh)"
         SKIP=$LEG_SKIP FIRST=$LEG_FIRST LAST=$LEG_LAST bash devtest/matrix.sh $LEG_LIST
         emulator_stop
         echo "seconds=$((SECONDS - start))" >> "$meta"
