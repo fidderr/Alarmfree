@@ -3611,7 +3611,14 @@ for s in ${LAST:-}; do
         *" $s "*) RUN_LIST="$RUN_LIST $s" ;;
     esac
 done
+# A scenario whose restart failed must not leave the next one on a half-booted device.
+boot_done() { [ "$(adb_ shell getprop sys.boot_completed 2> /dev/null | tr -d '\r')" = 1 ] && device_ok; }
 for s in $RUN_LIST; do
+    if on_emulator && ! boot_done; then
+        note "the device is not booted before $s: waiting"
+        wait_for 180 boot_done
+        open_shells
+    fi
     "$s"
 done
 dev am force-stop "$PKG"

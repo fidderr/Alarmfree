@@ -30,6 +30,17 @@ check_apk() {
 # the booted, untouched system (taken here the first time, 2.5 GB in the AVD's folder) loads in 7 s. Only for this
 # first start: the restarts the scenarios do themselves (s11, s13) stay cold boots, which is the point of them.
 # NO_SNAPSHOT_BOOT=1 turns it off; a snapshot goes stale with a new system image: delete <avd>.avd/snapshots/suite_clean.
+# Seconds the device's clock is ahead of the host's.
+clock_offset() { echo $(($(timeout 20 "$ADB" -s "$SERIAL" shell date +%s | tr -d '') - $(date +%s))); }
+# boot_completed, asked again while the connection drops: adbd restarts early in a boot.
+wait_boot_completed() { # seconds
+    local deadline=$((SECONDS + $1))
+    timeout "$1" "$ADB" -s "$SERIAL" wait-for-device
+    until [ "$(timeout 20 "$ADB" -s "$SERIAL" shell getprop sys.boot_completed 2> /dev/null | tr -d '')" = 1 ]; do
+        [ "$SECONDS" -lt "$deadline" ] || return 1
+        sleep 1
+    done
+}
 boot_leg() {
     local dir="$USERPROFILE/.android/avd/$AVD.avd/snapshots/suite_clean"
     if [ -n "${NO_SNAPSHOT_BOOT:-}" ]; then
@@ -38,11 +49,21 @@ boot_leg() {
     fi
     if [ -d "$dir" ]; then
         emulator_stop
-        powershell.exe -NoProfile -Command "Start-Process -WindowStyle Hidden -FilePath '$(cygpath -w "$EMULATOR")' -ArgumentList '-avd $AVD -no-window -no-audio -no-boot-anim -snapshot suite_clean -no-snapshot-save -gpu ${EMULATOR_GPU:-host} -port ${SERIAL#emulator-}'"
-        timeout 120 "$ADB" -s "$SERIAL" wait-for-device &&
-            timeout 120 "$ADB" -s "$SERIAL" shell 'while [ -z "$(getprop sys.boot_completed)" ]; do sleep 0.3; done' || return 1
-        # The guest clock stays at the time of the snapshot for a while: the host's time now.
+        powershell.exe -NoProfile -Command "Start-Process -WindowStyle Hidden -FilePath '$(cygpath -w "$EMULATOR")' -ArgumentList '-avd $AVD -no-window -no-audio -no-boot-anim -snapshot suite_clean -no-snapshot-save -no-snapshot-update-time -gpu ${EMULATOR_GPU:-host} -port ${SERIAL#emulator-}'"
+        wait_boot_completed 120 || return 1
+        # The snapshot has the time it was taken at. The emulator would put the guest clock right by itself some seconds after
+        # the load, undoing a scenario's clock jumps in between (seen: s03, s10): -no-snapshot-update-time stops that, and the
+        # host's time is set here once. Then the offset to the host must hold still for 12 s, or this start is not trusted.
         timeout 20 "$ADB" -s "$SERIAL" shell cmd alarm set-time $(($(date +%s) * 1000)) > /dev/null
+        local d1 d2
+        d1=$(clock_offset)
+        sleep 12
+        d2=$(clock_offset)
+        if [ $((d2 - d1)) -gt 2 ] || [ $((d1 - d2)) -gt 2 ]; then
+            note "the guest clock moved by itself after the snapshot load ($d1 s, then $d2 s): cold boot instead"
+            reboot_and_wait
+            return
+        fi
         open_shells
         return 0
     fi

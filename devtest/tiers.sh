@@ -18,10 +18,8 @@ NEWEST_ONLY="s13 s13b s13d big_screens"
 # The AVD that counts as the newest in a FULL run.
 NEWEST_AVD=afg16
 
-# The emulators of the quick matrix (Android 16 down to 10) and the ones that are off until phase 2 of the
-# older-android work makes the app run there (min_sdk is 29: Android 8 = msd26, Android 9 = msd28 do not start it).
+# The emulators of the quick matrix: Android 16 down to 10 (min_sdk is 29, so Android 10 is the oldest).
 MATRIX_AVDS="afg16 afg15 afg14 afg13 afg12 msd30 msd29"
-MATRIX_AVDS_OFF="msd28 msd26"
 
 # The graphics of an emulator: Android 12's on the host's GPU crashed the emulator now and then in the middle of a
 # run, and the older images are not made for it.
