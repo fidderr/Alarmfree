@@ -7,6 +7,15 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.5.3] - 2026-11-19
+
+versionCode 12403. Same app as 0.5.2; only the Play listing reach changes.
+
+### Fixed
+
+- The app no longer requires a portrait screen (`android.hardware.screen.portrait` is optional), so
+  Play offers it on devices without one, such as Chromebooks, Android XR and some tablets.
+
 ## [0.5.2] - 2026-11-16
 
 Accessibility with TalkBack, versionCode 12402. The UI now runs on a Slint fork

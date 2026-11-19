@@ -9,8 +9,8 @@
 generate = true
 application_id = "com.fidderr.alarmfree"
 label = "AlarmFree"
-version_code = 12402
-version_name = "0.5.2"
+version_code = 12403
+version_name = "0.5.3"
 native_lib = "main"
 # build.sh stages libalarmfree.so here as <abi>/libmain.so (the SDK's Kotlin loads it by that name).
 jni_libs = "build/jniLibs"
@@ -53,3 +53,9 @@ screen_orientation = "portrait"
 [[android.declare.queries.intent]]
 action = "android.intent.action.SEND_MULTIPLE"
 data = { mimeType = "message/rfc822" }
+
+# The portrait lock makes Android imply a required portrait screen; Play then hides the app from
+# devices without one (Chromebooks, XR, some tablets). Large screens ignore the lock anyway.
+[[android.declare.feature]]
+name = "android.hardware.screen.portrait"
+required = false
