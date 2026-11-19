@@ -1,12 +1,13 @@
 #!/bin/bash
-# A few scenarios on one emulator, started like all.sh does.
+# A few scenarios on one emulator, started like all.sh does (graphics from tiers.sh).
 # Usage: bash devtest/one.sh <avd> <port> [scenario...]    (results in devtest-out/one_<avd>.log)
 cd "$(dirname "$0")/.." || exit 1
 export APK="${APK:-build/alarmfree-slint-debug.apk}"
 avd=$1 port=$2
 shift 2
 export AVD=$avd SERIAL=emulator-$port OUT="devtest-out/one_$avd"
-case "$avd" in afg12 | msd29 | msd30) export EMULATOR_GPU=swiftshader_indirect ;; esac
+. devtest/tiers.sh
+export EMULATOR_GPU="${EMULATOR_GPU:-$(gpu_for "$avd")}"
 . devtest/lib.sh
 claim_device
 if [ -z "${NO_BOOT:-}" ]; then
