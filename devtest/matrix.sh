@@ -1996,10 +1996,16 @@ done_sheet() {
     return 1
 }
 # Open a row of the editor, and wait for its panel.
+# A touch that lands while the sheet before it is still closing is dropped, and everything after it
+# then goes to the editor instead of the sheet: look whether the sheet came up, and touch again if not.
 open_row() {
-    has_there "$1" || sheet_scroll
-    tap_has "$1" 0 0.4
-    await_ui 4 'editor_sheet!=None'
+    local i
+    for i in 1 2 3; do
+        has_there "$1" || sheet_scroll
+        tap_has "$1" 0 0.4
+        await_ui 4 'editor_sheet!=None' && return 0
+    done
+    return 1
 }
 # The number of an own sound's row in the sound sheet: the bundled ones first, then the own ones by
 # name. Counted from the files, because a scrolled list shows only part of its rows.
@@ -2380,8 +2386,12 @@ s54() {
         on_screen "Turn off" 15 || problems="$problems; no alarm screen"
         screenshot s54_over_the_lock_screen
         locked || problems="$problems; ringing unlocked the phone"
-        tap "Turn off"
-        on_screen SCAN 8 || problems="$problems; no scan button"
+        # A dropped touch leaves the alarm screen up: touch again until the challenge shows.
+        for _ in 1 2 3; do
+            tap "Turn off"
+            on_screen SCAN 8 && break
+        done
+        on_screen SCAN 1 || problems="$problems; no scan button"
         # The power button, by accident: what comes back is the challenge, not the PIN.
         dev input keyevent KEYCODE_SLEEP
         sleep 1
