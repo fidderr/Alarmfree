@@ -46,7 +46,8 @@ missed, stopped at the limit, phone restarted), a streak, a chart and timings pe
 
 **The rest.** System, light, dark and pure black themes, more colour themes, or your own colours.
 Five languages. 12 or 24 hours, and which day a week starts on. A home-screen widget with the
-next alarm. An optional quiet notification before an alarm. Alarms to a file and back. Undo on
+next alarm. A reminder before an alarm (how long before, your own text, silent or with a sound, with
+Skip). Alarms to a file and back. Undo on
 what can be undone. Works on tablets and foldables, with the list and an alarm side by side.
 
 ## The challenges
@@ -62,6 +63,9 @@ what can be undone. Works on tablets and foldables, with the list and an alarm s
 | **Scan** | Scan a barcode or QR code: any, or one you saved. | The code. |
 | **Hold** | Press a bubble until it fills. | 1 to 30 times, 1 to 15 seconds. |
 | **Reaction** | Pop targets before the time runs out. Too late starts over. | Targets, time, rounds. |
+
+Beating a challenge plays a strong, rising three-pulse vibration, so you know without looking; each
+counted squat gives a soft tick. Both follow the touch feedback setting.
 
 A challenge that cannot be done (a broken sensor, a lost code) can be swapped for 20 holds of 3
 seconds. That is slow on purpose. A minute without doing anything brings the sound back.

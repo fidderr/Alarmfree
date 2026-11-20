@@ -14,17 +14,18 @@ Wach werden, wirklich.
 
 AlarmFree ist ein kostenloser Wecker ohne Werbung, Konto oder Tracking, und er funktioniert offline. Wenn er klingelt, tippst du nicht einfach auf einen Knopf: Du rechnest eine Aufgabe, gehst ein paar Schritte oder scannst den Barcode auf deiner Zahnpasta. Bis du auf bist, klingelt er weiter.
 
-ACHT ARTEN VON AUFGABEN
+NEUN ARTEN VON AUFGABEN
 • Mathe: eine Rechnung, von leicht bis extrem
 • Gedächtnis: wiederhole eine Folge leuchtender Felder
 • Tippen: schreib einen Text ab, in deiner Sprache
 • Schütteln: schüttle dein Telefon einige Male
 • Schritte: steh auf und lauf
+• Kniebeugen: mit dem Telefon in beiden Händen
 • Scannen: jeder Barcode oder QR-Code, oder einer, den du gespeichert hast
 • Halten: drück auf eine Blase, bis sie voll ist
 • Reaktion: lass Ziele platzen, bevor die Zeit abläuft
 
-Bis zu 10 pro Wecker, in der Reihenfolge, die du wählst. Probier jede aus, bevor du dich darauf verlässt.
+Bis zu 10 pro Wecker, in der Reihenfolge, die du wählst. Probier jede aus, bevor du dich darauf verlässt. Ein kräftiges Vibrieren sagt dir ohne hinzusehen, dass du eine geschafft hast.
 
 EIN WECKER, DER KLINGELT
 • Klingelt aus einem eigenen Teil der App, den nichts auf dem Bildschirm stoppen kann, auch wenn die App längst geschlossen ist
@@ -36,7 +37,7 @@ EIN WECKER, DER KLINGELT
 DEINE WECKER, DEINE ART
 • Werktags oder an einem Datum, mit eigener Bezeichnung und einer Notiz fürs Klingeln
 • Schnelle Wecker für ein Nickerchen, mit zwei Fingertipps
-• Ein stiller Hinweis vor einem Wecker, mit Überspringen, wenn du schon auf bist
+• Eine Erinnerung vor einem Wecker: wie lange vorher, dein eigener Text, still oder mit Ton, und Überspringen, wenn du schon auf bist
 • Überspring das nächste Klingeln oder pausiere alles für den Urlaub
 • 10 Töne oder eigene Sounds, langsam lauter, zuerst vibrieren, Mindestlautstärke pro Wecker
 • Schlummere so oft und so lange du willst, oder gar nicht
@@ -58,8 +59,7 @@ Benötigt Android 10 oder neuer auf einem 64-Bit-Telefon.
 
 ## Neuigkeiten (max. 500)
 
-Erste Version bei Google Play.
-• Acht Aufgaben, bis zu 10 pro Wecker
-• Ein eigener Weckerbildschirm und neun Designs
-• Ein stiller Hinweis vor einem Wecker, mit Überspringen
-• Klingelt aus einem eigenen Prozess, in Sekundenbruchteilen
+• Neue Aufgabe: Kniebeugen
+• Kräftiges Vibrieren, wenn du eine Aufgabe schaffst, ein sanftes pro Kniebeuge
+• Erinnerungen vor einem Wecker, mit eigenem Text und auf Wunsch mit Ton
+• Läuft jetzt auch auf Android 10 und 11

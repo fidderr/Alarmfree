@@ -14,17 +14,18 @@ Wake up for real.
 
 AlarmFree is a free alarm clock without ads, accounts or tracking, and it works offline. When it rings you do not just tap a button: you do a sum, walk some steps, scan the barcode on your toothpaste. Until you are up, it keeps ringing.
 
-EIGHT KINDS OF CHALLENGE
+NINE KINDS OF CHALLENGE
 • Math: a sum, from easy to extreme
 • Memory: repeat a sequence of lit cells
 • Typing: copy a passage, in your language
 • Shake: shake your phone a number of times
 • Steps: get up and walk
+• Squat: squat with the phone in both hands
 • Scan: any barcode or QR code, or one you saved
 • Hold: press a bubble until it fills
 • Reaction: pop targets before the time runs out
 
-Up to 10 per alarm, in the order you choose. Try each one out before you depend on it.
+Up to 10 per alarm, in the order you choose. Try each one out before you depend on it. A strong buzz tells you when you beat one, without looking.
 
 AN ALARM THAT RINGS
 • Rings from its own part of the app that nothing on screen can stop, also when the app was closed long ago
@@ -36,7 +37,7 @@ AN ALARM THAT RINGS
 YOUR ALARMS, YOUR WAY
 • Weekdays or one date, with your own label and a note for when it rings
 • Quick alarms for a nap, in two taps
-• A silent notice before an alarm, with Skip if you are already up
+• A reminder before an alarm: how long before, your own text, silent or with a sound, and Skip if you are already up
 • Skip the next ring, or pause everything for a holiday
 • 10 tones or your own sounds, fade in, vibrate first, minimum volume per alarm
 • Snooze as often and as long as you like, or not at all
@@ -58,8 +59,7 @@ Needs Android 10 or newer on a 64-bit phone.
 
 ## What's new (max 500)
 
-First release on Google Play.
-• Eight challenges, up to 10 per alarm
-• An alarm screen of your own and nine themes
-• A silent notice before an alarm, with Skip
-• Rings from its own process, within a fraction of a second
+• New challenge: squats
+• A strong buzz when you beat a challenge, a soft one per squat
+• Reminders before an alarm, with your own text and an optional sound
+• Now runs on Android 10 and 11 too

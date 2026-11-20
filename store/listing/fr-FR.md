@@ -14,17 +14,18 @@ Réveillez-vous pour de vrai.
 
 AlarmFree est un réveil gratuit, sans publicité, sans compte ni pistage, qui fonctionne hors ligne. Quand il sonne, il ne suffit pas d'appuyer sur un bouton : vous faites un calcul, marchez quelques pas ou scannez le code-barres de votre dentifrice. Tant que vous n'êtes pas levé, il continue de sonner.
 
-HUIT TYPES DE DÉFIS
+NEUF TYPES DE DÉFIS
 • Maths : un calcul, de facile à extrême
 • Mémoire : répétez une suite de cases allumées
 • Saisie : recopiez un passage, dans votre langue
 • Secouer : secouez votre téléphone un certain nombre de fois
 • Pas : levez-vous et marchez
+• Squats : avec le téléphone dans les deux mains
 • Scanner : n'importe quel code-barres ou QR code, ou un code enregistré
 • Maintien : appuyez sur une bulle jusqu'à ce qu'elle se remplisse
 • Réaction : éclatez des cibles avant la fin du temps
 
-Jusqu'à 10 par alarme, dans l'ordre de votre choix. Essayez chacun avant de compter dessus.
+Jusqu'à 10 par alarme, dans l'ordre de votre choix. Essayez chacun avant de compter dessus. Une forte vibration vous dit, sans regarder, que vous en avez réussi un.
 
 UNE ALARME QUI SONNE
 • Sonne depuis une partie de l'appli que rien à l'écran ne peut arrêter, même si l'appli a été fermée il y a longtemps
@@ -36,7 +37,7 @@ UNE ALARME QUI SONNE
 VOS ALARMES, À VOTRE FAÇON
 • En semaine ou à une date, avec votre propre libellé et une note pour le moment où elle sonne
 • Alarmes rapides pour une sieste, en deux touches
-• Un avis silencieux avant une alarme, avec Ignorer si vous êtes déjà levé
+• Un rappel avant une alarme : combien de temps avant, votre propre texte, silencieux ou avec un son, et Ignorer si vous êtes déjà levé
 • Ignorez la prochaine sonnerie, ou mettez tout en pause pendant les vacances
 • 10 sonneries ou vos propres sons, montée progressive, vibration d'abord, volume minimal par alarme
 • Répétez aussi souvent et aussi longtemps que vous voulez, ou jamais
@@ -58,8 +59,7 @@ Nécessite Android 10 ou plus récent sur un téléphone 64 bits.
 
 ## Nouveautés (max. 500)
 
-Première version sur Google Play.
-• Huit défis, jusqu'à 10 par alarme
-• Un écran d'alarme personnalisé et neuf thèmes
-• Un avis silencieux avant une alarme, avec Ignorer
-• Sonne depuis son propre processus, en une fraction de seconde
+• Nouveau défi : les squats
+• Une forte vibration quand vous réussissez un défi, une douce par squat
+• Des rappels avant une alarme, avec votre propre texte et un son au choix
+• Fonctionne maintenant aussi sur Android 10 et 11

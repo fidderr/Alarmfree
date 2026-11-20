@@ -14,17 +14,18 @@ Despiértate de verdad.
 
 AlarmFree es un despertador gratuito sin anuncios, cuentas ni rastreo, y funciona sin conexión. Cuando suena no basta con tocar un botón: resuelves una suma, das unos pasos o escaneas el código de barras de tu pasta de dientes. Hasta que te levantes, sigue sonando.
 
-OCHO TIPOS DE RETO
+NUEVE TIPOS DE RETO
 • Mates: una suma, de fácil a extrema
 • Memoria: repite una secuencia de casillas iluminadas
 • Escritura: copia un texto, en tu idioma
 • Agitar: agita el teléfono varias veces
 • Pasos: levántate y camina
+• Sentadillas: con el teléfono en ambas manos
 • Escanear: cualquier código de barras o QR, o uno que hayas guardado
 • Mantener: pulsa una burbuja hasta que se llene
 • Reacción: explota objetivos antes de que se acabe el tiempo
 
-Hasta 10 por alarma, en el orden que elijas. Pruébalos antes de confiar en ellos.
+Hasta 10 por alarma, en el orden que elijas. Pruébalos antes de confiar en ellos. Una vibración fuerte te dice, sin mirar, que has superado uno.
 
 UNA ALARMA QUE SUENA
 • Suena desde una parte propia de la app que nada en pantalla puede detener, también si la app se cerró hace tiempo
@@ -36,7 +37,7 @@ UNA ALARMA QUE SUENA
 TUS ALARMAS, A TU MANERA
 • Entre semana o en una fecha, con tu propia etiqueta y una nota para cuando suene
 • Alarmas rápidas para una siesta, en dos toques
-• Un aviso silencioso antes de una alarma, con Omitir si ya estás levantado
+• Un recordatorio antes de una alarma: cuánto antes, tu propio texto, en silencio o con sonido, y Omitir si ya estás levantado
 • Omite el próximo aviso o pausa todo durante las vacaciones
 • 10 tonos o tus propios sonidos, subida gradual, vibrar primero, volumen mínimo por alarma
 • Pospón tantas veces y tanto tiempo como quieras, o nunca
@@ -58,8 +59,7 @@ Requiere Android 10 o posterior en un teléfono de 64 bits.
 
 ## Novedades (máx. 500)
 
-Primera versión en Google Play.
-• Ocho retos, hasta 10 por alarma
-• Una pantalla de alarma propia y nueve temas
-• Un aviso silencioso antes de una alarma, con Omitir
-• Suena desde su propio proceso, en una fracción de segundo
+• Nuevo reto: sentadillas
+• Una vibración fuerte al superar un reto, y una suave por sentadilla
+• Recordatorios antes de una alarma, con tu propio texto y sonido opcional
+• Ahora también funciona en Android 10 y 11

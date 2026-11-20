@@ -7,8 +7,14 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-20
+
 ### Added
 
+- **Android 10 and 11.** The app now runs on Android 10 and newer (it needed Android 12). Tested on Android 10, 12 and 16
+  emulators. Needs mobile-sentinel 0.7.0.
+- **Challenge haptics.** Beating any challenge plays a strong, rising three-pulse pattern, so you know it worked without
+  looking. Each counted squat gives a soft tick. Both follow the touch feedback setting.
 - **Squat challenge.** Squat with the phone held steady in both hands; the SDK's motion detector counts the squats (5 to 100,
   10 by default). It is in the challenge list, the try-out, the history timings and backups, in all five languages, and the usual
   "Can't do this one? Hold instead" still swaps it for 20 holds. The detector's limits are first guesses, to be tuned with real
@@ -22,6 +28,12 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
   shows the alarm's label as before), and silent or with the notification sound. Skip and Undo stay
   on it. An old notice becomes a silent reminder of the same length, also from a backup file; the
   "for all alarms" setting keeps working. Needs the next SDK (`ReminderSound` on `set_reminder`).
+- **Sheets slide up** from below the screen when they open.
+
+### Fixed
+
+- The "rings in" text for a time that falls in the daylight saving gap shows the first moment after the gap.
+- The theme card's day letters shrink at large display sizes (640 dpi), so the switch next to them fits.
 
 ## [0.5.3] - 2026-11-19
 
