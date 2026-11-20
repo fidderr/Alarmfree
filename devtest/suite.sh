@@ -85,6 +85,9 @@ run_leg() {
         # shellcheck disable=SC1091
         . devtest/lib.sh
         claim_device
+        # A leg that ends early (did not start, failed install, a run that stops) must not leave its emulator up: the
+        # next leg on this lane takes the same port.
+        trap emulator_stop EXIT
         local b=$SECONDS
         boot_leg || { echo "FAIL  $avd did not start"; exit 1; }
         boot_s=$((SECONDS - b))
