@@ -102,7 +102,7 @@ pub fn rings_in(translations: &Translations, alarm: &AlarmData) -> String {
         .and_then(|skip| chrono::Local.timestamp_millis_opt(skip).single())
         .map_or(now.naive_local(), |skip| skip.naive_local());
     schedule::next_ring_moment(alarm.time_hour, alarm.time_minute, alarm.days, date, from)
-        .and_then(|moment| schedule::instant_in(&chrono::Local, moment))
+        .and_then(|moment| schedule::ring_instant_in(&chrono::Local, moment))
         .map(|at| {
             let time = time_left(
                 translations,

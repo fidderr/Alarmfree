@@ -6,7 +6,7 @@
 use alarmfree::models::{Reminder, REMINDER_MINUTES};
 use alarmfree::schedule::{
     countdown, earliest_future, format_countdown, instant_in, next_occurrence_date,
-    next_ring_moment, reminder_plan, ReminderPlan,
+    next_ring_moment, reminder_plan, ring_instant_in, ReminderPlan,
 };
 use chrono::{Datelike, Duration, NaiveDate, NaiveDateTime, TimeZone, Timelike};
 use chrono_tz::Tz;
@@ -316,4 +316,14 @@ fn eight_hours_before_a_ring_after_the_clocks_went_forward_is_eight_real_hours()
     };
     let at = zone.timestamp_millis_opt(at_ms).unwrap();
     assert_eq!((at.day(), at.hour(), at.minute()), (28, 22, 0));
+}
+
+#[test]
+fn an_alarm_in_the_skipped_hour_is_shown_ringing_at_the_end_of_the_gap() {
+    let nl = chrono_tz::Europe::Amsterdam;
+    let day = NaiveDate::from_ymd_opt(2026, 3, 29).unwrap();
+    let ring = ring_instant_in(&nl, day.and_hms_opt(2, 30, 0).unwrap()).expect("rings at 03:00");
+    assert_eq!(ring.naive_local(), day.and_hms_opt(3, 0, 0).unwrap());
+    let normal = day.and_hms_opt(4, 15, 0).unwrap();
+    assert_eq!(ring_instant_in(&nl, normal), instant_in(&nl, normal));
 }

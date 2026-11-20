@@ -123,6 +123,15 @@ pub fn instant_in<Tz: chrono::TimeZone>(
     zone.from_local_datetime(&moment).earliest()
 }
 
+/// The instant an alarm at a wall-clock moment really rings: like `instant_in`, but a moment the
+/// clocks skip rings at the first valid minute after the gap.
+pub fn ring_instant_in<Tz: chrono::TimeZone>(
+    zone: &Tz,
+    moment: NaiveDateTime,
+) -> Option<chrono::DateTime<Tz>> {
+    (0..=24 * 60).find_map(|minutes| instant_in(zone, moment + Duration::minutes(minutes)))
+}
+
 /// Time left until an alarm rings, in whole days, hours and minutes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Countdown {
