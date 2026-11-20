@@ -1058,8 +1058,10 @@ s25() {
     # Sheets, editor, question and the main screens are checked in cargo test
     # (ui::flow_tests::s25_back_navigation). What needs the phone: Back on Home sends the app to
     # the background, without ending anything.
+    local seen
+    seen="screen=$(sn screen) sheet=$(sn home_sheet) panel=$(sn panel_open) ringing=$(sn ringing) preview=$(sn ed_preview)"
     press_back
-    wait_for 5 not_on_top || problems="$problems; Back on Home stayed on top"
+    wait_for 5 not_on_top || problems="$problems; Back on Home stayed on top ($seen; now $(sn screen) $(sn home_sheet) $(sn panel_open))"
     [ "$(main_pid)" = "$p0" ] || problems="$problems; main $p0 to $(main_pid)"
     start_app
     on_home 20 || problems="$problems; not back on Home"
