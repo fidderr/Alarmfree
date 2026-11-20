@@ -175,7 +175,7 @@ kill_pids() {
         while :; do
             kill_pid_once "$p"
             pid_gone "$p" && break
-            [ "$SECONDS" -ge "$budget" ] && fail "could not kill process $p"
+            [ "$SECONDS" -ge "$budget" ] && { fail "could not kill process $p"; return 1; }
             sleep 0.3
         done
     done
