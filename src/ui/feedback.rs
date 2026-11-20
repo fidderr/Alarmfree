@@ -16,8 +16,8 @@ use crate::report::{self, Answers, Kind, Parts};
 /// Where AlarmFree is on Google Play.
 const PLAY_ID: &str = "com.fidderr.alarmfree";
 
-const CHALLENGE_KINDS: [&str; 8] = [
-    "math", "scan", "shake", "steps", "memory", "typing", "hold", "reaction",
+const CHALLENGE_KINDS: [&str; 9] = [
+    "math", "scan", "shake", "steps", "squat", "memory", "typing", "hold", "reaction",
 ];
 
 #[derive(Default)]

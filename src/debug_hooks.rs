@@ -5,6 +5,10 @@
 //!
 //!   `snooze:<id>`, `dismiss:<id>`: the same calls as the screens make.
 //!   `hang_ui`: freeze the UI thread, to exercise the guardian.
+//!   `squat_record:start`, `squat_record:stop`: record the raw accelerometer to
+//!     `<files>/squat_record.csv` while the squat counter runs (for tuning it with real squats,
+//!     `devtest/squat_record.sh`); stop leaves `<files>/squat_record.txt` with the sample and squat
+//!     counts.
 //!   `ui:<command>`: ask or press something in the Slint window. The answer is written to
 //!   `<files>/debug_script_result.txt` (one line, or JSON), after the harness removed the
 //!   old one. The commands:
@@ -40,6 +44,11 @@ pub fn start() {
             continue;
         };
         let contents = contents.trim();
+        if let Some(what) = contents.strip_prefix("squat_record:") {
+            let _ = std::fs::remove_file(&path);
+            squat_record(what);
+            continue;
+        }
         #[cfg(debug_assertions)]
         if let Some(command) = contents.strip_prefix("ui:") {
             let _ = std::fs::remove_file(&path);
@@ -62,6 +71,35 @@ pub fn start() {
         }
         let _ = std::fs::remove_file(&path);
     });
+}
+
+/// Start or stop recording the accelerometer next to the squat counter.
+fn squat_record(what: &str) {
+    let dir = mobile_sentinel::app_files_dir();
+    match what {
+        "start" => {
+            mobile_sentinel::sensors::start_squat_counter();
+            let path = dir.join("squat_record.csv");
+            let started = mobile_sentinel::sensors::start_recording(&path.to_string_lossy());
+            log::info!("[AlarmFree] DEBUG squat_record started: {started}");
+        }
+        "stop" => {
+            let squats = mobile_sentinel::sensors::squat_count();
+            let samples = mobile_sentinel::sensors::stop_recording();
+            mobile_sentinel::sensors::stop_squat_counter();
+            let _ = std::fs::write(
+                dir.join("squat_record.txt"),
+                format!(
+                    "samples={samples} squats={squats}
+"
+                ),
+            );
+            log::info!(
+                "[AlarmFree] DEBUG squat_record stopped: {samples} samples, {squats} squats"
+            );
+        }
+        other => log::warn!("[AlarmFree] DEBUG squat_record: unknown {other}"),
+    }
 }
 
 #[cfg(debug_assertions)]

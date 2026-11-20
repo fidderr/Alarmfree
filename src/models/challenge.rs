@@ -19,6 +19,8 @@ pub enum ChallengeType {
     /// Speed/reaction: pop a set number of targets within a time limit, over
     /// several rounds. Pure count + time + rounds — no difficulty.
     Reaction,
+    /// Squats counted by the accelerometer (a repetition detector in the SDK).
+    Squat,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]

@@ -1661,6 +1661,76 @@ s44() {
     fi
 }
 
+# The squat challenge: shaking the phone does not count, squats do. An emulator can be told what its
+# accelerometer feels but not move, so a squat of 3 s and 0.6 m is set as the vertical acceleration it
+# makes, every 0.3 s or so, from the clock (the shell and adb take as long as they take). The detector
+# misses an occasional one set this coarsely, so it goes on until the alarm is off.
+s66() {
+    if ! on_emulator; then
+        note "s66 needs an emulator"
+        return
+    fi
+    scenario s66_squats
+    fresh
+    next_minute
+    seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null air 0 0 3 1 '[["challenge.squat","{\"count\":2}"]]')"
+    arm a
+    await_ring a 30 || { fail "never started"; return; }
+    shake() {
+        local i=0
+        while [ "$i" -lt 4 ]; do
+            adb_ emu sensor set acceleration 40:40:40 > /dev/null
+            sleep 0.35
+            adb_ emu sensor set acceleration 0:0:9.8 > /dev/null
+            sleep 0.35
+            i=$((i + 1))
+        done
+    }
+    squat() {
+        local start now value
+        start=$(date +%s%N)
+        while :; do
+            now=$(date +%s%N)
+            value=$(awk -v n="$now" -v s="$start" 'BEGIN {
+                t = (n - s) / 1e9
+                if (t > 3.0) { print "end"; exit }
+                w = 2 * 3.14159265 / 3.0
+                printf "%.2f", 9.8 - 0.3 * w * w * cos(w * t)
+            }')
+            [ "$value" = end ] && break
+            adb_ emu sensor set acceleration "0:0:$value" > /dev/null
+            sleep 0.2
+        done
+        adb_ emu sensor set acceleration 0:0:9.8 > /dev/null
+        sleep 1.2
+    }
+    on_screen "Turn off" 10
+    adb_ logcat -c
+    tap "Turn off" 0 0.5
+    wait_for 5 run_up
+    local problems=""
+    is_there "Hold your phone steady and squat!" || problems="$problems; no squat instruction on '$(texts_of)'"
+    shake
+    sleep 1
+    is_there "0 / 2" || problems="$problems; shaking counted: '$(texts_of)'"
+    local rounds=0
+    while [ "$rounds" -lt 8 ] && state_is a firing; do
+        squat
+        rounds=$((rounds + 1))
+    done
+    await_state a scheduled 5
+    local starts
+    starts=$(adb_ logcat -d 2> /dev/null | grep -c 'Accelerometer started')
+    if [ "$(state a)" != scheduled ] || [ "$(outcomes solved)" != 1 ] || sound_on; then
+        problems="$problems; state=$(state a) solved=$(outcomes solved) after $rounds squats, on screen '$(texts_of)'"
+    fi
+    if [ -z "$problems" ]; then
+        pass "shaking did not count, 2 squats did (in $rounds tries), the sensor started $starts times"
+    else
+        fail "${problems#; }"
+    fi
+}
+
 # A warning that is not a problem for this user can be hidden, and stays on its own screen.
 s45() {
     scenario s45_hide_a_warning
@@ -3384,7 +3454,7 @@ s62p() {
 . "$(dirname "$0")/panels.sh"
 . "$(dirname "$0")/a11y_audit.sh"
 
-ALL="s01 s03 s04 s05 s06 s07 s10 s11 s13 s13b s13d s14 s15 s16 s16b s17 s19 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s34 s36 s37 s38 s39 s40 s42 s43 s44 s45 s46 s47 s48 s49 s50 s51 s52 s53 s55 s56 s57 s58 s59 s60 s61 s62 s63 s65 big_screens s54"
+ALL="s01 s03 s04 s05 s06 s07 s10 s11 s13 s13b s13d s14 s15 s16 s16b s17 s19 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s34 s36 s37 s38 s39 s40 s42 s43 s44 s45 s46 s47 s48 s49 s50 s51 s52 s53 s55 s56 s57 s58 s59 s60 s61 s62 s63 s65 s66 big_screens s54"
 ON_A_PHONE="s01 s03 s04 s05 s06 s07 s10 s15 s16 s16b s17 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s36 s37 s38 s39 s42 s43 s45 s46 s47 s49 s50 s51 s52 s53 s55 s57 s58 s59 s61 s62"
 
 : > "$RESULTS"

@@ -58,6 +58,7 @@ what can be undone. Works on tablets and foldables, with the list and an alarm s
 | **Typing** | Copy a passage in your language. Capitals do not count, a skipped letter costs one letter. | Easy to Extreme: 5 to 60 words, 80 to 95% right. |
 | **Shake** | Shake the phone. | 5 to 200 times. |
 | **Steps** | Walk, by the phone's step counter. | 5 to 200 steps. |
+| **Squat** | Squat while holding the phone steady in both hands, counted by its motion sensor (first guesses, to be tuned with real squats, see `devtest/squat_record.sh`). | 5 to 100 squats. |
 | **Scan** | Scan a barcode or QR code: any, or one you saved. | The code. |
 | **Hold** | Press a bubble until it fills. | 1 to 30 times, 1 to 15 seconds. |
 | **Reaction** | Pop targets before the time runs out. Too late starts over. | Targets, time, rounds. |

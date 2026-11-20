@@ -49,9 +49,9 @@ enum Current {
         next: usize,
         timer: slint::Timer,
     },
-    /// Shake or steps: counts something and polls for it.
+    /// Shake, steps or squats: counts something and polls for it.
     Counter {
-        steps: bool,
+        kind: Count,
         required: u32,
         timer: slint::Timer,
     },
@@ -86,6 +86,7 @@ pub struct RunState {
     scan_limit: u32,
     last_shake: i32,
     last_steps: i32,
+    last_squats: i32,
     seq: i32,
     cur: Option<Current>,
     clock: slint::Timer,
@@ -158,6 +159,7 @@ fn begin(ctx: &Rc<Ctx>, mode: Mode, challenges: Vec<ChallengeToRun>) {
         scan_limit: crate::platform::shortened("scan_camera_secs", SCAN_CAMERA_SECS),
         last_shake: mobile_sentinel::sensors::shake_count(),
         last_steps: mobile_sentinel::sensors::step_count(),
+        last_squats: mobile_sentinel::sensors::squat_count(),
         seq: 0,
         cur: None,
         clock: slint::Timer::default(),
@@ -197,12 +199,8 @@ fn begin(ctx: &Rc<Ctx>, mode: Mode, challenges: Vec<ChallengeToRun>) {
 
 /// Stop whatever the current challenge runs: its clocks and its sensors.
 fn stop_current(run: &mut RunState) {
-    if let Some(Current::Counter { steps, .. }) = &run.cur {
-        if *steps {
-            mobile_sentinel::sensors::stop_step_counter();
-        } else {
-            mobile_sentinel::sensors::stop_accelerometer();
-        }
+    if let Some(Current::Counter { kind, .. }) = &run.cur {
+        kind.stop();
     }
     run.cur = None;
 }
@@ -279,9 +277,11 @@ fn clock_tick(ctx: &Rc<Ctx>) {
         }
         let shakes = mobile_sentinel::sensors::shake_count();
         let steps = mobile_sentinel::sensors::step_count();
-        if shakes != run.last_shake || steps != run.last_steps {
+        let squats = mobile_sentinel::sensors::squat_count();
+        if shakes != run.last_shake || steps != run.last_steps || squats != run.last_squats {
             run.last_shake = shakes;
             run.last_steps = steps;
+            run.last_squats = squats;
             run.idle_secs = 0;
             // A walk is no touch, and the ring limit should know somebody is up.
             if let Some(kit) = crate::platform::alarm_kit_optional() {
@@ -403,8 +403,9 @@ fn show_current(ctx: &Rc<Ctx>) {
             schedule_memory(ctx, &mut current);
             current
         }
-        Challenge::Shake { count } => start_counter(ctx, &screen, false, count),
-        Challenge::Steps { count } => start_counter(ctx, &screen, true, count),
+        Challenge::Shake { count } => start_counter(ctx, &screen, Count::Shake, count),
+        Challenge::Steps { count } => start_counter(ctx, &screen, Count::Steps, count),
+        Challenge::Squat { count } => start_counter(ctx, &screen, Count::Squat, count),
         Challenge::Hold { count, hold_ms } => {
             screen.set_kind(RunKind::Hold);
             let state = HoldState::new(count, hold_ms);
@@ -719,46 +720,101 @@ pub fn memory_tap(ctx: &Rc<Ctx>, cell: i32) {
     }
 }
 
-// ---- Shake and steps ----------------------------------------------------------------------
+// ---- Shake, steps and squats --------------------------------------------------------------
 
-fn start_counter(ctx: &Rc<Ctx>, screen: &Run<'_>, steps: bool, required: u32) -> Current {
+/// What a counter screen counts.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Count {
+    Shake,
+    Steps,
+    Squat,
+}
+
+#[cfg(test)]
+thread_local! {
+    /// What the tests make the sensors say: shake, steps, squats.
+    static INJECTED: std::cell::Cell<[i32; 3]> = const { std::cell::Cell::new([0; 3]) };
+}
+
+/// Make the sensors report these counts (shake, steps, squats), in a test.
+#[cfg(test)]
+pub fn inject_counts(counts: [i32; 3]) {
+    INJECTED.with(|c| c.set(counts));
+}
+
+impl Count {
+    fn instruction_key(self) -> &'static str {
+        match self {
+            Count::Shake => "challenge.shake.instruction",
+            Count::Steps => "challenge.steps.instruction",
+            Count::Squat => "challenge.squat.instruction",
+        }
+    }
+
+    fn unit_key(self) -> &'static str {
+        match self {
+            Count::Shake => "challenge.shake.unit",
+            Count::Steps => "challenge.steps.unit",
+            Count::Squat => "challenge.squat.unit",
+        }
+    }
+
+    fn poll_ms(self) -> u64 {
+        match self {
+            Count::Shake => 200,
+            Count::Steps => 250,
+            Count::Squat => 200,
+        }
+    }
+
+    /// The previous challenge is stopped by now: one that also counts switches the sensor off.
+    fn start(self) {
+        match self {
+            Count::Shake => {
+                mobile_sentinel::sensors::reset_shake_count();
+                mobile_sentinel::sensors::start_accelerometer();
+            }
+            Count::Steps => mobile_sentinel::sensors::start_step_counter(),
+            Count::Squat => mobile_sentinel::sensors::start_squat_counter(),
+        }
+    }
+
+    fn stop(self) {
+        match self {
+            Count::Shake => mobile_sentinel::sensors::stop_accelerometer(),
+            Count::Steps => mobile_sentinel::sensors::stop_step_counter(),
+            Count::Squat => mobile_sentinel::sensors::stop_squat_counter(),
+        }
+    }
+
+    fn now(self) -> i32 {
+        #[cfg(test)]
+        {
+            let injected = INJECTED.with(|c| c.get());
+            if injected != [0; 3] {
+                return injected[self as usize];
+            }
+        }
+        match self {
+            Count::Shake => mobile_sentinel::sensors::shake_count(),
+            Count::Steps => mobile_sentinel::sensors::step_count(),
+            Count::Squat => mobile_sentinel::sensors::squat_count(),
+        }
+    }
+}
+
+fn start_counter(ctx: &Rc<Ctx>, screen: &Run<'_>, kind: Count, required: u32) -> Current {
     screen.set_kind(RunKind::Ring);
-    screen.set_instruction(
-        tr(
-            ctx,
-            if steps {
-                "challenge.steps.instruction"
-            } else {
-                "challenge.shake.instruction"
-            },
-        )
-        .into(),
-    );
-    screen.set_unit(
-        tr(
-            ctx,
-            if steps {
-                "challenge.steps.unit"
-            } else {
-                "challenge.shake.unit"
-            },
-        )
-        .into(),
-    );
+    screen.set_instruction(tr(ctx, kind.instruction_key()).into());
+    screen.set_unit(tr(ctx, kind.unit_key()).into());
     screen.set_fraction(0.0);
     screen.set_ring_text(format!("0 / {required}").into());
-    // The previous challenge is stopped by now: one that also counts switches the sensor off.
-    if steps {
-        mobile_sentinel::sensors::start_step_counter();
-    } else {
-        mobile_sentinel::sensors::reset_shake_count();
-        mobile_sentinel::sensors::start_accelerometer();
-    }
+    kind.start();
     let timer = slint::Timer::default();
     let weak = weak(ctx);
     timer.start(
         slint::TimerMode::Repeated,
-        Duration::from_millis(if steps { 250 } else { 200 }),
+        Duration::from_millis(kind.poll_ms()),
         move || {
             if let Some(ctx) = weak.upgrade() {
                 counter_tick(&ctx);
@@ -766,7 +822,7 @@ fn start_counter(ctx: &Rc<Ctx>, screen: &Run<'_>, steps: bool, required: u32) ->
         },
     );
     Current::Counter {
-        steps,
+        kind,
         required,
         timer,
     }
@@ -775,18 +831,14 @@ fn start_counter(ctx: &Rc<Ctx>, screen: &Run<'_>, steps: bool, required: u32) ->
 fn counter_tick(ctx: &Rc<Ctx>) {
     let done = with_run(ctx, |run, ui| {
         let Some(Current::Counter {
-            steps,
+            kind,
             required,
             timer,
         }) = &run.cur
         else {
             return false;
         };
-        let now = if *steps {
-            mobile_sentinel::sensors::step_count()
-        } else {
-            mobile_sentinel::sensors::shake_count()
-        } as u32;
+        let now = kind.now() as u32;
         let screen = ui.global::<Run>();
         screen.set_fraction(fraction(now, *required));
         screen.set_ring_text(format!("{now} / {required}").into());

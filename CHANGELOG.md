@@ -7,6 +7,14 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+### Added
+
+- **Squat challenge.** Squat with the phone held steady in both hands; the SDK's motion detector counts the squats (5 to 100,
+  10 by default). It is in the challenge list, the try-out, the history timings and backups, in all five languages, and the usual
+  "Can't do this one? Hold instead" still swaps it for 20 holds. The detector's limits are first guesses, to be tuned with real
+  recordings: `devtest/squat_record.sh` records them on a phone. Moving the phone straight up and down with the arms, without
+  turning it, is counted too (a known limit). Needs mobile-sentinel 0.7.0.
+
 ## [0.5.3] - 2026-11-19
 
 versionCode 12403. Same app as 0.5.2; only the Play listing reach changes.
