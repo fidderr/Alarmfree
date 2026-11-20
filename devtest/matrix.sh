@@ -2088,7 +2088,7 @@ s50() {
     for field in '"time_hour":7' '"time_minute":10' '"label":"Morning"' '"note":"Take pills"' \
         '"days":[false,false,false,false,false,true,true]' '"sound":"funk' '"fade_in_secs":120' \
         '"volume_percent":75' '"vibration":1' '"sound_delay_secs":15' '"snooze_interval":6' \
-        '"snooze_count":4' 'challenge.math' 'challenge.steps' '"notify_before_minutes":10' \
+        '"snooze_count":4' 'challenge.math' 'challenge.steps' '"reminder":{"on":true,"minutes":10' \
         '"ring_limit_secs":3600' '"wake_check_minutes":3' '"max_brightness":true'; do
         has "$row" "$field"
     done
