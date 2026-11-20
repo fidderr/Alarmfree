@@ -1710,6 +1710,7 @@ s66() {
     wait_for 5 run_up
     local problems=""
     is_there "Hold your phone steady and squat!" || problems="$problems; no squat instruction on '$(texts_of)'"
+    screenshot s66_squat_screen
     shake
     sleep 1
     is_there "0 / 2" || problems="$problems; shaking counted: '$(texts_of)'"
@@ -2914,6 +2915,9 @@ s67() {
     own_notifications | grep -q "Go to bed, your alarm goes off in 8 hours" || problems="$problems; the 8 hour reminder does not say the text"
     own_notifications | grep -q "channel=$quiet" || problems="$problems; the silent reminder is not on the quiet channel"
     own_notifications | grep -q "channel=$loud" && problems="$problems; the silent reminder is on the sound channel"
+    dev cmd statusbar expand-notifications
+    sleep 1
+    adb_ exec-out screencap -p > "$OUT/s67_reminder_shade.png"
     tap_in_shade Skip || problems="$problems; no Skip to tap"
     dev cmd statusbar collapse
     wait_for 15 skipped || problems="$problems; Skip on the 8 hour reminder did not skip the ring"
