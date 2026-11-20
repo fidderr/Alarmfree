@@ -91,7 +91,9 @@ component Preview inherits Rectangle {
                         spacing: 2px;
                         alignment: start;
                         for day in Thm.days: Text {
-                            width: 13.2px;
+                            min-width: 0px;
+                            max-width: 13.2px;
+                            horizontal-stretch: 1;
                             horizontal-alignment: center;
                             text: day.letter;
                             font-size: 11px * Zoom.scale;

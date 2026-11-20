@@ -67,9 +67,8 @@ const LOOKS: [Look; 4] = [
     },
 ];
 
-/// Found by this test and left as it is: (look, screen, text) that sticks out of the window. The
-/// sample alarm on the theme screen has its switch 58 px (15 dp) past the edge at 640 dpi.
-const KNOWN_OUTSIDE: [(&str, &str, &str); 1] = [("large 640 dpi", "theme", "On or off:")];
+/// Found by this test and left as it is: (look, screen, text) that sticks out of the window.
+const KNOWN_OUTSIDE: [(&str, &str, &str); 0] = [];
 
 /// Choices that open the phone's picker (s57 only touches them on a real phone).
 const PICKERS: [&str; 1] = ["Photo"];
