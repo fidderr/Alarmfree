@@ -1,5 +1,10 @@
 # AlarmFree: Dioxus to Slint port inventory
 
+> Current state (after the port): the app runs on Android 10 and up (Android 10, 12 to 16 are tested). The challenges
+> include Squat (counted by the motion sensor). The old fixed "notice" sheet and its Off / 5 / 10 / 30 / 60 chips are
+> replaced by the per-alarm reminder (a silent notification before the ring, `reminder.*` keys); wherever this file
+> says "Notice", read "Reminder". The rest is the history of the port.
+>
 > Status: AlarmFree's `main` branch is now the Slint app. The Dioxus (WebView) version, up to 0.4.1, is on branch
 > `dioxus`. This file is the inventory the port was measured against; it is kept as history and as the list of what is
 > still open (the checklist in section 9 and the "Known gaps" under Status). It names `C:/Git/alarmfree-slint`, the
