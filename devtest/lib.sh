@@ -518,8 +518,14 @@ db_enabled() { # true / false / missing
 
 # Start the app so it arms the seeded alarms, then wait until `id` is armed.
 arm() {
-    start_app
-    wait_file "files/sentinel/armed/$1.armed" 30
+    # On a starved emulator Android can kill the starting app ("start timeout") before it arms
+    # anything: start it again rather than wait for a ring that was never set.
+    local try
+    for try in 1 2 3; do
+        start_app
+        wait_file "files/sentinel/armed/$1.armed" 30 && break
+        note "alarm $1 not armed 30s after start $try (main=$(main_pid))"
+    done
     # Whatever else was seeded comes right after.
     sleep 0.3
     # A slow start (Android optimising the app after an install, a starved emulator) can take
