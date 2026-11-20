@@ -685,6 +685,55 @@ fn s53_the_rest_of_the_screens() {
     f.finish();
 }
 
+/// Haptics of a counted challenge: one soft tick per newly counted squat, and the beaten pattern
+/// (not the soft tick) when the count is reached.
+#[test]
+fn squat_haptics_tick_and_beaten_pattern() {
+    use crate::feedback::{self, Haptic};
+    let f = Flow::new(Vec::new());
+    f.expect(f.tap("Create new alarm"), "no create button");
+    f.open_row("Challenges");
+    f.expect(f.tap("Add a challenge"), "no add");
+    f.expect(f.tap_last("Squat"), "no Squat");
+    super::challenge_run::inject_counts([0, 0, 0]);
+    f.expect(f.tap("Try"), "no Try");
+    let soft = Haptic::Waveform(
+        feedback::SOFT_TICK_TIMINGS.to_vec(),
+        feedback::SOFT_TICK_AMPLITUDES.to_vec(),
+    );
+    let beaten = Haptic::Waveform(
+        feedback::BEATEN_TIMINGS.to_vec(),
+        feedback::BEATEN_AMPLITUDES.to_vec(),
+    );
+    feedback::take_recorded();
+    super::challenge_run::inject_counts([0, 0, 1]);
+    f.settle();
+    f.expect(
+        feedback::take_recorded() == vec![soft.clone()],
+        "one new squat is not exactly one soft tick",
+    );
+    f.settle();
+    f.expect(
+        feedback::take_recorded().is_empty(),
+        "a tick without a new squat",
+    );
+    super::challenge_run::inject_counts([0, 0, 4]);
+    f.settle();
+    f.expect(
+        feedback::take_recorded() == vec![soft],
+        "several squats in one poll are not one soft tick",
+    );
+    super::challenge_run::inject_counts([0, 0, 10]);
+    f.settle();
+    f.expect(
+        feedback::take_recorded() == vec![beaten],
+        "the last squat does not play only the beaten pattern",
+    );
+    super::challenge_run::inject_counts([0; 3]);
+    f.tap("Exit");
+    f.finish();
+}
+
 /// The squat challenge: in the picker, its settings, tried out with squats counted by the sensor
 /// (injected), and saved with the alarm.
 #[test]

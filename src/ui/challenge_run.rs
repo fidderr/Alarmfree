@@ -54,6 +54,8 @@ enum Current {
         kind: Count,
         required: u32,
         timer: slint::Timer,
+        /// The count last answered with a haptic.
+        ticked: i32,
     },
     Hold {
         state: HoldState,
@@ -825,6 +827,7 @@ fn start_counter(ctx: &Rc<Ctx>, screen: &Run<'_>, kind: Count, required: u32) ->
         kind,
         required,
         timer,
+        ticked: kind.now(),
     }
 }
 
@@ -834,17 +837,24 @@ fn counter_tick(ctx: &Rc<Ctx>) {
             kind,
             required,
             timer,
-        }) = &run.cur
+            ticked,
+        }) = &mut run.cur
         else {
             return false;
         };
-        let now = kind.now() as u32;
+        let count = kind.now();
+        let now = count as u32;
         let screen = ui.global::<Run>();
         screen.set_fraction(fraction(now, *required));
         screen.set_ring_text(format!("{now} / {required}").into());
+        let more = count > *ticked;
+        *ticked = count;
         if now >= *required {
             timer.stop();
             return true;
+        }
+        if more && *kind == Count::Squat {
+            crate::feedback::soft_tick();
         }
         false
     });
@@ -1149,7 +1159,7 @@ fn solved_one(ctx: &Rc<Ctx>) {
             difficulty: item.difficulty,
             duration,
         });
-        crate::feedback::pattern(&[0, 45, 60, 90]);
+        crate::feedback::challenge_beaten();
         run.celebrating = true;
         let total = run.challenges.len();
         let screen = ui.global::<Run>();
