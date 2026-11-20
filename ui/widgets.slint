@@ -142,7 +142,8 @@ export component Sheet inherits Rectangle {
     property <bool> help-open: false;
     property <length> done-room: root.done-text == "" ? 0px : 52px + 20px + Insets.bottom;
     property <length> wanted: 74px + body.preferred-height + (root.done-text == "" ? Insets.bottom + 20px : 24px + root.done-room);
-    init => { shown = true; }
+    // Set after the first frame, so the panel starts below the screen and slides up.
+    Timer { interval: 1ms; running: true; triggered => { root.shown = true; self.running = false; } }
     // Scroll a row (its top and height in window coordinates) clear of the pinned button and the
     // keyboard: a text field in a row near the bottom would otherwise sit under them.
     public function reveal(row-y: length, row-h: length) {
@@ -159,7 +160,7 @@ export component Sheet inherits Rectangle {
         x: 0px;
         width: parent.width;
         height: min(parent.height * 0.9, root.wanted);
-        y: root.shown ? parent.height - self.height : parent.height;
+        y: root.shown || Motion.less ? parent.height - self.height : parent.height;
         animate y { duration: Motion.ms(220ms); easing: ease-out; }
         background: Pal.surface;
         border-top-left-radius: 28px;

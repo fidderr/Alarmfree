@@ -1193,3 +1193,48 @@ fn every_panel_at_560_dpi() {
 fn every_panel_at_640_dpi() {
     tour(LOOKS[3]);
 }
+
+/// A sheet slides up when it opens: right after the touch its content is still low on the screen
+/// and it rises over the next frames to where it stays (checked with the motion setting on).
+#[test]
+fn a_sheet_slides_up_when_it_opens() {
+    let t = Tour::new(LOOKS[0]);
+    t.ui.global::<Motion>().set_less(false);
+    t.press("go", "2");
+    let rows: Vec<El> = t
+        .els()
+        .into_iter()
+        .filter(|e| e.role == "Button" && e.t.starts_with("Time format"))
+        .collect();
+    let step = |ms: u64| {
+        i_slint_backend_testing::mock_elapsed_time(std::time::Duration::from_millis(ms));
+        t.read()
+    };
+    for row in rows {
+        assert_eq!(
+            debug_elements::run(&t.ui, &format!("tapxy:{} {}", row.x, row.y)).unwrap(),
+            "OK"
+        );
+        if !t.sheet_up() {
+            step(800);
+            continue;
+        }
+        let early = step(30);
+        let mid = step(80);
+        let end = step(800);
+        let lowest = |els: &[El]| {
+            els.iter()
+                .filter(|e| e.t == "Time format" && e.role == "Text" && e.y > 2000.0)
+                .map(|e| e.y)
+                .fold(f64::MIN, f64::max)
+        };
+        let (a, b, c) = (lowest(&early), lowest(&mid), lowest(&end));
+        // Offscreen at first (not in the tree), still on the way a moment later, then in place.
+        assert!(
+            a == f64::MIN && b > c + 100.0 && c > 2000.0,
+            "sheet content did not slide: {a} then {b} then {c}"
+        );
+        return;
+    }
+    panic!("no settings row opened a sheet");
+}
