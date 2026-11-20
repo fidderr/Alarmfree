@@ -2827,8 +2827,18 @@ tap_in_shade() {
         sleep 0.7
         UI_WINDOWS=--windows ui_tap "text=\"$1\"" && return 0
         UI_WINDOWS=--windows ui_tap "text=\"${1^^}\"" && return 0
+        # Android 10 sometimes leaves the shade out of the all-windows dump although it is up (the
+        # picture shows it): the plain dump, then a shade closed and opened again.
+        ui_tap "text=\"$1\"" && return 0
+        ui_tap "text=\"${1^^}\"" && return 0
+        dev cmd statusbar collapse
+        sleep 1
         i=$((i + 1))
     done
+    adb_ exec-out screencap -p > "$OUT/shade_no_$1.png"
+    dev uiautomator dump --windows /sdcard/af_ui.xml > /dev/null 2>&1
+    dev cat /sdcard/af_ui.xml > "$OUT/shade_no_$1.xml"
+    own_notifications > "$OUT/shade_no_$1.notifications.txt"
     return 1
 }
 
