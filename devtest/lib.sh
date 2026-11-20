@@ -161,21 +161,47 @@ main_pid() { dev pidof "$PKG"; }
 sentinel_pid() { dev pidof "$PKG:sentinel"; }
 # Android 12 does not let run-as kill the app, and says so only in the log. An emulator can do
 # it as root.
+#
+# Robustness: both the kill and the "is it gone yet?" poll use their own short, timeout-bounded
+# adb shells, never the long-lived DEV coprocess. A loaded emulator can stall that coprocess for
+# up to ASK_TIMEOUT (90 s); when that happened mid-kill the old code dropped the signal and then
+# misread the stalled shell as "process still alive", failing the scenario inside a 6 s budget it
+# could not even reach ("could not kill process N"). A fresh shell per attempt cannot be poisoned
+# that way, and the kill is re-sent every poll so a single dropped signal is simply resent.
 kill_pids() {
-    if on_emulator; then
-        dev "su 0 kill -9 $*"
-    else
-        as_app "kill -9 $*"
-    fi
-    # Nothing but the log says when this is refused. A starved emulator can take seconds to
-    # take a process down.
-    local p
+    local budget=$((SECONDS + ${KILL_BUDGET:-25})) p
     for p in $*; do
-        wait_for 6 pid_gone "$p" || fail "could not kill process $p"
+        [ -n "$p" ] || continue
+        while :; do
+            kill_pid_once "$p"
+            pid_gone "$p" && break
+            [ "$SECONDS" -ge "$budget" ] && fail "could not kill process $p"
+            sleep 0.3
+        done
     done
     true
 }
-pid_gone() { dev "[ ! -e /proc/$1 ]"; }
+# One kill signal through a fresh, timeout-bounded shell: root on an emulator, run-as on a phone.
+# Idempotent, so it is safe to re-send while polling (harmless once the process is already gone).
+kill_pid_once() {
+    if on_emulator; then
+        timeout 12 "$ADB" -s "$SERIAL" shell "su 0 kill -9 $1" > /dev/null 2>&1
+    else
+        timeout 12 "$ADB" -s "$SERIAL" shell "run-as $PKG kill -9 $1" > /dev/null 2>&1
+    fi
+    return 0
+}
+# True once PID is gone. A fresh short shell prints a definite token either way; an empty or
+# garbled answer (device momentarily unresponsive) counts as "not gone" so we keep trying rather
+# than declare a live process dead.
+pid_gone() {
+    local out
+    out=$(timeout 10 "$ADB" -s "$SERIAL" shell "[ -e /proc/$1 ] && echo __LIVE__ || echo __GONE__" 2> /dev/null | tr -d '\r')
+    case "$out" in
+        *__GONE__*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
 kill_main() { local p; p=$(main_pid); [ -n "$p" ] && kill_pids "$p"; true; }
 kill_sentinel() { local p; p=$(sentinel_pid); [ -n "$p" ] && kill_pids "$p"; true; }
 # In one go: with a moment in between, what survives can bring back what did not.
