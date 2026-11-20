@@ -288,6 +288,15 @@ fn connect_editor_sheets(ctx: &Rc<Ctx>, ui: &MainWindow) {
     on!(Ed, on_opt_picked, |ctx, i| editor_sound::opt_picked(
         &ctx, i as usize
     ));
+    on!(Ed, on_rem_picked, |ctx, i| editor_sound::reminder_picked(
+        &ctx, i as usize
+    ));
+    on!(Ed, on_rem_sound_picked, |ctx, i| {
+        editor_sound::reminder_sound_picked(&ctx, i as usize)
+    });
+    on!(Ed, on_rem_text_edited, |ctx, s| {
+        editor_sound::reminder_text_edited(&ctx, s.as_str())
+    });
     on!(Ed, on_tile_picked, |ctx, i| editor_look::tile_picked(
         &ctx, i as usize
     ));

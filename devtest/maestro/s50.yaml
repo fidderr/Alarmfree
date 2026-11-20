@@ -66,7 +66,7 @@ appId: com.fidderr.alarmfree
 - tapOn: "Are you up.*"
 - tapOn: ".*3 min"
 - tapOn: "Done"
-- tapOn: "Notice before.*"
+- tapOn: "Reminder.*"
 - tapOn: ".*10 min"
 - tapOn: "Done"
 - scrollUntilVisible:
@@ -87,7 +87,7 @@ appId: com.fidderr.alarmfree
     element: "Ring limit 60 min"
     centerElement: true
 - assertVisible: "Are you up.*3 min"
-- assertVisible: "Notice before 10 min"
+- assertVisible: "Reminder 10 min before"
 # Off the list from here too, after asking.
 - scrollUntilVisible:
     element: "Delete alarm"

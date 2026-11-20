@@ -7,7 +7,7 @@ pub mod setup;
 pub mod theme;
 
 // Re-export key types
-pub use alarm::{AlarmData, AlarmId};
+pub use alarm::{AlarmData, AlarmId, Reminder, REMINDER_MINUTES, REMINDER_TEXT_MAX};
 pub use challenge::{typing_accuracy, ChallengeEngine, ChallengeType, Difficulty};
 pub use history::{AggregateMetrics, AlarmEvent, AlarmOutcome, ChallengeSolve, HistoryFilter};
 pub use ring_look::{RingBackdrop, RingClock, RingLook};

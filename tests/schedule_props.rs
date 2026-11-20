@@ -3,9 +3,10 @@
 //! zones and leap days. The fixed cases are in `src/schedule.rs`; these look for the ones nobody
 //! thought of.
 
+use alarmfree::models::{Reminder, REMINDER_MINUTES};
 use alarmfree::schedule::{
     countdown, earliest_future, format_countdown, instant_in, next_occurrence_date,
-    next_ring_moment,
+    next_ring_moment, reminder_plan, ReminderPlan,
 };
 use chrono::{Datelike, Duration, NaiveDate, NaiveDateTime, TimeZone, Timelike};
 use chrono_tz::Tz;
@@ -23,6 +24,25 @@ fn any_now() -> impl Strategy<Value = NaiveDateTime> {
 
 fn any_days() -> impl Strategy<Value = [bool; 7]> {
     proptest::array::uniform7(any::<bool>())
+}
+
+/// A reminder that is on, with any of the steps the editor offers.
+fn any_reminder() -> impl Strategy<Value = Reminder> {
+    (
+        prop::sample::select(REMINDER_MINUTES.to_vec()),
+        any::<bool>(),
+        any::<bool>(),
+    )
+        .prop_map(|(minutes, sound, with_text)| Reminder {
+            on: true,
+            minutes,
+            text: if with_text {
+                "text".to_owned()
+            } else {
+                String::new()
+            },
+            sound,
+        })
 }
 
 /// Zones with the changes that matter: forward and back, a half-hour change (Lord Howe), a change
@@ -121,6 +141,50 @@ proptest! {
     ) {
         let got = earliest_future(now, times.clone());
         prop_assert_eq!(got, times.iter().copied().filter(|t| *t > now).min());
+    }
+
+    /// The reminder comes exactly its time before the ring, in real time, and still ahead.
+    #[test]
+    fn a_reminder_comes_its_time_before_the_ring_and_after_now(
+        reminder in any_reminder(), now_ms in 0i64..4_000_000_000_000, ahead_ms in 1i64..400_000_000,
+    ) {
+        let ring = now_ms + ahead_ms;
+        let before = i64::from(reminder.minutes) * 60_000;
+        match reminder_plan(&reminder, Some(ring), now_ms) {
+            ReminderPlan::Set { at_ms, before_ms } => {
+                prop_assert_eq!(at_ms, ring - before);
+                prop_assert_eq!(before_ms, before);
+                prop_assert!(at_ms > now_ms && at_ms < ring);
+            }
+            ReminderPlan::Keep => prop_assert!(ring - before <= now_ms),
+            ReminderPlan::Clear => prop_assert!(false, "an alarm with a reminder on was cleared"),
+        }
+    }
+
+    /// Off, or nothing to ring: nothing to remind of.
+    #[test]
+    fn no_reminder_without_one_wanted_or_a_ring(
+        mut reminder in any_reminder(), now_ms in 0i64..4_000_000_000_000, ahead_ms in 1i64..400_000_000,
+    ) {
+        prop_assert_eq!(reminder_plan(&reminder, None, now_ms), ReminderPlan::Clear);
+        reminder.on = false;
+        prop_assert_eq!(reminder_plan(&reminder, Some(now_ms + ahead_ms), now_ms), ReminderPlan::Clear);
+    }
+
+    /// For a daily alarm in any zone the reminder is the ring's instant minus the time, real
+    /// hours, whatever the clocks did in between.
+    #[test]
+    fn a_reminder_counts_real_time_across_clock_changes(
+        zone in any_zone(), now in any_now(), hour in 0u8..24, minute in 0u8..60, reminder in any_reminder(),
+    ) {
+        let Some(now_instant) = instant_in(&zone, now) else { return Ok(()) };
+        let at = next_ring_moment(hour, minute, [true; 7], None, now).unwrap();
+        let Some(ring) = instant_in(&zone, at) else { return Ok(()) };
+        let (now_ms, ring_ms) = (now_instant.timestamp_millis(), ring.timestamp_millis());
+        if let ReminderPlan::Set { at_ms, .. } = reminder_plan(&reminder, Some(ring_ms), now_ms) {
+            prop_assert_eq!(ring_ms - at_ms, i64::from(reminder.minutes) * 60_000);
+            prop_assert!(at_ms > now_ms);
+        }
     }
 
     /// In any zone, the next ring of a daily alarm is an instant after now, at the alarm's wall
@@ -223,4 +287,33 @@ fn a_leap_day_is_a_day_like_any_other() {
         next_occurrence_date(6, 30, now),
         NaiveDate::from_ymd_opt(2027, 3, 1).unwrap()
     );
+}
+
+/// 2026-03-29 07:00 in Amsterdam is after the clocks went forward: 8 real hours before it is 22:00
+/// the evening before, not the 23:00 the wall clock would say.
+#[test]
+fn eight_hours_before_a_ring_after_the_clocks_went_forward_is_eight_real_hours() {
+    let zone = chrono_tz::Europe::Amsterdam;
+    let now = NaiveDate::from_ymd_opt(2026, 3, 28)
+        .unwrap()
+        .and_hms_opt(12, 0, 0)
+        .unwrap();
+    let ring = instant_in(&zone, next_ring_moment(7, 0, [true; 7], None, now).unwrap()).unwrap();
+    assert_eq!(
+        ring.date_naive(),
+        NaiveDate::from_ymd_opt(2026, 3, 29).unwrap()
+    );
+    let reminder = Reminder {
+        on: true,
+        minutes: 480,
+        ..Reminder::default()
+    };
+    let now_ms = instant_in(&zone, now).unwrap().timestamp_millis();
+    let ReminderPlan::Set { at_ms, .. } =
+        reminder_plan(&reminder, Some(ring.timestamp_millis()), now_ms)
+    else {
+        panic!("a reminder 19 hours ahead is set");
+    };
+    let at = zone.timestamp_millis_opt(at_ms).unwrap();
+    assert_eq!((at.day(), at.hour(), at.minute()), (28, 22, 0));
 }

@@ -2074,7 +2074,7 @@ s50() {
     open_row 'Are you up?'
     tap_scrolling "3 min"
     done_sheet
-    open_row 'Notice before'
+    open_row 'Reminder'
     tap_scrolling "10 min"
     done_sheet
     has_there "Full brightness" || sheet_scroll
@@ -2803,6 +2803,24 @@ s59() {
     fi
 }
 
+# Each time again: Android 16 ignores opening the shade while it is still closing. Some
+# Androids write a button in capitals. A locked screen shows a notice without its buttons, and
+# an emulator can have gone to sleep after what ran before this. Waking closes the shade, so
+# only once.
+tap_in_shade() {
+    local i=0
+    wake
+    while [ "$i" -lt 8 ]; do
+        dev cmd statusbar expand-notifications
+        # Only once it has finished opening is the shade what counts as on screen.
+        sleep 0.7
+        UI_WINDOWS=--windows ui_tap "text=\"$1\"" && return 0
+        UI_WINDOWS=--windows ui_tap "text=\"${1^^}\"" && return 0
+        i=$((i + 1))
+    done
+    return 1
+}
+
 # The notice before an alarm: from there the next ring can be skipped with the app dead, and that
 # can be taken back. The ring after that one stays.
 s60() {
@@ -2824,23 +2842,6 @@ s60() {
     wait_for 180 reminded || { fail "no notice with a Skip"; return; }
     kill_all
     wait_for 3 no_process
-    # Each time again: Android 16 ignores opening the shade while it is still closing. Some
-    # Androids write a button in capitals. A locked screen shows a notice without its buttons, and
-    # an emulator can have gone to sleep after what ran before this. Waking closes the shade, so
-    # only once.
-    tap_in_shade() {
-        local i=0
-        wake
-        while [ "$i" -lt 8 ]; do
-            dev cmd statusbar expand-notifications
-            # Only once it has finished opening is the shade what counts as on screen.
-            sleep 0.7
-            UI_WINDOWS=--windows ui_tap "text=\"$1\"" && return 0
-            UI_WINDOWS=--windows ui_tap "text=\"${1^^}\"" && return 0
-            i=$((i + 1))
-        done
-        return 1
-    }
     tap_in_shade Skip || problems="$problems; no Skip to tap"
     dev cmd statusbar collapse
     skipped() { printf "SELECT data FROM alarms WHERE id='a';\n" | sql | grep -q "\"skip_until_ms\":$((T * 1000))"; }
@@ -2881,6 +2882,65 @@ s60() {
     fi
     if [ -z "$problems" ]; then
         pass "skipped with the app dead, taken back, skipped again, that ring silent, the next one rings"
+    else
+        fail "${problems#; }"
+    fi
+}
+
+# The reminder before an alarm with the user's own time and text: 8 hours before, silent, and 15 minutes
+# before, with the notification sound. Each comes when the clock reaches its moment (not before), says the
+# text, sits on its own channel (the quiet one, the one with sound), and Skip still skips the ring.
+s67() {
+    if ! on_emulator; then
+        note "s67 needs an emulator's clock"
+        return
+    fi
+    scenario s67_reminder_with_own_time_and_text
+    local problems="" quiet=sentinel_reminders_popup loud=sentinel_reminders_sound
+    # An 8 hour reminder, silent.
+    fresh
+    next_minute 40000
+    ALARM_EXTRA=',"reminder":{"on":true,"minutes":480,"text":"Go to bed, your alarm goes off in 8 hours","sound":false}'
+    seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
+    ALARM_EXTRA=
+    arm a
+    dev input keyevent KEYCODE_HOME
+    reminded && problems="$problems; a reminder 8 hours ahead is already up"
+    jump_to $((T - 8 * 3600 - 60))
+    sleep 3
+    reminded && problems="$problems; the 8 hour reminder came a minute early"
+    wait_for 150 reminded || { fail "no 8 hour reminder with a Skip"; return; }
+    [ "$(now_s)" -ge $((T - 8 * 3600)) ] || problems="$problems; the 8 hour reminder came before its moment"
+    own_notifications | grep -q "Go to bed, your alarm goes off in 8 hours" || problems="$problems; the 8 hour reminder does not say the text"
+    own_notifications | grep -q "channel=$quiet" || problems="$problems; the silent reminder is not on the quiet channel"
+    own_notifications | grep -q "channel=$loud" && problems="$problems; the silent reminder is on the sound channel"
+    tap_in_shade Skip || problems="$problems; no Skip to tap"
+    dev cmd statusbar collapse
+    wait_for 15 skipped || problems="$problems; Skip on the 8 hour reminder did not skip the ring"
+    # A 15 minute reminder, with sound.
+    fresh
+    next_minute 1200
+    ALARM_EXTRA=',"reminder":{"on":true,"minutes":15,"text":"Dentist in 15 minutes","sound":true}'
+    seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
+    ALARM_EXTRA=
+    arm a
+    dev input keyevent KEYCODE_HOME
+    reminded && problems="$problems; a reminder 20 minutes ahead is already up"
+    jump_to $((T - 15 * 60 - 45))
+    sleep 3
+    reminded && problems="$problems; the 15 minute reminder came early"
+    wait_for 120 reminded || { fail "no 15 minute reminder with a Skip"; return; }
+    [ "$(now_s)" -ge $((T - 15 * 60)) ] || problems="$problems; the 15 minute reminder came before its moment"
+    own_notifications | grep -q "Dentist in 15 minutes" || problems="$problems; the 15 minute reminder does not say the text"
+    own_notifications | grep -q "channel=$loud" || problems="$problems; the reminder with sound is not on the sound channel"
+    own_notifications | grep -q "channel=$quiet" && problems="$problems; the reminder with sound is on the quiet channel"
+    # What Android keeps per channel: the quiet one has no sound, the other has the notification sound.
+    local channels
+    channels=$(dev dumpsys notification --noredact)
+    printf '%s\n' "$channels" | grep -A6 "mId='$loud'" | grep -q 'mSound=content:' || problems="$problems; the sound channel has no sound"
+    printf '%s\n' "$channels" | grep -A6 "mId='$quiet'" | grep -q 'mSound=null' || problems="$problems; the quiet channel has a sound"
+    if [ -z "$problems" ]; then
+        pass "an 8 hour reminder (silent) and a 15 minute one (with sound) came on time, said their text, used their own channel, and Skip skipped"
     else
         fail "${problems#; }"
     fi
@@ -3454,7 +3514,7 @@ s62p() {
 . "$(dirname "$0")/panels.sh"
 . "$(dirname "$0")/a11y_audit.sh"
 
-ALL="s01 s03 s04 s05 s06 s07 s10 s11 s13 s13b s13d s14 s15 s16 s16b s17 s19 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s34 s36 s37 s38 s39 s40 s42 s43 s44 s45 s46 s47 s48 s49 s50 s51 s52 s53 s55 s56 s57 s58 s59 s60 s61 s62 s63 s65 s66 big_screens s54"
+ALL="s01 s03 s04 s05 s06 s07 s10 s11 s13 s13b s13d s14 s15 s16 s16b s17 s19 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s34 s36 s37 s38 s39 s40 s42 s43 s44 s45 s46 s47 s48 s49 s50 s51 s52 s53 s55 s56 s57 s58 s59 s60 s61 s62 s63 s65 s66 s67 big_screens s54"
 ON_A_PHONE="s01 s03 s04 s05 s06 s07 s10 s15 s16 s16b s17 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s36 s37 s38 s39 s42 s43 s45 s46 s47 s49 s50 s51 s52 s53 s55 s57 s58 s59 s61 s62"
 
 : > "$RESULTS"

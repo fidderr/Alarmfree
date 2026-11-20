@@ -630,7 +630,7 @@ s57_full() {
     tap_trash
     panel_open editor_delete
     # Each row of the editor.
-    for name in Label Sound Vibration Snooze 'Alarm screen' 'Ring limit' 'Are you up?' 'Notice before'; do
+    for name in Label Sound Vibration Snooze 'Alarm screen' 'Ring limit' 'Are you up?' 'Reminder'; do
         tap_row "$name"
         panel_open "editor_$(echo "$name" | tr -c 'a-zA-Z0-9\n' _)"
     done
@@ -908,7 +908,7 @@ s57() {
     lite_panel editor_delete
     # A choice is taken in the panels of sound, vibration and snooze; the others only open (the
     # cargo test takes every choice of every one). The first four rows are on screen without scrolling.
-    for name in Label Sound Vibration Snooze 'Ring limit' 'Are you up?' 'Notice before'; do
+    for name in Label Sound Vibration Snooze 'Ring limit' 'Are you up?' 'Reminder'; do
         case "$name" in
             Label | Sound | Vibration | Snooze) tap_has "$name" 0 0.4 ;;
             *) tap_row "$name" ;;

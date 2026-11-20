@@ -15,6 +15,14 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
   recordings: `devtest/squat_record.sh` records them on a phone. Moving the phone straight up and down with the arms, without
   turning it, is counted too (a known limit). Needs mobile-sentinel 0.7.0.
 
+### Changed
+
+- **The notice before an alarm is now a reminder.** Per alarm: off or on, how long before (5, 10, 15,
+  30, 45 minutes, 1 to 12 hours, 16 or 24 hours), a text of your own (up to 120 characters; empty
+  shows the alarm's label as before), and silent or with the notification sound. Skip and Undo stay
+  on it. An old notice becomes a silent reminder of the same length, also from a backup file; the
+  "for all alarms" setting keeps working. Needs the next SDK (`ReminderSound` on `set_reminder`).
+
 ## [0.5.3] - 2026-11-19
 
 versionCode 12403. Same app as 0.5.2; only the Play listing reach changes.

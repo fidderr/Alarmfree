@@ -749,3 +749,124 @@ fn squat_challenge_from_picker_to_try_out() {
     );
     f.finish();
 }
+
+fn draft_reminder(f: &Flow) -> crate::models::Reminder {
+    f.ctx
+        .editor
+        .borrow()
+        .as_ref()
+        .map(|ed| ed.draft.reminder.clone())
+        .unwrap_or_default()
+}
+
+/// The reminder sheet: off to begin with, every time step picks its minutes, the text and the
+/// sound only show once it is on, Off keeps what was typed, and Save keeps it all.
+#[test]
+fn s67_reminder_sheet() {
+    let f = Flow::new(Vec::new());
+    f.expect(f.tap("Create new alarm"), "no create button");
+    f.expect(
+        f.has_part("Reminder") && f.has_part("Off"),
+        "the editor has no Reminder row saying Off",
+    );
+    f.open_row("Reminder");
+    f.expect(
+        !f.has_part("Your text") && !f.has_part("Notification sound"),
+        "text and sound show while the reminder is off",
+    );
+    let steps: [(&str, u16); 19] = [
+        ("5 min", 5),
+        ("10 min", 10),
+        ("15 min", 15),
+        ("30 min", 30),
+        ("45 min", 45),
+        ("1 h", 60),
+        ("2 h", 120),
+        ("3 h", 180),
+        ("4 h", 240),
+        ("5 h", 300),
+        ("6 h", 360),
+        ("7 h", 420),
+        ("8 h", 480),
+        ("9 h", 540),
+        ("10 h", 600),
+        ("11 h", 660),
+        ("12 h", 720),
+        ("16 h", 960),
+        ("24 h", 1440),
+    ];
+    for (label, minutes) in steps {
+        f.expect(f.tap_last(label), format!("no step {label}"));
+        let r = draft_reminder(&f);
+        f.expect(r.on && r.minutes == minutes, format!("{label} gave {r:?}"));
+    }
+    f.expect(
+        f.has_part("Your text") && f.has_part("Notification sound"),
+        "text and sound do not show with the reminder on",
+    );
+    f.expect(!draft_reminder(&f).sound, "a reminder starts silent");
+    // Text and sound.
+    f.set_field(0, "Go to bed, your alarm goes off in 8 hours");
+    f.expect(f.tap_last("8 h"), "no 8 h");
+    f.expect(f.tap_last("Notification sound"), "no sound choice");
+    let r = draft_reminder(&f);
+    f.expect(
+        r.sound && r.text == "Go to bed, your alarm goes off in 8 hours" && r.minutes == 480,
+        format!("text and sound gave {r:?}"),
+    );
+    f.expect(f.tap_last("Silent"), "no silent choice");
+    f.expect(!draft_reminder(&f).sound, "Silent did not take it back");
+    f.expect(f.tap_last("Notification sound"), "no sound choice again");
+    // Off keeps what was typed, and turns it off.
+    f.expect(f.tap_last("Off"), "no Off");
+    let r = draft_reminder(&f);
+    f.expect(
+        !r.on && r.text.starts_with("Go to bed") && r.sound,
+        format!("Off gave {r:?}"),
+    );
+    f.expect(!f.has_part("Your text"), "text shows with the reminder off");
+    f.expect(f.tap_last("15 min"), "no 15 min");
+    // A text too long for a reminder is cut.
+    f.set_field(0, &"x".repeat(130));
+    f.expect(
+        draft_reminder(&f).text.chars().count() == 120,
+        format!(
+            "the long text is {} long",
+            draft_reminder(&f).text.chars().count()
+        ),
+    );
+    f.expect(
+        f.cmd("set:0:Dentist") == "OK",
+        "no field to replace the text in",
+    );
+    f.settle();
+    f.done();
+    f.expect(
+        f.has("15 min before, with sound"),
+        format!("the summary line: {:?}", f.texts()),
+    );
+    f.expect(f.tap("Save"), "no Save");
+    let a = crate::persistence::load_alarms()[0].clone();
+    f.expect(
+        a.reminder
+            == crate::models::Reminder {
+                on: true,
+                minutes: 15,
+                text: "Dentist".to_owned(),
+                sound: true,
+            },
+        format!("saved {:?}", a.reminder),
+    );
+    // Opened again it says the same.
+    f.press("open", &a.id);
+    f.expect(
+        f.has("15 min before, with sound"),
+        "the summary is gone after saving",
+    );
+    f.open_row("Reminder");
+    f.expect(
+        draft_reminder(&f).text == "Dentist" && f.has_part("Your text"),
+        "the text is gone after saving",
+    );
+    f.finish();
+}

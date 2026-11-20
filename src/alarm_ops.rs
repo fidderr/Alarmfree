@@ -3,7 +3,7 @@
 
 use chrono::{Duration, NaiveDateTime, Timelike};
 
-use crate::models::AlarmData;
+use crate::models::{AlarmData, Reminder};
 
 /// The most alarms the list takes.
 pub const MAX_ALARMS: usize = 50;
@@ -34,6 +34,7 @@ pub fn factory_alarm() -> AlarmData {
         vibration: 0,
         volume_percent: None,
         notify_before_minutes: 0,
+        reminder: Default::default(),
         ring_look: Default::default(),
         wake_check_minutes: 0,
         max_brightness: false,
@@ -94,7 +95,7 @@ pub fn quick_alarm(
     alarm.label = label;
     alarm.delete_after_ring = true;
     alarm.wake_check_minutes = 0;
-    alarm.notify_before_minutes = 0;
+    alarm.reminder = Reminder::default();
     alarm
 }
 
@@ -105,7 +106,7 @@ pub fn wake_check_alarm(source: &AlarmData, now: NaiveDateTime, label: String) -
     alarm.challenges = Vec::new();
     alarm.snooze_count = 0;
     alarm.wake_check_minutes = 0;
-    alarm.notify_before_minutes = 0;
+    alarm.reminder = Reminder::default();
     alarm.fade_in_secs = 0;
     alarm.note = String::new();
     alarm.label = label;
@@ -147,11 +148,16 @@ pub fn undo_skip_from_notice(alarm: &mut AlarmData) -> bool {
 
 /// What was one setting for all alarms goes to each of them, and to what new ones start from.
 pub fn give_notice_to_all(list: &mut [AlarmData], defaults: Option<&mut AlarmData>, minutes: u8) {
+    let notice = Reminder {
+        on: minutes > 0,
+        minutes: u16::from(minutes),
+        ..Reminder::default()
+    };
     for alarm in list.iter_mut().filter(|alarm| !alarm.hidden) {
-        alarm.notify_before_minutes = minutes;
+        alarm.reminder = notice.clone();
     }
     if let Some(defaults) = defaults {
-        defaults.notify_before_minutes = minutes;
+        defaults.reminder = notice;
     }
 }
 
@@ -214,6 +220,7 @@ pub fn import_json(
     let mut alarms: Vec<AlarmData> = serde_json::from_str(json).ok()?;
     alarms.retain(|a| !a.delete_after_ring);
     for alarm in &mut alarms {
+        alarm.migrate();
         alarm.id = uuid::Uuid::new_v4().to_string();
         alarm.hidden = false;
         alarm.skip_until_ms = None;
@@ -243,8 +250,82 @@ mod tests {
         fields.insert("random_order".to_owned(), true.into());
         let alarm: AlarmData = serde_json::from_value(saved).unwrap();
         assert_eq!(alarm.notify_before_minutes, 0);
+        assert_eq!(alarm.reminder, Reminder::default());
     }
 
+    /// An alarm as 0.5.x wrote it: the quiet notice is a number of minutes.
+    const OLD_ALARM: &str = r#"{"id":"a1","time_hour":7,"time_minute":30,"label":"Work","days":[true,true,true,true,true,false,false],"enabled":true,"sound":"air","sound_mode":0,"challenges":[],"snooze_count":0,"snooze_interval":1,"notify_before_minutes":30}"#;
+
+    #[test]
+    fn an_old_notice_becomes_a_silent_reminder_without_text() {
+        let mut alarm: AlarmData = serde_json::from_str(OLD_ALARM).unwrap();
+        alarm.migrate();
+        assert_eq!(
+            alarm.reminder,
+            Reminder {
+                on: true,
+                minutes: 30,
+                text: String::new(),
+                sound: false
+            }
+        );
+        assert_eq!(alarm.notify_before_minutes, 0);
+        let saved = serde_json::to_string(&alarm).unwrap();
+        assert!(
+            !saved.contains("notify_before_minutes"),
+            "never written again"
+        );
+        let mut again: AlarmData = serde_json::from_str(&saved).unwrap();
+        again.migrate();
+        assert_eq!(again.reminder, alarm.reminder, "and it stays that way");
+    }
+
+    #[test]
+    fn an_old_alarm_without_a_notice_has_no_reminder() {
+        let json = OLD_ALARM.replace(r#","notify_before_minutes":30"#, "");
+        let mut alarm: AlarmData = serde_json::from_str(&json).unwrap();
+        alarm.migrate();
+        assert_eq!(alarm.reminder, Reminder::default());
+    }
+
+    #[test]
+    fn an_old_backup_file_comes_in_with_its_notices_as_reminders() {
+        let backup = format!(
+            "[{OLD_ALARM},{}]",
+            OLD_ALARM.replace(r#""id":"a1""#, r#""id":"a2""#).replace(
+                r#""notify_before_minutes":30"#,
+                r#""notify_before_minutes":0"#
+            )
+        );
+        let now = NaiveDate::from_ymd_opt(2030, 1, 1)
+            .unwrap()
+            .and_hms_opt(7, 0, 0)
+            .unwrap();
+        let list = import_json(&backup, |_| true, now).unwrap();
+        assert_eq!(list.len(), 2);
+        assert!(list[0].reminder.on);
+        assert_eq!(list[0].reminder.minutes, 30);
+        assert!(!list[0].reminder.sound);
+        assert_eq!(list[1].reminder, Reminder::default());
+    }
+
+    #[test]
+    fn a_new_reminder_survives_a_backup() {
+        let mut alarm = factory_alarm();
+        alarm.reminder = Reminder {
+            on: true,
+            minutes: 480,
+            text: "Go to bed".to_owned(),
+            sound: true,
+        };
+        let now = NaiveDate::from_ymd_opt(2030, 1, 1)
+            .unwrap()
+            .and_hms_opt(7, 0, 0)
+            .unwrap();
+        let json = export_json(&[alarm.clone()]);
+        let back = import_json(&json, |_| true, now).unwrap();
+        assert_eq!(back[0].reminder, alarm.reminder);
+    }
     #[test]
     fn a_notice_skips_the_next_ring_and_can_take_it_back() {
         let mut alarm = factory_alarm();
@@ -279,29 +360,40 @@ mod tests {
         list[1].hidden = true;
         let mut defaults = factory_alarm();
         give_notice_to_all(&mut list, Some(&mut defaults), 10);
-        assert_eq!(list[0].notify_before_minutes, 10);
+        let ten = Reminder {
+            on: true,
+            minutes: 10,
+            ..Reminder::default()
+        };
+        assert_eq!(list[0].reminder, ten);
         assert_eq!(
-            list[1].notify_before_minutes, 0,
+            list[1].reminder,
+            Reminder::default(),
             "not one of the user's alarms"
         );
-        assert_eq!(defaults.notify_before_minutes, 10);
+        assert_eq!(defaults.reminder, ten);
     }
 
     #[test]
     fn alarms_made_along_the_way_give_no_notice() {
         let mut source = factory_alarm();
-        source.notify_before_minutes = 30;
+        source.reminder = Reminder {
+            on: true,
+            minutes: 30,
+            text: "hi".to_owned(),
+            sound: true,
+        };
         let now = NaiveDate::from_ymd_opt(2030, 1, 1)
             .unwrap()
             .and_hms_opt(7, 0, 0)
             .unwrap();
         assert_eq!(
-            quick_alarm(now, 10, String::new(), Some(&source)).notify_before_minutes,
-            0
+            quick_alarm(now, 10, String::new(), Some(&source)).reminder,
+            Reminder::default()
         );
         assert_eq!(
-            wake_check_alarm(&source, now, String::new()).notify_before_minutes,
-            0
+            wake_check_alarm(&source, now, String::new()).reminder,
+            Reminder::default()
         );
     }
 

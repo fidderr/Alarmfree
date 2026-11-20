@@ -85,10 +85,10 @@ chrono-tz = "0.10"
 tokio = { version = "1", features = ["rt", "macros", "time"] }
 
 [patch.crates-io]
+mobile-sentinel = { path = "../mobile-sentinel" }
 accesskit = { git = "https://github.com/fidderr/accesskit", rev = "764f0513e287de757b9c6c5ef3b91474dafac64f" }
 accesskit_consumer = { git = "https://github.com/fidderr/accesskit", rev = "764f0513e287de757b9c6c5ef3b91474dafac64f" }
 accesskit_android = { git = "https://github.com/fidderr/accesskit", rev = "764f0513e287de757b9c6c5ef3b91474dafac64f" }
-mobile-sentinel = { path = "../ms-squat" }
 
 # The headless UI tests (src/ui/panel_tests.rs) read the element tree thousands of times: optimized
 # Slint internals make that about 5x quicker, and they are only built once.
