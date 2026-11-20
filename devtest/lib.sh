@@ -921,8 +921,12 @@ type_test_pin() {
             return 1
         fi
     fi
+    # Android 16 leaves its keyboard up over whatever comes next after the PIN.
+    hide_keyboard
     # The shell as the app could not start while the phone was locked.
-    wait_for 10 app_shell_answers
+    wait_for 10 app_shell_answers || return 1
+    # The alarm's own screen starts a moment after the PIN; a scenario that looks at it right away finds no window.
+    wait_for 20 page_is_up || true
 }
 # Android shows its unlock in the window of the notification shade.
 unlock_has_focus() { focused_window | grep -q -E 'NotificationShade|Bouncer'; }
