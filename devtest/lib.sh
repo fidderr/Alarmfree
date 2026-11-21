@@ -1212,10 +1212,24 @@ tap_scrolling() { # text
     tap_has "$1" 0 0.3
 }
 # A phone's keyboard stays up over a sheet's Done button: Back puts it away (an emulator has none).
+# Asked twice: the input method's own dump can say it is hidden while it still covers the window (the Done button
+# under it then takes a tap as a key: "#c0y6020", seen on Android 15), and the app's insets say how far it reaches.
+keyboard_up() {
+    dev dumpsys input_method | grep -q 'mInputShown=true' && return 0
+    local px
+    px=$(sn insets_bottom_px | cut -d. -f1)
+    case "$px" in '' | *[!0-9]*) return 1 ;; esac
+    [ "$px" -gt 400 ]
+}
+keyboard_down() { ! keyboard_up; }
 hide_keyboard() {
-    dev dumpsys input_method | grep -q 'mInputShown=true' || return 0
-    dev input keyevent KEYCODE_BACK
-    after_input
+    local try
+    for try in 1 2 3; do
+        keyboard_up || return 0
+        dev input keyevent KEYCODE_BACK
+        after_input
+        wait_for 2 keyboard_down && return 0
+    done
 }
 sheet_scroll_up() {
     # shellcheck disable=SC2046
