@@ -203,6 +203,16 @@ pub(super) fn sync(
     ));
 }
 
+/// What the ring limit sheet offers: the minutes, then forever.
+pub(super) fn limit_labels(tr: &Translations) -> Vec<String> {
+    let mut labels: Vec<String> = LIMIT_MINUTES
+        .iter()
+        .map(|m| t(tr, "text.minutes").replace("{minutes}", &m.to_string()))
+        .collect();
+    labels.push(t(tr, "config.limit_forever"));
+    labels
+}
+
 /// The choices of the limit and wake-up check sheets.
 pub(super) fn sync_options(ctx: &Ctx, sheet: EditorSheet) {
     let Some(ui) = ctx.ui.upgrade() else {
@@ -223,8 +233,7 @@ pub(super) fn sync_options(ctx: &Ctx, sheet: EditorSheet) {
     };
     let (labels, selected): (Vec<String>, i32) = match sheet {
         EditorSheet::Limit => {
-            let mut labels: Vec<String> = LIMIT_MINUTES.iter().map(|m| minutes(*m)).collect();
-            labels.push(t(&tr, "config.limit_forever"));
+            let labels = limit_labels(&tr);
             let selected = match ed.draft.ring_limit_secs {
                 None => Some(LIMIT_MINUTES.len()),
                 Some(secs) => LIMIT_MINUTES.iter().position(|m| m * 60 == secs),
@@ -699,6 +708,26 @@ mod tests {
     #[test]
     fn trying_a_sound_lasts_5_s_and_15_s_when_nothing_shortens_it() {
         assert_eq!((sound_tap_ms(), preview_ms()), (5_000, 15_000));
+    }
+
+    #[test]
+    fn the_ring_limit_offers_1_to_120_minutes_and_forever_in_every_language() {
+        assert_eq!(LIMIT_MINUTES, [1, 3, 5, 10, 15, 30, 60, 90, 120]);
+        assert!(LIMIT_MINUTES.windows(2).all(|w| w[0] < w[1]));
+        let default = mobile_sentinel::context::schema::DEFAULT_RING_LIMIT_SECS;
+        assert!(LIMIT_MINUTES.iter().any(|m| m * 60 == default));
+        let en = crate::i18n::load_translations(crate::models::Locale::English);
+        let labels = limit_labels(&en);
+        assert_eq!(labels.len(), LIMIT_MINUTES.len() + 1);
+        assert_eq!(labels[0], "1 min");
+        assert_eq!(labels[5], "30 min");
+        assert_eq!(labels[9], "Forever");
+        for locale in crate::models::Locale::ALL {
+            let tr = crate::i18n::load_translations(locale);
+            let labels = limit_labels(&tr);
+            assert!(labels[0].starts_with("1 "), "{locale:?}: {}", labels[0]);
+            assert!(labels.iter().all(|l| !l.contains('{')), "{locale:?}");
+        }
     }
 
     #[test]

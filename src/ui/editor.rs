@@ -15,7 +15,7 @@ use crate::{alarm_ops, schedule};
 
 pub const FADE_SECONDS: [u16; 6] = [0, 15, 30, 60, 120, 300];
 pub const SOUND_DELAY_SECONDS: [u16; 4] = [0, 15, 30, 60];
-pub const LIMIT_MINUTES: [u32; 4] = [30, 60, 90, 120];
+pub const LIMIT_MINUTES: [u32; 9] = [1, 3, 5, 10, 15, 30, 60, 90, 120];
 pub const CHECK_MINUTES: [u8; 4] = [0, 3, 5, 10];
 
 /// Translation keys of the vibration patterns, in the order of `platform::VIBRATION_PATTERNS`.

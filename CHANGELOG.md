@@ -7,6 +7,10 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+### Changed
+
+- **Shorter ring limits.** An alarm can stop by itself after 1, 3, 5, 10, 15 or 30 minutes too (the shortest was 30).
+
 ## [0.6.0] - 2026-11-20
 
 ### Added

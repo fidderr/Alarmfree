@@ -37,8 +37,8 @@ the alarm will. Fade in up to 5 minutes, a minimum volume per alarm or for all, 
 patterns, vibrate first with the sound after a delay, or vibration only.
 
 **Ringing.** Up to 10 challenges per alarm, in your order, each one to try
-out first. 0 to 10 snoozes of 1 to 60 minutes. A ring limit of 30
-minutes to forever. An optional wake-up check a few minutes later. Optional full brightness.
+out first. 0 to 10 snoozes of 1 to 60 minutes. A ring limit of 1
+minute to forever. An optional wake-up check a few minutes later. Optional full brightness.
 
 **Telling the truth.** A reliability screen with what the phone allows, a way to each setting,
 and a test alarm that goes through the whole real ring path. History with outcomes (solved,
