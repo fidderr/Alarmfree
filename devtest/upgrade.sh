@@ -119,7 +119,7 @@ armed_after=$(as_app "ls files/sentinel/armed" | tr '\n' ' ')
 ACTIVITY=$SLINT_ACTIVITY start_app
 wait_for 40 page_is_up
 on_home 10 || problems="$problems; not on the alarm list"
-rows=$(ui snapshot | grep -oE '"label":"[^"]*","on":(true|false)' | tr '\n' ' ')
+rows=$(ui snapshot | grep -oE '"label":"[^"]*","locked":(true|false),"on":(true|false)' | tr '\n' ' ')
 for want in weekdays own off later ring; do
     case "$rows" in *"\"$want\""*) ;; *) problems="$problems; no card for $want ($rows)" ;; esac
 done

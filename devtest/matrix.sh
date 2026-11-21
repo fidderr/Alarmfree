@@ -24,7 +24,7 @@ on_card() { wait_for "${1:-6}" has_rows; }
 # What the first card of the list says it does next, and its time.
 row_when() { ui snapshot | grep -oE '"when":"[^"]*"' | head -1 | sed -E 's/^"when":"//; s/"$//'; }
 row_time() { ui snapshot | grep -oE '"time":"[^"]*"' | head -1 | sed -E 's/^"time":"//; s/"$//'; }
-row_labels() { ui snapshot | grep -oE '"label":"[^"]*","on"' | sed -E 's/^"label":"//; s/","on"$//' | tr '\n' ' ' | sed 's/ $//'; }
+row_labels() { ui snapshot | python -I -c 'import json,sys; print(" ".join(r["label"] for r in json.loads(sys.stdin.read()).get("rows", [])))'; }
 
 # A scenario that only looks at the window and what it saves now runs headless, in `cargo test`
 # (src/ui/flow_tests.rs): it stays a name here so that lists and results still show it.
