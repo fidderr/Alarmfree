@@ -542,5 +542,17 @@
   "intro.3_title": "Laissez votre téléphone l'autoriser",
   "intro.3_body": "Les téléphones aiment arrêter les applications d'alarme pour économiser la batterie. L'écran suivant montre quoi autoriser, et une alarme de test prouve que ça marche.",
   "report.when_last": "{time} (quand la dernière alarme a sonné)",
-  "report.dismiss": "Fermer"
+  "report.dismiss": "Fermer",
+  "lock.mark": "Verrou de modification activé",
+  "lock.title": "Cette alarme est verrouillée",
+  "lock.help": "Verrouillée jusqu'à sa sonnerie à {time}. Pour la modifier maintenant, faites ses défis.",
+  "lock.unlock": "Faire ses défis",
+  "lock.keep": "Garder verrouillée",
+  "lock.opened": "Ouverte pendant {minutes} minutes, puis elle se verrouille de nouveau.",
+  "lock.pause_all": "Impossible de tout mettre en pause : {alarm} est verrouillée jusqu'à sa sonnerie.",
+  "lock.skip_refused": "{alarm} est verrouillée, elle n'a donc pas été ignorée. Ouvrez l'application et faites ses défis pour la modifier.",
+  "config.edit_lock": "Verrou de modification",
+  "config.edit_lock_note": "Peu avant la sonnerie, vous ne pouvez ni éteindre l'alarme ni la modifier, sauf en faisant ses défis. Ensuite elle reste ouverte 5 minutes. Le verrou ne peut pas vous empêcher de forcer l'arrêt de l'application, d'effacer ses données ou de la désinstaller.",
+  "help.q_lock": "Qu'est-ce que le verrou de modification ?",
+  "help.a_lock": "Avec le verrou de modification, une alarme ne peut être ni éteinte, ni modifiée, ni supprimée, ni ignorée, ni mise en pause dans la dernière période avant sa sonnerie. Vous choisissez sa durée pour chaque alarme. Pour la modifier quand même, faites ses défis. Une alarme sans défi demande de maintenir le bouton {holds} fois. Ensuite elle reste ouverte {minutes} minutes. Dupliquer, réorganiser, sauvegarder et Annuler restent possibles. Le verrou ne peut pas vous empêcher de forcer l'arrêt d'AlarmFree, d'effacer ses données ou de le désinstaller."
 }

@@ -542,5 +542,17 @@
   "intro.3_title": "Deja que tu teléfono lo permita",
   "intro.3_body": "A los teléfonos les gusta detener las apps de alarma para ahorrar batería. La siguiente pantalla muestra qué permitir y una alarma de prueba demuestra que funciona.",
   "report.when_last": "{time} (cuando sonó la última alarma)",
-  "report.dismiss": "Descartar"
+  "report.dismiss": "Descartar",
+  "lock.mark": "Bloqueo de edición activado",
+  "lock.title": "Esta alarma está bloqueada",
+  "lock.help": "Bloqueada hasta que suene a las {time}. Para cambiarla ahora, haz sus retos.",
+  "lock.unlock": "Hacer sus retos",
+  "lock.keep": "Mantener bloqueada",
+  "lock.opened": "Abierta durante {minutes} minutos; después se bloquea otra vez.",
+  "lock.pause_all": "No se puede pausar todo: {alarm} está bloqueada hasta que suene.",
+  "lock.skip_refused": "{alarm} está bloqueada, así que no se omitió. Abre la app y haz sus retos para cambiarla.",
+  "config.edit_lock": "Bloqueo de edición",
+  "config.edit_lock_note": "Poco antes de que suene la alarma no puedes apagarla ni cambiarla, salvo que hagas sus retos. Después queda abierta 5 minutos. El bloqueo no puede impedir que fuerces la detención de la app, borres sus datos o la desinstales.",
+  "help.q_lock": "¿Qué es el bloqueo de edición?",
+  "help.a_lock": "Con el bloqueo de edición activado, una alarma no se puede apagar, cambiar, eliminar, omitir ni pausar en el último tramo antes de que suene. Tú eliges cuánto dura ese tramo en cada alarma. Para cambiarla igualmente, haz sus retos. Una alarma sin retos te pide mantener pulsado el botón {holds} veces. Después queda abierta {minutes} minutos. Duplicar, reordenar, hacer copias de seguridad y Deshacer siguen disponibles. El bloqueo no puede impedir que fuerces la detención de AlarmFree, borres sus datos o la desinstales."
 }

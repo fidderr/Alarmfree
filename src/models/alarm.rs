@@ -53,6 +53,10 @@ pub struct AlarmData {
     /// This long after it was turned off, confirm being up or it rings again (0 = off).
     #[serde(default)]
     pub wake_check_minutes: u8,
+    /// This long before it rings the alarm cannot be switched off or weakened without doing its
+    /// challenges, see [`crate::edit_lock`] (0 = off).
+    #[serde(default)]
+    pub lock_minutes: u16,
     /// The screen goes to full brightness while it rings.
     #[serde(default)]
     pub max_brightness: bool,

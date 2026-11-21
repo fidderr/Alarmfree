@@ -528,6 +528,20 @@ fn hand_notice_to_alarms(list: &mut [AlarmData]) -> bool {
     true
 }
 
+/// The Skip on a reminder does not skip an alarm that is locked: the screen says so.
+fn refuse_skip_of_locked(alarm: &AlarmData) -> bool {
+    if crate::edit_lock::locked_now(alarm).is_none() {
+        return false;
+    }
+    crate::edit_lock::note_refused_skip(if alarm.label.trim().is_empty() {
+        format!("{:02}:{:02}", alarm.time_hour, alarm.time_minute)
+    } else {
+        alarm.label.trim().to_owned()
+    });
+    RING_END_NEWS.store(true, std::sync::atomic::Ordering::Relaxed);
+    true
+}
+
 /// What was tapped on the notices before alarms. Whether the app ran or not: the tap wakes it.
 fn apply_reminder_taps(kit: &AlarmKit, list: &mut [AlarmData]) -> bool {
     let mut changed = false;
@@ -536,6 +550,7 @@ fn apply_reminder_taps(kit: &AlarmKit, list: &mut [AlarmData]) -> bool {
         match list.iter_mut().find(|alarm| alarm.id == id.0) {
             Some(alarm) => {
                 changed |= match tap {
+                    ReminderTap::Act if refuse_skip_of_locked(alarm) => false,
                     ReminderTap::Act => crate::alarm_ops::skip_from_notice(alarm, next_fire),
                     ReminderTap::Undo => crate::alarm_ops::undo_skip_from_notice(alarm),
                 };
@@ -898,6 +913,7 @@ mod tests {
             reminder: Default::default(),
             ring_look: Default::default(),
             wake_check_minutes: 0,
+            lock_minutes: 0,
             max_brightness: false,
             sound_delay_secs: 0,
             pause_until_ms: None,
@@ -963,5 +979,29 @@ mod tests {
             ScheduleSpec::OneTime { date, .. } => assert_eq!(date, "2020-01-01"),
             other => panic!("expected one-time, got {other:?}"),
         }
+    }
+
+    /// The Skip on a reminder does not skip an alarm that is locked, and is told to the screen.
+    #[test]
+    fn the_skip_on_a_reminder_is_refused_for_a_locked_alarm_only() {
+        use chrono::Timelike;
+        let soon = crate::clock::local_now() + chrono::Duration::minutes(3);
+        let mut alarm = weekday_alarm();
+        alarm.id = "refused-skip-test".into();
+        alarm.label = "Gym".into();
+        alarm.enabled = true;
+        alarm.days = [true; 7];
+        alarm.time_hour = soon.hour() as u8;
+        alarm.time_minute = soon.minute() as u8;
+        alarm.lock_minutes = 0;
+        assert!(!refuse_skip_of_locked(&alarm), "no lock, no refusal");
+        alarm.lock_minutes = 10;
+        assert!(refuse_skip_of_locked(&alarm));
+        assert!(crate::edit_lock::take_refused_skips().contains(&"Gym".to_owned()));
+        alarm.lock_minutes = 1;
+        assert!(
+            !refuse_skip_of_locked(&alarm),
+            "3 minutes away is outside 1"
+        );
     }
 }

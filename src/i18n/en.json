@@ -542,5 +542,17 @@
   "intro.3_title": "Let your phone allow it",
   "intro.3_body": "Phones like to stop alarm apps to save battery. The next screen shows what to allow, and a test alarm proves it works.",
   "report.when_last": "{time} (when the last alarm rang)",
-  "report.dismiss": "Dismiss"
+  "report.dismiss": "Dismiss",
+  "lock.mark": "Edit lock is on",
+  "lock.title": "This alarm is locked",
+  "lock.help": "Locked until it rings at {time}. To change it now, do its challenges.",
+  "lock.unlock": "Do its challenges",
+  "lock.keep": "Keep it locked",
+  "lock.opened": "Open for {minutes} minutes, then it locks again.",
+  "lock.pause_all": "Cannot pause all: {alarm} is locked until it rings.",
+  "lock.skip_refused": "{alarm} is locked, so it was not skipped. Open the app and do its challenges to change it.",
+  "config.edit_lock": "Edit lock",
+  "config.edit_lock_note": "Shortly before the alarm rings you cannot switch it off or change it, unless you do its challenges. After that it is open for 5 minutes. It cannot stop you from force-stopping the app, clearing its data or uninstalling it.",
+  "help.q_lock": "What is the edit lock?",
+  "help.a_lock": "With the edit lock on, an alarm cannot be switched off, changed, deleted, skipped or paused in the last stretch before it rings. You choose how long that is for each alarm. To change it anyway, do its challenges. An alarm without challenges asks you to hold the button {holds} times. Then it is open for {minutes} minutes. Duplicating, rearranging, backing up and Undo stay possible. The lock cannot stop you from force-stopping AlarmFree, clearing its data or uninstalling it."
 }

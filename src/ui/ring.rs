@@ -277,6 +277,7 @@ pub fn poll(ctx: &Rc<Ctx>) {
     if crate::platform::take_ring_end_news() {
         *ctx.alarms.borrow_mut() = crate::persistence::load_alarms();
         super::home::refresh(ctx);
+        super::lock::say_skips_refused(ctx);
         super::feedback::refresh_trouble(ctx);
         // Rang until its limit with nobody there: nothing else tells the user.
         let notices = unseen_outcome_notices(ctx);

@@ -542,5 +542,17 @@
   "intro.3_title": "Lass dein Handy es erlauben",
   "intro.3_body": "Handys stoppen Wecker-Apps gern, um Akku zu sparen. Der nächste Bildschirm zeigt, was du erlauben musst, und ein Testwecker beweist, dass es klappt.",
   "report.when_last": "{time} (als der letzte Wecker klingelte)",
-  "report.dismiss": "Schließen"
+  "report.dismiss": "Schließen",
+  "lock.mark": "Bearbeitungssperre ist aktiv",
+  "lock.title": "Dieser Wecker ist gesperrt",
+  "lock.help": "Gesperrt, bis er um {time} klingelt. Um ihn jetzt zu ändern, löse seine Aufgaben.",
+  "lock.unlock": "Aufgaben lösen",
+  "lock.keep": "Gesperrt lassen",
+  "lock.opened": "{minutes} Minuten lang offen, danach wieder gesperrt.",
+  "lock.pause_all": "Alle pausieren geht nicht: {alarm} ist gesperrt, bis er klingelt.",
+  "lock.skip_refused": "{alarm} ist gesperrt und wurde deshalb nicht übersprungen. Öffne die App und löse die Aufgaben, um ihn zu ändern.",
+  "config.edit_lock": "Bearbeitungssperre",
+  "config.edit_lock_note": "Kurz bevor der Wecker klingelt, kannst du ihn weder ausschalten noch ändern, es sei denn, du löst seine Aufgaben. Danach ist er 5 Minuten lang offen. Die Sperre kann nicht verhindern, dass du die App zwangsweise beendest, ihre Daten löschst oder sie deinstallierst.",
+  "help.q_lock": "Was ist die Bearbeitungssperre?",
+  "help.a_lock": "Bei aktiver Bearbeitungssperre kann ein Wecker in der letzten Zeit vor dem Klingeln nicht ausgeschaltet, geändert, gelöscht, übersprungen oder pausiert werden. Wie lang diese Zeit ist, stellst du für jeden Wecker ein. Um ihn trotzdem zu ändern, löse seine Aufgaben. Ein Wecker ohne Aufgaben verlangt, den Knopf {holds} Mal zu halten. Danach ist er {minutes} Minuten lang offen. Duplizieren, Umsortieren, Sichern und Rückgängig bleiben möglich. Die Sperre kann nicht verhindern, dass du AlarmFree zwangsweise beendest, die Daten löschst oder die App deinstallierst."
 }

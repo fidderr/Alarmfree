@@ -9,7 +9,7 @@ use slint::{ComponentHandle, SharedString};
 
 use super::editor::{
     edit, reminder_time_label, seconds_label, EditorState, CHECK_MINUTES, FADE_SECONDS,
-    LIMIT_MINUTES, SOUND_DELAY_SECONDS, VIBRATION_KEYS,
+    LIMIT_MINUTES, LOCK_MINUTES, SOUND_DELAY_SECONDS, VIBRATION_KEYS,
 };
 use super::{Ctx, Ed, EditorSheet, MainWindow, SoundRow, UsedChip};
 use crate::i18n::{t, Translations};
@@ -213,7 +213,16 @@ pub(super) fn limit_labels(tr: &Translations) -> Vec<String> {
     labels
 }
 
-/// The choices of the limit and wake-up check sheets.
+/// "Off", "30 min" or "2 h": how long before the ring the edit lock starts.
+fn lock_label(tr: &Translations, minutes: u16) -> String {
+    if minutes == 0 {
+        t(tr, "config.fade_off")
+    } else {
+        reminder_time_label(tr, minutes)
+    }
+}
+
+/// The choices of the limit, wake-up check and edit lock sheets.
 pub(super) fn sync_options(ctx: &Ctx, sheet: EditorSheet) {
     let Some(ui) = ctx.ui.upgrade() else {
         return;
@@ -250,6 +259,13 @@ pub(super) fn sync_options(ctx: &Ctx, sheet: EditorSheet) {
                 .position(|m| *m == ed.draft.wake_check_minutes)
                 .map_or(-1, |i| i as i32),
         ),
+        EditorSheet::EditLock => (
+            LOCK_MINUTES.iter().map(|m| lock_label(&tr, *m)).collect(),
+            LOCK_MINUTES
+                .iter()
+                .position(|m| *m == ed.draft.lock_minutes)
+                .map_or(-1, |i| i as i32),
+        ),
         _ => return,
     };
     let e = ui.global::<Ed>();
@@ -272,6 +288,11 @@ pub fn opt_picked(ctx: &Rc<Ctx>, index: usize) {
         EditorSheet::WakeCheck => {
             if let Some(m) = CHECK_MINUTES.get(index) {
                 ed.draft.wake_check_minutes = *m;
+            }
+        }
+        EditorSheet::EditLock => {
+            if let Some(m) = LOCK_MINUTES.get(index) {
+                ed.draft.lock_minutes = *m;
             }
         }
         _ => {}

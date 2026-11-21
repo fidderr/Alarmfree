@@ -24,7 +24,7 @@ fn snapshot(ui: &MainWindow) -> String {
             serde_json::json!({
                 "id": r.id.as_str(), "time": r.time.as_str(), "label": r.label.as_str(),
                 "when": r.when.as_str(), "on": r.on, "can_skip": r.can_skip,
-                "skip_active": r.skip_active,
+                "skip_active": r.skip_active, "locked": r.locked,
             })
         })
         .collect();

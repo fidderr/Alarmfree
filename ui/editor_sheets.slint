@@ -21,6 +21,11 @@ export global Ed {
     in property <string> look-summary;
     in property <string> limit-summary;
     in property <string> check-summary;
+    in property <string> lock-summary;
+    // The sheet that says why the alarm cannot be changed now.
+    in property <string> lock-title;
+    in property <string> lock-help;
+    callback unlock-tapped();
     in property <string> notice-summary;
     in property <bool> bright;
     callback bright-toggled(bool);

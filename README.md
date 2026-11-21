@@ -40,6 +40,14 @@ patterns, vibrate first with the sound after a delay, or vibration only.
 out first. 0 to 10 snoozes of 1 to 60 minutes. A ring limit of 1
 minute to forever. An optional wake-up check a few minutes later. Optional full brightness.
 
+**Edit lock.** Per alarm, an optional lock for the last stretch before it rings (1 minute to 10 hours).
+While it is locked you cannot switch the alarm off, change or save it, delete it, skip its next ring or
+pause it (pausing all is refused while any alarm is locked), and the Skip on its reminder does nothing.
+To change it anyway you do its challenges (an alarm without challenges asks for 20 holds of 3 seconds);
+then it is open for 5 minutes, in memory only. Duplicating, rearranging, backing up and Undo stay open.
+A lock mark shows on the card. It cannot stop you from force-stopping the app, clearing its data or
+uninstalling it, so it is a speed bump for a half-asleep you, not a security feature.
+
 **Telling the truth.** A reliability screen with what the phone allows, a way to each setting,
 and a test alarm that goes through the whole real ring path. History with outcomes (solved,
 missed, stopped at the limit, phone restarted), a streak, a chart and timings per challenge.

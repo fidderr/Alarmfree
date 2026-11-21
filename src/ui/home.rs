@@ -178,6 +178,7 @@ pub fn refresh(ctx: &Ctx) {
                 on: alarm.enabled,
                 can_skip: alarm.enabled && !one_time && (skip_active || next.is_some()),
                 skip_active,
+                locked: crate::edit_lock::locked_now(alarm).is_some(),
             }
         })
         .collect();
@@ -249,6 +250,10 @@ fn has_room(ctx: &Rc<Ctx>) -> bool {
 }
 
 pub fn toggle(ctx: &Rc<Ctx>, id: &str) {
+    let switching_off = ctx.alarms.borrow().iter().any(|a| a.id == id && a.enabled);
+    if switching_off && super::lock::refuse(ctx, id) {
+        return;
+    }
     let now = crate::clock::local_now().naive_local();
     let mut message = String::new();
     change(ctx, String::new(), &mut |list| {
@@ -313,6 +318,9 @@ pub fn create(ctx: &Rc<Ctx>) {
 }
 
 pub fn toggle_skip(ctx: &Rc<Ctx>, id: &str, next: Option<i64>, skip_active: bool) {
+    if !skip_active && super::lock::refuse(ctx, id) {
+        return;
+    }
     let message = {
         let tr = ctx.tr.borrow();
         if skip_active {
@@ -330,6 +338,9 @@ pub fn toggle_skip(ctx: &Rc<Ctx>, id: &str, next: Option<i64>, skip_active: bool
 }
 
 pub fn delete_alarm(ctx: &Rc<Ctx>, id: &str) {
+    if super::lock::refuse(ctx, id) {
+        return;
+    }
     let name = ctx
         .alarms
         .borrow()

@@ -17,6 +17,7 @@ export struct AlarmRow {
     on: bool,
     can-skip: bool,
     skip-active: bool,
+    locked: bool,
 }
 
 component AlarmCard inherits Rectangle {
@@ -150,6 +151,12 @@ component AlarmCard inherits Rectangle {
                         }
                     }
                 }
+            }
+            if data.locked: Rectangle {
+                width: 24px;
+                accessible-role: text;
+                accessible-label: Tr.t("lock.mark");
+                Icon { name: IconName.lock; size: 16px; tint: Pal.text2; }
             }
             Rectangle {
                 width: 32px;

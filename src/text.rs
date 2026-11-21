@@ -91,23 +91,9 @@ pub fn rings_in(translations: &Translations, alarm: &AlarmData) -> String {
             })
             .unwrap_or_default();
     }
-    let date = alarm
-        .date
-        .as_deref()
-        .and_then(|d| NaiveDate::parse_from_str(d, "%Y-%m-%d").ok());
-    // A ring that is skipped is not what comes next.
-    let from = alarm
-        .skip_until_ms
-        .filter(|skip| *skip > now_ms)
-        .and_then(|skip| chrono::Local.timestamp_millis_opt(skip).single())
-        .map_or(now.naive_local(), |skip| skip.naive_local());
-    schedule::next_ring_moment(alarm.time_hour, alarm.time_minute, alarm.days, date, from)
-        .and_then(|moment| schedule::ring_instant_in(&chrono::Local, moment))
+    schedule::next_ring_ms(alarm, now)
         .map(|at| {
-            let time = time_left(
-                translations,
-                schedule::countdown(now_ms, at.timestamp_millis()),
-            );
+            let time = time_left(translations, schedule::countdown(now_ms, at));
             t(translations, "config.rings_in").replace("{time}", &time)
         })
         .unwrap_or_default()

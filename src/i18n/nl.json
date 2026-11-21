@@ -542,5 +542,17 @@
   "intro.3_title": "Laat je telefoon het toestaan",
   "intro.3_body": "Telefoons stoppen graag wekker-apps om batterij te sparen. Het volgende scherm laat zien wat je moet toestaan, en een testwekker bewijst dat het werkt.",
   "report.when_last": "{time} (toen de laatste wekker afging)",
-  "report.dismiss": "Sluiten"
+  "report.dismiss": "Sluiten",
+  "lock.mark": "Bewerkslot staat aan",
+  "lock.title": "Deze wekker is vergrendeld",
+  "lock.help": "Vergrendeld tot hij afgaat om {time}. Wil je hem nu toch wijzigen, doe dan zijn uitdagingen.",
+  "lock.unlock": "Doe de uitdagingen",
+  "lock.keep": "Vergrendeld laten",
+  "lock.opened": "{minutes} minuten open, daarna weer vergrendeld.",
+  "lock.pause_all": "Alles pauzeren kan niet: {alarm} is vergrendeld tot hij afgaat.",
+  "lock.skip_refused": "{alarm} is vergrendeld en is dus niet overgeslagen. Open de app en doe de uitdagingen om hem te wijzigen.",
+  "config.edit_lock": "Bewerkslot",
+  "config.edit_lock_note": "Vlak voordat de wekker afgaat kun je hem niet uitzetten of wijzigen, tenzij je de uitdagingen doet. Daarna staat hij 5 minuten open. Het slot kan niet voorkomen dat je de app geforceerd stopt, de gegevens wist of de app verwijdert.",
+  "help.q_lock": "Wat is het bewerkslot?",
+  "help.a_lock": "Met het bewerkslot aan kan een wekker in het laatste stuk voor hij afgaat niet worden uitgezet, gewijzigd, verwijderd, overgeslagen of gepauzeerd. Per wekker kies je hoe lang dat stuk duurt. Wil je hem toch wijzigen, doe dan zijn uitdagingen. Een wekker zonder uitdagingen vraagt om de knop {holds} keer vast te houden. Daarna staat hij {minutes} minuten open. Dupliceren, herschikken, een back-up maken en Ongedaan maken blijven mogelijk. Het slot kan niet voorkomen dat je AlarmFree geforceerd stopt, de gegevens wist of de app verwijdert."
 }

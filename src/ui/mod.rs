@@ -36,6 +36,7 @@ mod flow_tests;
 mod history;
 mod home;
 mod home_sheets;
+mod lock;
 mod look;
 #[cfg(test)]
 mod modal_tests;
@@ -285,6 +286,7 @@ fn connect_editor_sheets(ctx: &Rc<Ctx>, ui: &MainWindow) {
     on!(Ed, on_delay_picked, |ctx, i| editor_sound::delay_picked(
         &ctx, i as usize
     ));
+    on!(Ed, on_unlock_tapped, |ctx| editor::unlock_tapped(&ctx));
     on!(Ed, on_opt_picked, |ctx, i| editor_sound::opt_picked(
         &ctx, i as usize
     ));

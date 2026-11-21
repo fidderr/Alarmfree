@@ -6,7 +6,7 @@ import { DatePicker } from "datepicker.slint";
 export struct SheetChoice { text: string, selected: bool, danger: bool }
 
 // Which panel is open over the list.
-export enum HomeSheet { none, sort, pause-all, pause-date, menu }
+export enum HomeSheet { none, sort, pause-all, pause-date, menu, locked }
 
 component SheetItem inherits Rectangle {
     in property <SheetChoice> choice;
@@ -34,15 +34,23 @@ component SheetItem inherits Rectangle {
 export component HomeSheets inherits Rectangle {
     in property <HomeSheet> sheet;
     in property <string> title;
+    in property <string> help;
     in property <[SheetChoice]> choices;
     callback close();
     callback picked(int);
     callback pause-apply();
-    if root.sheet == HomeSheet.sort || root.sheet == HomeSheet.pause-all || root.sheet == HomeSheet.menu: Sheet {
+    if root.sheet == HomeSheet.sort || root.sheet == HomeSheet.pause-all || root.sheet == HomeSheet.menu || root.sheet == HomeSheet.locked: Sheet {
         title: root.title;
         help: root.sheet == HomeSheet.sort ? Tr.t("home.sort_note") : root.sheet == HomeSheet.pause-all ? Tr.t("home.pause_note") : "";
         close => { root.close(); }
         VerticalLayout {
+            if root.sheet == HomeSheet.locked: Text {
+                text: root.help;
+                font-size: 14px * Zoom.scale;
+                line-height-factor: 1.22;
+                color: Pal.text2;
+                wrap: word-wrap;
+            }
             for choice[i] in root.choices: SheetItem {
                 choice: choice;
                 clicked => { root.picked(i); }

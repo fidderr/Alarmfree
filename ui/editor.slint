@@ -32,7 +32,7 @@ component DangerItem inherits Rectangle {
 }
 
 // Which panel is open over the editor.
-export enum EditorSheet { none, time, date, label, sound, vibration, snooze, delete, discard, challenges, add-challenge, detail, limit, wake-check, reminder, ring-look, ring-colour }
+export enum EditorSheet { none, time, date, label, sound, vibration, snooze, delete, discard, challenges, add-challenge, detail, limit, wake-check, edit-lock, locked, reminder, ring-look, ring-colour }
 
 // Making and changing an alarm: the time and the days are right there; everything else is one
 // summary row that opens a sheet.
@@ -240,6 +240,8 @@ export component EditorScreen inherits Rectangle {
                         Separator { }
                         Row { title: Tr.t("config.wake_check"); value: Ed.check-summary; clicked => { root.open(EditorSheet.wake-check); } }
                         Separator { }
+                        Row { title: Tr.t("config.edit_lock"); value: Ed.lock-summary; clicked => { root.open(EditorSheet.edit-lock); } }
+                        Separator { }
                         Row { title: Tr.t("config.notice"); value: Ed.notice-summary; clicked => { root.open(EditorSheet.reminder); } }
                         Separator { }
                         SwitchRow { title: Tr.t("config.max_brightness"); on: Ed.bright; toggled(on) => { Ed.bright-toggled(on); } }
@@ -275,6 +277,19 @@ export component EditorScreen inherits Rectangle {
         title: Tr.t("config.wake_check");
         help: Tr.t("config.wake_check_note");
         done => { root.close-sheet(); }
+    }
+    if root.sheet == EditorSheet.edit-lock: OptionsSheet {
+        title: Tr.t("config.edit_lock");
+        help: Tr.t("config.edit_lock_note");
+        done => { root.close-sheet(); }
+    }
+    if root.sheet == EditorSheet.locked: Sheet {
+        title: Ed.lock-title;
+        done-text: Tr.t("lock.unlock");
+        finish => { Ed.unlock-tapped(); }
+        close => { root.close-sheet(); }
+        Text { text: Ed.lock-help; font-size: 14px * Zoom.scale; line-height-factor: 1.22; color: Pal.text2; wrap: word-wrap; }
+        PrimaryButton { quiet: true; text: Tr.t("lock.keep"); clicked => { root.close-sheet(); } }
     }
     if root.sheet == EditorSheet.reminder: ReminderSheet { done => { root.close-sheet(); } }
     if root.sheet == EditorSheet.ring-look: RingLookSheet { done => { root.close-sheet(); } }

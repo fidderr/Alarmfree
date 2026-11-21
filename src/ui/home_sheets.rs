@@ -27,6 +27,8 @@ enum Act {
     Duplicate(String),
     MakeDefault(String),
     Delete(String),
+    Unlock(String),
+    KeepLocked,
 }
 
 #[derive(Default)]
@@ -96,6 +98,30 @@ pub fn open_sort(ctx: &Ctx) {
         (rows, t(&tr, "home.sort_title"))
     };
     show(ctx, HomeSheet::Sort, title, rows);
+}
+
+/// The sheet of a locked alarm: when it rings, and the way to change it anyway.
+pub fn open_locked(ctx: &Ctx, id: &str, until_ms: i64) {
+    let (title, help, rows) = {
+        let tr = ctx.tr.borrow();
+        (
+            t(&tr, "lock.title"),
+            super::lock::help_text(ctx, until_ms),
+            vec![
+                (
+                    t(&tr, "lock.unlock"),
+                    false,
+                    false,
+                    Act::Unlock(id.to_owned()),
+                ),
+                (t(&tr, "lock.keep"), false, false, Act::KeepLocked),
+            ],
+        )
+    };
+    if let Some(ui) = ctx.ui.upgrade() {
+        ui.set_hs_help(help.into());
+    }
+    show(ctx, HomeSheet::Locked, title, rows);
 }
 
 pub fn open_pause_all(ctx: &Ctx) {
@@ -249,13 +275,24 @@ pub fn pause_apply(ctx: &Rc<Ctx>) {
         )
     };
     let now_ms = crate::clock::local_now().timestamp_millis();
+    close(ctx);
     if let Some(until) = until.filter(|until| *until > now_ms) {
         pause(ctx, only, until);
     }
-    close(ctx);
+}
+
+/// Pausing is refused while an alarm it would pause is locked.
+fn pause_refused(ctx: &Rc<Ctx>, only: &Option<String>) -> bool {
+    match only {
+        Some(id) => super::lock::refuse(ctx, id),
+        None => super::lock::refuse_all(ctx),
+    }
 }
 
 fn pause(ctx: &Rc<Ctx>, only: Option<String>, until: i64) {
+    if pause_refused(ctx, &only) {
+        return;
+    }
     let message = paused_message(&ctx.tr.borrow(), until);
     super::home::change(ctx, message, &mut |list| match &only {
         Some(id) => {
@@ -284,10 +321,13 @@ pub fn picked(ctx: &Rc<Ctx>, index: usize) {
     let Some(act) = ctx.home_sheet.borrow().acts.get(index).cloned() else {
         return;
     };
+    // Closed first: an action that is refused opens a sheet of its own.
+    close(ctx);
     match act {
         Act::PauseDate(only) => {
-            show_pause_date(ctx, only);
-            return;
+            if !pause_refused(ctx, &only) {
+                show_pause_date(ctx, only);
+            }
         }
         Act::Sort(mode) => {
             ctx.settings.borrow_mut().prefs.sort = mode;
@@ -301,7 +341,6 @@ pub fn picked(ctx: &Rc<Ctx>, index: usize) {
             }
         }
         Act::Practice(id) => {
-            close(ctx);
             let setups = ctx
                 .alarms
                 .borrow()
@@ -310,18 +349,15 @@ pub fn picked(ctx: &Rc<Ctx>, index: usize) {
                 .map(|a| ChallengeSetup::list_from_stored(&a.challenges))
                 .unwrap_or_default();
             super::challenge_run::start_practice(ctx, &setups);
-            return;
         }
         Act::Skip { id, next, active } => super::home::toggle_skip(ctx, &id, next, active),
         Act::Duplicate(id) => {
-            close(ctx);
             if ctx.alarms.borrow().len() >= alarm_ops::MAX_ALARMS {
                 let message = t(&ctx.tr.borrow(), "alarm.limit_reached");
                 super::toast::error(ctx, message);
             } else {
                 super::editor::open(ctx, &format!("copy-{id}"));
             }
-            return;
         }
         Act::MakeDefault(id) => {
             let alarm: Option<AlarmData> = ctx.alarms.borrow().iter().find(|a| a.id == id).cloned();
@@ -334,6 +370,7 @@ pub fn picked(ctx: &Rc<Ctx>, index: usize) {
             }
         }
         Act::Delete(id) => super::home::delete_alarm(ctx, &id),
+        Act::Unlock(id) => super::lock::start_unlock(ctx, &id),
+        Act::KeepLocked => {}
     }
-    close(ctx);
 }

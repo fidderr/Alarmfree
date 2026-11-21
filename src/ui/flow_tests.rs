@@ -919,3 +919,253 @@ fn s67_reminder_sheet() {
     );
     f.finish();
 }
+
+/// An alarm twenty minutes after the clock of these tests, locked from half an hour before, that
+/// asks for two squats.
+fn locked_alarm(id: &str, label: &str) -> AlarmData {
+    let mut a = daily(id, 10, 20, label);
+    a.lock_minutes = 30;
+    a.challenges = vec![("challenge.squat".to_owned(), r#"{"count":2}"#.to_owned())];
+    a
+}
+
+impl Flow {
+    fn said_locked(&self) -> bool {
+        self.has_part("Locked until it rings at") && self.has("Do its challenges")
+    }
+    fn close_sheets(&self) {
+        for _ in 0..2 {
+            if self.sheet_open() || self.editor_sheet_open() {
+                self.back();
+            }
+        }
+    }
+    /// Do the two squats of the unlock run and wait out the celebration.
+    fn do_the_squats(&self) {
+        let run = self.ui.global::<Run>();
+        self.expect(run.get_active(), "the unlock did not start");
+        super::challenge_run::inject_counts([0, 0, 2]);
+        self.settle();
+        i_slint_backend_testing::mock_elapsed_time(std::time::Duration::from_millis(2500));
+        self.expect(!run.get_active(), "the unlock did not end after its squats");
+        super::challenge_run::inject_counts([0; 3]);
+    }
+}
+
+/// The edit lock: the switch says no with a sheet, the challenges open the alarm, it can be
+/// switched off, and after five minutes it locks again.
+#[test]
+fn edit_lock_switch_off_unlock_and_lock_again() {
+    crate::edit_lock::relock("lk2");
+    let f = Flow::new(vec![locked_alarm("lk2", "Lock")]);
+    f.expect(f.has("Edit lock is on"), "no lock mark on the card");
+    f.expect(f.tap("On or off: Lock"), "no switch");
+    f.expect(saved("lk2").enabled, "the switch turned a locked alarm off");
+    f.expect(f.said_locked(), format!("no sheet: {:?}", f.texts()));
+    f.expect(f.tap("Keep it locked"), "no way to keep it locked");
+    f.expect(!f.sheet_open(), "the sheet stayed");
+    // The challenges.
+    f.expect(f.tap("On or off: Lock"), "no switch the second time");
+    super::challenge_run::inject_counts([0, 0, 0]);
+    f.expect(f.tap("Do its challenges"), "no way to the challenges");
+    f.do_the_squats();
+    f.expect(
+        f.sn("toast_visible") == true && f.has_part("Open for 5 minutes"),
+        format!("nothing said about the unlock: {:?}", f.texts()),
+    );
+    f.expect(
+        !f.has("Edit lock is on"),
+        "the mark stayed on an open alarm",
+    );
+    f.expect(f.tap("On or off: Lock"), "no switch once open");
+    f.expect(
+        !saved("lk2").enabled,
+        "an open alarm cannot be switched off",
+    );
+    f.expect(f.tap("On or off: Lock"), "no switch to turn it on");
+    f.expect(saved("lk2").enabled, "not on again");
+    // Five minutes on it locks again.
+    crate::clock::set_fixed(Some(wednesday_ten() + 5 * 60_000 + 1));
+    home::refresh(&f.ctx);
+    f.expect(f.has("Edit lock is on"), "no mark after the five minutes");
+    f.expect(f.tap("On or off: Lock"), "no switch after the five minutes");
+    f.expect(saved("lk2").enabled, "locked again but switched off");
+    f.expect(f.said_locked(), "no sheet after the five minutes");
+    crate::edit_lock::relock("lk2");
+    f.finish();
+}
+
+/// What is blocked from the card's menu and the pause button, and what is not.
+#[test]
+fn edit_lock_blocks_delete_skip_and_pause_but_not_duplicate() {
+    crate::edit_lock::relock("lk3");
+    let mut other = daily("b", 7, 0, "Other");
+    other.order = 2;
+    let mut locked = locked_alarm("lk3", "Lock");
+    locked.order = 1;
+    let f = Flow::new(vec![locked, other]);
+    // The first card is the one that rings first: the locked one.
+    for (row, what) in [
+        ("Skip the next ring", "skip"),
+        ("Pause until a date", "pause"),
+        ("Delete", "delete"),
+    ] {
+        f.close_sheets();
+        if what == "skip" {
+            // There is no AlarmKit here to say when it rings, so no Skip row: its swipe.
+            home::skip_from_swipe(&f.ctx, "lk3");
+            f.settle();
+        } else {
+            f.expect(f.tap_has("More actions"), "no menu");
+            f.expect(f.has(row), format!("no {what} row: {:?}", f.texts()));
+            f.tap(row);
+        }
+        f.expect(
+            f.said_locked(),
+            format!("{what} did not say it is locked: {:?}", f.texts()),
+        );
+        let a = saved("lk3");
+        f.expect(
+            a.skip_until_ms.is_none() && a.pause_until_ms.is_none() && a.enabled,
+            format!("{what} changed a locked alarm: {a:?}"),
+        );
+        f.expect(
+            crate::persistence::load_alarms()
+                .iter()
+                .any(|a| a.id == "lk3"),
+            format!("{what} deleted a locked alarm"),
+        );
+    }
+    // Pause all names the alarm that is in the way.
+    f.close_sheets();
+    f.expect(f.tap("Pause all alarms until a date"), "no pause button");
+    f.expect(f.tap("For a week"), "no week");
+    f.expect(
+        f.has_part("Cannot pause all: Lock is locked"),
+        format!("pause all said: {:?}", f.texts()),
+    );
+    f.expect(
+        saved("b").pause_until_ms.is_none() && saved("lk3").pause_until_ms.is_none(),
+        "pause all paused something while an alarm was locked",
+    );
+    // Duplicating is not blocked.
+    f.close_sheets();
+    f.expect(f.tap_has("More actions"), "no menu");
+    f.expect(f.tap("Duplicate"), "no Duplicate");
+    f.expect(f.screen() == 1, "duplicating a locked alarm was blocked");
+    f.finish();
+}
+
+/// Saving an edit of a locked alarm, and deleting it from the editor, say no with the sheet of the
+/// editor; after its challenges the same save goes through.
+#[test]
+fn edit_lock_blocks_saving_an_edit_until_the_challenges_are_done() {
+    crate::edit_lock::relock("lk5");
+    let f = Flow::new(vec![locked_alarm("lk5", "Lock")]);
+    f.press("open", "lk5");
+    f.expect(f.screen() == 1, "no editor");
+    f.expect(f.tap("+1"), "no +1");
+    f.expect(f.tap("Save"), "no Save");
+    f.expect(f.screen() == 1, "a locked alarm was saved");
+    f.expect(
+        f.editor_sheet_open() && f.said_locked(),
+        format!("no sheet in the editor: {:?}", f.texts()),
+    );
+    f.expect(saved("lk5").time_minute == 20, "the edit was saved");
+    f.expect(f.tap("Keep it locked"), "no way to keep it locked");
+    // Delete from the editor.
+    f.expect(f.tap("Delete alarm"), "no delete button");
+    f.expect(f.tap_last("Delete"), "no confirm");
+    f.expect(
+        crate::persistence::load_alarms()
+            .iter()
+            .any(|a| a.id == "lk5"),
+        "deleted from the editor while locked",
+    );
+    f.expect(f.said_locked(), "no sheet after delete");
+    // Its challenges, then the same save goes through.
+    super::challenge_run::inject_counts([0, 0, 0]);
+    f.expect(f.tap("Do its challenges"), "no way to the challenges");
+    f.do_the_squats();
+    f.expect(f.screen() == 1, "the unlock left the editor");
+    f.expect(f.tap("Save"), "no Save after the unlock");
+    f.expect(f.screen() == 0, "saving after the unlock did not leave");
+    f.expect(saved("lk5").time_minute == 21, "the edit was not saved");
+    crate::edit_lock::relock("lk5");
+    f.finish();
+}
+
+/// An alarm without challenges unlocks through the holds, and an alarm outside its window is not
+/// locked.
+#[test]
+fn edit_lock_without_challenges_needs_the_holds_and_outside_the_window_nothing() {
+    crate::edit_lock::relock("lk7");
+    let mut bare = locked_alarm("lk7", "Lock");
+    bare.challenges.clear();
+    let mut far = locked_alarm("far7", "Far");
+    far.time_hour = 11;
+    far.time_minute = 0;
+    let f = Flow::new(vec![bare, far]);
+    f.expect(f.tap("On or off: Far"), "no switch of the far alarm");
+    f.expect(
+        !saved("far7").enabled,
+        "an alarm 60 minutes away was locked",
+    );
+    f.expect(f.tap("On or off: Lock"), "no switch");
+    f.expect(f.tap("Do its challenges"), "no way to the challenges");
+    let run = f.ui.global::<Run>();
+    f.expect(run.get_active(), "the holds did not start");
+    f.expect(run.get_total() == 1, format!("total {}", run.get_total()));
+    f.expect(f.has_part("20"), format!("not 20 holds: {:?}", f.texts()));
+    // Leaving the run changes nothing.
+    f.back();
+    f.expect(!run.get_active(), "Back left the run up");
+    f.expect(saved("lk7").enabled, "leaving the unlock switched it off");
+    crate::edit_lock::relock("lk7");
+    f.finish();
+}
+
+/// The setting: off to begin with, every choice sets its minutes, and Save keeps it.
+#[test]
+fn edit_lock_setting_sheet_picks_and_saves() {
+    let f = Flow::new(Vec::new());
+    f.expect(f.tap("Create new alarm"), "no create button");
+    f.expect(
+        f.has_part("Edit lock") && f.has_part("Off"),
+        "the editor has no Edit lock row saying Off",
+    );
+    f.open_row("Edit lock");
+    let steps: [(&str, u16); 10] = [
+        ("1 min", 1),
+        ("5 min", 5),
+        ("10 min", 10),
+        ("15 min", 15),
+        ("30 min", 30),
+        ("1 h", 60),
+        ("2 h", 120),
+        ("3 h", 180),
+        ("6 h", 360),
+        ("10 h", 600),
+    ];
+    for (label, minutes) in steps {
+        f.expect(f.tap_last(label), format!("no choice {label}"));
+        let got = f
+            .ctx
+            .editor
+            .borrow()
+            .as_ref()
+            .map(|ed| ed.draft.lock_minutes);
+        f.expect(got == Some(minutes), format!("{label} gave {got:?}"));
+    }
+    f.expect(f.tap_last("Off"), "no Off");
+    f.expect(f.tap_last("2 h"), "no 2 h");
+    f.done();
+    f.expect(
+        f.has("2 h before"),
+        format!("the summary line: {:?}", f.texts()),
+    );
+    f.expect(f.tap("Save"), "no Save");
+    let kept = crate::persistence::load_alarms()[0].lock_minutes;
+    f.expect(kept == 120, format!("saved {kept}"));
+    f.finish();
+}

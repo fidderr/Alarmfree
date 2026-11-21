@@ -45,6 +45,7 @@ export component MainWindow inherits Window {
     // The panels over the list.
     in-out property <HomeSheet> home-sheet: HomeSheet.none;
     in property <string> hs-title;
+    in property <string> hs-help;
     in property <[SheetChoice]> hs-choices;
     callback hs-close();
     callback hs-picked(int);
@@ -196,6 +197,7 @@ export component MainWindow inherits Window {
     if root.screen == 0 || (root.split && root.screen == 1): HomeSheets {
         sheet: root.home-sheet;
         title: root.hs-title;
+        help: root.hs-help;
         choices: root.hs-choices;
         close => { root.home-sheet = HomeSheet.none; root.hs-close(); }
         picked(i) => { root.hs-picked(i); }

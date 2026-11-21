@@ -2970,6 +2970,55 @@ s67() {
     fi
 }
 
+# The edit lock: 50 minutes before the ring the alarm is free, 25 minutes before (the clock moved) the card shows
+# the lock and the switch says no with the sheet, the alarm's own challenge opens it, then it can be switched
+# off, and 6 minutes later (the clock moved again) it is locked once more.
+s68() {
+    if ! on_emulator; then
+        note "s68 needs an emulator's clock"
+        return
+    fi
+    scenario s68_edit_lock
+    local problems=""
+    fresh
+    next_minute 3000
+    ALARM_EXTRA=',"lock_minutes":30'
+    seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null air 0 0 3 1 '[["challenge.math","{\"difficulty\":\"easy\"}"]]')"
+    ALARM_EXTRA=
+    arm a
+    start_app
+    on_card 10
+    locked_row() { ui snapshot | grep -q '"locked":true'; }
+    is_enabled() { printf 'SELECT data FROM alarms;\n' | sql | grep -q '"enabled":true'; }
+    locked_row && problems="$problems; locked 50 minutes before the ring"
+    jump_to $((T - 25 * 60))
+    wait_for 20 locked_row || problems="$problems; no lock on the card 25 minutes before the ring"
+    screenshot s68_locked_card
+    tap_has "On or off" 0 0.5
+    on_screen_has "Locked until it rings at" 5 || problems="$problems; the switch gave no sheet: $(texts_of)"
+    screenshot s68_locked_sheet
+    is_enabled || problems="$problems; the switch turned a locked alarm off"
+    tap "Do its challenges" 0 0.5
+    on_screen "Solve the math problem" 5 || problems="$problems; no challenge to unlock with: $(texts_of)"
+    solve_math
+    on_screen_has "Open for 5 minutes" 8 || problems="$problems; nothing said about the unlock: $(texts_of)"
+    locked_row && problems="$problems; still locked after its challenge"
+    tap_has "On or off" 0 0.5
+    wait_for 5 is_enabled && problems="$problems; an open alarm could not be switched off"
+    tap_has "On or off" 0 0.5
+    wait_for 5 is_enabled || problems="$problems; not on again"
+    jump_to $((T - 25 * 60 + 6 * 60))
+    sleep 1
+    tap_has "On or off" 0 0.5
+    on_screen_has "Locked until it rings at" 5 || problems="$problems; no sheet 6 minutes after the unlock: $(texts_of)"
+    is_enabled || problems="$problems; it was switched off 6 minutes after the unlock"
+    if [ -z "$problems" ]; then
+        pass "free 50 minutes before, locked 25 minutes before (card and sheet), its challenge opened it, locked again after 5 minutes"
+    else
+        fail "${problems#; }"
+    fi
+}
+
 # Colours of one's own: on the wheel, in a code, and never unreadable. They stay, also on the ring.
 s61() {
     scenario s61_colours_of_ones_own
@@ -3538,7 +3587,7 @@ s62p() {
 . "$(dirname "$0")/panels.sh"
 . "$(dirname "$0")/a11y_audit.sh"
 
-ALL="s01 s03 s04 s05 s06 s07 s10 s11 s13 s13b s13d s14 s15 s16 s16b s17 s19 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s34 s36 s37 s38 s39 s40 s42 s43 s44 s45 s46 s47 s48 s49 s50 s51 s52 s53 s55 s56 s57 s58 s59 s60 s61 s62 s63 s65 s66 s67 big_screens s54"
+ALL="s01 s03 s04 s05 s06 s07 s10 s11 s13 s13b s13d s14 s15 s16 s16b s17 s19 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s34 s36 s37 s38 s39 s40 s42 s43 s44 s45 s46 s47 s48 s49 s50 s51 s52 s53 s55 s56 s57 s58 s59 s60 s61 s62 s63 s65 s66 s67 s68 big_screens s54"
 ON_A_PHONE="s01 s03 s04 s05 s06 s07 s10 s15 s16 s16b s17 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s36 s37 s38 s39 s42 s43 s45 s46 s47 s49 s50 s51 s52 s53 s55 s57 s58 s59 s61 s62"
 
 : > "$RESULTS"

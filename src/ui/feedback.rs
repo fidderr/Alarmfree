@@ -137,6 +137,15 @@ fn help_items(ctx: &Ctx) -> Vec<HelpItem> {
             ),
         ),
         item(
+            "help.q_lock",
+            t(&tr, "help.a_lock")
+                .replace("{holds}", &crate::challenges::FALLBACK_HOLDS.to_string())
+                .replace(
+                    "{minutes}",
+                    &(crate::edit_lock::OPEN_MS / 60_000).to_string(),
+                ),
+        ),
+        item(
             "help.q_backup",
             format!(
                 "{}\n\n{}",

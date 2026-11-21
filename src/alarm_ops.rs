@@ -37,6 +37,7 @@ pub fn factory_alarm() -> AlarmData {
         reminder: Default::default(),
         ring_look: Default::default(),
         wake_check_minutes: 0,
+        lock_minutes: 0,
         max_brightness: false,
         sound_delay_secs: 0,
         pause_until_ms: None,
@@ -95,6 +96,7 @@ pub fn quick_alarm(
     alarm.label = label;
     alarm.delete_after_ring = true;
     alarm.wake_check_minutes = 0;
+    alarm.lock_minutes = 0;
     alarm.reminder = Reminder::default();
     alarm
 }
@@ -106,6 +108,7 @@ pub fn wake_check_alarm(source: &AlarmData, now: NaiveDateTime, label: String) -
     alarm.challenges = Vec::new();
     alarm.snooze_count = 0;
     alarm.wake_check_minutes = 0;
+    alarm.lock_minutes = 0;
     alarm.reminder = Reminder::default();
     alarm.fade_in_secs = 0;
     alarm.note = String::new();
@@ -171,6 +174,7 @@ pub fn test_alarm(now: NaiveDateTime, seconds: i64, label: String) -> AlarmData 
     alarm.delete_after_ring = true;
     alarm.hidden = true;
     alarm.test = true;
+    alarm.lock_minutes = 0;
     one_time_at(alarm, now + Duration::seconds(seconds))
 }
 

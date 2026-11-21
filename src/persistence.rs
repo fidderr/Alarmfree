@@ -283,6 +283,7 @@ mod tests {
             reminder: Default::default(),
             ring_look: Default::default(),
             wake_check_minutes: 0,
+            lock_minutes: 0,
             max_brightness: false,
             sound_delay_secs: 0,
             pause_until_ms: None,

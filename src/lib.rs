@@ -11,6 +11,7 @@ pub mod db;
 #[cfg(debug_assertions)]
 pub mod debug_hooks;
 pub mod diag_log;
+pub mod edit_lock;
 pub mod feedback;
 pub mod firing_state;
 pub mod history_persistence;

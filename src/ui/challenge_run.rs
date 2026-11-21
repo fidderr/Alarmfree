@@ -18,7 +18,7 @@ use crate::challenges::{
     FALLBACK_HOLDS, FALLBACK_HOLD_MS, IDLE_LIMIT_SECS, SCAN_CAMERA_SECS,
 };
 use crate::i18n::t;
-use crate::models::{ChallengeSetup, ChallengeSolve, ChallengeType};
+use crate::models::{ChallengeSetup, ChallengeSolve, ChallengeType, Difficulty};
 
 static SCANNER_OPEN: AtomicBool = AtomicBool::new(false);
 
@@ -33,6 +33,8 @@ pub enum Mode {
     Ring(String),
     /// Trying the challenges: nothing rings, nothing is recorded.
     Practice,
+    /// The challenges of a locked alarm, done to change it anyway.
+    Unlock(String),
 }
 
 /// The challenge on screen, with what it keeps between taps and its own clocks.
@@ -131,13 +133,34 @@ pub fn start_ring(ctx: &Rc<Ctx>, id: &str, challenges: Vec<ChallengeToRun>) {
 
 /// Try challenges without an alarm.
 pub fn start_practice(ctx: &Rc<Ctx>, setups: &[ChallengeSetup]) {
+    begin(ctx, Mode::Practice, prepared(ctx, setups));
+}
+
+/// The challenges of a locked alarm, one after another like the try-out. With none, the way out
+/// every challenge has: hold the button.
+pub fn start_unlock(ctx: &Rc<Ctx>, id: &str, setups: &[ChallengeSetup]) {
+    let mut challenges = prepared(ctx, setups);
+    if challenges.is_empty() {
+        challenges.push(ChallengeToRun {
+            challenge: Challenge::Hold {
+                count: FALLBACK_HOLDS,
+                hold_ms: FALLBACK_HOLD_MS,
+            },
+            kind: ChallengeType::HoldButton,
+            difficulty: Difficulty::Easy,
+        });
+    }
+    begin(ctx, Mode::Unlock(id.to_owned()), challenges);
+}
+
+fn prepared(ctx: &Rc<Ctx>, setups: &[ChallengeSetup]) -> Vec<ChallengeToRun> {
     for setup in setups {
         if let Some(permission) = crate::challenges::config::permission_for(setup) {
             let _ = mobile_sentinel::permissions::request(permission);
         }
     }
     let locale = ctx.settings.borrow().locale;
-    begin(ctx, Mode::Practice, prepare(setups, locale));
+    prepare(setups, locale)
 }
 
 fn begin(ctx: &Rc<Ctx>, mode: Mode, challenges: Vec<ChallengeToRun>) {
@@ -145,7 +168,8 @@ fn begin(ctx: &Rc<Ctx>, mode: Mode, challenges: Vec<ChallengeToRun>) {
     let Some(ui) = ctx.ui.upgrade() else {
         return;
     };
-    let practice = matches!(mode, Mode::Practice);
+    // Practice and unlocking have no ringing alarm behind them: no idle clock, a way out.
+    let practice = !matches!(mode, Mode::Ring(_));
     let empty = challenges.is_empty();
     let total = challenges.len();
     let run = RunState {
@@ -251,7 +275,7 @@ pub fn back(ctx: &Rc<Ctx>) -> bool {
 }
 
 pub fn exit(ctx: &Rc<Ctx>) {
-    if with_run(ctx, |run, _| matches!(run.mode, Mode::Practice)).unwrap_or(false) {
+    if with_run(ctx, |run, _| !matches!(run.mode, Mode::Ring(_))).unwrap_or(false) {
         abort(ctx);
     }
 }
@@ -311,7 +335,7 @@ fn clock_tick(ctx: &Rc<Ctx>) {
 fn ring_id(ctx: &Ctx) -> Option<String> {
     ctx.run.borrow().as_ref().and_then(|run| match &run.mode {
         Mode::Ring(id) => Some(id.clone()),
-        Mode::Practice => None,
+        Mode::Practice | Mode::Unlock(_) => None,
     })
 }
 
@@ -1210,10 +1234,15 @@ fn celebration_over(ctx: &Rc<Ctx>) {
 
 /// Every challenge is done.
 fn finish(ctx: &Rc<Ctx>) {
+    let mut unlocked = None;
     let ring = with_run(ctx, |run, ui| {
         stop_current(run);
         match &run.mode {
             Mode::Ring(id) => Some((id.clone(), std::mem::take(&mut run.solves))),
+            Mode::Unlock(id) => {
+                unlocked = Some(id.clone());
+                None
+            }
             Mode::Practice => {
                 let screen = ui.global::<Run>();
                 screen.set_message(tr(ctx, "practice.done").into());
@@ -1228,6 +1257,10 @@ fn finish(ctx: &Rc<Ctx>) {
     if let Some((id, solves)) = ring {
         abort(ctx);
         super::ring::solved(ctx, &id, solves);
+    }
+    if let Some(id) = unlocked {
+        abort(ctx);
+        super::lock::unlocked(ctx, &id);
     }
 }
 

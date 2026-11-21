@@ -114,6 +114,26 @@ pub fn next_ring_moment(
     at(date?).filter(|moment| *moment > now)
 }
 
+/// When an alarm next rings from its own settings (unix ms), after a skipped ring. Pauses and
+/// snoozes are not in it.
+pub fn next_ring_ms(alarm: &AlarmData, now: chrono::DateTime<chrono::Local>) -> Option<i64> {
+    use chrono::TimeZone;
+    let date = alarm
+        .date
+        .as_deref()
+        .and_then(|d| NaiveDate::parse_from_str(d, DATE_FORMAT).ok());
+    let now_ms = now.timestamp_millis();
+    // A ring that is skipped is not what comes next.
+    let from = alarm
+        .skip_until_ms
+        .filter(|skip| *skip > now_ms)
+        .and_then(|skip| chrono::Local.timestamp_millis_opt(skip).single())
+        .map_or(now.naive_local(), |skip| skip.naive_local());
+    next_ring_moment(alarm.time_hour, alarm.time_minute, alarm.days, date, from)
+        .and_then(|moment| ring_instant_in(&chrono::Local, moment))
+        .map(|at| at.timestamp_millis())
+}
+
 /// The instant a wall-clock moment is in a time zone. When the clocks go back that moment happens
 /// twice: the first one. When they go forward it never happens: `None`.
 pub fn instant_in<Tz: chrono::TimeZone>(
@@ -257,6 +277,7 @@ mod tests {
             reminder: Default::default(),
             ring_look: Default::default(),
             wake_check_minutes: 0,
+            lock_minutes: 0,
             max_brightness: false,
             sound_delay_secs: 0,
             pause_until_ms: None,

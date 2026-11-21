@@ -17,6 +17,7 @@ pub const FADE_SECONDS: [u16; 6] = [0, 15, 30, 60, 120, 300];
 pub const SOUND_DELAY_SECONDS: [u16; 4] = [0, 15, 30, 60];
 pub const LIMIT_MINUTES: [u32; 9] = [1, 3, 5, 10, 15, 30, 60, 90, 120];
 pub const CHECK_MINUTES: [u8; 4] = [0, 3, 5, 10];
+pub use crate::edit_lock::LOCK_MINUTES;
 
 /// Translation keys of the vibration patterns, in the order of `platform::VIBRATION_PATTERNS`.
 pub const VIBRATION_KEYS: [&str; 3] =
@@ -410,6 +411,15 @@ pub fn sync(ctx: &Ctx) {
         }
         .into(),
     );
+    rows.set_lock_summary(
+        if current.lock_minutes == 0 {
+            t(&tr, "config.fade_off")
+        } else {
+            t(&tr, "config.reminder_before")
+                .replace("{time}", &reminder_time_label(&tr, current.lock_minutes))
+        }
+        .into(),
+    );
     rows.set_notice_summary(reminder_summary(&tr, &current.reminder).into());
     rows.set_bright(current.max_brightness);
 
@@ -551,7 +561,7 @@ pub fn sheet_opened(ctx: &Rc<Ctx>, sheet: EditorSheet) {
             }
             sync(ctx);
         }
-        EditorSheet::Limit | EditorSheet::WakeCheck => {
+        EditorSheet::Limit | EditorSheet::WakeCheck | EditorSheet::EditLock => {
             super::editor_sound::sync_options(ctx, sheet)
         }
         EditorSheet::Reminder => super::editor_sound::sync_reminder(ctx),
@@ -559,6 +569,17 @@ pub fn sheet_opened(ctx: &Rc<Ctx>, sheet: EditorSheet) {
             super::editor_look::sheet_opened(ctx, sheet)
         }
         _ => {}
+    }
+}
+
+/// "Do its challenges" in the sheet of a locked alarm.
+pub fn unlock_tapped(ctx: &Rc<Ctx>) {
+    let id = ctx.editor.borrow().as_ref().map(|ed| ed.id.clone());
+    if let Some(ui) = ctx.ui.upgrade() {
+        ui.set_ed_sheet(EditorSheet::None);
+    }
+    if let Some(id) = id {
+        super::lock::start_unlock(ctx, &id);
     }
 }
 
@@ -723,6 +744,15 @@ pub fn save(ctx: &Rc<Ctx>) {
         };
         build(ctx, ed)
     };
+    let changes_a_saved_alarm = {
+        let editor = ctx.editor.borrow();
+        editor
+            .as_ref()
+            .is_some_and(|ed| !ed.is_new && !ed.for_defaults && has_changes(ctx, ed))
+    };
+    if changes_a_saved_alarm && super::lock::refuse_in_editor(ctx, &alarm.id) {
+        return;
+    }
     if alarm_is_defaults(ctx) {
         let mut defaults = alarm;
         defaults.id = String::new();
@@ -780,6 +810,9 @@ pub fn delete(ctx: &Rc<Ctx>) {
     let Some(id) = ctx.editor.borrow().as_ref().map(|ed| ed.id.clone()) else {
         return;
     };
+    if super::lock::refuse_in_editor(ctx, &id) {
+        return;
+    }
     let before = ctx.alarms.borrow().clone();
     let name = before
         .iter()
