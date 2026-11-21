@@ -181,7 +181,7 @@
   "sound.not_a_sound": "Questo file non è un suono che questo telefono può riprodurre.",
   "alarm.ended_by_reboot": "La sveglia {alarm} è stata fermata perché il telefono si è riavviato.",
   "alarm.missed": "La sveglia {alarm} non ha suonato in orario, perché il telefono era spento o l'ha trattenuta.",
-  "alarm.ended_by_limit": "La sveglia {alarm} si è fermata dopo aver suonato a lungo senza risposta.",
+  "alarm.ended_by_limit": "La sveglia {alarm} ha suonato fino al suo limite e si è fermata da sola.",
   "ring.channel": "Sveglie",
   "ring.body": "Tocca per aprire",
   "ring.fallback_title": "Sveglia",

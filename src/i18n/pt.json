@@ -181,7 +181,7 @@
   "sound.not_a_sound": "Este arquivo não é um som que este celular consiga tocar.",
   "alarm.ended_by_reboot": "O alarme {alarm} foi parado porque o celular reiniciou.",
   "alarm.missed": "O alarme {alarm} não tocou na hora, porque o celular estava desligado ou bloqueou o alarme.",
-  "alarm.ended_by_limit": "O alarme {alarm} parou depois de tocar por muito tempo sem resposta.",
+  "alarm.ended_by_limit": "O alarme {alarm} tocou até ao seu limite e parou sozinho.",
   "ring.channel": "Alarmes",
   "ring.body": "Toque para abrir",
   "ring.fallback_title": "Alarme",

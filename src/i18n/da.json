@@ -181,7 +181,7 @@
   "sound.not_a_sound": "Den fil er ikke en lyd, som denne telefon kan afspille.",
   "alarm.ended_by_reboot": "Alarm {alarm} blev stoppet, fordi telefonen genstartede.",
   "alarm.missed": "Alarm {alarm} ringede ikke til tiden, fordi telefonen var slukket eller holdt den tilbage.",
-  "alarm.ended_by_limit": "Alarm {alarm} stoppede efter at have ringet længe uden svar.",
+  "alarm.ended_by_limit": "Alarm {alarm} ringede til sin grænse og stoppede af sig selv.",
   "ring.channel": "Alarmer",
   "ring.body": "Tryk for at åbne",
   "ring.fallback_title": "Alarm",

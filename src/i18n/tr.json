@@ -181,7 +181,7 @@
   "sound.not_a_sound": "Bu dosya, bu telefonun çalabileceği bir ses değil.",
   "alarm.ended_by_reboot": "“{alarm}” alarmı, telefon yeniden başladığı için durduruldu.",
   "alarm.missed": "“{alarm}” alarmı zamanında çalmadı, çünkü telefon kapalıydı ya da engelledi.",
-  "alarm.ended_by_limit": "“{alarm}” alarmı, uzun süre yanıt alamadan çaldıktan sonra durdu.",
+  "alarm.ended_by_limit": "“{alarm}” alarmı sınırına kadar çaldı ve kendiliğinden durdu.",
   "ring.channel": "Alarmlar",
   "ring.body": "Açmak için dokun",
   "ring.fallback_title": "Alarm",

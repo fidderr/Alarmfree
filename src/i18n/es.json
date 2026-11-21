@@ -181,7 +181,7 @@
   "sound.not_a_sound": "Ese archivo no es un sonido que este teléfono pueda reproducir.",
   "alarm.ended_by_reboot": "La alarma {alarm} se detuvo porque el teléfono se reinició.",
   "alarm.missed": "La alarma {alarm} no sonó a tiempo porque el teléfono estaba apagado o la retuvo.",
-  "alarm.ended_by_limit": "La alarma {alarm} se detuvo tras sonar mucho tiempo sin respuesta.",
+  "alarm.ended_by_limit": "La alarma {alarm} sonó hasta su límite y se detuvo sola.",
   "ring.channel": "Alarmas",
   "ring.body": "Toca para abrir",
   "ring.fallback_title": "Alarma",

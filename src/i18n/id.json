@@ -181,7 +181,7 @@
   "sound.not_a_sound": "File itu bukan suara yang bisa diputar ponsel ini.",
   "alarm.ended_by_reboot": "Alarm {alarm} dihentikan karena ponsel dimulai ulang.",
   "alarm.missed": "Alarm {alarm} tidak berdering tepat waktu, karena ponsel mati atau menahannya.",
-  "alarm.ended_by_limit": "Alarm {alarm} berhenti setelah lama berdering tanpa respons.",
+  "alarm.ended_by_limit": "Alarm {alarm} berdering sampai batasnya dan berhenti sendiri.",
   "ring.channel": "Alarm",
   "ring.body": "Ketuk untuk membuka",
   "ring.fallback_title": "Alarm",

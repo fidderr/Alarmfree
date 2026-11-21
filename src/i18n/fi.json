@@ -181,7 +181,7 @@
   "sound.not_a_sound": "Tämä tiedosto ei ole ääni, jonka puhelin voi toistaa.",
   "alarm.ended_by_reboot": "Herätys {alarm} pysäytettiin, koska puhelin käynnistyi uudelleen.",
   "alarm.missed": "Herätys {alarm} ei soinut ajoissa, koska puhelin oli sammutettuna tai esti sen.",
-  "alarm.ended_by_limit": "Herätys {alarm} pysähtyi, kun se oli soinut pitkään ilman reaktiota.",
+  "alarm.ended_by_limit": "Herätys {alarm} soi rajaansa asti ja pysähtyi itsestään.",
   "ring.channel": "Herätykset",
   "ring.body": "Avaa napauttamalla",
   "ring.fallback_title": "Herätys",

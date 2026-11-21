@@ -181,7 +181,7 @@
   "sound.not_a_sound": "Den filen är inget ljud som den här telefonen kan spela upp.",
   "alarm.ended_by_reboot": "Alarm {alarm} stoppades eftersom telefonen startades om.",
   "alarm.missed": "Alarm {alarm} ringde inte i tid, eftersom telefonen var avstängd eller höll tillbaka det.",
-  "alarm.ended_by_limit": "Alarm {alarm} stoppades efter att ha ringt länge utan svar.",
+  "alarm.ended_by_limit": "Alarm {alarm} ringde till sin gräns och stoppades av sig självt.",
   "ring.channel": "Alarm",
   "ring.body": "Tryck för att öppna",
   "ring.fallback_title": "Alarm",

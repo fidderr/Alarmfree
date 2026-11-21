@@ -181,7 +181,7 @@
   "sound.not_a_sound": "Dat bestand is geen geluid dat deze telefoon kan afspelen.",
   "alarm.ended_by_reboot": "Wekker {alarm} is gestopt omdat de telefoon opnieuw is opgestart.",
   "alarm.missed": "Wekker {alarm} is niet op tijd afgegaan, omdat de telefoon uit stond of de wekker tegenhield.",
-  "alarm.ended_by_limit": "Wekker {alarm} is gestopt nadat hij lang zonder reactie afging.",
+  "alarm.ended_by_limit": "Wekker {alarm} ging af tot zijn limiet en stopte vanzelf.",
   "ring.channel": "Wekkers",
   "ring.body": "Tik om te openen",
   "ring.fallback_title": "Wekker",

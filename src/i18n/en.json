@@ -181,7 +181,7 @@
   "sound.not_a_sound": "That file is not a sound this phone can play.",
   "alarm.ended_by_reboot": "Alarm {alarm} was stopped because the phone restarted.",
   "alarm.missed": "Alarm {alarm} did not ring on time, because the phone was off or held it back.",
-  "alarm.ended_by_limit": "Alarm {alarm} stopped after ringing for a long time with no response.",
+  "alarm.ended_by_limit": "Alarm {alarm} rang until its limit and stopped by itself.",
   "ring.channel": "Alarms",
   "ring.body": "Tap to open",
   "ring.fallback_title": "Alarm",

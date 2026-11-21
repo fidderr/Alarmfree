@@ -181,7 +181,7 @@
   "sound.not_a_sound": "Ce fichier n'est pas un son que ce téléphone peut lire.",
   "alarm.ended_by_reboot": "L'alarme {alarm} a été arrêtée parce que le téléphone a redémarré.",
   "alarm.missed": "L'alarme {alarm} n'a pas sonné à temps, car le téléphone était éteint ou l'a retenue.",
-  "alarm.ended_by_limit": "L'alarme {alarm} s'est arrêtée après avoir sonné longtemps sans réponse.",
+  "alarm.ended_by_limit": "L'alarme {alarm} a sonné jusqu'à sa limite et s'est arrêtée d'elle-même.",
   "ring.channel": "Alarmes",
   "ring.body": "Appuyez pour ouvrir",
   "ring.fallback_title": "Alarme",
