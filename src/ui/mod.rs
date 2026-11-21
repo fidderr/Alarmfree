@@ -494,7 +494,10 @@ pub fn run() -> Result<(), slint::PlatformError> {
 
     let ui = MainWindow::new()?;
     #[cfg(all(debug_assertions, feature = "devtest"))]
-    ready::install(&ui);
+    {
+        ready::install(&ui);
+        ui.global::<DevMark>().set_on(true);
+    }
     let ctx = new_ctx(&ui, settings, alarms);
     CTX.with(|slot| *slot.borrow_mut() = Rc::downgrade(&ctx));
 

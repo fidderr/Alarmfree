@@ -30,8 +30,12 @@ const ADVANCE: [u16; 352] = [
     713, 564, 713, 564, 1023, 804, 668, 529, 668, 637, 484, 637, 484, 637, 484, 305,
 ];
 
-/// A chip's natural width: the text, as wide as its characters say, plus its padding, and no
-/// less than `min`.
+/// What a font may be wider than `ADVANCE` says before the estimate is short: the real font of an
+/// emulator or another phone is a few percent wider, and a chip must not cut its text short.
+const SLACK: f32 = 1.04;
+
+/// A chip's natural width: the text, as wide as its characters say (and a little more, `SLACK`),
+/// plus its padding, and no less than `min`.
 fn basis(text: &str, pad: f32, min: f32, font_size: f32) -> f32 {
     let thousandths: u32 = text
         .chars()
@@ -43,7 +47,7 @@ fn basis(text: &str, pad: f32, min: f32, font_size: f32) -> f32 {
                 .map_or(560, |w| u32::from(*w).max(1)),
         })
         .sum();
-    (thousandths as f32 * font_size / 1000.0 + pad).max(min)
+    (thousandths as f32 * font_size / 1000.0 * SLACK + pad).max(min)
 }
 
 /// Line, x and width of each chip in a row `width` wide, `gap` apart. The room left on a line
@@ -170,6 +174,19 @@ mod tests {
         );
         assert_eq!(got.len(), 1);
         assert!((got[0].2 - 100.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn a_chip_has_room_for_a_font_a_little_wider_than_counted() {
+        // "15 min" is 6 characters of 14 px text: its chip is wider than the text and its padding.
+        let width = place(&labels(&["15 min"]), 300.0, 8.0, 12.0, 0.0, 14.0)[0].2;
+        let bare = super::basis("15 min", 12.0, 0.0, 14.0);
+        assert!(width >= bare);
+        let plain: f32 = "15 min"
+            .chars()
+            .map(|c| f32::from(super::ADVANCE[c as usize - 0x20]) * 14.0 / 1000.0)
+            .sum();
+        assert!(bare - 12.0 >= plain * 1.03, "{bare} for text of {plain}");
     }
 
     #[test]

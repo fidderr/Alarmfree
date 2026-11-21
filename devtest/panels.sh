@@ -282,7 +282,7 @@ any_sheet_up() {
 no_sheet_up() { ! any_sheet_up; }
 
 # A row of a screen that scrolls: where it is, wherever the screen was left.
-tap_row() { # text
+tap_row() { # text [which of the rows that have it, default the first]
     has_there "$1" || { sheet_scroll_up; has_there "$1" || sheet_scroll; }
     has_there "$1" || sheet_scroll
     # A row in the tree can sit behind the Save or Done button that stays at the bottom, or the
@@ -300,7 +300,7 @@ tap_row() { # text
     done
     # What stands on this screen now (the labelled swatches of the theme screen under a panel) is no choice of the panel.
     baseline_update
-    tap_has "$1" 0 0.5
+    tap_has "$1" "${2:-0}" 0.5
 }
 
 # The language sheet: every language would change what the rest of the tour reads. One other one

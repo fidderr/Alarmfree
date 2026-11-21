@@ -1,4 +1,4 @@
-import { Pal, Tr, Insets, Motion, Zoom } from "theme.slint";
+import { Pal, Tr, Insets, Motion, Zoom, DevMark } from "theme.slint";
 import { Icon, IconName, AppSwitch } from "components.slint";
 
 // The screen's top bar: back arrow, title, and room for actions on the right.
@@ -508,16 +508,19 @@ export component ChoiceChips inherits Rectangle {
         accessible-label: label;
         accessible-checkable: true;
         accessible-checked: root.selected == i;
+        accessible-description: DevMark.on && chip-text.preferred-width > chip-text.width + 0.5px ? "elided" : "";
         accessible-action-default => { root.picked(i); }
         Rectangle {
             y: root.small ? 7px : 0px;
             height: root.small ? 30px : 48px;
             border-radius: root.small ? 15px : 14px;
             background: root.small ? (root.selected == i ? Pal.accent-soft : Pal.surface) : (root.selected == i ? Pal.accent : Pal.surface2);
-            Text {
+            // The whole pill is the text's room: the 6 px of padding on each side are for a font a
+            // little wider than `chipflow.rs` counted on.
+            chip-text := Text {
                 accessible-role: AccessibleRole.none;
-                x: 6px;
-                width: parent.width - 12px;
+                x: 0px;
+                width: parent.width;
                 text: label;
                 font-size: (root.small ? 12px : 14px) * Zoom.scale;
                 font-weight: 500;

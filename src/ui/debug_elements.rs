@@ -284,7 +284,7 @@ pub fn run(ui: &MainWindow, command: &str) -> Option<String> {
             },
             None => "ERR settext: <n>:<text>".to_owned(),
         },
-        // What sticks out of the window at the sides, or has no room: the stops of a visual check.
+        // What sticks out of the window at the sides, has no room, or is a chip cut short: the stops of a visual check.
         "overflow" => {
             let w = ui.window().size().width as f32;
             let all = texts(ui);
@@ -297,11 +297,26 @@ pub fn run(ui: &MainWindow, command: &str) -> Option<String> {
                     .count()
                     >= 3
             };
-            let bad: Vec<String> = all
+            let mut bad: Vec<String> = all
                 .iter()
                 .filter(|s| outside(s) && !strip(s))
                 .map(|s| s.text.chars().take(24).collect())
                 .collect();
+            // A chip whose text is cut short with an ellipsis (`ChoiceChips` says so in its description).
+            bad.extend(
+                ElementQuery::from_root(ui)
+                    .match_descendants()
+                    .match_predicate(|e| e.accessible_description().is_some_and(|d| d == "elided"))
+                    .find_all()
+                    .into_iter()
+                    .filter_map(|e| {
+                        let text = e.accessible_label()?.to_string();
+                        seen_in_window(ui, &e, text)
+                    })
+                    .map(|s| format!("elided {}", s.text.chars().take(24).collect::<String>())),
+            );
+            bad.sort();
+            bad.dedup();
             if bad.is_empty() {
                 "none".to_owned()
             } else {

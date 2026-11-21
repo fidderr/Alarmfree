@@ -3052,6 +3052,66 @@ s68b() {
     fi
 }
 
+# The panels with rows of chips (ring limit, edit lock, fade in, are you up, reminder) in every language: no chip
+# with its text cut short, nothing out of the window. A picture of each in <run>/chips/ for a person to look over.
+chips_in_languages() { # scenario name, then pairs of locale code and name
+    local scen=$1 problems="" code locale key title found
+    shift
+    scenario "$scen"
+    mkdir -p "$OUT/chips"
+    fresh
+    next_minute 3600
+    seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
+    while [ $# -gt 0 ]; do
+        code=$1 locale=$2
+        shift 2
+        use_settings '"Dark"' "\"$locale\"" '"setup_done":true,"language_follows_phone":false'
+        start_app
+        on_card 10 || { problems="$problems; $locale: no card"; continue; }
+        press open a 0.6
+        on_editor 5 || { problems="$problems; $locale: no editor"; continue; }
+        for key in config.sound config.ring_limit config.edit_lock config.wake_check config.notice; do
+            title=$(python -I -c 'import json,sys; print(json.load(open(sys.argv[1],encoding="utf-8"))[sys.argv[2]])' "src/i18n/$code.json" "$key")
+            # A row says its title and value together; the title alone is also there. By part of a text
+            # "Son" would be the first line of the card ("Sonnera demain") in French.
+            if [ "$key" = config.sound ]; then
+                tap "$title" 0 0.5
+            elif [ "$key" = config.notice ]; then
+                # In French the snooze and the reminder are both "Rappel": the reminder is the lower row.
+                tap_row "$title" L
+            else
+                tap_row "$title"
+            fi
+            if ! wait_for 4 any_sheet_up; then
+                problems="$problems; $locale/$key: no panel"
+                continue
+            fi
+            sleep 0.5
+            found=$(clipped)
+            screenshot "chips/${code}_$key"
+            # The sound panel has the fade-in chips below the volume.
+            if [ "$key" = config.sound ]; then
+                sheet_scroll
+                found="$found$(clipped)"
+                screenshot "chips/${code}_${key}_fade"
+            fi
+            [ -z "$found" ] || problems="$problems; $locale/$key: $found"
+            press_back
+            wait_for 3 no_sheet_up || problems="$problems; $locale/$key: Back leaves it open"
+        done
+        dev am force-stop "$PKG"
+    done
+    if [ -z "$problems" ]; then
+        pass "no chip cut short and nothing out of the window on five panels"
+    else
+        fail "${problems#; }"
+    fi
+}
+s69a() { chips_in_languages s69a_chips_in_languages_1 en English nl Dutch es Spanish; }
+s69b() { chips_in_languages s69b_chips_in_languages_2 fr French de German it Italian; }
+s69c() { chips_in_languages s69c_chips_in_languages_3 pt Portuguese sv Swedish da Danish; }
+s69d() { chips_in_languages s69d_chips_in_languages_4 nb Norwegian fi Finnish tr Turkish id Indonesian; }
+
 # Colours of one's own: on the wheel, in a code, and never unreadable. They stay, also on the ring.
 s61() {
     scenario s61_colours_of_ones_own
@@ -3620,7 +3680,7 @@ s62p() {
 . "$(dirname "$0")/panels.sh"
 . "$(dirname "$0")/a11y_audit.sh"
 
-ALL="s01 s03 s04 s05 s06 s07 s10 s11 s13 s13b s13d s14 s15 s16 s16b s17 s19 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s34 s36 s37 s38 s39 s40 s42 s43 s44 s45 s46 s47 s48 s49 s50 s51 s52 s53 s55 s56 s57 s58 s59 s60 s61 s62 s63 s65 s66 s67 s68 s68b big_screens s54"
+ALL="s01 s03 s04 s05 s06 s07 s10 s11 s13 s13b s13d s14 s15 s16 s16b s17 s19 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s34 s36 s37 s38 s39 s40 s42 s43 s44 s45 s46 s47 s48 s49 s50 s51 s52 s53 s55 s56 s57 s58 s59 s60 s61 s62 s63 s65 s66 s67 s68 s68b s69a s69b s69c s69d big_screens s54"
 ON_A_PHONE="s01 s03 s04 s05 s06 s07 s10 s15 s16 s16b s17 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s36 s37 s38 s39 s42 s43 s45 s46 s47 s49 s50 s51 s52 s53 s55 s57 s58 s59 s61 s62"
 
 : > "$RESULTS"
