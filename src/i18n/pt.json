@@ -200,7 +200,7 @@
   "settings.min_volume_desc": "Enquanto um alarme toca, o volume sobe pelo menos até este nível, então até um celular no mudo acorda você. Depois ele volta ao que era.",
   "settings.volume_off": "Desligado",
   "config.fade_in": "Aumento gradual",
-  "config.fade_off": "Off",
+  "config.fade_off": "Não",
   "action.skip_next": "Pular o próximo alarme",
   "action.undo_skip": "Desfazer o pulo",
   "home.skipped": "Próximo alarme pulado",

@@ -232,11 +232,14 @@ pub fn refresh_outside_app() {
                     &body,
                     &channel,
                     before_ms,
-                    Some(ReminderButton {
-                        label: &skip,
-                        done_title: &done_title,
-                        undo_label: &undo,
-                    }),
+                    // An alarm that is locked by the time of its reminder has no Skip to tap.
+                    (!crate::edit_lock::locked_when_reminded(&alarm, before_ms)).then_some(
+                        ReminderButton {
+                            label: &skip,
+                            done_title: &done_title,
+                            undo_label: &undo,
+                        },
+                    ),
                     sound,
                 );
             }

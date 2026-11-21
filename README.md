@@ -42,7 +42,7 @@ minute to forever. An optional wake-up check a few minutes later. Optional full 
 
 **Edit lock.** Per alarm, an optional lock for the last stretch before it rings (1 minute to 10 hours).
 While it is locked you cannot switch the alarm off, change or save it, delete it, skip its next ring or
-pause it (pausing all is refused while any alarm is locked), and the Skip on its reminder does nothing.
+pause it (pausing all is refused while any alarm is locked), and its reminder has no Skip button.
 To change it anyway you do its challenges (an alarm without challenges asks for 20 holds of 3 seconds);
 then it is open for 5 minutes, in memory only. Duplicating, rearranging, backing up and Undo stay open.
 A lock mark shows on the card. It cannot stop you from force-stopping the app, clearing its data or

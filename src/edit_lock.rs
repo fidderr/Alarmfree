@@ -38,6 +38,17 @@ pub fn locked_until(
     (!free && ring - now_ms <= i64::from(alarm.lock_minutes) * 60_000).then_some(ring)
 }
 
+/// Whether the alarm is already locked when its reminder comes, `before_ms` ahead of the ring:
+/// that reminder has no Skip button.
+pub fn locked_when_reminded(alarm: &AlarmData, before_ms: i64) -> bool {
+    alarm.lock_minutes > 0
+        && alarm.enabled
+        && !alarm.hidden
+        && !alarm.test
+        && !alarm.delete_after_ring
+        && before_ms <= i64::from(alarm.lock_minutes) * 60_000
+}
+
 /// The next ring as far as the app can tell: AlarmKit knows a snooze in progress, the settings
 /// know the rest.
 pub fn next_ring_ms(alarm: &AlarmData, now: chrono::DateTime<chrono::Local>) -> Option<i64> {
@@ -228,6 +239,21 @@ mod tests {
         assert_eq!(open_until("lock-memory-a"), Some(NOW + MIN + OPEN_MS));
         relock("lock-memory-a");
         assert_eq!(open_until("lock-memory-a"), None);
+    }
+
+    #[test]
+    fn a_reminder_inside_the_lock_window_has_no_skip_button() {
+        let alarm = locked_alarm();
+        assert!(locked_when_reminded(&alarm, 10 * MIN), "at the edge");
+        assert!(locked_when_reminded(&alarm, 5 * MIN));
+        assert!(!locked_when_reminded(&alarm, 10 * MIN + 1));
+        assert!(!locked_when_reminded(&alarm, 30 * MIN));
+        let mut off = locked_alarm();
+        off.lock_minutes = 0;
+        assert!(!locked_when_reminded(&off, MIN));
+        let mut disabled = locked_alarm();
+        disabled.enabled = false;
+        assert!(!locked_when_reminded(&disabled, MIN));
     }
 
     #[test]

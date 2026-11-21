@@ -3019,6 +3019,39 @@ s68() {
     fi
 }
 
+# The reminder before an alarm that is already locked when it comes has no Skip button (the lock could be got round
+# from the notice); with the lock shorter than the reminder, the same reminder has its Skip.
+s68b() {
+    if ! on_emulator; then
+        note "s68b needs an emulator's clock"
+        return
+    fi
+    scenario s68b_no_skip_on_a_locked_reminder
+    local problems="" lock
+    noticed() { own_notifications | grep -q 'channel=sentinel_reminders_popup'; }
+    for lock in 30 10; do
+        fresh
+        next_minute 1500
+        ALARM_EXTRA=",\"reminder\":{\"on\":true,\"minutes\":15,\"text\":\"\",\"sound\":false},\"lock_minutes\":$lock"
+        seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
+        ALARM_EXTRA=
+        arm a
+        dev input keyevent KEYCODE_HOME
+        jump_to $((T - 15 * 60 - 3))
+        wait_for 60 noticed || { fail "no reminder with a lock of $lock minutes"; return; }
+        if [ "$lock" = 30 ]; then
+            reminded && problems="$problems; the reminder of a locked alarm has a Skip"
+        else
+            reminded || problems="$problems; the reminder of an alarm that is not locked has no Skip"
+        fi
+    done
+    if [ -z "$problems" ]; then
+        pass "no Skip on the reminder when the lock is on by then, a Skip when it is not"
+    else
+        fail "${problems#; }"
+    fi
+}
+
 # Colours of one's own: on the wheel, in a code, and never unreadable. They stay, also on the ring.
 s61() {
     scenario s61_colours_of_ones_own
@@ -3587,7 +3620,7 @@ s62p() {
 . "$(dirname "$0")/panels.sh"
 . "$(dirname "$0")/a11y_audit.sh"
 
-ALL="s01 s03 s04 s05 s06 s07 s10 s11 s13 s13b s13d s14 s15 s16 s16b s17 s19 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s34 s36 s37 s38 s39 s40 s42 s43 s44 s45 s46 s47 s48 s49 s50 s51 s52 s53 s55 s56 s57 s58 s59 s60 s61 s62 s63 s65 s66 s67 s68 big_screens s54"
+ALL="s01 s03 s04 s05 s06 s07 s10 s11 s13 s13b s13d s14 s15 s16 s16b s17 s19 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s34 s36 s37 s38 s39 s40 s42 s43 s44 s45 s46 s47 s48 s49 s50 s51 s52 s53 s55 s56 s57 s58 s59 s60 s61 s62 s63 s65 s66 s67 s68 s68b big_screens s54"
 ON_A_PHONE="s01 s03 s04 s05 s06 s07 s10 s15 s16 s16b s17 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s36 s37 s38 s39 s42 s43 s45 s46 s47 s49 s50 s51 s52 s53 s55 s57 s58 s59 s61 s62"
 
 : > "$RESULTS"

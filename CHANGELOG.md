@@ -15,7 +15,7 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
   off. Store screenshots and graphics for them are not made yet.
 - **Edit lock.** Per alarm (Edit lock in the editor: off, 1, 5, 10, 15 or 30 minutes, 1, 2, 3, 6 or 10 hours), the last
   stretch before the alarm rings it cannot be switched off, saved with a change, deleted, skipped or paused (pause all is
-  refused while one is locked), and the Skip on its reminder does nothing. A lock mark shows on the card. Doing the alarm's
+  refused while one is locked), and its reminder has no Skip button. A lock mark shows on the card. Doing the alarm's
   challenges (an alarm without any asks for 20 holds of 3 seconds) opens it for 5 minutes; the open state is kept in memory
   only. Duplicating, rearranging, exporting, importing and Undo are not blocked. It cannot stop force-stopping the app,
   clearing its data or uninstalling it. Quick alarms, wake-up checks and the test alarm never lock.
