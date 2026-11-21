@@ -15,6 +15,7 @@ QUICK="s01 s03 s04 s05 s06 s07 s10 s11 s14 s16 s16b s25 s26x2 s28 s33 s42 s66 s6
 # (s13*) work the same on all of them and take a minute each.
 OLDEST_ONLY="s29 s30 s31 s32 s34 s38 s43 s44 s45 s46 s47 s50 s51 s52"
 NEWEST_ONLY="s13 s13b s13d big_screens"
+# EVERYWHERE=1 (any tier name but quick) runs the FULL list on every emulator, without OLDEST_ONLY and NEWEST_ONLY.
 # The AVD that counts as the newest in a FULL run.
 NEWEST_AVD=afg16
 
@@ -41,6 +42,12 @@ tier_setup() {
     # The design walk (walk.sh): s57's full tour, pictures of every panel for a person to look over. Not a test, in no tier.
     if [ "$tier" = walk ]; then
         LEG_LIST=s57
+        return
+    fi
+    # EVERYWHERE=1: every scenario on every emulator (the test round), with nothing left to one Android version.
+    if [ -n "${EVERYWHERE:-}" ]; then
+        LEG_FIRST=big_screens
+        LEG_LAST="s13b s13d s13"
         return
     fi
     if [ "$avd" = "$NEWEST_AVD" ]; then
