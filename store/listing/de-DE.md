@@ -51,7 +51,7 @@ UND
 • Verlauf mit deiner Serie, wie lange du brauchst und was schiefging, falls etwas schiefging
 • Startbildschirm-Widget mit deinem nächsten Wecker
 • Sichere deine Wecker in einer Datei für ein neues Telefon
-• Deutsch, Englisch, Niederländisch, Spanisch und Französisch
+• Deutsch, Englisch, Niederländisch, Spanisch, Französisch, Italienisch, Portugiesisch, Schwedisch, Dänisch, Norwegisch, Finnisch, Türkisch und Indonesisch
 • Funktioniert auf Tablets und Foldables
 • Open Source (MIT)
 

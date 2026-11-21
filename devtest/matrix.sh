@@ -1228,7 +1228,7 @@ s33() {
 # Nothing sticks out of the screen in the longest languages, with large text.
 s34() {
     scenario s34_nothing_clipped
-    local problems="" locale result locales="Dutch Spanish French German"
+    local problems="" locale result locales="Dutch Spanish French German Finnish Turkish"
     # On a big screen only the longest words, each language is a restart.
     [ -z "${VARIANT:-}" ] || locales=German
     fresh

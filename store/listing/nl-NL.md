@@ -51,7 +51,7 @@ EN VERDER
 • Geschiedenis met je reeks, hoe lang je erover doet en wat er misging als er iets misging
 • Widget op je startscherm met je volgende wekker
 • Zet je wekkers in een bestand voor een nieuwe telefoon
-• Nederlands, Engels, Spaans, Frans en Duits
+• Nederlands, Engels, Spaans, Frans, Duits, Italiaans, Portugees, Zweeds, Deens, Noors, Fins, Turks en Indonesisch
 • Werkt op tablets en vouwtelefoons
 • Open source (MIT)
 

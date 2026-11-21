@@ -53,7 +53,7 @@ and a test alarm that goes through the whole real ring path. History with outcom
 missed, stopped at the limit, phone restarted), a streak, a chart and timings per challenge.
 
 **The rest.** System, light, dark and pure black themes, more colour themes, or your own colours.
-Five languages. 12 or 24 hours, and which day a week starts on. A home-screen widget with the
+Thirteen languages. 12 or 24 hours, and which day a week starts on. A home-screen widget with the
 next alarm. A reminder before an alarm (how long before, your own text, silent or with a sound, with
 Skip). Alarms to a file and back. Undo on
 what can be undone. Works on tablets and foldables, with the list and an alarm side by side.
@@ -266,7 +266,10 @@ to ring before the first unlock.
 
 `src/i18n/<code>.json`, compiled in. `t(&translations, "key")` looks a text up, and
 `{placeholders}` are filled in with `replace`. To add a language: the JSON file with every key,
-a `Locale` variant, and an arm in `load_translations`.
+a `Locale` variant (in `Locale::ALL`, with its name in that language, and its phone language code in
+`from_language_code`), an arm in `load_translations`, a typing word list in `word_pool`, and the
+test lists in `src/i18n/mod.rs`. English, Dutch, Spanish, French, German, Italian, Portuguese (Brazil),
+Swedish, Danish, Norwegian (Bokmal), Finnish, Turkish and Indonesian.
 
 ## Rules of this code
 
@@ -285,7 +288,7 @@ a `Locale` variant, and an arm in `load_translations`.
 3. `./build.sh aab && ./sign-aab.sh`. The result is in `release/`. The upload keystore is not in
    this repository, and every release needs the same one; `sign-aab.sh` says what to do when
    there is none.
-4. [store/README.md](store/README.md) has the listing in five languages, the graphics, and what Play
+4. [store/README.md](store/README.md) has the listing in thirteen languages, the graphics, and what Play
    Console asks about. New screenshots: `bash devtest/store_shots.sh`, then `python store/make_graphics.py`;
    the foreground service video: `bash devtest/store_video.sh`. The privacy policy is `docs/privacy.html`.
 

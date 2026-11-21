@@ -51,7 +51,7 @@ ET AUSSI
 • Historique avec votre série, le temps qu'il vous faut, et ce qui n'a pas marché le cas échéant
 • Widget d'écran d'accueil avec votre prochaine alarme
 • Sauvegardez vos alarmes dans un fichier pour un nouveau téléphone
-• Français, anglais, néerlandais, espagnol et allemand
+• Français, anglais, néerlandais, espagnol, allemand, italien, portugais, suédois, danois, norvégien, finnois, turc et indonésien
 • Fonctionne sur tablettes et pliables
 • Open source (MIT)
 

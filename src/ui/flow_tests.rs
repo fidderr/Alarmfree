@@ -1169,3 +1169,49 @@ fn edit_lock_setting_sheet_picks_and_saves() {
     f.expect(kept == 120, format!("saved {kept}"));
     f.finish();
 }
+
+/// The language sheet lists every language plus "same as the phone", and each one switches the
+/// texts of the app and is saved.
+#[test]
+fn every_language_can_be_picked() {
+    use crate::models::Locale;
+    let f = Flow::new(vec![daily("a", 14, 5, "a")]);
+    f.expect(f.tap_last("Settings"), "no Settings tab");
+    for locale in Locale::ALL {
+        f.expect(f.tap_has("Language"), "no Language row");
+        f.expect(f.panel_open(), "Language opens no panel");
+        let texts = f.texts();
+        for other in Locale::ALL {
+            f.expect(
+                texts.iter().any(|t| t == other.display_name()),
+                format!("no {} in the picker: {texts:?}", other.display_name()),
+            );
+        }
+        f.expect(
+            texts.iter().any(|t| t == "Same as the phone"),
+            format!("no follow-the-phone row: {texts:?}"),
+        );
+        f.expect(
+            f.tap(locale.display_name()),
+            format!("cannot pick {}", locale.display_name()),
+        );
+        f.expect(!f.panel_open(), "the sheet stays open after a choice");
+        let tr = crate::i18n::load_translations(locale);
+        let settings = tr["nav.settings"].clone();
+        f.expect(
+            f.has(&settings),
+            format!("{locale:?} did not take: {:?}", f.texts()),
+        );
+        let saved = crate::persistence::load_settings();
+        f.expect(saved.locale == locale, format!("saved {:?}", saved.locale));
+        f.expect(!saved.prefs.language_follows_phone, "still follows phone");
+        // The language row of the settings screen is now in that language; English again.
+        f.expect(
+            f.tap_has(&tr["settings.language"]),
+            format!("{locale:?}: no language row: {:?}", f.texts()),
+        );
+        f.expect(f.tap("English"), "English does not come back");
+        f.expect(f.has("Settings"), "English did not take");
+    }
+    f.finish();
+}

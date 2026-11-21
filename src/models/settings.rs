@@ -147,6 +147,14 @@ pub enum Locale {
     Spanish,
     French,
     German,
+    Italian,
+    Portuguese,
+    Swedish,
+    Danish,
+    Norwegian,
+    Finnish,
+    Turkish,
+    Indonesian,
 }
 
 /// How times are written.
@@ -286,16 +294,32 @@ impl Locale {
             "es" => Some(Self::Spanish),
             "fr" => Some(Self::French),
             "de" => Some(Self::German),
+            "it" => Some(Self::Italian),
+            "pt" => Some(Self::Portuguese),
+            "sv" => Some(Self::Swedish),
+            "da" => Some(Self::Danish),
+            "nb" | "no" => Some(Self::Norwegian),
+            "fi" => Some(Self::Finnish),
+            "tr" => Some(Self::Turkish),
+            "id" | "in" => Some(Self::Indonesian),
             _ => None,
         }
     }
 
-    pub const ALL: [Locale; 5] = [
+    pub const ALL: [Locale; 13] = [
         Locale::English,
         Locale::Dutch,
         Locale::Spanish,
         Locale::French,
         Locale::German,
+        Locale::Italian,
+        Locale::Portuguese,
+        Locale::Swedish,
+        Locale::Danish,
+        Locale::Norwegian,
+        Locale::Finnish,
+        Locale::Turkish,
+        Locale::Indonesian,
     ];
 
     /// The language's name, in that language.
@@ -306,6 +330,14 @@ impl Locale {
             Locale::Spanish => "Español",
             Locale::French => "Français",
             Locale::German => "Deutsch",
+            Locale::Italian => "Italiano",
+            Locale::Portuguese => "Português",
+            Locale::Swedish => "Svenska",
+            Locale::Danish => "Dansk",
+            Locale::Norwegian => "Norsk",
+            Locale::Finnish => "Suomi",
+            Locale::Turkish => "Türkçe",
+            Locale::Indonesian => "Bahasa Indonesia",
         }
     }
 }
@@ -324,6 +356,39 @@ impl Default for AppSettings {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn phone_language_codes_map_to_the_languages() {
+        for (code, locale) in [
+            ("en", Locale::English),
+            ("nl", Locale::Dutch),
+            ("es", Locale::Spanish),
+            ("fr", Locale::French),
+            ("de", Locale::German),
+            ("it", Locale::Italian),
+            ("pt", Locale::Portuguese),
+            ("sv", Locale::Swedish),
+            ("da", Locale::Danish),
+            ("nb", Locale::Norwegian),
+            ("no", Locale::Norwegian),
+            ("fi", Locale::Finnish),
+            ("tr", Locale::Turkish),
+            ("id", Locale::Indonesian),
+            ("in", Locale::Indonesian),
+        ] {
+            assert_eq!(Locale::from_language_code(code), Some(locale), "{code}");
+        }
+        assert_eq!(Locale::from_language_code("ja"), None);
+        // Every language can be reached from some code.
+        for locale in Locale::ALL {
+            assert!(
+                ["en", "nl", "es", "fr", "de", "it", "pt", "sv", "da", "nb", "fi", "tr", "id"]
+                    .iter()
+                    .any(|code| Locale::from_language_code(code) == Some(locale)),
+                "{locale:?}"
+            );
+        }
+    }
 
     fn palette_of(theme: ThemeMode, system_dark: bool) -> Palette {
         AppSettings {

@@ -26,6 +26,14 @@ pub fn load_translations(locale: Locale) -> TranslationMap {
         Locale::Spanish => include_str!("es.json"),
         Locale::French => include_str!("fr.json"),
         Locale::German => include_str!("de.json"),
+        Locale::Italian => include_str!("it.json"),
+        Locale::Portuguese => include_str!("pt.json"),
+        Locale::Swedish => include_str!("sv.json"),
+        Locale::Danish => include_str!("da.json"),
+        Locale::Norwegian => include_str!("nb.json"),
+        Locale::Finnish => include_str!("fi.json"),
+        Locale::Turkish => include_str!("tr.json"),
+        Locale::Indonesian => include_str!("id.json"),
     };
     serde_json::from_str(json).unwrap_or_default()
 }
@@ -34,13 +42,7 @@ pub fn load_translations(locale: Locale) -> TranslationMap {
 mod tests {
     use super::*;
 
-    const LOCALES: [Locale; 5] = [
-        Locale::English,
-        Locale::Dutch,
-        Locale::Spanish,
-        Locale::French,
-        Locale::German,
-    ];
+    const LOCALES: [Locale; 13] = Locale::ALL;
 
     /// `load_translations` falls back to an empty map on bad JSON, which would
     /// silently show raw keys in the UI — make that a test failure instead.

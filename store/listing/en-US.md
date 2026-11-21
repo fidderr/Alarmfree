@@ -51,7 +51,7 @@ AND
 • History with your streak, how long it takes you, and what went wrong if something did
 • Home-screen widget with your next alarm
 • Back up your alarms to a file for a new phone
-• English, Dutch, Spanish, French and German
+• English, Dutch, Spanish, French, German, Italian, Portuguese, Swedish, Danish, Norwegian, Finnish, Turkish and Indonesian
 • Works on tablets and foldables
 • Open source (MIT)
 

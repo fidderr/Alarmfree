@@ -51,7 +51,7 @@ Y ADEMÁS
 • Historial con tu racha, cuánto tardas y qué falló si algo falló
 • Widget en la pantalla de inicio con tu próxima alarma
 • Copia tus alarmas en un archivo para un teléfono nuevo
-• Español, inglés, neerlandés, francés y alemán
+• Español, inglés, neerlandés, francés, alemán, italiano, portugués, sueco, danés, noruego, finés, turco y indonesio
 • Funciona en tablets y plegables
 • Código abierto (MIT)
 

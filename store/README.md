@@ -6,10 +6,11 @@ Everything Play Console asks for, ready to paste. Package name: `com.fidderr.ala
 
 | Field | Where it is |
 |---|---|
-| App name, short and full description | `listing/<language>.md`, one file per language: en-US, nl-NL, es-ES, fr-FR, de-DE. Add the other four as translations under *Manage translations → Add your own translations*. |
+| App name, short and full description | `listing/<language>.md`, one file per language: en-US, nl-NL, es-ES, fr-FR, de-DE, it-IT, pt-BR, sv-SE, da-DK, no-NO, fi-FI, tr-TR, id. Add the other twelve as translations under *Manage translations → Add your own translations*. |
 | App icon (512 × 512) | `graphics/icon-512.png` |
 | Feature graphic (1024 × 500) | `graphics/feature-graphic-<language>.png`, one per language |
 | Phone screenshots (1080 × 1920) | `screenshots/<language>/`, eight per language, numbered in the order to upload |
+| Graphics and screenshots of the eight newer languages | Not made yet (it, pt, sv, da, nb, fi, tr, id): until then Play shows the English ones for them |
 | Privacy policy | https://fidderr.github.io/Alarmfree/privacy.html (from `docs/` on `main`, served by GitHub Pages) |
 | Category | Tools (or Lifestyle) |
 | Tags | Alarm clock, Productivity |
