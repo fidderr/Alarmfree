@@ -14,6 +14,8 @@ bad=0
 cat > "$tmp/drive.sh" << 'E'
 # Env: LIB DIR MODE, and per case SX LEFT STUCK SERIAL RESTART_FAILS.
 export OUT="$DIR/out" TMPDIR="$DIR" ADB=/nonexistent/adb
+# lock_away (system.sh) waits this many seconds per step: the stubbed device answers at once.
+export LOCK_AWAY_STEP=1
 export SERIAL="${SERIAL:-emulator-5554}"
 mkdir -p "$OUT"
 . "$LIB"
@@ -52,6 +54,7 @@ settings() {
     case "$3" in
         font_scale) echo "$ST_font" ;; auto_time) echo "$ST_autotime" ;; accelerometer_rotation) echo "$ST_rot_auto" ;;
         user_rotation) echo "$ST_rot_user" ;; screen_off_timeout) echo "$ST_timeout" ;; stay_on_while_plugged_in) echo "$ST_stay" ;;
+        default_input_method) echo com.google.android.inputmethod.latin/com.android.inputmethod.latin.LatinIME ;;
     esac
 }
 dumpsys() {
@@ -106,8 +109,10 @@ fake_command() {
             echo '  client A mInputShown=false'
             [ "$(st_get ime)" != true ] || echo '  client B mInputShown=true'
             ;;
+        "am force-stop com.google.android.inputmethod.latin"*) fd_set ime false ;;
         "input keyevent KEYCODE_BACK"*)
-            fd_set ime false
+            # BACK_KEEPS_IME=1: Android 14 to 16 after the PIN, where Back does not take the keyboard down.
+            [ -n "${BACK_KEEPS_IME:-}" ] || fd_set ime false
             [ -z "${BACK_LOCKS:-}" ] || { st_set keyguard true; st_set focus 'mCurrentFocus=Window{fc62baa u0 NotificationShade}'; }
             ;;
         "input keyevent KEYCODE_HOME"*)
@@ -435,6 +440,14 @@ has "$tmp/ime_real/calls" 'KEYCODE_BACK' && has "$(res ime_real)" 'left: the key
 
 # The night mode of Android 16 at its first start is `custom_bedtime`: not dropped; on an emulator the wish is `no`, on a phone it is
 # what it was.
+# A keyboard that Back does not take down (Android 14 to 16 after the PIN, runs 45079574283): from the second round the input
+# method is stopped, which ends it, and there is no INFRA.
+run_case ime_stuck leftover LEFT=ime=true BACK_KEEPS_IME=1
+if has "$tmp/ime_stuck/calls" 'am force-stop com.google.android.inputmethod.latin' && has "$(res ime_stuck)" 'left: the keyboard is up (put back)' && ! has "$(res ime_stuck)" '^INFRA' && [ "$(first "$tmp/ime_stuck/rc")" = 0 ]; then
+    verdict "a keyboard that Back does not take down is put away by stopping the input method (no INFRA)" 1
+else
+    verdict "a keyboard that Back does not take down is put away by stopping the input method ($(cat "$(res ime_stuck)" 2> /dev/null))" 0
+fi
 run_case night_a16 clean PRE="st_set night custom_bedtime"
 [ "$(first "$tmp/night_a16/rc")" = 0 ] && [ "$(st_get_of night_a16 night)" = no ] && verdict "night mode custom_bedtime at the first reading is compared (put to no on an emulator)" 1 || verdict "night mode custom_bedtime at the first reading is compared ($(st_get_of night_a16 night))" 0
 run_case night_phone leftover PRE="st_set night custom_bedtime" LEFT=night=no SERIAL=R58M12345A

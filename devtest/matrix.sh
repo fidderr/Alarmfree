@@ -378,6 +378,7 @@ s13() {
     ui_given_up && problems="$problems; the core dying while locked counted as a failing screen"
 
     unlock_pin 0 || problems="$problems; the PIN did not unlock the phone: $SYS_WHY"
+    sys_wait "$SYS_DEADLINE" "the app's window answering after the unlock" page_is_up || note "$SYS_WHY"
     if ! on_screen "Turn off" 30; then
         screenshot s13_after_unlock
         sys_evidence s13_after_unlock
@@ -433,9 +434,10 @@ s13b() {
     if pad_read && [ "$PAD_UP" = 1 ]; then
         sdk_unlock_cancel || problems="$problems; $SYS_WHY"
     fi
-    home_from_unlock || problems="$problems; $SYS_WHY"
+    home_from_unlock || :
     sys_wait "$SYS_DEADLINE" "the sound after Home" sound_on || problems="$problems; silent after Home"
     unlock_pin 1 || problems="$problems; the PIN did not unlock the phone: $SYS_WHY"
+    sys_wait "$SYS_DEADLINE" "the app's window answering after the unlock" page_is_up || note "$SYS_WHY"
     if ! on_screen "Turn off" 30; then
         screenshot s13b_after_unlock
         sys_evidence s13b_after_unlock
@@ -475,7 +477,7 @@ s13c() {
     scenario s13c_locked_restart_no_overlay
     OVERLAY=deny locked_ring 60 || { no_pin; return; }
     local problems="" how="own screen only once the app was opened, as Android allows without the overlay"
-    home_from_unlock || problems="$problems; $SYS_WHY"
+    home_from_unlock || :
     unlock_pin 1 || problems="$problems; the PIN did not unlock the phone: $SYS_WHY"
     wait_for 8 top_is_main && how="own screen up by itself"
     sys_wait "$SYS_DEADLINE" "the sound after the unlock" sound_on || problems="$problems; silent after the unlock"

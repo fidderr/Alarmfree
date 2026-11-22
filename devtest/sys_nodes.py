@@ -15,7 +15,7 @@ MODE
   focused           the bounds line of the focused nodes
   ok                exit 0 when the input holds a hierarchy with at least one node
 
-FILTER  key=value (equal) or key~value (contains), key is one of: pkg cls rid text desc label clickable focused
+FILTER  key=value (equal), key~value (contains) or key^regex (a regular expression, case ignored), key is one of: pkg cls rid text desc label clickable focused
         enabled checked password. `label` is the text, or the description when the text is empty. A value that
         starts with ! is negated: text!~Wrong.
 """
@@ -62,7 +62,7 @@ def parse(xml):
 
 
 def parse_filter(arg):
-    m = re.match(r"([a-z]+)(!?)([=~])(.*)$", arg, re.S)
+    m = re.match(r"([a-z]+)(!?)([=~^])(.*)$", arg, re.S)
     if not m:
         raise SystemExit("bad filter: " + arg)
     key, neg, op, value = m.groups()
@@ -72,7 +72,12 @@ def parse_filter(arg):
 def matches(node, filters):
     for key, neg, op, value in filters:
         have = node.get(key, "")
-        hit = have == value if op == "=" else value in have
+        if op == "=":
+            hit = have == value
+        elif op == "~":
+            hit = value in have
+        else:
+            hit = re.search(value, have, re.I) is not None
         if hit == neg:
             return False
     return True

@@ -39,13 +39,42 @@ sys_show() {
     echo "focus=$(sys_focus | tr -d '\n') top=$(top_activity | tr -d '\n') keyguard=$(kg_state) user=$(user_unlocked && echo unlocked || echo locked) screen=$(wakefulness)"
 }
 
+# A dialog "<something> isn't responding" in front. Of Android itself (System UI after a boot on Android 15, a Settings
+# page): a named obstacle, put away with its Wait button, a NOTE that it was there, and the wait goes on. Of the app under test:
+# never put away, that is a failure of the app (SYS_WHY says so, status 2).
+sys_anr_check() {
+    local f xy now
+    now=$(now_ms)
+    [ $((now - ${SYS_ANR_AT:-0})) -ge 3000 ] || return 0
+    SYS_ANR_AT=$now
+    f=$(sys_focus)
+    case "$f" in
+        *"Not Responding"*) ;;
+        *) return 0 ;;
+    esac
+    case "$f" in
+        *"Not Responding: $PKG"*)
+            SYS_WHY="the app did not respond: its not-responding dialog is in front ($f)"
+            return 2
+            ;;
+    esac
+    if sys_dump && xy=$(sys_nodes find rid~aerr_wait) || { sys_dump && xy=$(sys_nodes find label=Wait); }; then
+        # shellcheck disable=SC2086
+        dev input tap $xy > /dev/null
+        echo "NOTE  ${CURRENT:-?}  Android's own screen did not respond ($f): its dialog was put away with Wait" | tee -a "$RESULTS"
+        sleep 1
+    fi
+    return 0
+}
+
 # Poll a named state: sys_wait SECONDS "what" command...  Returns 1 and sets SYS_WHY when the deadline passes. The check is
-# run at least once, also with a deadline of 0.
+# run at least once, also with a deadline of 0. A not-responding dialog of Android is put away on the way (sys_anr_check).
 sys_wait() {
     local secs=$1 what=$2 end
     shift 2
     end=$(($(now_ms) + secs * 1000))
     until "$@"; do
+        sys_anr_check || return 1
         if [ "$(now_ms)" -ge "$end" ]; then
             SYS_WHY="$what did not come within ${secs}s ($(sys_show))"
             return 1
@@ -95,6 +124,10 @@ pin_is_set() { [ "$(pin_state)" != false ]; }
 # The soft keyboard (Android 14 and 16 leave theirs up after the PIN).
 ime_shown() { dev "dumpsys input_method 2> /dev/null | grep -c 'mInputShown=true'" | grep -q -v '^0'; }
 ime_hidden() { ! ime_shown; }
+# What the input method service says, for the record (ime.txt in the results).
+ime_note() { printf '%s %s %s: %s
+' "$(date +%T)" "${CURRENT:-?}" "$1" "$(dev "dumpsys input_method 2> /dev/null | grep -E 'mInputShown|mImeWindowVis|mShowRequested|mCurFocusedWindow=|mCurId' | tr -s ' ' | tr '
+' ';'")" >> "$OUT/ime.txt"; }
 unlocked_and_clear() { user_unlocked && kg_gone; }
 
 # The tree of the screen in SYS_XML (all windows with `--windows`); 1 when this dump gave none. Dumping fails now and then on
@@ -119,8 +152,9 @@ sys_evidence() { # name
     screen_may_be_taken && adb_ exec-out screencap -p > "$OUT/${name}${VARIANT:-}.png" 2> /dev/null
     {
         echo "== $(sys_show)"
+        echo "-- the app says: $(UI_QUIET=1 ui ready 2>&1 | head -c 500)"
         echo "-- tree"
-        if sys_dump; then sys_nodes list | head -70; else echo "(no dump)"; fi
+        if sys_dump; then sys_nodes list | head -160; else echo "(no dump)"; fi
     } > "$OUT/${name}${VARIANT:-}.screen.txt" 2>&1
 }
 
@@ -222,6 +256,7 @@ pad_get() { # ask(1|0)
     local ask=${1:-1} end last=0 now
     end=$(($(now_ms) + SYS_DEADLINE * 1000))
     until pad_ready; do
+        sys_anr_check || return 1
         now=$(now_ms)
         if [ "$now" -ge "$end" ]; then
             SYS_WHY="the PIN pad with the focus did not come within ${SYS_DEADLINE}s (pad up=$PAD_UP focus=$PAD_FOCUS message='$PAD_MSG'; $(sys_show))"
@@ -284,6 +319,7 @@ unlock_pin() { # [ask(1|0)] [pin]
         return 1
     }
     # Android 14 and 16 leave their keyboard up over whatever comes next.
+    ime_note "after the PIN"
     sys_keyboard_down || return 1
     # The shell as the app could not start while the phone was locked.
     sys_wait "$SYS_DEADLINE" "the app's shell answering after the unlock" app_shell_answers || return 1
@@ -334,6 +370,7 @@ shade_set() { # open|closed
     [ "$want" = closed ] && check=shade_closed cmd=collapse
     end=$(($(now_ms) + SYS_DEADLINE * 1000))
     until "$check"; do
+        sys_anr_check || return 1
         now=$(now_ms)
         if [ "$now" -ge "$end" ]; then
             SYS_WHY="the shade did not get $want within ${SYS_DEADLINE}s ($(sys_show))"
@@ -379,6 +416,7 @@ tap_in_shade() { # label
     end=$(($(now_ms) + 90000))
     opened=0
     while [ "$(now_ms)" -lt "$end" ]; do
+        sys_anr_check || return 1
         shade_set open || return 1
         [ "$opened" != 0 ] || opened=$(now_ms)
         if shade_button_xy "$label"; then
@@ -428,11 +466,30 @@ picker_keys_select() { # name
     done
     return 1
 }
+# What picker_pick did and saw, one line per step (picker_trace.txt in the results).
+picker_trace() { printf '%s %s %s
+' "$(date +%T.%N | cut -c1-12)" "${CURRENT:-?}" "$*" >> "$OUT/picker_trace.txt"; }
+# The state for half a second after a touch, for the record: who has the keys, and a picture.
+picker_watch() { # label rounds
+    local i=0
+    while [ "$i" -lt "$2" ]; do
+        picker_trace "$1 +$i: $(sys_focus | tr -d '
+')"
+        i=$((i + 1))
+        sleep 0.5
+    done
+    screen_may_be_taken && adb_ exec-out screencap -p > "$OUT/picker_$1.png" 2> /dev/null
+}
+# A screen of another app opened from the picker's task (the preview of an audio file or a photo): it is not the app and not
+# the picker.
+picker_preview_up() { sys_focus | grep -v -e documentsui -e "$PKG" -e '^$' -e '^null' | grep -q .; }
 picker_pick() { # name
     local name=$1 end xy tapped=0 keyed=0 sig
     sys_wait "$SYS_DEADLINE" "the file picker being up" picker_up || return 1
+    picker_trace "== pick $name: $(sys_show)"
     end=$(($(now_ms) + ${PICKER_DEADLINE:-90} * 1000))
     while :; do
+        sys_anr_check || return 1
         picker_up || { sys_wait "$SYS_DEADLINE" "the app getting the keys back from the picker" focus_in_app; return; }
         if [ "$(now_ms)" -ge "$end" ]; then
             SYS_WHY="the picker did not deliver $name within ${PICKER_DEADLINE:-90}s (tapped=$tapped keys=$keyed; shows: $(picker_summary); $(sys_show))"
@@ -443,26 +500,43 @@ picker_pick() { # name
         if xy=$(sys_nodes find "label~$name" pkg~documentsui); then
             if [ "$tapped" = 0 ]; then
                 tapped=1
+                picker_trace "touch on $name at $xy"
                 # shellcheck disable=SC2086
                 dev input tap $xy > /dev/null
-                sys_wait 10 "the picker closing after the touch on $name" focus_in_app && return 0
+                picker_watch after_touch 8
+                sys_wait 2 "the picker closing after the touch on $name" focus_in_app && return 0
+                # A screen of another app took the keys (the preview of the file, Android 12 and later: the touch opened
+                # it and did not choose): Back once brings the picker again, and the file is chosen with the keys.
+                if picker_preview_up; then
+                    picker_trace "a preview is up: $(sys_focus | tr -d '
+'): Back once"
+                    dev input keyevent KEYCODE_BACK > /dev/null
+                    sys_wait "$SYS_DEADLINE" "the picker coming back after Back from the preview" picker_up || return 1
+                    picker_watch after_back 2
+                fi
             elif [ "$keyed" = 0 ]; then
                 keyed=1
+                picker_trace "keys for $name"
                 picker_keys_select "$name"
+                picker_watch after_keys 8
                 sys_wait 15 "the picker closing after the keys on $name" focus_in_app && return 0
             else
                 SYS_WHY="$name is listed but neither the touch nor the keys chose it (shows: $(picker_summary); $(sys_show))"
+                sys_evidence "picker_stuck"
                 return 1
             fi
         elif xy=$(sys_nodes find label=Downloads pkg~documentsui); then
+            picker_trace "touch on Downloads at $xy"
             # shellcheck disable=SC2086
             dev input tap $xy > /dev/null
             sys_wait 10 "the picker showing another listing after Downloads" picker_changed "$sig"
         elif xy=$(sys_nodes find label=Download pkg~documentsui); then
+            picker_trace "touch on the Download folder at $xy"
             # shellcheck disable=SC2086
             dev input tap $xy > /dev/null
             sys_wait 10 "the picker showing another listing after the Download folder" picker_changed "$sig"
         elif xy=$(sys_nodes find desc="Show roots" pkg~documentsui); then
+            picker_trace "touch on Show roots at $xy"
             # shellcheck disable=SC2086
             dev input tap $xy > /dev/null
             sys_wait 10 "the roots drawer after Show roots" picker_changed "$sig"
@@ -505,28 +579,55 @@ sdk_unlock_press() {
 # the full screen intent comes with the lock screen).
 unlock_left_count() { dev "logcat -d -b events 2> /dev/null | grep -c 'wm_pause_activity.*SentinelUnlockActivity.*userLeaving=true'" | tail -1; }
 unlock_left_since() { ! top_is_unlock || [ "$(unlock_left_count)" -gt "$1" ] 2> /dev/null; }
-home_from_unlock() {
-    local before
+# Whether Home takes the unlock screen away depends on the Android version (Android 16 over a phone that is locked and has no
+# Android unlock up: the key is taken and nothing moves, the log shows no pause of the screen in 40 s), so what the scenario
+# gets is an answer: 0 when the screen was left, 1 when nothing moved within SECONDS (a NOTE says so, and it is no failure of
+# the app: what the app has to do afterwards is checked by the scenario).
+home_from_unlock() { # [seconds]
+    local before secs=${1:-10}
     before=$(unlock_left_count)
-    sys_home "Home taking the screen from the unlock screen" unlock_left_since "$before"
+    dev input keyevent KEYCODE_HOME > /dev/null
+    sys_wait "$secs" "Home taking the screen from the unlock screen" unlock_left_since "$before" && return 0
+    echo "NOTE  ${CURRENT:-?}  Home did not move the unlock screen within ${secs}s on this Android version ($SYS_WHY)" | tee -a "$RESULTS"
+    return 1
 }
 
 # ---- Putting the lock screen away once the PIN is cleared (scenario ends, baseline) ----
-# Android 10 to 12 keep the lock screen up after `locksettings clear` until something dismisses it. Each step only when a read
-# still shows the lock screen.
+# Android 10 to 12 keep the lock screen up after `locksettings clear` (the probe on msd29: `wm dismiss-keyguard`, the Menu key,
+# `locksettings set-disabled true` and a swipe up all left it showing, `deviceLocked=0`). It still asks for the PIN that is gone,
+# so the PIN pad is what has to be dealt with. Each step only when a read still shows the lock screen; LOCK_AWAY_LOG (in the
+# results) says which step worked on which version.
+lock_away_note() { printf '%s %s %s: %s
+' "$(date +%T)" "${CURRENT:-?}" "$1" "$(sys_show)" >> "$OUT/lock_away.txt"; }
 lock_away() {
+    local step=${LOCK_AWAY_STEP:-8}
     [ "$(kg_state)" != true ] && return 0
+    lock_away_note "start"
     screen_awake || sys_wake || return 1
     dev wm dismiss-keyguard > /dev/null
-    sys_wait 8 "the lock screen gone after wm dismiss-keyguard" kg_gone && return 0
+    sys_wait "$step" "the lock screen gone after wm dismiss-keyguard" kg_gone && { lock_away_note "gone by wm dismiss-keyguard"; return 0; }
+    # The lock screen asks for the old PIN: the pad is up (or comes up now), the old PIN takes it away.
+    if sys_wait "$step" "the PIN pad after wm dismiss-keyguard" pad_ready && unlock_pin 0 && sys_wait "$step" "the lock screen gone after the old PIN" kg_gone; then
+        lock_away_note "gone by the old PIN on the pad"
+        return 0
+    fi
+    lock_away_note "the pad did not do it: $SYS_WHY"
+    # Asleep and awake again, so that the lock screen is made anew; then asked once more.
+    sys_sleep > /dev/null
+    sys_wake > /dev/null
+    dev wm dismiss-keyguard > /dev/null
+    sys_wait "$step" "the lock screen gone after sleep, wake and wm dismiss-keyguard" kg_gone && { lock_away_note "gone by sleep and wake"; return 0; }
     dev input keyevent KEYCODE_MENU > /dev/null
-    sys_wait 6 "the lock screen gone after the Menu key" kg_gone && return 0
+    sys_wait "$step" "the lock screen gone after the Menu key" kg_gone && { lock_away_note "gone by Menu"; return 0; }
     local size w h
     size=$(dev wm size | sed -n 's/^Physical size: //p' | head -1)
     w=${size%x*}
     h=${size#*x}
     dev input swipe $((w / 2)) $((h * 4 / 5)) $((w / 2)) $((h / 5)) 300 > /dev/null
-    sys_wait 10 "the lock screen gone after a swipe up" kg_gone
+    sys_wait "$step" "the lock screen gone after a swipe up" kg_gone && { lock_away_note "gone by a swipe"; return 0; }
+    lock_away_note "STILL THERE"
+    sys_evidence lock_away_still_there
+    return 1
 }
 
 # ---- The launcher (home screen, and the dialog that asks to add a widget) ----
@@ -535,14 +636,11 @@ launcher_up() { sys_focus | grep -q -i launcher; }
 launcher_texts() { sys_dump && sys_nodes list | cut -d'|' -f4 | grep -v '^$'; }
 launcher_has() { launcher_texts | grep -q -F -- "$1"; }
 widget_registered() { dev dumpsys appwidget | grep -q 'SentinelHomeWidget'; }
-# The button of the launcher's question "add this widget?" (what it is called differs per launcher and per version).
+# The button of the launcher's question "add this widget?" (what it is called differs per launcher and per version: "Add to Home
+# screen" on Android 12 to 16 with a capital H).
 the_add_button() {
-    local l
     sys_dump || return 1
-    for l in "Add" "ADD" "Add to home screen" "Add automatically"; do
-        ADD_XY=$(sys_nodes find label="$l" clickable=true) && return 0
-    done
-    return 1
+    ADD_XY=$(sys_nodes find 'label^^(add|add to home screen|add automatically)$' clickable=true)
 }
 # The widget added once the question is up: the button touched once, and the widget registered. When after 15 s a read still
 # shows the question and nothing is registered, the touch is proven lost and the button is touched once more.
