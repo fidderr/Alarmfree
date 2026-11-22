@@ -190,8 +190,8 @@ key the code names exists.
 sound on, what is on screen, what is armed, what is saved. The app is the debug APK of `./build.sh`
 (`TARGET=x86_64-linux-android ./build.sh` for an emulator): it is built with the cargo feature
 `devtest`, which adds a test channel (`src/debug_hooks.rs`, `src/ui/debug.rs`,
-`src/ui/debug_elements.rs`). The harness writes a command to `files/debug_action.txt` and reads the
-answer: the texts on screen with their places (`ui:texts`, from Slint's element tree, which also
+`src/ui/debug_elements.rs`). The harness writes a request with an id to `files/debug_request.txt` and reads the
+answer from `files/debug_answer_<id>.txt`: the texts on screen with their places (`ui:texts`, from Slint's element tree, which also
 carries each control's role and on/off state), a snapshot of the window's state, a tap or typed text
 at a place, and the callbacks of the window by name for the few buttons that are only a picture.
 Touches are real (`adb input`) wherever a finger matters (taps, swipes, hold and drag, the keyboard).

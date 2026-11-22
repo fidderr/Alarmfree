@@ -38,6 +38,24 @@ fn android_main(app: slint::android::AndroidApp) {
     // `OnBackInvokedCallback` of its own.
     let options = slint::android::InitOptions::new()
         .with_back_invoked_callback(slint::android::BackInvokedCallback::Disabled);
+    // The debug channel needs to know whether the UI can run (`debug_hooks`), and the devtest harness
+    // checks that a real touch reached the app (`input_seen` in `ui:ready`).
+    #[cfg(debug_assertions)]
+    let options = options.with_event_listener(|event| {
+        use slint::android::android_activity::{MainEvent, PollEvent};
+        let PollEvent::Main(event) = event else {
+            return;
+        };
+        match event {
+            MainEvent::InitWindow { .. } => debug_hooks::window(true),
+            MainEvent::TerminateWindow { .. } => debug_hooks::window(false),
+            MainEvent::Pause | MainEvent::Stop => debug_hooks::paused(true),
+            MainEvent::Resume { .. } => debug_hooks::paused(false),
+            #[cfg(feature = "devtest")]
+            MainEvent::InputAvailable => ui::note_input(),
+            _ => {}
+        }
+    });
     slint::android::init_with_options(app, options).expect("start the UI backend");
     if let Err(e) = ui::run() {
         log::error!("[AlarmFree] the UI stopped: {e}");

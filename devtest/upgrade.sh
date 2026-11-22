@@ -60,8 +60,9 @@ history_row h2 3
 dx_start
 wait_file files/sentinel/armed/later.armed 30 || problems="$problems; the old app did not arm 'later'"
 await_ring ring 30 || problems="$problems; the old app's ring did not happen"
-action dismiss:ring
-await_state ring scheduled 10 || problems="$problems; ring state after dismissing: $(state ring)"
+# The old app has the old channel (one file, no answer): not the request and answer files of channel.sh.
+as_app "echo dismiss:ring > files/debug_action.tmp && mv files/debug_action.tmp files/debug_action.txt"
+await_state ring scheduled 10|| problems="$problems; ring state after dismissing: $(state ring)"
 sleep 2
 # Not force-stopped: a user's app is not, and a stopped app gets no MY_PACKAGE_REPLACED.
 printf "PRAGMA wal_checkpoint(TRUNCATE);\n" | sql > /dev/null

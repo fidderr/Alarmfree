@@ -8,8 +8,8 @@
 # expected  the true number of squats (0 for walking, shaking, pumping the arms); written into the
 #           file as "# expect: N". Without it add that line by hand before using the file as a fixture.
 #
-# Keep the app open on the screen: a background app gets no sensor events. Needs a debug build or a
-# release with RELEASE_TEST (src/debug_hooks.rs). The file is then copied to
+# Keep the app open on the screen: a background app gets no sensor events. Needs a debug build
+# (src/debug_hooks.rs). The file is then copied to
 # mobile-sentinel/tests/fixtures/squat/ and `cargo test --all-features --test squat_fixtures` run
 # there (docs/SQUAT_TUNING.md).
 cd "$(dirname "$0")/.." || exit 1

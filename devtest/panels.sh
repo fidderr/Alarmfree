@@ -156,7 +156,7 @@ try_chips() { # name [x y of the row that opened it]
         line=$(sheet_checkables | grep -F -m1 -- "$text|")
         [ -z "$line" ] || IFS='|' read -r _ x y _ <<< "$line"
         [ "$y" -lt "$floor" ] || continue
-        dev input tap "$x" "$y"
+        tap_xy "$x" "$y"
         sleep 0.2
         if ! focus_in_app; then
             # Something else came up over the app. The phone's picker is what a choice such as Photo (the
@@ -192,14 +192,14 @@ try_chips() { # name [x y of the row that opened it]
                 panel_problem "$name: the choice '$text' closes the panel, and there is no row to open it again from"
                 return 3
             fi
-            dev input tap "$ox" "$oy"
+            tap_xy "$ox" "$oy"
             sleep 0.7
             wait_for 3 any_sheet_up || { panel_problem "$name: the panel does not open again"; return 3; }
             now=$(checkables | grep -F -m1 "$text|" | cut -d'|' -f4)
             [ "$now" = true ] || [ "$was" = true ] || panel_problem "$name: the choice '$text' does not take"
             # As it was: take what was on, which closes the panel again.
             while IFS='|' read -r text x y was role; do
-                [ "$was" = true ] && [ "$role" != Switch ] && { dev input tap "$x" "$y"; sleep 0.7; break; }
+                [ "$was" = true ] && [ "$role" != Switch ] && { tap_xy "$x" "$y"; sleep 0.7; break; }
             done <<< "$before"
             wait_for 3 no_sheet_up || { panel_problem "$name: the choice that was on leaves the panel open"; press_back; }
             return 3
@@ -213,7 +213,7 @@ try_chips() { # name [x y of the row that opened it]
         case "$role" in
             Switch)
                 [ "$now" != "$was" ] || panel_problem "$name: the switch '$text' does not switch"
-                dev input tap "$x" "$y"
+                tap_xy "$x" "$y"
                 sleep 0.2
                 ;;
             *)
@@ -226,7 +226,7 @@ try_chips() { # name [x y of the row that opened it]
         [ "$was" = true ] && [ "$role" != Switch ] || continue
         line=$(sheet_checkables | grep -F -m1 -- "$text|")
         [ -z "$line" ] || IFS='|' read -r _ x y _ <<< "$line"
-        [ "$y" -lt "$floor" ] && { dev input tap "$x" "$y"; sleep 0.15; }
+        [ "$y" -lt "$floor" ] && { tap_xy "$x" "$y"; sleep 0.15; }
     done <<< "$before"
     # A colour that was automatic (nothing ringed) goes back by Automatic: a swatch can not be taken off.
     if ! printf '%s
@@ -334,7 +334,7 @@ try_language() { # name [x y of the row that opened it]
     # A language closes the sheet. Open it again, now in Dutch, and take English from it.
     wait_for 3 no_sheet_up || { panel_problem "$1: choosing a language leaves the sheet open"; press_back; }
     if [ -n "${2:-}" ]; then
-        dev input tap "$2" "$3"
+        tap_xy "$2" "$3"
     else
         tap_has Taal 0 0.3
     fi
@@ -459,7 +459,7 @@ for e in json.loads(sys.stdin.read()):
         case "$text" in
             *idget* | "Create new alarm" | Alarms | History | Settings) continue ;;
         esac
-        dev input tap "$x" "$y"
+        tap_xy "$x" "$y"
         sleep 0.4
         if any_sheet_up; then
             panel_open "${name}_$(echo "$text" | tr -c 'a-zA-Z0-9\n' _ | cut -c1-24)" "$x" "$y"

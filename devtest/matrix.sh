@@ -1139,7 +1139,7 @@ tap_trash() {
     # On the title's line: its height depends on the status bar.
     y=$(where "$(sn ed_title)" | cut -d' ' -f2)
     case "$y" in '' | *[!0-9]*) y=$(awk -v s="$s" 'BEGIN { printf "%d", 56 * s }') ;; esac
-    dev input tap "$(awk -v w="$w" -v s="$s" 'BEGIN { printf "%d", w - 22 * s }')" "$y"
+    tap_xy "$(awk -v w="$w" -v s="$s" 'BEGIN { printf "%d", w - 22 * s }')" "$y"
     sleep 0.5
 }
 
@@ -2236,7 +2236,7 @@ rows = [e for e in json.loads(sys.stdin.read()) if e["r"] == "Text" and e["t"].e
 print("%d %d" % (rows[0]["x"], rows[0]["y"]) if rows else "")
 ')
     # shellcheck disable=SC2086
-    [ -z "$xy" ] || dev input tap $xy
+    [ -z "$xy" ] || tap_xy $xy
     sleep 0.5
     tap "Delete this one" 0 0.5
     await_ui 3 'panel=true' || problems="$problems; deleting one row does not ask"

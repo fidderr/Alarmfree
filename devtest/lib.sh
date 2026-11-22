@@ -1,7 +1,7 @@
 #!/bin/bash
 # Helpers for the on-device scenarios in matrix.sh. Everything goes through
 # adb against one explicit device, so a connected phone is never touched by
-# accident. Needs a debug build, or a release with RELEASE_TEST (run-as, debug_action.txt).
+# accident. Needs a debug build (run-as, files/debug_request.txt).
 #
 # Nothing waits longer than it has to: what can be asked is asked until it is true, and on
 # an emulator the clock moves instead of a test waiting for the time to pass.
@@ -18,6 +18,9 @@ _here=${BASH_SOURCE[0]%/*}
 [ "$_here" != "${BASH_SOURCE[0]}" ] || _here=.
 # shellcheck disable=SC1091
 . "$_here/chaos.sh"
+# The request and answer files of the debug channel (ui, action).
+# shellcheck disable=SC1091
+. "$_here/channel.sh"
 # The state of the device before each scenario, and the watchdog around it (run_unit in the runner of matrix.sh).
 # shellcheck disable=SC1091
 . "$_here/baseline.sh"
@@ -599,35 +602,27 @@ job_status() { # active / pending / none
         echo none
     fi
 }
-# In one go: the app deletes the file once it has seen it.
-action() { as_app "echo $1 > files/debug_action.tmp && mv files/debug_action.tmp files/debug_action.txt"; }
+# snooze:<id>, dismiss:<id>, hang_ui, squat_record:start|stop. Waits for the app's OK (channel.sh). No
+# answer: the command may still run, so it returns 2 and the channel stays closed until the app is started again.
+action() {
+    channel "$1" && [ "$CHANNEL_OUT" = OK ] && return 0
+    echo "action $1: $CHANNEL_OUT" >&2
+    return 2
+}
 
 # ---- The window (Slint) ----
-# The app answers commands written to files/debug_action.txt (src/debug_hooks.rs, src/ui/debug*.rs;
-# a debug build made by ./build.sh). One program on the device writes the command and waits for the
-# answer: under a tenth of a second.
-# A text for inside single quotes in a shell: each quote becomes quote, backslash, quote, quote. Done
-# in a loop: how bash reads a quote in the replacement of ${var//x/y} differs between versions (5.3
-# made three quotes of it, which left the quote open and the shell on the device waiting for the
-# rest: "no answer from the device shell" after 90 s, on any text with an apostrophe).
-sq_escape() {
-    local rest=$1 out="" q="'"
-    while [[ $rest == *"$q"* ]]; do
-        out+="${rest%%"$q"*}'\\''"
-        rest=${rest#*"$q"}
-    done
-    printf '%s' "$out$rest"
-}
-ui() { # command: its answer, or "no answer from the app"
-    local out
+# The app answers commands written to files/debug_request.txt (src/debug_hooks.rs, src/ui/debug*.rs; a debug
+# build made by ./build.sh), each with an id, in a file with that id (channel.sh). One program on the device
+# writes the request and waits for the answer: under a tenth of a second.
+# No answer in STEP_DEADLINE seconds: the answer is a line "no answer from the app (request <id>: <command>)", the
+# status is 2, and nothing more is sent until the app process was started again.
+# UI_EXTRA: seconds on top of the deadline, for a command that waits by itself (await).
+ui() { # command: its answer, or "no answer from the app ..."
     [ -z "$CHAOS_ON" ] || chaos_step
-    out=$(as_app "cd files && rm -f debug_script_result.txt && print -r -- 'ui:$(sq_escape "$1")' > debug_action.tmp && mv debug_action.tmp debug_action.txt && i=0; while [ ! -e debug_script_result.txt ] && [ \$i -lt ${UI_WAIT:-300} ]; do sleep 0.01; i=\$((i + 1)); done; cat debug_script_result.txt 2> /dev/null")
-    if [ -n "$out" ]; then
-        echo "$out"
-        return 0
-    fi
-    echo "no answer from the app"
-    return 1
+    channel "ui:$1" "${UI_EXTRA:-}"
+    local rc=$?
+    echo "$CHANNEL_OUT"
+    return $rc
 }
 
 # ---- Readiness signals ----
@@ -635,12 +630,24 @@ ui() { # command: its answer, or "no answer from the app"
 # guess. `ui:await` runs inside the app: it answers when every condition holds and the layout has
 # stood still for a moment (no panel sliding, nothing fading), or when the time is up.
 # Conditions: key=value or key!=value of `ui ready` (screen, home_sheet, panel, editor_sheet,
-# theme_sheet, ringing, toast, first_frame), key>N, text=, textc=, gone=. UI_QUIET=1: no message.
+# theme_sheet, ringing, toast, first_frame, keyboard=up|down, win=<w>x<h>, resizes, input_seen), key>N, text=,
+# textc=, gone=, moved, stable (first frame drawn and no window resize for 1.2 s). A key the app does not know is
+# an error at once. UI_QUIET=1: no message. While another screen is in front the app answers at once: `ERR the app has
+# no window in front` to a command, `TIMEOUT after <n>ms, the app had no window in front` to an await (which is run
+# when the window comes back in time); neither closes the channel.
 await_ms() { # milliseconds condition...
     local ms=$1 out
     shift
-    out=$(UI_WAIT=$((ms / 10 + 400)) ui "await:$ms:$(IFS=';'; echo "$*")")
+    out=$(UI_EXTRA=$(((ms + 999) / 1000)) ui "await:$ms:$(IFS=';'; echo "$*")")
     case "$out" in OK*) return 0 ;; esac
+    # Another screen was in front for the whole wait (the unlock screen, say): the app answered at once and the channel
+    # is fine, so this is no hang. The caller still sees the status 1.
+    case "$out" in
+        *"the app had no window in front"*)
+            [ -n "${UI_QUIET:-}" ] || echo "NOWIN  $CURRENT  the app had no window in front while waiting ${ms}ms for [$*]" >&2
+            return 1
+            ;;
+    esac
     [ -n "${UI_QUIET:-}" ] || echo "WAIT  $CURRENT  gave up after ${ms}ms waiting for [$*]: $out" >&2
     return 1
 }
@@ -734,7 +741,7 @@ has_there() {
     esac
     return 1
 }
-page_is_up() { [ "$(ui window)" != "no answer from the app" ]; }
+page_is_up() { case "$(ui window)" in "no answer from the app"* | "ERR the app has no window in front"*) return 1 ;; esac; }
 # Right now, and until it shows or is gone: a screen takes a moment to change. A window that is not
 # up yet does not count, once per scenario: a first start can take most of a minute when Android is
 # busy with something else, which the results then say.
@@ -761,7 +768,31 @@ still_where() { # command text [which]
     [ "$SETTLED_AT" = "$SECONDS" ] || UI_QUIET=1 await_settled 2
     "$1" "$2" "${3:-}"
 }
-tap() { # text [which of them] [seconds to wait]
+# A touch through the app: the app finds the element and delivers the press through its own window
+# events, and answers after it ran. Nothing is sent from outside, so no touch is lost on the way and no
+# position can be out of date. It fails when the app says the element is not there. A real touch is
+# `finger`: for where the touch itself is the subject, and for a text field that has to bring up the
+# keyboard (only a real touch does).
+tap_through() { # command, what to say when it fails
+    local said
+    [ "$SETTLED_AT" = "$SECONDS" ] || UI_QUIET=1 await_settled 2
+    said=$(ui "$1")
+    UI_QUIET=1 await_settled 3
+    SETTLED_AT=$SECONDS
+    [ "$said" = OK ] && return 0
+    echo "$2 (the app said: $said)" >&2
+    return 1
+}
+tap() { tap_through "tap${2:+@$2}:$1" "nothing says $1"; } # text [which of them] [seconds, not read]
+# The time of the editor, which a touch there opens the time sheet.
+tap_time() { tap_has "Time:" 0 "${1:-0.6}"; }
+tap_has() { tap_through "tapc${2:+@$2}:$1" "nothing has $1"; } # text [which] [seconds, not read]
+tap_in() { tap "$@"; }
+# A touch at a place, in device pixels.
+tap_xy() { tap_through "tapxy:$1 $2" "no touch at $1 $2"; } # x y
+# The real touch, from outside the app: read where the text is, once it holds still, and press there with a
+# finger. Only for what the touch itself is the subject of, and for a text field that brings up the keyboard.
+finger() { # text [which of them] [seconds to wait]
     local xy
     xy=$(still_where where "$1" "${2:-}")
     case "$xy" in
@@ -775,9 +806,7 @@ tap() { # text [which of them] [seconds to wait]
     dev input tap $xy
     after_input
 }
-# The time of the editor, which a touch there opens the time sheet.
-tap_time() { tap_has "Time:" 0 "${1:-0.6}"; }
-tap_has() { # text [which] [seconds]
+finger_has() { # text [which] [seconds]
     local xy
     xy=$(still_where where_has "$1" "${2:-}")
     case "$xy" in
@@ -791,17 +820,7 @@ tap_has() { # text [which] [seconds]
     dev input tap $xy
     after_input
 }
-# The same through the window's own events, with no finger on the glass: where only the outcome counts.
-tap_in() { # text [which] [seconds]
-    local said
-    still_where where "$1" "${2:-}" > /dev/null
-    said=$(ui "tap${2:+@$2}:$1")
-    UI_QUIET=1 await_settled 3
-    SETTLED_AT=$SECONDS
-    [ "$said" = OK ] || echo "nothing says $1" >&2
-    [ "$said" = OK ]
-}
-click_text() { tap_in "$@"; }
+click_text() { tap "$@"; }
 # The n-th text field on screen takes this text.
 set_field() { type_field "$@"; }
 # The same through the keys, which runs the field's own handler for what is typed.
@@ -823,7 +842,7 @@ type_field() { # n text
     return 1
 }
 fields() { ui inputs; }
-# Slider n (from the top) to this fraction (0 to 1) of its track, by a touch there.
+# Slider n (from the top) to this fraction (0 to 1) of its track, by a touch there (through the app).
 set_slider() { # n fraction
     local row x y w scale
     row=$(ui boxes:AppSlider | grep -oE '\{[^{}]*\}' | sed -n "$(($1 + 1))p")
@@ -832,8 +851,7 @@ set_slider() { # n fraction
     y=$(echo "$row" | sed -E 's/.*"y":([0-9]+).*/\1/')
     w=$(echo "$row" | sed -E 's/.*"w":([0-9]+).*/\1/')
     scale=$(window_size | cut -d' ' -f3)
-    dev input tap "$(awk -v x="$x" -v w="$w" -v s="$scale" -v f="$2" 'BEGIN { printf "%d", x - w / 2 + 12 * s + (w - 24 * s) * f }')" "$y"
-    after_input
+    tap_xy "$(awk -v x="$x" -v w="$w" -v s="$scale" -v f="$2" 'BEGIN { printf "%d", x - w / 2 + 12 * s + (w - 24 * s) * f }')" "$y"
 }
 # The number of a choice in a list of radio rows (from the top), by its text.
 radio_index() {
