@@ -2020,7 +2020,8 @@ open_row() {
     local i
     for i in 1 2 3; do
         # Where the row is, if the screen was left scrolled either way (s50 once found no "Label" on Android 12).
-        has_there "$1" || { sheet_scroll_up; has_there "$1" || sheet_scroll; }
+        # A keyboard left up by something before (the one of the last typing, which Android brings back) covers the rows.
+        has_there "$1" || { hide_keyboard; sheet_scroll_up; has_there "$1" || sheet_scroll; }
         tap_has "$1" 0 0.4
         await_ui 4 'editor_sheet!=None' && return 0
     done
@@ -3094,6 +3095,8 @@ chips_in_languages() { # scenario name, then pairs of locale code and name
         UI_QUIET=1 await_settled 5
         press open a 0.6
         on_editor 5 || { problems="$problems; $locale: no editor"; continue; }
+        # Android brings back the keyboard of the last typing for the app's window: it would cover the rows.
+        hide_keyboard
         for key in config.sound config.ring_limit config.edit_lock config.wake_check config.notice; do
             title=$(python -I -c 'import json,sys; print(json.load(open(sys.argv[1],encoding="utf-8"))[sys.argv[2]])' "src/i18n/$code.json" "$key")
             # A row says its title and value together; the title alone is also there. By part of a text
@@ -3107,6 +3110,8 @@ chips_in_languages() { # scenario name, then pairs of locale code and name
                 tap_row "$title"
             fi
             if ! wait_for 4 any_sheet_up; then
+                screenshot "chips/${code}_${key}_NO_PANEL"
+                note "s69 $locale/$key: no panel; screen=$(screen_no) ed_sheet=$(sn ed_sheet) focus=$(focused_window | cut -c1-90)"
                 problems="$problems; $locale/$key: no panel"
                 continue
             fi
