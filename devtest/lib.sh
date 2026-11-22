@@ -333,7 +333,8 @@ reboot_and_wait() {
 # has started since: asked from the saved file itself, which an emulator's root can read, and
 # which often never said "stopped" at all.
 saved_as_running() {
-    dev "su 0 abx2xml /data/system/users/0/package-restrictions.xml - | tr '>' '\n' | grep 'name=\"$PKG\"'" | grep -v -q 'stopped="true"'
+    # Android 12 and up write the file as binary XML (abx2xml reads it); Android 10 and 11 write plain XML.
+    dev "{ su 0 abx2xml /data/system/users/0/package-restrictions.xml - 2> /dev/null || su 0 cat /data/system/users/0/package-restrictions.xml; } | tr '>' '\n' | grep 'name=\"$PKG\"'" | grep -v -q 'stopped="true"'
 }
 stopped_state_saved() {
     # No device, as before an emulator's first start: nothing to save.

@@ -434,10 +434,15 @@ s13b() {
     kill_sentinel
     wait_for 15 sound_on || problems="$problems; no sound within 15s of the ring service being killed in the quiet"
     wait_for 10 top_is_unlock || problems="$problems; the unlock screen did not come back after that: $(top_activity)"
-    # Android's unlock can still be up from the button, and it takes Home for itself.
+    # Android's unlock can still be up from the button, and it takes Home for itself. The ring's own notification may
+    # bring its unlock screen back within milliseconds (Android 11 does, now and then: the full screen intent comes
+    # with the lock screen), so what shows that Home took the screen is the system pausing it as the user leaving.
+    unlock_left_count() { dev "logcat -d -b events | grep -c 'wm_pause_activity.*SentinelUnlockActivity.*userLeaving=true'"; }
+    local left_before
+    left_before=$(unlock_left_count)
     press_back
     go_home
-    left() { ! top_is_unlock; }
+    left() { ! top_is_unlock || [ "$(unlock_left_count)" -gt "$left_before" ] 2> /dev/null; }
     wait_for 3 left || problems="$problems; Home did not leave the unlock screen"
     sound_on || problems="$problems; silent after Home"
     dev wm dismiss-keyguard
