@@ -456,6 +456,11 @@ s13b() {
     sound_on || problems="$problems; silent on the alarm's own screen"
     tap "Turn off" 0 0.5
     finished() { sound_off && state_is b scheduled && [ "$(outcomes solved)" = 1 ]; }
+    # As in s13: a tap in the moment Android resizes the new window once more is lost.
+    if ! wait_for 3 finished; then
+        note "s13b: the first tap on Turn off was lost: once more"
+        tap "Turn off" 0 0.5
+    fi
     wait_for 8 finished || problems="$problems; after turning it off: sound=$(sound_on && echo ON || echo off) state=$(state b) solved=$(outcomes solved)"
     if [ -z "$problems" ]; then
         pass "the ring came back after its service died in the quiet, and unlocking on the lock screen brought the alarm's own screen"
@@ -1269,10 +1274,15 @@ s34() {
             dev input swipe 900 341 100 341 300
             sleep 0.8
             after=$(clipped)
-            # A slow machine is still scrolling after the swipe: ask again until the chip has come in.
-            for _ in 1 2 3 4 5 6 7 8; do
-                case "$after" in *"$result"*) sleep 0.8; after=$(clipped) ;; *) break ;; esac
+            # A slow machine is still scrolling after the swipe, or lost it: ask again until the chip has come in, and swipe
+            # again twice (a row that cannot be scrolled in stays out through all of it).
+            for _ in 1 2 3; do
+                for _ in 1 2 3 4 5 6; do
+                    case "$after" in *"$result"*) sleep 0.8; after=$(clipped) ;; *) break ;; esac
+                done
+                case "$after" in *"$result"*) dev input swipe 900 341 100 341 300 ;; *) break ;; esac
             done
+            case "$after" in *"$result"*) after=$(clipped) ;; esac
             case "$after" in
                 *"$result"*) problems="$problems $locale/history: $result stays out after scrolling;" ;;
             esac
@@ -3112,6 +3122,9 @@ chips_in_languages() { # scenario name, then pairs of locale code and name
             else
                 tap_row "$title"
             fi
+            if ! wait_for 4 any_sheet_up && on_editor 1 && { note "s69 $locale/$key: the tap was lost: once more"; true; }; then
+                if [ "$key" = config.sound ]; then tap "$title" 0 0.5; elif [ "$key" = config.notice ]; then tap_row "$title" L; else tap_row "$title"; fi
+            fi
             if ! wait_for 4 any_sheet_up; then
                 screenshot "chips/${code}_${key}_NO_PANEL"
                 note "s69 $locale/$key: no panel; screen=$(screen_no) ed_sheet=$(sn ed_sheet) focus=$(focused_window | cut -c1-90)"
@@ -3130,6 +3143,7 @@ chips_in_languages() { # scenario name, then pairs of locale code and name
             [ -z "$found" ] || problems="$problems; $locale/$key: $found"
             press_back
             wait_for 3 no_sheet_up || problems="$problems; $locale/$key: Back leaves it open"
+            on_editor 2 || note "s69 $locale/$key: after Back the editor is gone: screen=$(screen_no) focus=$(focused_window | cut -c1-90)"
         done
         dev am force-stop "$PKG"
     done
@@ -3196,6 +3210,7 @@ s61() {
     [ "$(sn pal_bg)" = "#f3ede2" ] || problems="$problems; does not start from the theme on screen"
     screenshot s61_own
     tap Background 0 0.5
+    await_settled
     set_field 0 '#102030'
     [ "$(sn pal_bg)" = "#102030" ] || problems="$problems; background is $(sn pal_bg)"
     [ "$(sn pal_light)" = false ] || problems="$problems; a dark background is not a dark theme"
@@ -3204,6 +3219,7 @@ s61() {
     # Unreadable on purpose.
     scroll_to Text L
     tap Text L 0.5
+    await_settled
     set_field 0 '#102030'
     [ "$(sn pal_text)" != "#102030" ] || problems="$problems; text as dark as the page can be chosen"
     on_screen "Changed a little so everything stays readable." 3 || problems="$problems; does not say it changed the colour"

@@ -930,8 +930,14 @@ user_unlocked() { dev "dumpsys user | grep -q RUNNING_UNLOCKED" > /dev/null; }
 # there, and no script runs in it.
 tap_text() {
     local box
-    box=$(dev "uiautomator dump /data/local/tmp/af_ui.xml > /dev/null 2>&1; tr '>' '\\n' < /data/local/tmp/af_ui.xml | grep 'text=\"$1\"' | sed -E 's/.*bounds=\"\\[([0-9]+),([0-9]+)\\]\\[([0-9]+),([0-9]+)\\]\".*/\\1 \\2 \\3 \\4/' | head -1")
-    [ -n "$box" ] || return 1
+    local try
+    for try in 1 2 3; do
+        box=$(dev "uiautomator dump /data/local/tmp/af_ui.xml > /dev/null 2>&1; tr '>' '\\n' < /data/local/tmp/af_ui.xml | grep 'text=\"$1\"' | sed -E 's/.*bounds=\"\\[([0-9]+),([0-9]+)\\]\\[([0-9]+),([0-9]+)\\]\".*/\\1 \\2 \\3 \\4/' | head -1")
+        [[ "$box" =~ ^[0-9]+\ [0-9]+\ [0-9]+\ [0-9]+$ ]] && break
+        sleep 1
+    done
+    # A dump that failed leaves an error text (sh: can't open ...) where the numbers go; in $(( )) that ends the whole run.
+    [[ "$box" =~ ^[0-9]+\ [0-9]+\ [0-9]+\ [0-9]+$ ]] || return 1
     # shellcheck disable=SC2086
     set -- $box
     TAPPED_AT="$((($1 + $3) / 2)) $((($2 + $4) / 2))"
@@ -1077,7 +1083,12 @@ fail() {
     write_log
 }
 note() { echo "      $1"; }
-write_log() { adb_ logcat -d -t 30000 -b all -v time 2> /dev/null | grep -E "AlarmFree|MobileSentinel|Sentinel|AlarmKit|AlarmClass|alarmfree|ActivityTaskManager.*(fidderr|Background)|BackgroundActivity|AndroidRuntime|FATAL|am_anr|ANR in" > "$OUT/$CURRENT.log"; }
+write_log() { adb_ logcat -d -t 30000 -b all -v time 2> /dev/null | grep -E "AlarmFree|MobileSentinel|Sentinel|AlarmKit|AlarmClass|alarmfree|ActivityTaskManager.*(fidderr|Background)|BackgroundActivity|AndroidRuntime|FATAL|am_anr|ANR in" > "$OUT/$CURRENT.log"; anr_traces; }
+# What the system wrote about a not-responding app (stacks of its threads), kept with the log of a failed scenario.
+anr_traces() {
+    timeout 60 "$ADB" -s "$SERIAL" shell "su 0 sh -c 'tail -n +1 /data/anr/* 2>/dev/null'" 2> /dev/null | head -c 400000 > "$OUT/$CURRENT.anr.txt"
+    [ -s "$OUT/$CURRENT.anr.txt" ] || rm -f "$OUT/$CURRENT.anr.txt"
+}
 
 # One row of history, `$2` days ago.
 history_row() { # id days_ago

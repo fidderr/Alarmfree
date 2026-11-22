@@ -14,6 +14,17 @@ bash devtest/all.sh ci
 rc=$?
 res="devtest-out/ci_$avd/results.txt" meta="devtest-out/ci_$avd.meta"
 p=$(grep -c '^PASS' "$res" 2> /dev/null); f=$(grep -c '^FAIL' "$res" 2> /dev/null); s=$(grep -c '^SKIP' "$res" 2> /dev/null)
+# A scenario that printed its header and no result was cut short (the run ended inside it): that is a failure, not a pass.
+incomplete=""
+for name in $(grep -ahE '^=== s[0-9a-z_]+$' "devtest-out/ci_$avd.log" | sed 's/^=== //' | sort -u); do
+    # By the id (s07_ring has its results as s07a, s07b, s07c).
+    grep -aqE "^(PASS|FAIL|SKIP)  ${name%%_*}[a-z0-9]*_" "$res" 2> /dev/null || incomplete="$incomplete $name"
+done
+# The scenarios that run last (tiers.sh LEG_LAST) are the ones an early end loses without a header.
+for id in s13 s13b s13d; do
+    grep -aqE "^(PASS|FAIL|SKIP)  ${id}_" "$res" 2> /dev/null || incomplete="$incomplete $id(never ran)"
+done
+[ -z "$incomplete" ] || rc=1
 stop=$(grep -h '^STOP' "devtest-out/ci_$avd.log" 2> /dev/null | head -1)
 {
     echo "### $avd (Android $(sed -n 's/.*android=\([^ ]*\).*/\1/p' "$meta" 2> /dev/null | head -1))"
@@ -21,6 +32,7 @@ stop=$(grep -h '^STOP' "devtest-out/ci_$avd.log" 2> /dev/null | head -1)
     echo "| passed | failed | skipped | minutes | suite rc |"
     echo "|---|---|---|---|---|"
     echo "| ${p:-0} | ${f:-0} | ${s:-0} | $(((SECONDS - start) / 60)) | $rc |"
+    [ -z "$incomplete" ] || { echo; echo "INCOMPLETE (no result): \`${incomplete# }\`"; }
     [ -z "$stop" ] || { echo; echo "STOPPED: \`$stop\`"; }
     if [ "${f:-0}" -gt 0 ]; then
         echo; echo "Failed:"; echo
