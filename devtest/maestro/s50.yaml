@@ -44,9 +44,10 @@ appId: com.fidderr.alarmfree
       - tapOn: "Done"
 - tapOn: "Add a challenge"
 - tapOn: "Steps"
+# Steps has its own sheet ("How many steps"), and then the list of challenges is still open under it.
 - runFlow:
     when:
-      visible: "Difficulty"
+      visible: "How many steps"
     commands:
       - tapOn: "Done"
 - tapOn: "Done"
