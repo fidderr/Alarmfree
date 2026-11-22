@@ -9,7 +9,7 @@ cd "$(dirname "$0")/../.." || exit 1
 sc=$1 runs=${2:-1}
 export OUT="${OUT:-devtest-out/maestro_${SERIAL}_$sc}"
 . devtest/lib.sh
-MAESTRO='C:\Users\rfidd\tools\maestro-2.12.1\maestro\bin\maestro.bat'
+MAESTRO=${MAESTRO:-'C:\Users\rfidd\tools\maestro-2.12.1\maestro\bin\maestro.bat'}
 export JAVA_HOME="${JAVA_HOME:-C:/Program Files/Microsoft/jdk-17.0.21.21-hotspot}" MAESTRO_CLI_NO_ANALYTICS=true MAESTRO_CLI_ANALYSIS_NOTIFICATION_DISABLED=true MAESTRO_DISABLE_UPDATE_CHECK=true
 claim_device
 open_shells
@@ -18,6 +18,11 @@ HERE=$(cd devtest/maestro && pwd -W 2> /dev/null || pwd)
 
 maestro_flow() { # flow file
     local bs='\' flow
+    # On a Linux runner MAESTRO is the maestro script itself (devtest/ci/closing.sh installs it).
+    if [ "$(uname -s)" = Linux ]; then
+        "$MAESTRO" --device "$SERIAL" test "$HERE/$1" > "$OUT/maestro_$sc.log" 2>&1
+        return
+    fi
     flow="${HERE}${bs}${1}"
     cmd.exe /c "$MAESTRO --device $SERIAL test $flow" > "$OUT/maestro_$sc.log" 2>&1
 }

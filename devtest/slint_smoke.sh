@@ -59,10 +59,22 @@ dev pm clear "$PKG" > /dev/null
 dev monkey -p "$PKG" 1 > /dev/null 2>&1
 step "the window answers" '"screen":' 40
 
-# The first run screen comes before the list.
-if ui screen | grep -q "screen=4"; then
-    ui press:back > /dev/null
-fi
+# The first start has two screens before the list: the intro (6), then the reliability setup (4). Back leaves each one.
+# Asked from the app which one is open, and pressed again if a key was lost, until the list (0) is there.
+first_run_screens() {
+    local i=0 s
+    while [ "$i" -lt 30 ]; do
+        s=$(ui screen | sed -n 's/.*screen=\([0-9]*\).*/\1/p')
+        case "$s" in
+            0) return 0 ;;
+            4 | 6) ui press:back > /dev/null ;;
+        esac
+        sleep 1
+        i=$((i + 1))
+    done
+    return 1
+}
+first_run_screens
 step "the alarm list is empty" '"rows":\[\]' 10
 step "the alarm list is open" '"screen":0' 10
 
