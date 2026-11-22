@@ -4,7 +4,8 @@ name: Closing checks
 # audit (A11Y=1 devtest/matrix.sh a11y_audit) and three Maestro flows (s38, s36, s50), on a fresh emulator per Android
 # version. The logic is devtest/ci/closing.sh, which also runs by hand on Linux.
 # Start it: Actions > Closing checks > Run workflow (pick a version), or `gh workflow run closing.yml --ref <branch> -f version=afg16`.
-# A push to noflake/closing also runs it: Android 16, or the versions named in the commit message as `[avds: afg16 afg12]`.
+# A push to noflake/closing also runs it: Android 16, or the versions named in the commit message as `[avds: afg16 afg12]`,
+# and `[runs: 3]` repeats each Maestro flow.
 on:
   workflow_dispatch:
     inputs:
@@ -13,6 +14,10 @@ on:
         type: choice
         default: afg16
         options: [afg16, afg15, afg14, afg13, afg12, msd30, msd29, all]
+      runs:
+        description: Runs of each Maestro flow (1 to 10)
+        type: string
+        default: '1'
   push:
     branches: [noflake/closing]
 
@@ -29,10 +34,12 @@ jobs:
     runs-on: ubuntu-slim
     outputs:
       avds: ${{ steps.pick.outputs.avds }}
+      runs: ${{ steps.pick.outputs.runs }}
     steps:
       - id: pick
         env:
           INPUT: ${{ inputs.version }}
+          INPUT_RUNS: ${{ inputs.runs }}
           MSG: ${{ github.event.head_commit.message }}
         run: |
           all="afg16 afg15 afg14 afg13 afg12 msd30 msd29"
@@ -45,6 +52,12 @@ jobs:
           [ -n "$json" ] || json='"afg16",'
           echo "avds=[${json%,}]" >> "$GITHUB_OUTPUT"
           echo "AVDs: $json"
+          # Runs of each Maestro flow: the input, or `[runs: 3]` in a commit message; digits only, 1 to 10.
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then runs=$INPUT_RUNS
+          else runs=$(printf '%s' "$MSG" | sed -n 's/.*\[runs: *\([0-9]*\)\].*/\1/p' | head -1); fi
+          case "$runs" in "" | *[!0-9]* | 0* | 1[1-9] | [2-9][0-9] | [0-9][0-9][0-9]*) runs=1 ;; esac
+          echo "runs=$runs" >> "$GITHUB_OUTPUT"
+          echo "Maestro runs: $runs"
 
   build:
     name: x86_64 debug APK
@@ -119,6 +132,7 @@ jobs:
       - name: Closing checks
         env:
           AVD: ${{ matrix.avd }}
+          MAESTRO_RUNS: ${{ needs.plan.outputs.runs }}
         run: |
           # Host load every 15 s next to the checks: tells a starved machine from a failing app.
           (while :; do echo "$(date +%T) $(cut -d' ' -f1-3 /proc/loadavg) $(awk '/MemAvailable/{print $2/1024" MB free"}' /proc/meminfo)"; sleep 15; done > host_load.txt) &

@@ -6,7 +6,7 @@
 #        devtest/ci/closing.sh --install-maestro   downloads Maestro 2.12.1 from its GitHub release and prints its path
 # Results: devtest-out/closing_<avd>/<check>/output.txt (+ the check's own files), devtest-out/closing_<avd>/summary.md.
 # Settings: APK, PORT (emulator port, 5554), MAESTRO (path of the maestro script; installed when not set), CHECKS
-# (which of smoke a11y s38 s36 s50 to run, in that order; all by default).
+# (which of smoke a11y s38 s36 s50 to run, in that order; all by default), MAESTRO_RUNS (runs of each Maestro flow, 1).
 cd "$(dirname "$0")/../.." || exit 1
 
 MAESTRO_VERSION=2.12.1
@@ -117,12 +117,15 @@ if [ "$boot_ok" = 1 ]; then
             s38 | s36 | s50)
                 [ -n "${MAESTRO:-}" ] || MAESTRO=$(install_maestro) || { mark FAIL "maestro $check" "Maestro did not install"; continue; }
                 export MAESTRO
-                run_check "maestro_$check" 25m bash devtest/maestro/run.sh "$check"
-                line=$(grep -aE "^maestro $check " "$(out_of "maestro_$check")/output.txt" | tail -1)
-                case "$line" in
-                    *" PASS "*) mark PASS "maestro $check" "$line" ;;
-                    *) mark FAIL "maestro $check" "rc=$CHECK_RC ${line:-no result line}" ;;
-                esac
+                run_check "maestro_$check" 60m bash devtest/maestro/run.sh "$check" "${MAESTRO_RUNS:-1}"
+                lines=$(grep -aE "^maestro $check " "$(out_of "maestro_$check")/output.txt")
+                total=$(echo "$lines" | grep -c .)
+                passed=$(echo "$lines" | grep -c ' PASS ')
+                if [ "$total" -gt 0 ] && [ "$passed" = "$total" ]; then
+                    mark PASS "maestro $check" "$passed of $total runs: $(echo "$lines" | tail -1)"
+                else
+                    mark FAIL "maestro $check" "$passed of $total runs, rc=$CHECK_RC: $(echo "$lines" | grep -v ' PASS ' | head -1 | cut -c1-200)"
+                fi
                 ;;
             *) mark FAIL "$check" "unknown check" ;;
         esac

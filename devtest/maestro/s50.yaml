@@ -55,9 +55,9 @@ appId: com.fidderr.alarmfree
     element: "Ring limit.*"
     centerElement: true
 - tapOn: "Ring limit.*"
+# The ring limit sheet is short too: no centering.
 - scrollUntilVisible:
     element: "60 min"
-    centerElement: true
 - tapOn: "60 min"
 - tapOn: "Done"
 - scrollUntilVisible:
