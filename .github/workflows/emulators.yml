@@ -94,13 +94,50 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-linux-android
-      - uses: Swatinem/rust-cache@v2
+      # The built APK is kept in the cache under a key of everything it is built from, so a run that changed only test
+      # scripts skips the build. The key holds: every file of the app except devtest/, docs/, store/, .github/ and .git
+      # (source, ui, assets, build.rs, Cargo.toml, Cargo.lock, build.sh, sentinel.toml, .cargo/), the commit of the SDK that
+      # is checked out, the Rust compiler version, the runner image version (NDK, JDK, Gradle) and APK_CACHE_VERSION: bump it
+      # when the Build step below changes. Anything else that changes the APK is a changed key and builds.
+      - name: Key of the APK
+        id: apk
+        env:
+          SRC_HASH: ${{ hashFiles('Alarmfree/**', 'Alarmfree/.cargo/**', '!Alarmfree/.git/**', '!Alarmfree/.github/**', '!Alarmfree/devtest/**', '!Alarmfree/docs/**', '!Alarmfree/store/**') }}
+          APK_CACHE_VERSION: '1'
+        run: |
+          sdk=$(git -C mobile-sentinel rev-parse HEAD)
+          rustc_version=$(rustc --version | tr -c 'A-Za-z0-9.\n' '-')
+          if [ -z "$SRC_HASH" ] || [ -z "$sdk" ] || [ -z "$rustc_version" ]; then
+              echo "::error::could not make the key of the APK"
+              exit 1
+          fi
+          echo "key=apk-v$APK_CACHE_VERSION-$sdk-$rustc_version-${ImageVersion:-noimage}-$SRC_HASH" >> "$GITHUB_OUTPUT"
+      - id: apk-cache
+        uses: actions/cache@v6
+        with:
+          path: Alarmfree/build/alarmfree-slint-debug.apk
+          key: ${{ steps.apk.outputs.key }}
+      - name: The APK came from
+        env:
+          HIT: ${{ steps.apk-cache.outputs.cache-hit }}
+          KEY: ${{ steps.apk.outputs.key }}
+        run: |
+          if [ "$HIT" = true ]; then what="the cache (no build)"; else what="a new build"; fi
+          echo "APK: $what"
+          {
+              echo "### APK"
+              echo "From $what."
+              echo "Key: \`$KEY\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - if: steps.apk-cache.outputs.cache-hit != 'true'
+        uses: Swatinem/rust-cache@v2
         with:
           workspaces: |
             Alarmfree
             mobile-sentinel
       # The runner image has NDK 30 (build.sh wants exactly 30.0.16248370) and JDK 17 as the default.
       - name: Build
+        if: steps.apk-cache.outputs.cache-hit != 'true'
         working-directory: Alarmfree
         run: |
           test -d "$ANDROID_HOME/ndk/30.0.16248370" || "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;30.0.16248370"
