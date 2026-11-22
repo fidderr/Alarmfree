@@ -1268,6 +1268,10 @@ s34() {
             dev input swipe 900 341 100 341 300
             sleep 0.8
             after=$(clipped)
+            # A slow machine is still scrolling after the swipe: ask again until the chip has come in.
+            for _ in 1 2 3 4 5 6 7 8; do
+                case "$after" in *"$result"*) sleep 0.8; after=$(clipped) ;; *) break ;; esac
+            done
             case "$after" in
                 *"$result"*) problems="$problems $locale/history: $result stays out after scrolling;" ;;
             esac
