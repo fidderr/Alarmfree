@@ -64,7 +64,7 @@ jobs:
         working-directory: Alarmfree
         run: |
           test -d "$ANDROID_HOME/ndk/30.0.16248370" || "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;30.0.16248370"
-          TARGET=x86_64-linux-android ./build.sh
+          TARGET=x86_64-linux-android bash ./build.sh
       - uses: actions/upload-artifact@v5
         with:
           name: apk
