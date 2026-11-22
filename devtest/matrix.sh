@@ -1188,7 +1188,8 @@ s32() {
     jump_to $((T - 3))
     await_sound 30 || { fail "it never rang"; return; }
     on_screen "Turn off" 10
-    tap "Turn off" 0 0.5
+    # By the window's own events: a finger's tap in the moment Android resizes the new window is lost, and what counts here is the record.
+    tap_in "Turn off" 0 0.5
     wait_for 5 sound_off
     rm_download alarmfree-rings.txt
     start_app
