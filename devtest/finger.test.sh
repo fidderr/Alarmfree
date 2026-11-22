@@ -113,8 +113,8 @@ verdict "a swipe goes through the same acknowledgement" \
     "$([ "$(taps swipe)" = 2 ] && has swipe 'dev input swipe 1 2 3 4 300' && echo 1)"
 
 run_case tap tap AWAIT_FILE="$tmp/f_ok"
-verdict "tap sends no touch from outside, only tap@2:Hello to the app" \
-    "$([ "$(taps tap)" = 0 ] && has tap 'ui tap@2:Hello' && has tap 'rc=0' && echo 1)"
+verdict "tap sends no touch from outside, only tap@2:Hello to the app, after the window is stable" \
+    "$([ "$(taps tap)" = 0 ] && has tap 'await_ui 5 stable' && has tap 'ui tap@2:Hello' && has tap 'rc=0' && echo 1)"
 
 run_case taph tap_has AWAIT_FILE="$tmp/f_ok"
 verdict "tap_has sends tapc@L:Hello to the app" \

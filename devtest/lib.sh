@@ -787,7 +787,9 @@ still_where() { # command text [which]
 # keyboard (only a real touch does).
 tap_through() { # command, what to say when it fails
     local said
-    [ "$SETTLED_AT" = "$SECONDS" ] || UI_QUIET=1 await_settled 2
+    # Settled and not being resized (the window is resized by Android a moment after a keyboard goes away or a window
+    # comes up): the answer comes at once when it is.
+    UI_QUIET=1 await_ui 5 stable
     said=$(ui "$1")
     UI_QUIET=1 await_settled 3
     SETTLED_AT=$SECONDS

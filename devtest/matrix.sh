@@ -3228,7 +3228,11 @@ s61() {
     # In a code.
     set_field 0 '#c06020'
     [ "$(sn pal_accent)" = "#c06020" ] || problems="$problems; the code gives $(sn pal_accent)"
-    done_sheet_theme() { hide_keyboard; tap Done; }
+    done_sheet_theme() {
+        hide_keyboard
+        tap Done && await_ui 8 'theme_sheet=false' ||
+            problems="$problems; the theme sheet is still up after Done: $(ui ready | grep -oE 'theme_sheet=[a-z]+')"
+    }
     done_sheet_theme
     # A theme of one's own, from what is on screen.
     tap "Your own theme" 0 0.5
