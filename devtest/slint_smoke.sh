@@ -32,13 +32,17 @@ ui() {
     return $rc
 }
 
-# Ask the snapshot until it says what we wait for (a grep pattern), for up to $2 seconds.
+# Ask the snapshot until it says what we wait for (a grep pattern), for up to $2 seconds. With $3 set, a window that
+# does not answer (the app went to the background) is brought back to the front.
 wait_for() {
-    local pattern=$1 limit=${2:-20} i=0 snap=""
+    local pattern=$1 limit=${2:-20} revive=${3:-} i=0 snap=""
     while [ "$i" -lt "$limit" ]; do
         snap=$(ui snapshot 2>&1 | grep -v "^sh:")
         if echo "$snap" | grep -q -- "$pattern"; then
             return 0
+        fi
+        if [ -n "$revive" ] && ! echo "$snap" | grep -q '"screen":'; then
+            dev monkey -p "$PKG" 1 > /dev/null 2>&1
         fi
         sleep 1
         i=$((i + 1))
@@ -47,8 +51,8 @@ wait_for() {
     return 1
 }
 
-step() { # name pattern [seconds]
-    if wait_for "$2" "${3:-20}"; then
+step() { # name pattern [seconds] [revive]
+    if wait_for "$2" "${3:-20}" "${4:-}"; then
         echo "PASS  $1"
     else
         echo "FAIL  $1"
@@ -67,10 +71,22 @@ dev pm clear "$PKG" > /dev/null
 dev monkey -p "$PKG" 1 > /dev/null 2>&1
 step "the window answers" '"screen":' 40
 
-# The first run screen comes before the list.
-if ui screen | grep -q "screen=4"; then
-    ui press:back > /dev/null
-fi
+# The first start has two screens before the list: the intro (6), then the reliability setup (4). Back leaves each one.
+# Asked from the app which one is open, and pressed again if a key was lost, until the list (0) is there.
+first_run_screens() {
+    local i=0 s
+    while [ "$i" -lt 30 ]; do
+        s=$(ui screen | sed -n 's/.*screen=\([0-9]*\).*/\1/p')
+        case "$s" in
+            0) return 0 ;;
+            4 | 6) ui press:back > /dev/null ;;
+        esac
+        sleep 1
+        i=$((i + 1))
+    done
+    return 1
+}
+first_run_screens
 step "the alarm list is empty" '"rows":\[\]' 10
 step "the alarm list is open" '"screen":0' 10
 
@@ -97,8 +113,9 @@ step "the alarm rings" '"ringing":true' 40
 "$ADB" -s "$SERIAL" exec-out screencap -p > "$OUT/slint_smoke_ring.png"
 
 ui press:ring-snooze > /dev/null
-step "snooze ends the ring screen" '"ringing":false' 20
-# Snoozing sends the app to the background, where the window does not answer.
+# Snoozing sends the app to the background, where the window does not answer: whether that happens before the first
+# question or after it, the wait brings the window back and reads the state from it.
+step "snooze ends the ring screen" '"ringing":false' 20 revive
 dev monkey -p "$PKG" 1 > /dev/null 2>&1
 step "the card says it is snoozed" '"when":"[^"]' 10
 

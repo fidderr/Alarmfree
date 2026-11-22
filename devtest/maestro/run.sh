@@ -9,7 +9,7 @@ cd "$(dirname "$0")/../.." || exit 1
 sc=$1 runs=${2:-1}
 export OUT="${OUT:-devtest-out/maestro_${SERIAL}_$sc}"
 . devtest/lib.sh
-MAESTRO='C:\Users\rfidd\tools\maestro-2.12.1\maestro\bin\maestro.bat'
+MAESTRO=${MAESTRO:-'C:\Users\rfidd\tools\maestro-2.12.1\maestro\bin\maestro.bat'}
 export JAVA_HOME="${JAVA_HOME:-C:/Program Files/Microsoft/jdk-17.0.21.21-hotspot}" MAESTRO_CLI_NO_ANALYTICS=true MAESTRO_CLI_ANALYSIS_NOTIFICATION_DISABLED=true MAESTRO_DISABLE_UPDATE_CHECK=true
 claim_device
 open_shells
@@ -18,6 +18,16 @@ HERE=$(cd devtest/maestro && pwd -W 2> /dev/null || pwd)
 
 maestro_flow() { # flow file
     local bs='\' flow
+    # On a Linux runner MAESTRO is the maestro script itself (devtest/ci/closing.sh installs it).
+    if [ "$(uname -s)" = Linux ]; then
+        local rc
+        "$MAESTRO" --device "$SERIAL" test --debug-output "$OUT/debug_$i" --flatten-debug-output "$HERE/$1" > "$OUT/maestro_${sc}_$i.log" 2>&1
+        rc=$?
+        # What the screen looked like where the flow ended or stopped.
+        "$ADB" -s "$SERIAL" exec-out screencap -p > "$OUT/end_${sc}_$i.png"
+        [ "$rc" = 0 ] || "$MAESTRO" --device "$SERIAL" hierarchy > "$OUT/hierarchy_${sc}_$i.json" 2>&1
+        return "$rc"
+    fi
     flow="${HERE}${bs}${1}"
     cmd.exe /c "$MAESTRO --device $SERIAL test $flow" > "$OUT/maestro_$sc.log" 2>&1
 }
@@ -34,7 +44,7 @@ setup_s38() {
 check_s38() {
     problems=""
     printf "SELECT prefs FROM settings;\n" | sql | grep -q '"accent":"Purple"' || problems="$problems; accent not kept"
-    printf "SELECT prefs FROM settings;\n" | sql | grep -q '"mytune.ogg":"Morning"' || problems="$problems; name not saved"
+    printf "SELECT prefs FROM settings;\n" | sql | grep -q '"mytune.ogg":"Morning"' || problems="$problems; name not saved (prefs: $(printf "SELECT prefs FROM settings;\n" | sql | cut -c1-300))"
 }
 
 setup_s36() {
@@ -50,7 +60,7 @@ check_s36() {
     dev am force-stop "$PKG"
     start_app
     wait_for 20 on_card_rows
-    order=$(ui snapshot | grep -oE '"label":"[^"]*","on"' | sed -E 's/^"label":"//; s/","on"$//' | tr '\n' ' ' | sed 's/ $//')
+    order=$(ui snapshot | grep -oE '"label":"[^"]*"' | sed -E 's/^"label":"//; s/"$//' | tr '\n' ' ' | sed 's/ $//')
     [ "$order" = "b c a" ] || problems="$problems; order is '$order'"
 }
 on_card_rows() { ui snapshot | grep -q '"rows":\[{'; }

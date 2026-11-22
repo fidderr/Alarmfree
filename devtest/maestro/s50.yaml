@@ -26,13 +26,12 @@ appId: com.fidderr.alarmfree
 - tapOn: "15 s"
 - tapOn: "Done"
 - tapOn: "Snooze.*"
+# The snooze sheet is short and does not scroll: centering would swipe over the dimmed area and close it.
 - scrollUntilVisible:
     element: "More How often"
-    centerElement: true
 - tapOn: "More How often"
 - scrollUntilVisible:
     element: "More How long"
-    centerElement: true
 - tapOn: "More How long"
 - tapOn: "Done"
 - tapOn: "Challenges.*"
@@ -45,9 +44,10 @@ appId: com.fidderr.alarmfree
       - tapOn: "Done"
 - tapOn: "Add a challenge"
 - tapOn: "Steps"
+# Steps has its own sheet ("How many steps"), and then the list of challenges is still open under it.
 - runFlow:
     when:
-      visible: "Difficulty"
+      visible: "How many steps"
     commands:
       - tapOn: "Done"
 - tapOn: "Done"
@@ -55,9 +55,9 @@ appId: com.fidderr.alarmfree
     element: "Ring limit.*"
     centerElement: true
 - tapOn: "Ring limit.*"
+# The ring limit sheet is short too: no centering.
 - scrollUntilVisible:
     element: "60 min"
-    centerElement: true
 - tapOn: "60 min"
 - tapOn: "Done"
 - scrollUntilVisible:
@@ -66,6 +66,9 @@ appId: com.fidderr.alarmfree
 - tapOn: "Are you up.*"
 - tapOn: ".*3 min"
 - tapOn: "Done"
+- scrollUntilVisible:
+    element: "Reminder.*"
+    centerElement: true
 - tapOn: "Reminder.*"
 - tapOn: ".*10 min"
 - tapOn: "Done"

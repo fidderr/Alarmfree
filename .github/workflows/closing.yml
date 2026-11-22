@@ -1,0 +1,154 @@
+name: Closing checks
+
+# The checks that close a release, on GitHub's machines: the Slint smoke test (devtest/slint_smoke.sh), the accessibility
+# audit (A11Y=1 devtest/matrix.sh a11y_audit) and three Maestro flows (s38, s36, s50), on a fresh emulator per Android
+# version. The logic is devtest/ci/closing.sh, which also runs by hand on Linux.
+# Start it: Actions > Closing checks > Run workflow (pick a version), or `gh workflow run closing.yml --ref <branch> -f version=afg16`.
+# A push to noflake/closing also runs it: Android 16, or the versions named in the commit message as `[avds: afg16 afg12]`,
+# and `[runs: 3]` repeats each Maestro flow.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: One Android version (AVD name) or all
+        type: choice
+        default: afg16
+        options: [afg16, afg15, afg14, afg13, afg12, msd30, msd29, all]
+      runs:
+        description: Runs of each Maestro flow (1 to 10)
+        type: string
+        default: '1'
+  push:
+    branches: [noflake/closing]
+
+# A newer push to the same branch replaces its older run.
+concurrency:
+  group: closing-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  plan:
+    runs-on: ubuntu-slim
+    outputs:
+      avds: ${{ steps.pick.outputs.avds }}
+      runs: ${{ steps.pick.outputs.runs }}
+    steps:
+      - id: pick
+        env:
+          INPUT: ${{ inputs.version }}
+          INPUT_RUNS: ${{ inputs.runs }}
+          MSG: ${{ github.event.head_commit.message }}
+        run: |
+          all="afg16 afg15 afg14 afg13 afg12 msd30 msd29"
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then want=$INPUT
+          else want=$(printf '%s' "$MSG" | sed -n 's/.*\[avds: *\([^]]*\)\].*/\1/p' | head -1); fi
+          [ -n "$want" ] || want=afg16
+          [ "$want" = all ] && want=$all
+          # A version is a name from the list, nothing else: what follows it in a commit message is not passed on.
+          json=$(for a in $want; do case "$a" in *[!a-z0-9]*) continue ;; esac; case " $all " in *" $a "*) printf '"%s",' "$a" ;; esac; done)
+          [ -n "$json" ] || json='"afg16",'
+          echo "avds=[${json%,}]" >> "$GITHUB_OUTPUT"
+          echo "AVDs: $json"
+          # Runs of each Maestro flow: the input, or `[runs: 3]` in a commit message; digits only, 1 to 10.
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then runs=$INPUT_RUNS
+          else runs=$(printf '%s' "$MSG" | sed -n 's/.*\[runs: *\([0-9]*\)\].*/\1/p' | head -1); fi
+          case "$runs" in "" | *[!0-9]* | 0* | 1[1-9] | [2-9][0-9] | [0-9][0-9][0-9]*) runs=1 ;; esac
+          echo "runs=$runs" >> "$GITHUB_OUTPUT"
+          echo "Maestro runs: $runs"
+
+  build:
+    name: x86_64 debug APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          path: Alarmfree
+      # build.sh finds the SDK's build tool at ../mobile-sentinel.
+      - uses: actions/checkout@v5
+        with:
+          repository: fidderr/mobile-sentinel
+          ref: main
+          path: mobile-sentinel
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-linux-android
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            Alarmfree
+            mobile-sentinel
+      # The runner image has NDK 30 (build.sh wants exactly 30.0.16248370) and JDK 17 as the default.
+      - name: Build
+        working-directory: Alarmfree
+        run: |
+          test -d "$ANDROID_HOME/ndk/30.0.16248370" || "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;30.0.16248370"
+          # build_sentinel starts the generated project's relative "target/sentinel-android/gradlew" with that folder as its
+          # working directory, which only resolves on Linux with this link (SDK 0.7.0 bug, reported in devtest/CI.md).
+          mkdir -p target/sentinel-android/target && ln -sfn .. target/sentinel-android/target/sentinel-android
+          TARGET=x86_64-linux-android bash ./build.sh
+      - uses: actions/upload-artifact@v5
+        with:
+          name: apk
+          path: Alarmfree/build/alarmfree-slint-debug.apk
+          retention-days: 3
+
+  closing:
+    name: ${{ matrix.avd }}
+    needs: [plan, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        avd: ${{ fromJSON(needs.plan.outputs.avds) }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        with:
+          name: apk
+          path: build
+      - name: KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          ls -l /dev/kvm
+      # The scripts call `python`, and the suite helpers use sqlite3 on the runner.
+      - name: Tools
+        run: |
+          sudo ln -sf "$(command -v python3)" /usr/local/bin/python
+          python3 -c 'import PIL' 2> /dev/null || sudo apt-get install -y python3-pil
+          sudo apt-get install -y sqlite3 > /dev/null || true
+      - name: Android image and AVD
+        env:
+          AVD: ${{ matrix.avd }}
+        run: bash devtest/ci/make_avd.sh "$AVD"
+      # Maestro 2.12.1 from the project's GitHub release, checked against its sha256.
+      - name: Maestro
+        run: echo "MAESTRO=$(bash devtest/ci/closing.sh --install-maestro)" >> "$GITHUB_ENV"
+      - name: Closing checks
+        env:
+          AVD: ${{ matrix.avd }}
+          MAESTRO_RUNS: ${{ needs.plan.outputs.runs }}
+        run: |
+          # Host load every 15 s next to the checks: tells a starved machine from a failing app.
+          (while :; do echo "$(date +%T) $(cut -d' ' -f1-3 /proc/loadavg) $(awk '/MemAvailable/{print $2/1024" MB free"}' /proc/meminfo)"; sleep 15; done > host_load.txt) &
+          bash devtest/ci/closing.sh "$AVD"
+      - name: Pack the results
+        if: always()
+        env:
+          AVD: ${{ matrix.avd }}
+        run: |
+          mkdir -p "devtest-out/closing_$AVD"
+          cp host_load.txt "devtest-out/closing_$AVD/" 2> /dev/null || true
+          cp ~/.android/avd/"$AVD".avd/config.ini "devtest-out/closing_$AVD/avd_config.ini" 2> /dev/null || true
+          du -sh "devtest-out/closing_$AVD"
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: closing-${{ matrix.avd }}
+          path: devtest-out/closing_${{ matrix.avd }}
+          retention-days: 3
