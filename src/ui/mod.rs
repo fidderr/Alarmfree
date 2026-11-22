@@ -123,6 +123,12 @@ pub fn debug_command(command: String, reply: impl FnOnce(String) + Send + 'stati
     });
 }
 
+/// Android told the app that input is waiting: the `input_seen` count of the devtest `ready` line.
+#[cfg(all(debug_assertions, feature = "devtest"))]
+pub fn note_input() {
+    ready::note_input();
+}
+
 /// History is kept this long.
 const HISTORY_KEEP_DAYS: u32 = 5 * 365;
 

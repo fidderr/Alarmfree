@@ -38,6 +38,14 @@ fn android_main(app: slint::android::AndroidApp) {
     // `OnBackInvokedCallback` of its own.
     let options = slint::android::InitOptions::new()
         .with_back_invoked_callback(slint::android::BackInvokedCallback::Disabled);
+    // The devtest harness checks that a real touch reached the app (`input_seen` in `ui:ready`).
+    #[cfg(all(debug_assertions, feature = "devtest"))]
+    let options = options.with_event_listener(|event| {
+        use slint::android::android_activity::{MainEvent, PollEvent};
+        if matches!(event, PollEvent::Main(MainEvent::InputAvailable)) {
+            ui::note_input();
+        }
+    });
     slint::android::init_with_options(app, options).expect("start the UI backend");
     if let Err(e) = ui::run() {
         log::error!("[AlarmFree] the UI stopped: {e}");

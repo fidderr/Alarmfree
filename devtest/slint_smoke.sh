@@ -18,10 +18,18 @@ FAILS=0
 
 dev() { timeout 60 "$ADB" -s "$SERIAL" shell "$@" | tr -d '\r'; }
 as_app() { dev "run-as $PKG sh -c '$1'"; }
+CHANNEL_DIR=$FILES
+# shellcheck disable=SC1091
+_here=${BASH_SOURCE[0]%/*}
+[ "$_here" != "${BASH_SOURCE[0]}" ] || _here=.
+. "$_here/channel.sh"
 
 # One command to the app, and its answer.
 ui() {
-    as_app "cd $FILES && rm -f debug_script_result.txt && echo ui:$1 > debug_action.tmp && mv debug_action.tmp debug_action.txt && i=0; while [ ! -e debug_script_result.txt ] && [ \$i -lt 500 ]; do sleep 0.02; i=\$((i + 1)); done; cat debug_script_result.txt 2> /dev/null"
+    channel "ui:$1"
+    local rc=$?
+    echo "$CHANNEL_OUT"
+    return $rc
 }
 
 # Ask the snapshot until it says what we wait for (a grep pattern), for up to $2 seconds.
