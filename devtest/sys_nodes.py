@@ -8,6 +8,10 @@ MODE
   find FILTER...    "x y" of the middle of the first node that matches every FILTER (a clickable one first), or none
   count FILTER...   how many nodes match
   text FILTER...    the text (or the description) of the first node that matches, or none
+  len FILTER...     the number of characters in the text of the first node that matches (a PIN field shows one bullet
+                    per digit), or -1 when no node matches
+  box FILTER...     "x1 y1 x2 y2" of the first node that matches, or none
+  focusbox          "x1 y1 x2 y2" of the first focused node that is smaller than 700 px high (a row or a card), or none
   focused           the bounds line of the focused nodes
   ok                exit 0 when the input holds a hierarchy with at least one node
 
@@ -83,6 +87,8 @@ def main():
     if len(sys.argv) < 2:
         raise SystemExit(__doc__)
     mode = sys.argv[1]
+    sys.stdin.reconfigure(encoding="utf-8", errors="replace")
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     nodes = parse(sys.stdin.read())
     if mode == "ok":
         sys.exit(0 if nodes else 1)
@@ -118,6 +124,18 @@ def main():
     elif mode == "text":
         hits = [n for n in nodes if matches(n, filters)]
         print(hits[0]["label"] if hits else "none")
+        sys.exit(0 if hits else 1)
+    elif mode == "box":
+        hits = [n for n in nodes if matches(n, filters)]
+        print("%d %d %d %d" % hits[0]["box"] if hits else "none")
+        sys.exit(0 if hits else 1)
+    elif mode == "focusbox":
+        hits = [n for n in nodes if n["focused"] == "true" and n["box"][3] - n["box"][1] < 700]
+        print("%d %d %d %d" % hits[0]["box"] if hits else "none")
+        sys.exit(0 if hits else 1)
+    elif mode == "len":
+        hits = [n for n in nodes if matches(n, filters)]
+        print(len(hits[0]["text"]) if hits else -1)
         sys.exit(0 if hits else 1)
     elif mode == "focused":
         for n in nodes:

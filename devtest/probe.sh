@@ -116,7 +116,27 @@ t05_probe_lock() {
     pr "collapse said: $(dev cmd statusbar collapse 2>&1 | head -2 | tr '\n' ' ')"
     pr_timeline 4 collapse
     pr_state
-    dev locksettings clear --old 1234 > /dev/null
+    pr_head "put the PIN away: clear, then what the lock screen does"
+    dev input keyevent KEYCODE_SLEEP
+    pr_timeline 3 asleep4
+    dev input keyevent KEYCODE_WAKEUP
+    pr_timeline 3 wake4
+    pr "clear said: $(dev locksettings clear --old 1234 2>&1 | head -2 | tr '
+' ' ')"
+    pr_timeline 4 cleared
+    pr_state
+    pr_policy
+    dev wm dismiss-keyguard
+    pr_timeline 4 dismiss5
+    pr_state
+    dev input keyevent KEYCODE_MENU
+    pr_timeline 4 menu
+    pr_state
+    pr "set-disabled said: $(dev locksettings set-disabled true 2>&1 | head -2 | tr '
+' ' ')"
+    pr_timeline 4 disabled
+    pr_state
+    dev locksettings set-disabled false > /dev/null
     wake
     pass "probed the lock screen: see probe_lock.txt"
 }
