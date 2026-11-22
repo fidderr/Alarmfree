@@ -986,6 +986,11 @@ type_test_pin() {
     dev input keyevent 66
     if ! wait_for 5 user_unlocked; then
         note "the PIN did not go in the first time, focus: $(focused_window)"
+        # The lock screen can be up without its keypad (s13b on Android 14 typed twice into a bare lock screen): ask for the
+        # keypad again before the second try.
+        dev wm dismiss-keyguard
+        wait_for 5 unlock_has_focus
+        sleep 1
         dev input text 1234
         dev input keyevent 66
         if ! wait_for 8 user_unlocked; then

@@ -26,7 +26,7 @@ declare -ga BL_BAD=()
 BL_REF=""
 BL_PREV=""
 BL_INFRA=""
-WD_SS="" WD_AUDIO="" WD_BOOT="" WD_WHAT=""
+WD_SS="" WD_AUDIO="" WD_BOOT="" WD_WHAT="" WD_AUDIO_ONLY="" BL_BOOTED=""
 RES_MARK=0
 
 # Every line is `key=value`. The shell of the device is mksh or toybox sh: plain sh only. The dumps are read once into a
@@ -35,6 +35,8 @@ RES_MARK=0
 #          print): `Override ...` is there only when the size or density was changed. The displays dump is not used: Android 16
 #          prints no `base=` part in it, also not for a changed size
 #   pin    a lock credential is set (KeyguardServiceDelegate in the window policy dump)
+#   kgpol  `showing=` in the same block: the lock screen on a version whose displays dump has no isKeyguardShowing
+#          (Android 10, run 45065611089)
 read -r -d '' BASELINE_SCRIPT << 'E'
 w=$(dumpsys window displays)
 echo "boot=$(getprop sys.boot_completed)"
@@ -43,7 +45,9 @@ echo "ss=$(pidof system_server)"
 echo "audio=$(pidof audioserver)"
 x=$(dumpsys power 2> /dev/null | grep -m1 -o 'mWakefulness=[A-Za-z]*'); echo "wake=${x#*=}"
 x=$(printf '%s\n' "$w" | grep -m1 -o 'isKeyguardShowing=[a-z]*'); echo "keyguard=${x#*=}"
-x=$(dumpsys window policy 2> /dev/null | grep -m1 -o 'secure=[a-z]*'); echo "pin=${x#*=}"
+p=$(dumpsys window policy 2> /dev/null)
+x=$(printf '%s\n' "$p" | grep -m1 -o '[ ]showing=[a-z]*'); echo "kgpol=${x#*=}"
+x=$(printf '%s\n' "$p" | grep -m1 -o 'secure=[a-z]*'); echo "pin=${x#*=}"
 x=$(dumpsys input_method | grep -o 'mInputShown=[a-z]*'); case "$x" in *true*) echo "ime=true" ;; *false*) echo "ime=false" ;; *) echo "ime=" ;; esac
 echo "focus=$(printf '%s\n' "$w" | grep -m1 mCurrentFocus)"
 x=$(cmd window size 2> /dev/null); echo "psize=$(printf '%s\n' "$x" | grep -m1 'Physical size')"; echo "osize=$(printf '%s\n' "$x" | grep -m1 'Override size')"
@@ -65,7 +69,9 @@ echo "boot=$(getprop sys.boot_completed)"
 echo "bootid=$(cat /proc/sys/kernel/random/boot_id)"
 echo "ss=$(pidof system_server)"
 echo "audio=$(pidof audioserver)"
-echo "crash=$(logcat -d -b main -b system -b crash 2> /dev/null | grep -m1 -E 'FATAL EXCEPTION IN SYSTEM PROCESS|WATCHDOG KILLING SYSTEM PROCESS|Fatal signal.*[(](system_server|audioserver)[)]')"
+l=$(logcat -d -b main -b system -b crash 2> /dev/null)
+echo "crash=$(printf '%s\n' "$l" | grep -m1 -E 'FATAL EXCEPTION IN SYSTEM PROCESS|WATCHDOG KILLING SYSTEM PROCESS|Fatal signal.*[(]system_server[)]')"
+echo "acrash=$(printf '%s\n' "$l" | grep -m1 -E 'Fatal signal.*[(]audioserver[)]')"
 E
 
 # A checkout with Windows line ends must not send a carriage return to the device.
@@ -97,7 +103,10 @@ baseline_parse() { # text
     esac
     f=${f%\}}
     BL_VAL[focusname]=${f##* }
-    case "$n" in yes | no | auto) ;; *) BL_VAL[night]="" ;; esac
+    # The words of `cmd uimode night`, `custom_bedtime` (what Android 16 says at its first start) and `custom_schedule` among them; an error text is not.
+    case "$n" in yes | no | auto | custom_*) ;; *) BL_VAL[night]="" ;; esac
+    # Android 10 has no isKeyguardShowing in the displays dump: the policy dump says it.
+    if [ -z "${BL_VAL[keyguard]-}" ] && [ -n "${BL_VAL[kgpol]-}" ]; then BL_VAL[keyguard]=${BL_VAL[kgpol]} BL_VAL[kgsrc]=policy; fi
     case "$fs" in null | 1 | 1.0 | 1.00) BL_VAL[font]=1.0 ;; esac
 }
 
@@ -127,10 +136,14 @@ baseline_want_init() {
         BL_WANT[sizeov]=none BL_WANT[dpiov]=none BL_WANT[font]=1.0 BL_WANT[idle]=false BL_WANT[autotime]=0
         # A device that does not show `false` at the start has no readable PIN here: the value is left out.
         [ "${BL_VAL[pin]-}" != false ] || BL_WANT[pin]=false
+        # The same for the lock screen where only the policy dump says it.
+        [ "${BL_VAL[kgsrc]-}" != policy ] || [ "${BL_VAL[keyguard]-}" = false ] || BL_WANT[keyguard]=
     else
         for k in ime sizeov dpiov font idle; do BL_WANT[$k]=${BL_VAL[$k]-}; done
     fi
     for k in zone rot_auto rot_user night timeout stay; do BL_WANT[$k]=${BL_VAL[$k]-}; done
+    # The night mode of a fresh Android 16 emulator is `custom_bedtime` and turns to `no` by itself: that is the wish.
+    case "${BL_WANT[night]}" in custom_*) on_emulator && BL_WANT[night]=no ;; esac
 }
 
 # BL_BAD: the keys that are not as wanted, BL_WHY[key]: what it was.
@@ -185,8 +198,34 @@ baseline_diffs() {
 baseline_put() { # system|global key value
     if [ "$3" = null ]; then dev settings delete "$1" "$2" > /dev/null 2>&1; else dev settings put "$1" "$2" "$3" > /dev/null 2>&1; fi
 }
+# The lock screen: the shade or the status bar in front while the keyguard says showing, or says nothing (Android 10 without
+# a reading), is the lock screen; with the keyguard not showing it is the shade.
+baseline_is_lock() {
+    case "${BL_VAL[focusname]-}" in NotificationShade | StatusBar) ;; *) return 1 ;; esac
+    case "${BL_VAL[keyguard]-}" in true | "") return 0 ;; esac
+    return 1
+}
+# Wake and dismiss (what `wake` does). Run 45065611089: that alone did not take in four places. A screen of the app over the
+# lock screen (s06 leaves its ring there) holds the dismiss back, so it is stopped first (every scenario starts with the same
+# force-stop); from the second round the lock screen is also swiped away, as a hand would.
+baseline_unlock() { # round
+    local pk=${PKG:-com.fidderr.alarmfree} size w h
+    case "${BL_VAL[focus]-}" in
+        *"$pk/"*) [ "${BL_VAL[keyguard]-}" != true ] || dev am force-stop "$pk" > /dev/null 2>&1 ;;
+    esac
+    wake
+    SCREEN_WENT_OFF=""
+    [ "$1" -ge 2 ] || return 0
+    dev input keyevent KEYCODE_MENU > /dev/null 2>&1
+    size=${BL_VAL[osize]:-${BL_VAL[psize]-}}
+    size=${size##* }
+    w=${size%x*}
+    h=${size#*x}
+    case "$w$h" in '' | *[!0-9]*) ;; *) dev input swipe $((w / 2)) $((h * 4 / 5)) $((w / 2)) $((h / 5)) 300 > /dev/null 2>&1 ;; esac
+    wake
+}
 # Each with the command the suite already has for it. Emulator only.
-baseline_repair() {
+baseline_repair() { # round
     local k woke=""
     for k in "${BL_BAD[@]}"; do
         case "$k" in
@@ -195,9 +234,13 @@ baseline_repair() {
                 OVERLAY=
                 SCREEN_WENT_OFF=1
                 ;;
-            wake | keyguard) [ -n "$woke" ] || { wake; woke=1; SCREEN_WENT_OFF=""; } ;;
+            wake | keyguard) [ -n "$woke" ] || { baseline_unlock "$1"; woke=1; } ;;
             ime) dev input keyevent KEYCODE_BACK > /dev/null 2>&1 ;;
             focus)
+                if baseline_is_lock && [ -z "$woke" ]; then
+                    baseline_unlock "$1"
+                    woke=1
+                fi
                 dev cmd statusbar collapse > /dev/null 2>&1
                 case "${BL_VAL[focus]-}" in
                     *"Not Responding"*)
@@ -228,6 +271,19 @@ baseline_repair() {
     done
 }
 
+# The keyboard of a reading that the second look does not confirm (Android 11 keeps `mInputShown=true` a while) is no finding,
+# and no Back key goes to whatever is in front.
+baseline_drop_stale_ime() {
+    local k shown
+    local -a keep=()
+    case " ${BL_BAD[*]-} " in *" ime "*) ;; *) return 0 ;; esac
+    on_emulator || return 0
+    shown=$(dev dumpsys input_method 2> /dev/null)
+    case "$shown" in '' | *mInputShown=true*) return 0 ;; esac
+    for k in "${BL_BAD[@]}"; do [ "$k" = ime ] || keep+=("$k"); done
+    BL_BAD=(${keep[@]+"${keep[@]}"})
+}
+
 baseline_note() { # unit text
     echo "NOTE  $1  $2"
     echo "NOTE  $1  $2" >> "$RESULTS"
@@ -236,7 +292,7 @@ baseline_note() { # unit text
 # The check before a scenario `$1` (the name the runner got). Returns 1 with BL_INFRA set when the baseline cannot be
 # reached; the scenario is then not run.
 baseline_unit() {
-    local s=$1 round k left="" prev=${BL_PREV:+" ($BL_PREV)"} was_off=${SCREEN_WENT_OFF-}
+    local s=$1 round k left="" lockfirst="" prev=${BL_PREV:+" ($BL_PREV)"} was_off=${SCREEN_WENT_OFF-}
     local -a first=()
     local -A why=()
     BL_INFRA=""
@@ -255,11 +311,14 @@ baseline_unit() {
     fi
     printf '%s %s\n' "$s" "${BL_RAW//$'\n'/ }" >> "$OUT/baseline.txt"
     baseline_diffs
+    baseline_drop_stale_ime
     if [ ${#BL_BAD[@]} -eq 0 ]; then
         baseline_watch_from_read
         return 0
     fi
     first=("${BL_BAD[@]}")
+    # The lock screen in front of the focus is one finding, not two.
+    case " ${first[*]} " in *" keyguard "*) ! baseline_is_lock || lockfirst=1 ;; esac
     for k in "${first[@]}"; do why[$k]=${BL_WHY[$k]}; done
     if ! on_emulator; then
         for k in "${first[@]}"; do
@@ -270,27 +329,33 @@ baseline_unit() {
         return 0
     fi
     for round in 1 2 3 4; do
-        baseline_repair
+        baseline_repair "$round"
         # A change of focus, the keyboard and the shade take a moment to show in the dumps: read at once, a round later
         # puts back what is already on its way and the baseline would look stuck on a busy runner.
         sleep 1
         baseline_read || { BL_INFRA="the device stopped answering while the baseline was put back"; return 1; }
         baseline_diffs
+        baseline_drop_stale_ime
         [ ${#BL_BAD[@]} -gt 0 ] || break
     done
     for k in "${first[@]}"; do
         case " ${BL_BAD[*]} " in
-            *" $k "*) left="$left; ${why[$k]}" ;;
+            *" $k "*) ;;
             *)
                 # After a restart nothing was left by a scenario: the system reports assumed values until it has answered.
                 [ -z "${BL_RESTARTED-}" ] || continue
-                # The screen that a scenario switched off on purpose is no finding.
-                case "$k" in wake | keyguard | focus) [ -z "$was_off" ] || continue ;; esac
+                # No scenario ran before the first one of a run.
+                [ -n "$BL_PREV" ] || continue
+                [ "$k" != focus ] || [ -z "$lockfirst" ] || continue
+                # The screen that a scenario switched off on purpose, and the lock screen of a restart the scenario meant, are no finding.
+                case "$k" in wake | keyguard | focus) { [ -z "$was_off" ] && [ -z "${BL_BOOTED-}" ]; } || continue ;; esac
                 baseline_note "$s" "the scenario before$prev left: ${why[$k]} (put back)"
                 ;;
         esac
     done
     if [ ${#BL_BAD[@]} -gt 0 ]; then
+        # What is off in the last reading, not in the first.
+        for k in "${BL_BAD[@]}"; do left="$left; ${BL_WHY[$k]}"; done
         BL_INFRA="${left#; } and cannot be put back"
         return 1
     fi
@@ -302,7 +367,8 @@ baseline_watch_from_read() {
 
 # A restart that the scenario means (s11, s13 and the like): reboot_only calls the first when it starts, so that the new
 # boot is not a finding, and the second when the device is back, so that what breaks later in the same scenario is.
-watchdog_announce_restart() { WD_SS="" WD_AUDIO="" WD_BOOT=""; }
+# BL_BOOTED: a restart boots to the lock screen, which the next baseline reading may still find: no finding about the scenario.
+watchdog_announce_restart() { WD_SS="" WD_AUDIO="" WD_BOOT="" BL_BOOTED=1; }
 watchdog_rebase() {
     local out line
     WD_SS="" WD_AUDIO="" WD_BOOT=""
@@ -319,9 +385,10 @@ watchdog_rebase() {
 
 # After the scenario, pass or fail. WD_WHAT is empty when the device is whole.
 watchdog_end() {
-    local out line reason=""
+    local out line reason="" areason=""
     local -A W=()
     WD_WHAT=""
+    WD_AUDIO_ONLY=""
     out=$(dev "$WATCH_SCRIPT" 2> /dev/null)
     while IFS= read -r line; do
         case "$line" in [a-z]*=*) W[${line%%=*}]=${line#*=} ;; esac
@@ -334,10 +401,13 @@ watchdog_end() {
             reason="${reason:+$reason; }system_server restarted (pid $WD_SS, now ${W[ss]:-none})"
         fi
         if [ -n "$WD_AUDIO" ] && [ "$WD_AUDIO" != "${W[audio]-}" ]; then
-            reason="${reason:+$reason; }the audio server restarted (pid $WD_AUDIO, now ${W[audio]:-none})"
+            areason="the audio server restarted (pid $WD_AUDIO, now ${W[audio]:-none})"
         fi
+        [ -z "${W[acrash]-}" ] || areason="${areason:+$areason; }crash in the system log: ${W[acrash]:0:140}"
         [ -z "${W[crash]-}" ] || reason="${reason:+$reason; }crash in the system log: ${W[crash]:0:140}"
     fi
+    # Only the audio server: a unit that passed keeps its PASS (run_unit decides).
+    [ -z "$areason" ] || { [ -n "$reason" ] || WD_AUDIO_ONLY=1; reason="${reason:+$reason; }$areason"; }
     [ -n "$reason" ] || return 0
     if on_emulator; then
         WD_WHAT=$reason
@@ -380,6 +450,18 @@ unit_forget() {
     ALARM_EXTRA="" OVERLAY="" VARIANT="" RETRY_NOTE="" RETRY_CARRY=""
 }
 
+# True when the scenario wrote a FAIL line since RES_MARK.
+unit_wrote_fail() {
+    local l i
+    local -a now
+    mapfile -t now < "$RESULTS"
+    for ((i = RES_MARK; i < ${#now[@]}; i++)); do
+        l=${now[i]}
+        case "$l" in "FAIL "*) return 0 ;; esac
+    done
+    return 1
+}
+
 # One scenario of the runner: the baseline, the scenario, the watchdog, and the one rerun on a restarted device.
 run_unit() { # name
     local s=$1 attempt=1 what t0 follow bl_ok
@@ -389,11 +471,16 @@ run_unit() { # name
         mapfile -t RES_ALL < "$RESULTS"
         RES_MARK=${#RES_ALL[@]}
         baseline_unit "$s" && bl_ok=1 || bl_ok=""
-        BL_RESTARTED=""
+        BL_RESTARTED="" BL_BOOTED=""
         if [ -n "$bl_ok" ]; then
             "$s"
             watchdog_end
             what=$WD_WHAT
+            # An audio server that restarted while the scenario passed is the device's, not a verdict on the app.
+            if [ -n "$what" ] && [ -n "$WD_AUDIO_ONLY" ] && ! unit_wrote_fail; then
+                baseline_note "$s" "the scenario passed although $what"
+                what=""
+            fi
         else
             what="the device is not at its baseline: $BL_INFRA"
         fi

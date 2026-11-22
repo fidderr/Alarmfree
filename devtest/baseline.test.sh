@@ -27,9 +27,9 @@ CLEAN_FOCUS='mCurrentFocus=Window{3c4d u0 com.google.android.apps.nexuslauncher/
 mkdir -p "$DIR/st"
 st_set() { printf '%s' "$2" > "$DIR/st/$1"; }
 st_get() { local v=""; read -r v < "$DIR/st/$1" || :; printf '%s' "$v"; }
-ST_KEYS="boot bootid ss audio wake keyguard pin ime focus size dpi font idle autotime zone rot_auto rot_user night timeout stay"
+ST_KEYS="boot bootid ss audio wake keyguard kgpol pin ime imestale focus size dpi font idle autotime zone rot_auto rot_user night timeout stay"
 st_set boot 1; st_set bootid boot-1; st_set ss 812; st_set audio 640; st_set wake Awake; st_set keyguard false; st_set pin false
-st_set ime false; st_set focus 'mCurrentFocus=Window{1a2b u0 com.fidderr.alarmfree/android.app.NativeActivity}'
+st_set ime false; st_set imestale false; st_set kgpol false; st_set focus 'mCurrentFocus=Window{1a2b u0 com.fidderr.alarmfree/android.app.NativeActivity}'
 st_set size 1080x2400; st_set dpi 420; st_set font null; st_set idle false; st_set autotime 0; st_set zone Europe/Amsterdam
 st_set rot_auto 0; st_set rot_user 0; st_set night no; st_set timeout 86400000; st_set stay 0
 : > "$DIR/devlog"
@@ -63,11 +63,12 @@ dumpsys() {
             printf '  isKeyguardShowing=%s\n  %s\n  mFocusedApp=ActivityRecord{1 u0 x/y t5}\n' "$ST_keyguard" "$ST_focus"
             ;;
         # A dumpsys whose reader left early says so on its error output (as the real one does): adb shows it in the reading.
-        "window policy") echo "Failed to write while dumping service window: Broken pipe" >&2; printf 'WINDOW MANAGER POLICY STATE\n  mSafeMode=false\n  KeyguardServiceDelegate\n    showing=false\n    secure=%s\n    occluded=false\n' "$ST_pin" ;;
+        "window policy") echo "Failed to write while dumping service window: Broken pipe" >&2; printf 'WINDOW MANAGER POLICY STATE\n  mSafeMode=false\n  mShowingDream=false\n  KeyguardServiceDelegate\n    showing=%s\n    showingAndNotOccluded=false\n    secure=%s\n    occluded=false\n' "$ST_kgpol" "$ST_pin" ;;
         "power "*) echo "Failed to write while dumping service power: Broken pipe" >&2; printf 'POWER MANAGER (dumpsys power)\n  mWakefulness=%s\n  mWakefulnessChanging=false\n' "$ST_wake" ;;
         "input_method "*)
             printf 'Input Method Service\n  client A mInputShown=false\n'
-            [ "$ST_ime" != true ] || printf '  client B mInputShown=true\n'
+            # imestale: this reading says the keyboard is up (Android 11 keeps it so a while); a second look does not.
+            [ "$ST_ime" != true ] && [ "$ST_imestale" != true ] || printf '  client B mInputShown=true\n'
             ;;
         "deviceidle "*) echo "Failed to write while dumping service deviceidle: Broken pipe" >&2; printf 'Idle state:\n  mForceIdle=%s\n  mState=ACTIVE\n' "$ST_idle" ;;
     esac
@@ -83,14 +84,32 @@ fake_script() { # the script of the device, run by a local bash that answers as 
         bash -c "$FAKE_PRE"$'\n'"$1" 2>&1
     )
 }
+unlock_screen() {
+    [ -z "$(st_get keyguard)" ] || fd_set keyguard false
+    fd_set kgpol false
+    case "$(st_get focus)" in *NotificationShade* | *StatusBar*) fd_set focus "$CLEAN_FOCUS" ;; esac
+}
 fake_command() {
     local c=$1
     case "$c" in
         *isKeyguardShowing=false*) [ "$(st_get keyguard)" = false ]; return ;;
         "locksettings clear --old 1234"*) fd_set pin false ;;
         "input keyevent KEYCODE_WAKEUP"*) fd_set wake Awake ;;
-        "wm dismiss-keyguard"*) fd_set keyguard false ;;
-        "input keyevent KEYCODE_BACK"*) fd_set ime false ;;
+        "wm dismiss-keyguard"*)
+            # OCCLUDED=1: a screen of the app over the lock screen holds the dismiss back. SWIPE_ONLY=1: only a swipe takes it away.
+            [ -z "${SWIPE_ONLY:-}" ] || return 0
+            case "$(st_get focus)" in *alarmfree/*) [ -z "${OCCLUDED:-}" ] || return 0 ;; esac
+            unlock_screen
+            ;;
+        "input swipe"*) unlock_screen ;;
+        "dumpsys input_method"*)
+            echo '  client A mInputShown=false'
+            [ "$(st_get ime)" != true ] || echo '  client B mInputShown=true'
+            ;;
+        "input keyevent KEYCODE_BACK"*)
+            fd_set ime false
+            [ -z "${BACK_LOCKS:-}" ] || { st_set keyguard true; st_set focus 'mCurrentFocus=Window{fc62baa u0 NotificationShade}'; }
+            ;;
         "input keyevent KEYCODE_HOME"*)
             # SLOW_HOME=n: a change of focus that shows only after the n-th press.
             echo h >> "$DIR/homes"
@@ -105,7 +124,10 @@ fake_command() {
         "settings put system screen_off_timeout"*) fd_set timeout "${c##* }" ;;
         "settings put global stay_on_while_plugged_in"*) fd_set stay "${c##* }" ;;
         "dumpsys deviceidle unforce"*) fd_set idle false ;;
-        "am force-stop com.fidderr.alarmfree"* | "am force-stop com.android.settings"*) fd_set focus "$CLEAN_FOCUS" ;;
+        "am force-stop com.fidderr.alarmfree"* | "am force-stop com.android.settings"*)
+            # What is behind the app is the lock screen, when there is one.
+            if [ "$(st_get keyguard)" = true ] || [ "$(st_get kgpol)" = true ]; then fd_set focus 'mCurrentFocus=Window{fc62baa u0 NotificationShade}'; else fd_set focus "$CLEAN_FOCUS"; fi
+            ;;
         "su 0 id -u"*) [ -n "${NOROOT:-}" ] || echo 0 ;;
         "cmd alarm set-timezone"*) fd_set zone "${c##* }" ;;
         "cmd uimode night"*) fd_set night "${c##* }" ;;
@@ -178,6 +200,30 @@ sx() {
             ;;
         audio_replaced)
             st_set audio 641
+            pass "fine"
+            ;;
+        audio_real)
+            # Run 45065611089, Android 12, s03: the ring came back, the audio server restarted meanwhile.
+            printf '%s\n' '11-22 20:28:06.375   429   806 F libc    : Fatal signal 6 (SIGABRT), code -1 (SI_QUEUE) in tid 806 (TimeCheckThread), pid 429 (audioserver)' >> "$DIR/devlog"
+            st_set audio 14444
+            pass "rang again, 1s after the snooze ended"
+            ;;
+        audio_fail)
+            st_set audio 641
+            fail "no ring"
+            ;;
+        audio_and_ss)
+            st_set audio 641
+            st_set ss 999
+            pass "fine"
+            ;;
+        reboot_lock)
+            reboot_and_wait
+            st_set keyguard true
+            pass "fine"
+            ;;
+        lock_left)
+            st_set keyguard true
             pass "fine"
             ;;
         new_boot)
@@ -277,6 +323,8 @@ has() { grep -q -- "$2" "$1" 2> /dev/null; }
 # A file's single line, without a program.
 first() { local l=""; [ -f "$1" ] && read -r l < "$1"; echo "$l"; }
 res() { echo "$tmp/$1/out/results.txt"; }
+# One value of the stubbed device after a case.
+st_get_of() { first "$tmp/$1/st/$2"; }
 
 # 1. A clean reading passes with no note, and costs one call to the device.
 run_case clean clean
@@ -340,10 +388,68 @@ for f in 'mCurrentFocus=Window{1 u0 com.fidderr.alarmfree/android.app.NativeActi
     [ "$(first "$tmp/focus_ok/rc")" = 0 ] && [ "$(lines "$(res focus_ok)")" = 0 ] && verdict "focus on ${f#*u0 } is no leftover" 1 || verdict "focus on ${f#*u0 } is no leftover" 0
 done
 
+# The lock screen (run 45065611089): behind the app (s07 on Android 14 and 15, s14), in the notification shade (s13b on
+# Android 12 and 11, s13d on Android 16), in the status bar with no reading of the keyguard (s13b on Android 10).
+SHADE='mCurrentFocus=Window{865b41d u0 NotificationShade}'
+lock_case() { # name text-of-the-note PRE... (env as VAR=value after)
+    local name=$1 note=$2 pre=$3
+    shift 3
+    run_case "$name" run SX=ok PRE="BL_PREV=s00; $pre" "$@"
+    local rf
+    rf=$(res "$name")
+    if has "$rf" '^PASS  sx  ' && has "$rf" "^NOTE  sx  the scenario before (s00) left: $note (put back)\$" && ! has "$rf" '^INFRA' && [ ! -e "$tmp/$name/reboots" ] && [ "$(lines "$rf")" = 2 ]; then
+        verdict "lock screen, $name: put back, the scenario runs, no INFRA" 1
+    else
+        verdict "lock screen, $name: put back, the scenario runs, no INFRA ($(cat "$rf" 2> /dev/null))" 0
+    fi
+}
+lock_case behind_app "the lock screen is showing" "st_set keyguard true" OCCLUDED=1
+lock_case behind_app_swipe "the lock screen is showing" "st_set keyguard true" OCCLUDED=1 SWIPE_ONLY=1
+lock_case shade_lock "the lock screen is showing" "st_set keyguard true; st_set focus '$SHADE'"
+lock_case shade_lock_swipe "the lock screen is showing" "st_set keyguard true; st_set focus '$SHADE'" SWIPE_ONLY=1
+lock_case statusbar_nokg "the focus is on StatusBar" "st_set keyguard ''; st_set kgpol ''; st_set focus 'mCurrentFocus=Window{c769a94 u0 StatusBar}'"
+lock_case statusbar_nokg_swipe "the focus is on StatusBar" "st_set keyguard ''; st_set kgpol ''; st_set focus 'mCurrentFocus=Window{c769a94 u0 StatusBar}'" SWIPE_ONLY=1
+# The status bar with the keyguard not showing is the shade: no wake, no swipe.
+run_case statusbar_shade run SX=ok PRE="BL_PREV=s00; st_set focus 'mCurrentFocus=Window{c769a94 u0 StatusBar}'"
+has "$(res statusbar_shade)" '^NOTE  sx  the scenario before (s00) left: the focus is on StatusBar (put back)$' && ! has "$tmp/statusbar_shade/calls" 'dismiss-keyguard' && ! has "$tmp/statusbar_shade/calls" 'input swipe' && verdict "the status bar with no lock screen is the shade: no dismiss, no swipe" 1 || verdict "the status bar with no lock screen is the shade ($(cat "$(res statusbar_shade)" 2> /dev/null))" 0
+# Android 10: no isKeyguardShowing in the displays dump, the policy dump has showing=.
+run_case a10_lock leftover PRE="st_set keyguard ''" LEFT=kgpol=true
+has "$(res a10_lock)" '^NOTE  s02  the scenario before (s01) left: the lock screen is showing (put back)$' && [ "$(first "$tmp/a10_lock/rc")" = 0 ] && [ "$(first "$tmp/a10_lock/after")" = false ] && verdict "Android 10: the lock screen is read from showing= of the policy dump and put back" 1 || verdict "Android 10: the lock screen is read from the policy dump ($(cat "$(res a10_lock)" 2> /dev/null))" 0
+run_case a10_clean clean PRE="st_set keyguard ''"
+[ "$(first "$tmp/a10_clean/rc")" = 0 ] && [ "$(lines "$(res a10_clean)")" = 0 ] && ! has "$tmp/a10_clean/stdout" 'not readable on this device:.*keyguard' && verdict "Android 10: a clean reading with no isKeyguardShowing is clean, keyguard is no longer 'not readable'" 1 || verdict "Android 10: a clean reading with no isKeyguardShowing is clean ($(cat "$tmp/a10_clean/stdout" 2> /dev/null))" 0
+# A policy dump that says showing=true at the very first reading is not taken as a wish.
+run_case a10_assumed leftover PRE="st_set keyguard ''; st_set kgpol true" LEFT=kgpol=true
+[ "$(first "$tmp/a10_assumed/rc")" = 0 ] && [ "$(lines "$(res a10_assumed)")" = 0 ] && verdict "Android 10: a lock screen that the policy dump shows from the start is not repaired on every unit" 1 || verdict "Android 10: a lock screen that the policy dump shows from the start ($(cat "$(res a10_assumed)" 2> /dev/null))" 0
+# The restart that a scenario meant boots to the lock screen: no NOTE about that scenario. A scenario that leaves it up does get one.
+run_case reboot_lock runs SX=reboot_lock
+rf=$(res reboot_lock)
+[ "$(lines "$rf")" = 2 ] && ! has "$rf" '^NOTE' && ! has "$rf" '^INFRA' && verdict "after a restart the scenario meant, a lock screen in the next reading is no NOTE (put back all the same)" 1 || verdict "after a restart the scenario meant, a lock screen is no NOTE ($(cat "$rf" 2> /dev/null))" 0
+run_case lock_left runs SX=lock_left
+has "$(res lock_left)" '^NOTE  sx  the scenario before (sx) left: the lock screen is showing (put back)$' && verdict "a scenario that leaves the lock screen up gets the NOTE" 1 || verdict "a scenario that leaves the lock screen up gets the NOTE ($(cat "$(res lock_left)" 2> /dev/null))" 0
+
+# The keyboard: a reading that a second look does not confirm (Android 11) is no finding and no Back key.
+run_case ime_stale leftover LEFT=imestale=true
+[ "$(first "$tmp/ime_stale/rc")" = 0 ] && [ "$(lines "$(res ime_stale)")" = 0 ] && ! has "$tmp/ime_stale/calls" 'KEYCODE_BACK' && verdict "a stale keyboard reading: no NOTE, no Back key" 1 || verdict "a stale keyboard reading: no NOTE, no Back key ($(cat "$(res ime_stale)" 2> /dev/null))" 0
+run_case ime_real leftover LEFT=ime=true
+has "$tmp/ime_real/calls" 'KEYCODE_BACK' && has "$(res ime_real)" 'left: the keyboard is up (put back)' && verdict "a keyboard that is up is still put away with the Back key" 1 || verdict "a keyboard that is up is still put away with the Back key" 0
+
+# The night mode of Android 16 at its first start is `custom_bedtime`: not dropped; on an emulator the wish is `no`, on a phone it is
+# what it was.
+run_case night_a16 clean PRE="st_set night custom_bedtime"
+[ "$(first "$tmp/night_a16/rc")" = 0 ] && [ "$(st_get_of night_a16 night)" = no ] && verdict "night mode custom_bedtime at the first reading is compared (put to no on an emulator)" 1 || verdict "night mode custom_bedtime at the first reading is compared ($(st_get_of night_a16 night))" 0
+run_case night_phone leftover PRE="st_set night custom_bedtime" LEFT=night=no SERIAL=R58M12345A
+has "$(res night_phone)" '^NOTE  s02  changed during the run (s01): night mode no (was custom_bedtime) (a phone: not put back)$' && verdict "a phone: night mode custom_bedtime is a value that is compared" 1 || verdict "a phone: night mode custom_bedtime is compared ($(cat "$(res night_phone)" 2> /dev/null))" 0
+
 # 3. A leftover that stays is INFRA, and the one that was put back still gets its NOTE.
 run_case stuck leftover LEFT=font=1.3 STUCK=font
 infra=$(first "$tmp/stuck/infra")
 [ "$(first "$tmp/stuck/rc")" = 1 ] && case "$infra" in *"font scale 1.3 and cannot be put back") true ;; *) false ;; esac && verdict "a leftover that stays gives INFRA, the scenario does not run" 1 || verdict "a leftover that stays gives INFRA ($infra)" 0
+
+# The INFRA text names what is off in the last reading, not in the first one (run 45065611089, Android 16 s13d: the keyboard was
+# put away, the Back key brought the lock screen, and the text still said keyboard).
+run_case infra_last leftover LEFT=ime=true BACK_LOCKS=1 STUCK="keyguard focus"
+infra=$(first "$tmp/infra_last/infra")
+[ "$(first "$tmp/infra_last/rc")" = 1 ] && [ "$infra" = "the lock screen is showing; the focus is on NotificationShade and cannot be put back" ] && verdict "the INFRA text names the last reading, not the first" 1 || verdict "the INFRA text names the last reading ($infra)" 0
 
 # 4. The watchdog.
 run_case w_ss watch "CHANGE=st_set ss 999"
@@ -386,10 +492,39 @@ else
 fi
 run_case r_syscrash run SX=system_crash
 has "$(res r_syscrash)" 'crash in the system log: .*FATAL EXCEPTION IN SYSTEM PROCESS' && verdict "a crash of the system process in the log is INFRA" 1 || verdict "a crash of the system process in the log is INFRA ($(cat "$(res r_syscrash)"))" 0
+# An audio server that restarted while the scenario passed does not overrule the PASS (run 45065611089, Android 12, s03):
+# one NOTE with what happened. Changed from P1-3: these two cases said INFRA for a passed unit.
 run_case r_audiocrash run SX=audio_crash
-has "$(res r_audiocrash)" 'crash in the system log: .*(audioserver)' && verdict "a crash of the audio server in the log is INFRA" 1 || verdict "a crash of the audio server in the log is INFRA ($(cat "$(res r_audiocrash)"))" 0
+rf=$(res r_audiocrash)
+if has "$rf" '^PASS  sx  ' && has "$rf" '^NOTE  sx  the scenario passed although crash in the system log: .*(audioserver)' && ! has "$rf" '^INFRA' && [ ! -e "$tmp/r_audiocrash/reboots" ]; then
+    verdict "a crash of the audio server in the log, with a passed scenario: the PASS stands, one NOTE" 1
+else
+    verdict "a crash of the audio server in the log, with a passed scenario: the PASS stands, one NOTE ($(cat "$rf"))" 0
+fi
 run_case r_audio run SX=audio_replaced
-has "$(res r_audio)" 'the audio server restarted (pid 640, now 641)' && verdict "a replaced audio server is INFRA in a run" 1 || verdict "a replaced audio server is INFRA in a run" 0
+rf=$(res r_audio)
+if has "$rf" '^PASS  sx  ' && has "$rf" '^NOTE  sx  the scenario passed although the audio server restarted (pid 640, now 641)$' && ! has "$rf" '^INFRA' && [ "$(lines "$rf")" = 2 ] && [ ! -e "$tmp/r_audio/reboots" ]; then
+    verdict "a replaced audio server, with a passed scenario: the PASS stands, one NOTE, no restart" 1
+else
+    verdict "a replaced audio server, with a passed scenario: the PASS stands, one NOTE ($(cat "$rf"))" 0
+fi
+run_case r_audioreal run SX=audio_real
+rf=$(res r_audioreal)
+if has "$rf" '^PASS  sx  .*rang again, 1s after the snooze ended$' && has "$rf" '^NOTE  sx  the scenario passed although the audio server restarted (pid 640, now 14444); crash in the system log: .*TimeCheckThread.*(audioserver)$' && ! has "$rf" '^INFRA' && [ "$(lines "$rf")" = 2 ]; then
+    verdict "the audio server restart of Android 12 s03 (real log line): PASS and one NOTE" 1
+else
+    verdict "the audio server restart of Android 12 s03 (real log line): PASS and one NOTE ($(cat "$rf"))" 0
+fi
+printf 'PASS  s03  [1s] x\nNOTE  s03  the scenario passed although the audio server restarted\n' > "$tmp/e6"
+(. "$here/baseline.sh"; run_exit_code "$tmp/e6"; echo $? > "$tmp/code6")
+[ "$(first "$tmp/code6")" = 0 ] && verdict "a PASS with the audio NOTE leaves the exit code of the run at 0" 1 || verdict "a PASS with the audio NOTE leaves the exit code of the run at 0" 0
+# A unit that failed, or one where the system process changed too, is still INFRA.
+run_case r_audiofail run SX=audio_fail
+rf=$(res r_audiofail)
+has "$rf" '^INFRA  sx  .*the audio server restarted (pid 640, now 641); the scenario said: FAIL no ring \[rerun follows\]$' && [ "$(lines "$tmp/r_audiofail/reboots")" = 1 ] && verdict "a failed scenario with an audio server restart is INFRA, as before" 1 || verdict "a failed scenario with an audio server restart is INFRA ($(cat "$rf"))" 0
+run_case r_audiodss run SX=audio_and_ss
+rf=$(res r_audiodss)
+has "$rf" '^INFRA  sx  .*system_server restarted (pid 812, now 999); the audio server restarted' && ! has "$rf" '^NOTE' && verdict "an audio server restart together with system_server is INFRA" 1 || verdict "an audio server restart together with system_server is INFRA ($(cat "$rf"))" 0
 run_case r_boot run SX=new_boot
 has "$(res r_boot)" 'the device restarted (a new boot)' && verdict "a new boot is INFRA in a run" 1 || verdict "a new boot is INFRA in a run" 0
 run_case r_meant run SX=reboot_meant
