@@ -40,7 +40,13 @@ getprop() { case "$1" in sys.boot_completed) echo "$ST_boot" ;; persist.sys.time
 pidof() { case "$1" in system_server) echo "$ST_ss" ;; audioserver) echo "$ST_audio" ;; esac; }
 cat() { if [ "$1" = /proc/sys/kernel/random/boot_id ]; then echo "$ST_bootid"; else command cat "$@"; fi; }
 logcat() { command cat "$ST_logfile"; }
-cmd() { [ "$1 $2" = "uimode night" ] && echo "Night mode: $ST_night"; }
+cmd() {
+    case "$1 $2" in
+        "uimode night") echo "Night mode: $ST_night" ;;
+        "window size") echo "Physical size: 1080x2400"; [ "$ST_size" = 1080x2400 ] || echo "Override size: $ST_size" ;;
+        "window density") echo "Physical density: 420"; [ "$ST_dpi" = 420 ] || echo "Override density: $ST_dpi" ;;
+    esac
+}
 settings() {
     [ "$1" = get ] || return 0
     case "$3" in
@@ -52,20 +58,18 @@ dumpsys() {
     case "$1 $2" in
         "window displays")
             printf 'WINDOW MANAGER DISPLAY CONTENTS (dumpsys window displays)\n  Display: mDisplayId=0\n'
-            if [ "$ST_size $ST_dpi" = "1080x2400 420" ]; then
-                printf '    init=1080x2400 420dpi cur=1080x2400 app=1080x2400 rng=1080x1000-2400x2400\n'
-            else
-                printf '    init=1080x2400 420dpi base=%s %sdpi cur=%s app=%s rng=1080x1000-2400x2400\n' "$ST_size" "$ST_dpi" "$ST_size" "$ST_size"
-            fi
+            # As Android 16 prints it: never a `base=` part, also not with a changed size (run 45062208688).
+            printf '    init=1080x2400 420dpi cur=%s app=%s rng=1080x1000-2400x2400\n' "$ST_size" "$ST_size"
             printf '  isKeyguardShowing=%s\n  %s\n  mFocusedApp=ActivityRecord{1 u0 x/y t5}\n' "$ST_keyguard" "$ST_focus"
             ;;
-        "window policy") printf 'WINDOW MANAGER POLICY STATE\n  mSafeMode=false\n  KeyguardServiceDelegate\n    showing=false\n    secure=%s\n    occluded=false\n' "$ST_pin" ;;
-        "power "*) printf 'POWER MANAGER (dumpsys power)\n  mWakefulness=%s\n  mWakefulnessChanging=false\n' "$ST_wake" ;;
+        # A dumpsys whose reader left early says so on its error output (as the real one does): adb shows it in the reading.
+        "window policy") echo "Failed to write while dumping service window: Broken pipe" >&2; printf 'WINDOW MANAGER POLICY STATE\n  mSafeMode=false\n  KeyguardServiceDelegate\n    showing=false\n    secure=%s\n    occluded=false\n' "$ST_pin" ;;
+        "power "*) echo "Failed to write while dumping service power: Broken pipe" >&2; printf 'POWER MANAGER (dumpsys power)\n  mWakefulness=%s\n  mWakefulnessChanging=false\n' "$ST_wake" ;;
         "input_method "*)
             printf 'Input Method Service\n  client A mInputShown=false\n'
             [ "$ST_ime" != true ] || printf '  client B mInputShown=true\n'
             ;;
-        "deviceidle "*) printf 'Idle state:\n  mForceIdle=%s\n  mState=ACTIVE\n' "$ST_idle" ;;
+        "deviceidle "*) echo "Failed to write while dumping service deviceidle: Broken pipe" >&2; printf 'Idle state:\n  mForceIdle=%s\n  mState=ACTIVE\n' "$ST_idle" ;;
     esac
 }
 F
@@ -76,7 +80,7 @@ fake_script() { # the script of the device, run by a local bash that answers as 
     (
         for k in $ST_KEYS; do export "ST_$k=$(st_get "$k")"; done
         export ST_logfile="$DIR/devlog"
-        bash -c "$FAKE_PRE"$'\n'"$1"
+        bash -c "$FAKE_PRE"$'\n'"$1" 2>&1
     )
 }
 fake_command() {
@@ -132,6 +136,8 @@ reboot_and_wait() {
     st_set bootid boot-2
     st_set ss 4000
     st_set audio 4100
+    # Right after a boot the system reports its assumed lock state until the lock screen service has answered.
+    [ -z "${BOOT_LOCKED:-}" ] || { st_set keyguard true; st_set pin true; }
     watchdog_announce_restart
     watchdog_rebase
 }
@@ -280,6 +286,7 @@ run_case clean clean
 has "$tmp/clean/out/baseline.txt" "boot=1 bootid=boot-1 ss=812" && verdict "the reading is kept in baseline.txt" 1 || verdict "the reading is kept in baseline.txt" 0
 # The system prints `base=` only when the size or density was changed: no `base=` is no override.
 [ "$(first "$tmp/clean/disp")" = "none none" ] && verdict "a display line without base= reads as no override" 1 || verdict "a display line without base= reads as no override ($(first "$tmp/clean/disp"))" 0
+! has "$tmp/clean/out/baseline.txt" "Broken pipe" && verdict "no error text of a dumpsys that was cut short in the reading" 1 || verdict "no error text of a dumpsys that was cut short in the reading" 0
 
 # 2. Each kind of leftover is put back, read again, and said in a NOTE.
 leftover_case() { # name key=value expected-text key-after
@@ -307,6 +314,14 @@ leftover_case rotauto rot_auto=1 "auto-rotate 1 (was 0)" 0
 leftover_case rotuser rot_user=1 "rotation 1 (was 0)" 0
 leftover_case night night=yes "night mode yes (was no)" no
 leftover_case timeout timeout=10000 "screen timeout 10000 (was 86400000)" 86400000
+# The size and density of an Android whose displays dump has no `base=` part (Android 16): the two cases above read them
+# from `cmd window size` and `cmd window density`.
+# A screen timeout of 86400000 or more is "never": the value of reboot_only and the value the emulator writes are the same.
+for pair in "86400000 2147483647" "2147483647 86400000"; do
+    set -- $pair
+    run_case "tmo_$1_$2" leftover PRE="st_set timeout $1" LEFT="timeout=$2"
+    [ "$(first "$tmp/tmo_$1_$2/rc")" = 0 ] && [ "$(lines "$(res "tmo_$1_$2")")" = 0 ] && verdict "screen timeout $1 and $2 are the same to the baseline (no NOTE)" 1 || verdict "screen timeout $1 and $2 are the same to the baseline ($(cat "$(res "tmo_$1_$2")" 2> /dev/null))" 0
+done
 leftover_case stay stay=3 "stay awake while plugged in 3 (was 0)" 0
 leftover_case wake wake=Asleep "the screen was Asleep" Awake
 leftover_case keyguard keyguard=true "the lock screen is showing" false
@@ -389,6 +404,15 @@ if has "$rf" '^INFRA  sx  \[[0-9]*s\] the device is not at its baseline: font sc
     verdict "a baseline that cannot be reached: INFRA, the scenario does not run, one restart, INFRA stands" 1
 else
     verdict "a baseline that cannot be reached: INFRA, the scenario does not run ($(cat "$rf"))" 0
+fi
+# After the restart that follows an INFRA the system reports a lock PIN and a lock screen until it has answered: waited out, put
+# right, and no NOTE "the scenario before left" (nothing was left by a scenario).
+run_case r_bootlock run SX=break_once BOOT_LOCKED=1
+rf=$(res r_bootlock)
+if has "$rf" '^INFRA  sx  .*\[rerun follows\]$' && has "$rf" '^PASS  sx  ' && ! has "$rf" '^NOTE' && [ "$(lines "$rf")" = 2 ]; then
+    verdict "the second run after a restart writes no 'left' NOTE for what the boot reports, and passes" 1
+else
+    verdict "the second run after a restart writes no 'left' NOTE for what the boot reports ($(cat "$rf"))" 0
 fi
 run_case r_restartfails run SX=break_once RESTART_FAILS=1
 [ "$(first "$tmp/r_restartfails/exit")" = 2 ] && has "$(res r_restartfails)" '^STOP  sx  the device did not come back after the restart' && verdict "a device that does not come back ends the run with STOP and the reason" 1 || verdict "a device that does not come back ends the run with STOP ($(cat "$(res r_restartfails)"), exit $(first "$tmp/r_restartfails/exit"))" 0

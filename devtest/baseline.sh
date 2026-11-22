@@ -31,8 +31,9 @@ RES_MARK=0
 
 # Every line is `key=value`. The shell of the device is mksh or toybox sh: plain sh only. The dumps are read once into a
 # variable and cut there, so the output is small and the call is one.
-#   disp   the line of the display with its real size and, when it was changed, its set size (`wm size` and `wm density`
-#          would start a program each); the system leaves `base=` out when nothing was changed
+#   psize, osize, pdens, odens   the lines of `cmd window size` and `cmd window density` (what `wm size` and `wm density`
+#          print): `Override ...` is there only when the size or density was changed. The displays dump is not used: Android 16
+#          prints no `base=` part in it, also not for a changed size
 #   pin    a lock credential is set (KeyguardServiceDelegate in the window policy dump)
 read -r -d '' BASELINE_SCRIPT << 'E'
 w=$(dumpsys window displays)
@@ -40,14 +41,15 @@ echo "boot=$(getprop sys.boot_completed)"
 echo "bootid=$(cat /proc/sys/kernel/random/boot_id)"
 echo "ss=$(pidof system_server)"
 echo "audio=$(pidof audioserver)"
-x=$(dumpsys power | grep -m1 -o 'mWakefulness=[A-Za-z]*'); echo "wake=${x#*=}"
+x=$(dumpsys power 2> /dev/null | grep -m1 -o 'mWakefulness=[A-Za-z]*'); echo "wake=${x#*=}"
 x=$(printf '%s\n' "$w" | grep -m1 -o 'isKeyguardShowing=[a-z]*'); echo "keyguard=${x#*=}"
-x=$(dumpsys window policy | grep -m1 -o 'secure=[a-z]*'); echo "pin=${x#*=}"
+x=$(dumpsys window policy 2> /dev/null | grep -m1 -o 'secure=[a-z]*'); echo "pin=${x#*=}"
 x=$(dumpsys input_method | grep -o 'mInputShown=[a-z]*'); case "$x" in *true*) echo "ime=true" ;; *false*) echo "ime=false" ;; *) echo "ime=" ;; esac
 echo "focus=$(printf '%s\n' "$w" | grep -m1 mCurrentFocus)"
-echo "disp=$(printf '%s\n' "$w" | grep -m1 -E -o 'init=[0-9x]+ [0-9]+dpi( base=[0-9x]+ [0-9]+dpi)?')"
+x=$(cmd window size 2> /dev/null); echo "psize=$(printf '%s\n' "$x" | grep -m1 'Physical size')"; echo "osize=$(printf '%s\n' "$x" | grep -m1 'Override size')"
+x=$(cmd window density 2> /dev/null); echo "pdens=$(printf '%s\n' "$x" | grep -m1 'Physical density')"; echo "odens=$(printf '%s\n' "$x" | grep -m1 'Override density')"
 echo "font=$(settings get system font_scale)"
-x=$(dumpsys deviceidle | grep -m1 -o 'mForceIdle=[a-z]*'); echo "idle=${x#*=}"
+x=$(dumpsys deviceidle 2> /dev/null | grep -m1 -o 'mForceIdle=[a-z]*'); echo "idle=${x#*=}"
 echo "autotime=$(settings get global auto_time)"
 echo "zone=$(getprop persist.sys.timezone)"
 echo "rot_auto=$(settings get system accelerometer_rotation)"
@@ -80,15 +82,11 @@ baseline_parse() { # text
         case "$line" in [a-z]*=*) BL_VAL[${line%%=*}]=${line#*=} ;; esac
     done <<< "$1"
     # What the shell cannot compare as it is printed.
-    local d=${BL_VAL[disp]-} f=${BL_VAL[focus]-} n=${BL_VAL[night]-} fs=${BL_VAL[font]-}
+    local f=${BL_VAL[focus]-} n=${BL_VAL[night]-} fs=${BL_VAL[font]-}
+    # A line `Override size: 900x1600` is there only when changed; no Physical line means the command gave nothing.
     BL_VAL[sizeov]="?" BL_VAL[dpiov]="?"
-    if [[ $d =~ init=([0-9]+x[0-9]+)\ ([0-9]+)dpi\ base=([0-9]+x[0-9]+)\ ([0-9]+)dpi ]]; then
-        BL_VAL[sizeov]=none BL_VAL[dpiov]=none
-        [ "${BASH_REMATCH[1]}" = "${BASH_REMATCH[3]}" ] || BL_VAL[sizeov]=${BASH_REMATCH[3]}
-        [ "${BASH_REMATCH[2]}" = "${BASH_REMATCH[4]}" ] || BL_VAL[dpiov]=${BASH_REMATCH[4]}
-    elif [[ $d =~ ^init=[0-9]+x[0-9]+\ [0-9]+dpi$ ]]; then
-        BL_VAL[sizeov]=none BL_VAL[dpiov]=none
-    fi
+    if [ -n "${BL_VAL[psize]-}" ]; then BL_VAL[sizeov]=none; [ -z "${BL_VAL[osize]-}" ] || BL_VAL[sizeov]=${BL_VAL[osize]##*: }; fi
+    if [ -n "${BL_VAL[pdens]-}" ]; then BL_VAL[dpiov]=none; [ -z "${BL_VAL[odens]-}" ] || BL_VAL[dpiov]=${BL_VAL[odens]##*: }; fi
     # The window that has the keys: the app, a launcher, nothing (a moment of change) or something of Android.
     # `mCurrentFocus=Window{4a1b2c u0 com.android.settings/com.android.settings.Settings}`: focusname is the last word.
     case "$f" in
@@ -110,6 +108,14 @@ baseline_read() {
     BL_RAW=$out
     baseline_parse "$out"
     [ -n "${BL_VAL[boot]+x}" ]
+}
+
+# A screen timeout of 86400000 (reboot_only) or more (the emulator writes 2147483647 when it has booted) is `never`.
+baseline_tmo() { # value
+    case "$1" in
+        '' | *[!0-9]*) echo "$1" ;;
+        *) if [ ${#1} -gt 9 ] || [ "$1" -ge 86400000 ]; then echo never; else echo "$1"; fi ;;
+    esac
 }
 
 # What is wanted. A phone has no fixed wishes: what it showed at the first reading is what it should show.
@@ -137,6 +143,9 @@ baseline_diffs() {
         [ -n "$want" ] || continue
         got=${BL_VAL[$k]-}
         [ "$k" != focus ] || got=${BL_VAL[focusc]-}
+        if [ "$k" = timeout ]; then
+            [ "$(baseline_tmo "$got")" != "$(baseline_tmo "$want")" ] || continue
+        fi
         # Not readable on this device (or this once): not a finding. Boot is the one that must be there.
         if [ -z "$got" ] || [ "$got" = "?" ]; then
             [ "$k" = boot ] || continue
@@ -240,7 +249,7 @@ baseline_unit() {
     if [ -z "$BL_REF" ]; then
         BL_REF=1
         baseline_want_init
-        for k in $BL_KEYS disp; do [ -n "${BL_VAL[$k]-}" ] || left="$left $k"; done
+        for k in $BL_KEYS; do [ -n "${BL_VAL[$k]-}" ] || left="$left $k"; done
         [ -z "$left" ] || echo "BASELINE  not readable on this device:$left"
         left=""
     fi
@@ -273,6 +282,8 @@ baseline_unit() {
         case " ${BL_BAD[*]} " in
             *" $k "*) left="$left; ${why[$k]}" ;;
             *)
+                # After a restart nothing was left by a scenario: the system reports assumed values until it has answered.
+                [ -z "${BL_RESTARTED-}" ] || continue
                 # The screen that a scenario switched off on purpose is no finding.
                 case "$k" in wake | keyguard | focus) [ -z "$was_off" ] || continue ;; esac
                 baseline_note "$s" "the scenario before$prev left: ${why[$k]} (put back)"
@@ -371,13 +382,15 @@ unit_forget() {
 
 # One scenario of the runner: the baseline, the scenario, the watchdog, and the one rerun on a restarted device.
 run_unit() { # name
-    local s=$1 attempt=1 what t0 follow
+    local s=$1 attempt=1 what t0 follow bl_ok
     while :; do
         t0=$SECONDS
         what=""
         mapfile -t RES_ALL < "$RESULTS"
         RES_MARK=${#RES_ALL[@]}
-        if baseline_unit "$s"; then
+        baseline_unit "$s" && bl_ok=1 || bl_ok=""
+        BL_RESTARTED=""
+        if [ -n "$bl_ok" ]; then
             "$s"
             watchdog_end
             what=$WD_WHAT
@@ -401,8 +414,7 @@ run_unit() { # name
         fi
         attempt=2
         unit_forget
-        # The restart puts the screen timeout where reboot_only sets it.
-        [ -z "${BL_WANT[timeout]-}" ] || BL_WANT[timeout]=86400000
+        BL_RESTARTED=1
     done
 }
 
