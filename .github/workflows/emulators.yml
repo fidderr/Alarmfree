@@ -24,8 +24,9 @@ on:
         type: choice
         default: 'no'
         options: ['no', 'yes']
+  # noflake/<name>: a long run of its own (a baseline, a proof round) that later pushes to devtest-no-flake do not replace.
   push:
-    branches: [ci-emulators, devtest-no-flake]
+    branches: [ci-emulators, devtest-no-flake, 'noflake/**']
 
 # A newer push to the same branch replaces its older run.
 concurrency:
