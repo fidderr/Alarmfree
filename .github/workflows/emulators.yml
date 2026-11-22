@@ -64,6 +64,9 @@ jobs:
         working-directory: Alarmfree
         run: |
           test -d "$ANDROID_HOME/ndk/30.0.16248370" || "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;30.0.16248370"
+          # build_sentinel starts the generated project's relative "target/sentinel-android/gradlew" with that folder as its
+          # working directory, which only resolves on Linux with this link (SDK 0.7.0 bug, reported in devtest/CI.md).
+          mkdir -p target/sentinel-android/target && ln -sfn .. target/sentinel-android/target/sentinel-android
           TARGET=x86_64-linux-android bash ./build.sh
       - uses: actions/upload-artifact@v5
         with:
