@@ -509,6 +509,7 @@ run_unit() { # name
         follow=""
         [ "$attempt" != 1 ] || follow=" [rerun follows]"
         infra_evidence "$s"
+        evidence_snapshot infra "$s" "$what"
         infra_record "$s" "$t0" "$what" "$follow"
         BL_PREV=$s
         [ "$attempt" = 1 ] || return 0

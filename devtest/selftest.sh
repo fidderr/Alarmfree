@@ -103,3 +103,14 @@ t04_app_dies() {
     kill_all
     pass "the app's processes were killed; system_server ${pid} is untouched"
 }
+
+# Fails on purpose with the app in front, so that the snapshot of a failure (evidence.sh) can be looked at in the results:
+# t09_fails_on_purpose.fail.txt, .fail.xml and .fail.png. The FAIL line is the expected result of this one.
+t09_fails_on_purpose() {
+    scenario t09_fails_on_purpose
+    fresh
+    seed a "$(alarm_json a 7 0 "$EVERY_DAY" null)"
+    arm a
+    on_card 10
+    fail "on purpose: the snapshot of this failure must be in the results"
+}
