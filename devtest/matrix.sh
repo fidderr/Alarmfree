@@ -1064,7 +1064,7 @@ s25() {
     next_minute 3600
     seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
     arm a
-    on_card 10
+    on_card 30 || { fail "the alarm list did not come up in 30 s"; return; }
     local p0 problems=""
     p0=$(main_pid)
     # Sheets, editor, question and the main screens are checked in cargo test
