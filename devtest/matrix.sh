@@ -249,6 +249,10 @@ s11() {
     scenario s12b_missed_during_restart
     one_missed() { [ "$(outcomes missed)" = 1 ]; }
     wait_for 30 one_missed
+    # The outcome is written first and the next ring armed a moment later (seen on a busy Android 14: armed='' when
+    # read at once): wait until it is armed for a time to come.
+    next_armed() { [ "$(armed_at_ms d)" -gt "$(($(now_s) * 1000))" ] 2> /dev/null; }
+    wait_for 20 next_armed
     local next
     next=$(armed_at_ms d)
     if [ "$(outcomes missed)" = 1 ] && [ "$(state d)" = scheduled ] && [ "${next:-0}" -gt "$(($(now_s) * 1000))" ]; then

@@ -1005,6 +1005,11 @@ set_alarm_volume() {
     dev cmd audio set-volume 4 "$1" > /dev/null 2>&1
     dev cmd media_session volume --stream 4 --set "$1" > /dev/null 2>&1
     dev media volume --stream 4 --set "$1" > /dev/null 2>&1
+    # Android 14 refuses those for the alarm stream (AppOps: "com.android.server.media" is no package of the shell's
+    # uid): the audio service's own call, as the shell's package, works (setStreamVolume is transaction 12 there).
+    if [ "$(alarm_volume)" != "$1" ] && [ "$(dev getprop ro.build.version.sdk | tr -d '')" = 34 ]; then
+        dev service call audio 12 i32 4 i32 "$1" i32 0 s16 com.android.shell > /dev/null 2>&1
+    fi
 }
 
 # What the app saved in Downloads has a row in MediaStore. Removing only the file leaves it, and
