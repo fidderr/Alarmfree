@@ -1946,6 +1946,10 @@ s49() {
     on_card 10
     local problems="" x y before free typed
     before=$(free_px)
+    # The window is resized once more a moment after it came up (seen on Android 15 at 2208x1840: a smaller reading at
+    # first): the room it has is what two readings a second apart agree on.
+    steady() { local a; a=$(free_px); sleep 1; [ "$(free_px)" = "$a" ] && before=$a; }
+    wait_for 10 steady
     press open a 0.8
     on_editor
     tap_has Label 0 0.6
