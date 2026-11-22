@@ -336,6 +336,13 @@ reboot_and_wait() {
 # disk the app counts as force-stopped after the boot, and gets no boot signal. For an app that
 # has started since: asked from the saved file itself, which an emulator's root can read, and
 # which often never said "stopped" at all.
+# Android resizes a new window about a second after its first frame, and a key or touch in that moment is lost: wait
+# until 3 s have passed since the app was started, and the layout holds still.
+window_past_late_resize() {
+    local since=$((SECONDS - ${STARTED_AT:-0}))
+    [ "$since" -ge 3 ] || sleep $((3 - since))
+    UI_QUIET=1 await_settled 5
+}
 saved_as_running() {
     # Android 12 and up write the file as binary XML (abx2xml reads it); Android 10 and 11 write plain XML.
     dev "{ su 0 abx2xml /data/system/users/0/package-restrictions.xml - 2> /dev/null || su 0 cat /data/system/users/0/package-restrictions.xml; } | tr '>' '\n' | grep 'name=\"$PKG\"'" | grep -v -q 'stopped="true"'
