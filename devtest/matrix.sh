@@ -927,6 +927,9 @@ s26x2() { for r in 1 2; do s26 "$r"; done; }
 # What sticks out of the window at the sides (the middle of a text out of its width), if anything.
 clipped() {
     local r
+    # A window that has just come up lays itself out more than once (Android 12 and 13 on a big screen: every text
+    # "outside" for a moment): look when no frame is being drawn.
+    UI_QUIET=1 await_settled 6
     r=$(ui overflow)
     [ "$r" = none ] || echo "$r"
 }
