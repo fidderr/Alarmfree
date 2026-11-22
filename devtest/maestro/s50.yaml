@@ -26,13 +26,12 @@ appId: com.fidderr.alarmfree
 - tapOn: "15 s"
 - tapOn: "Done"
 - tapOn: "Snooze.*"
+# The snooze sheet is short and does not scroll: centering would swipe over the dimmed area and close it.
 - scrollUntilVisible:
     element: "More How often"
-    centerElement: true
 - tapOn: "More How often"
 - scrollUntilVisible:
     element: "More How long"
-    centerElement: true
 - tapOn: "More How long"
 - tapOn: "Done"
 - tapOn: "Challenges.*"

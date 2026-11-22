@@ -23,8 +23,9 @@ maestro_flow() { # flow file
         local rc
         "$MAESTRO" --device "$SERIAL" test --debug-output "$OUT/debug" --flatten-debug-output "$HERE/$1" > "$OUT/maestro_$sc.log" 2>&1
         rc=$?
-        # What the screen looked like where a flow stopped.
-        [ "$rc" = 0 ] || { "$MAESTRO" --device "$SERIAL" hierarchy > "$OUT/hierarchy_$sc.json" 2>&1; "$ADB" -s "$SERIAL" exec-out screencap -p > "$OUT/stopped_$sc.png"; }
+        # What the screen looked like where the flow ended or stopped.
+        "$ADB" -s "$SERIAL" exec-out screencap -p > "$OUT/end_$sc.png"
+        [ "$rc" = 0 ] || "$MAESTRO" --device "$SERIAL" hierarchy > "$OUT/hierarchy_$sc.json" 2>&1
         return "$rc"
     fi
     flow="${HERE}${bs}${1}"
@@ -43,7 +44,7 @@ setup_s38() {
 check_s38() {
     problems=""
     printf "SELECT prefs FROM settings;\n" | sql | grep -q '"accent":"Purple"' || problems="$problems; accent not kept"
-    printf "SELECT prefs FROM settings;\n" | sql | grep -q '"mytune.ogg":"Morning"' || problems="$problems; name not saved"
+    printf "SELECT prefs FROM settings;\n" | sql | grep -q '"mytune.ogg":"Morning"' || problems="$problems; name not saved (prefs: $(printf "SELECT prefs FROM settings;\n" | sql | cut -c1-300))"
 }
 
 setup_s36() {
@@ -59,7 +60,7 @@ check_s36() {
     dev am force-stop "$PKG"
     start_app
     wait_for 20 on_card_rows
-    order=$(ui snapshot | grep -oE '"label":"[^"]*","on"' | sed -E 's/^"label":"//; s/","on"$//' | tr '\n' ' ' | sed 's/ $//')
+    order=$(ui snapshot | grep -oE '"label":"[^"]*"' | sed -E 's/^"label":"//; s/"$//' | tr '\n' ' ' | sed 's/ $//')
     [ "$order" = "b c a" ] || problems="$problems; order is '$order'"
 }
 on_card_rows() { ui snapshot | grep -q '"rows":\[{'; }
