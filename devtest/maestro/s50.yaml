@@ -66,6 +66,9 @@ appId: com.fidderr.alarmfree
 - tapOn: "Are you up.*"
 - tapOn: ".*3 min"
 - tapOn: "Done"
+- scrollUntilVisible:
+    element: "Reminder.*"
+    centerElement: true
 - tapOn: "Reminder.*"
 - tapOn: ".*10 min"
 - tapOn: "Done"
