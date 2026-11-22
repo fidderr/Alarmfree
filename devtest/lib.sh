@@ -765,7 +765,31 @@ still_where() { # command text [which]
     [ "$SETTLED_AT" = "$SECONDS" ] || UI_QUIET=1 await_settled 2
     "$1" "$2" "${3:-}"
 }
-tap() { # text [which of them] [seconds to wait]
+# A touch through the app: the app finds the element and delivers the press through its own window
+# events, and answers after it ran. Nothing is sent from outside, so no touch is lost on the way and no
+# position can be out of date. It fails when the app says the element is not there. A real touch is
+# `finger`: for where the touch itself is the subject, and for a text field that has to bring up the
+# keyboard (only a real touch does).
+tap_through() { # command, what to say when it fails
+    local said
+    [ "$SETTLED_AT" = "$SECONDS" ] || UI_QUIET=1 await_settled 2
+    said=$(ui "$1")
+    UI_QUIET=1 await_settled 3
+    SETTLED_AT=$SECONDS
+    [ "$said" = OK ] && return 0
+    echo "$2 (the app said: $said)" >&2
+    return 1
+}
+tap() { tap_through "tap${2:+@$2}:$1" "nothing says $1"; } # text [which of them] [seconds, not read]
+# The time of the editor, which a touch there opens the time sheet.
+tap_time() { tap_has "Time:" 0 "${1:-0.6}"; }
+tap_has() { tap_through "tapc${2:+@$2}:$1" "nothing has $1"; } # text [which] [seconds, not read]
+tap_in() { tap "$@"; }
+# A touch at a place, in device pixels.
+tap_xy() { tap_through "tapxy:$1 $2" "no touch at $1 $2"; } # x y
+# The real touch, from outside the app: read where the text is, once it holds still, and press there with a
+# finger. Only for what the touch itself is the subject of, and for a text field that brings up the keyboard.
+finger() { # text [which of them] [seconds to wait]
     local xy
     xy=$(still_where where "$1" "${2:-}")
     case "$xy" in
@@ -779,9 +803,7 @@ tap() { # text [which of them] [seconds to wait]
     dev input tap $xy
     after_input
 }
-# The time of the editor, which a touch there opens the time sheet.
-tap_time() { tap_has "Time:" 0 "${1:-0.6}"; }
-tap_has() { # text [which] [seconds]
+finger_has() { # text [which] [seconds]
     local xy
     xy=$(still_where where_has "$1" "${2:-}")
     case "$xy" in
@@ -795,17 +817,7 @@ tap_has() { # text [which] [seconds]
     dev input tap $xy
     after_input
 }
-# The same through the window's own events, with no finger on the glass: where only the outcome counts.
-tap_in() { # text [which] [seconds]
-    local said
-    still_where where "$1" "${2:-}" > /dev/null
-    said=$(ui "tap${2:+@$2}:$1")
-    UI_QUIET=1 await_settled 3
-    SETTLED_AT=$SECONDS
-    [ "$said" = OK ] || echo "nothing says $1" >&2
-    [ "$said" = OK ]
-}
-click_text() { tap_in "$@"; }
+click_text() { tap "$@"; }
 # The n-th text field on screen takes this text.
 set_field() { type_field "$@"; }
 # The same through the keys, which runs the field's own handler for what is typed.
@@ -827,7 +839,7 @@ type_field() { # n text
     return 1
 }
 fields() { ui inputs; }
-# Slider n (from the top) to this fraction (0 to 1) of its track, by a touch there.
+# Slider n (from the top) to this fraction (0 to 1) of its track, by a touch there (through the app).
 set_slider() { # n fraction
     local row x y w scale
     row=$(ui boxes:AppSlider | grep -oE '\{[^{}]*\}' | sed -n "$(($1 + 1))p")
@@ -836,8 +848,7 @@ set_slider() { # n fraction
     y=$(echo "$row" | sed -E 's/.*"y":([0-9]+).*/\1/')
     w=$(echo "$row" | sed -E 's/.*"w":([0-9]+).*/\1/')
     scale=$(window_size | cut -d' ' -f3)
-    dev input tap "$(awk -v x="$x" -v w="$w" -v s="$scale" -v f="$2" 'BEGIN { printf "%d", x - w / 2 + 12 * s + (w - 24 * s) * f }')" "$y"
-    after_input
+    tap_xy "$(awk -v x="$x" -v w="$w" -v s="$scale" -v f="$2" 'BEGIN { printf "%d", x - w / 2 + 12 * s + (w - 24 * s) * f }')" "$y"
 }
 # The number of a choice in a list of radio rows (from the top), by its text.
 radio_index() {

@@ -102,8 +102,11 @@ sys.exit(1)
 }
 # The time of the editor is one button, "Time: 7:00 AM".
 tap_time() { tap_has "Time:" 0 "${1:-0.6}"; }
-# What a_tap does through the debug channel before: the window's own event, now a real touch.
-tap_in() { tap "$@"; }
+# Everything here is a real touch on what the tree says: the debug channel's taps are not used.
+tap() { finger "$@"; }
+tap_has() { finger_has "$@"; }
+tap_in() { finger "$@"; }
+tap_xy() { dev input tap "$1" "$2"; after_input; }
 
 # The n-th text field takes this text: a touch on it, the old text taken out, the new one typed
 # through the keyboard's key events, as a person does it.
