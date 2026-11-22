@@ -11,7 +11,7 @@ appId: com.fidderr.alarmfree
 - tapOn: "Purple"
 - stopApp
 - launchApp
-- tapOn: "7:00 AM a.*"
+- tapOn: "7:00 AM, a.*"
 - tapOn: "Sound.*"
 - scrollUntilVisible:
     element: "mytune"

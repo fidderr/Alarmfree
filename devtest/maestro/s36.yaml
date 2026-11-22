@@ -3,11 +3,11 @@
 appId: com.fidderr.alarmfree
 ---
 - launchApp
-- assertVisible: "7:00 AM a.*"
+- assertVisible: "7:00 AM, a.*"
 - swipe:
     start: 50%, 40%
     end: 50%, 70%
     duration: 1500
 - stopApp
 - launchApp
-- assertVisible: "7:00 AM a.*"
+- assertVisible: "7:00 AM, a.*"

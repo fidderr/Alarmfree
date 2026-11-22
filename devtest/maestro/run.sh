@@ -20,8 +20,12 @@ maestro_flow() { # flow file
     local bs='\' flow
     # On a Linux runner MAESTRO is the maestro script itself (devtest/ci/closing.sh installs it).
     if [ "$(uname -s)" = Linux ]; then
-        "$MAESTRO" --device "$SERIAL" test "$HERE/$1" > "$OUT/maestro_$sc.log" 2>&1
-        return
+        local rc
+        "$MAESTRO" --device "$SERIAL" test --debug-output "$OUT/debug" --flatten-debug-output "$HERE/$1" > "$OUT/maestro_$sc.log" 2>&1
+        rc=$?
+        # What the screen looked like where a flow stopped.
+        [ "$rc" = 0 ] || { "$MAESTRO" --device "$SERIAL" hierarchy > "$OUT/hierarchy_$sc.json" 2>&1; "$ADB" -s "$SERIAL" exec-out screencap -p > "$OUT/stopped_$sc.png"; }
+        return "$rc"
     fi
     flow="${HERE}${bs}${1}"
     cmd.exe /c "$MAESTRO --device $SERIAL test $flow" > "$OUT/maestro_$sc.log" 2>&1
