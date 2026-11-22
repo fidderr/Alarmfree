@@ -109,6 +109,7 @@ fake_command() {
             echo '  client A mInputShown=false'
             [ "$(st_get ime)" != true ] || echo '  client B mInputShown=true'
             ;;
+        "settings get secure default_input_method"*) echo com.google.android.inputmethod.latin/com.android.inputmethod.latin.LatinIME ;;
         "am force-stop com.google.android.inputmethod.latin"*) fd_set ime false ;;
         "input keyevent KEYCODE_BACK"*)
             # BACK_KEEPS_IME=1: Android 14 to 16 after the PIN, where Back does not take the keyboard down.

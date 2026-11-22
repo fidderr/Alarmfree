@@ -433,7 +433,6 @@ tap_in_shade() { # label
         sleep 0.3
     done
     SYS_WHY="no $label button in the shade within 90s ($(sys_show))"
-    sys_evidence "shade_no_$label"
     return 1
 }
 
@@ -441,6 +440,10 @@ tap_in_shade() { # label
 # It opens on Recent files, which is empty: the roots drawer (the button described `Show roots`) lists Downloads; on
 # Android 11 the picker of images has a folder `Download` instead.
 picker_up() { sys_focus | grep -q documentsui; }
+# Google's picker (Android 12 to 16 on the images with Google APIs): a touch on a file only focuses it (a text file) or opens
+# its preview in another app (a sound, a picture: YouTube Music, Photos; runs 45079574283 and 45082824603), and the key Enter on the
+# focused file chooses it. The picker of Android 10 and 11 takes the touch.
+picker_is_google() { sys_focus | grep -q 'com.google.android.documentsui'; }
 # What the picker shows, for the message of a failure.
 picker_summary() {
     sys_dump && sys_nodes list | grep -E 'documentsui' | grep -E '\|(title|header_title)\||Show roots|dir_list|message' | cut -d'|' -f3-5 | head -12 | tr '\n' ';'
@@ -483,6 +486,16 @@ picker_watch() { # label rounds
 # A screen of another app opened from the picker's task (the preview of an audio file or a photo): it is not the app and not
 # the picker.
 picker_preview_up() { sys_focus | grep -v -e documentsui -e "$PKG" -e '^$' -e '^null' | grep -q .; }
+# The picker is gone: the app has the keys again. After a detour through the preview of the file the picker's task can leave the
+# launcher in front (Android 13, run 45082824603): the app is then started again, and a NOTE says so.
+picker_back_in_app() {
+    sys_wait 15 "the app getting the keys back from the picker" focus_in_app && return 0
+    picker_up && return 1
+    echo "NOTE  ${CURRENT:-?}  the picker closed and the app was not in front ($(sys_focus | tr -d '
+')): the app was started again" | tee -a "$RESULTS"
+    start_app
+    sys_wait "$SYS_DEADLINE" "the app in front after it was started again" focus_in_app
+}
 picker_pick() { # name
     local name=$1 end xy tapped=0 keyed=0 sig
     sys_wait "$SYS_DEADLINE" "the file picker being up" picker_up || return 1
@@ -490,7 +503,7 @@ picker_pick() { # name
     end=$(($(now_ms) + ${PICKER_DEADLINE:-90} * 1000))
     while :; do
         sys_anr_check || return 1
-        picker_up || { sys_wait "$SYS_DEADLINE" "the app getting the keys back from the picker" focus_in_app; return; }
+        picker_up || { picker_back_in_app; return; }
         if [ "$(now_ms)" -ge "$end" ]; then
             SYS_WHY="the picker did not deliver $name within ${PICKER_DEADLINE:-90}s (tapped=$tapped keys=$keyed; shows: $(picker_summary); $(sys_show))"
             return 1
@@ -498,7 +511,7 @@ picker_pick() { # name
         sys_dump || { sleep 0.5; continue; }
         sig=$(sys_nodes list | cksum | cut -d' ' -f1)
         if xy=$(sys_nodes find "label~$name" pkg~documentsui); then
-            if [ "$tapped" = 0 ]; then
+            if [ "$tapped" = 0 ] && ! picker_is_google; then
                 tapped=1
                 picker_trace "touch on $name at $xy"
                 # shellcheck disable=SC2086
@@ -522,7 +535,6 @@ picker_pick() { # name
                 sys_wait 15 "the picker closing after the keys on $name" focus_in_app && return 0
             else
                 SYS_WHY="$name is listed but neither the touch nor the keys chose it (shows: $(picker_summary); $(sys_show))"
-                sys_evidence "picker_stuck"
                 return 1
             fi
         elif xy=$(sys_nodes find label=Downloads pkg~documentsui); then
@@ -606,13 +618,7 @@ lock_away() {
     screen_awake || sys_wake || return 1
     dev wm dismiss-keyguard > /dev/null
     sys_wait "$step" "the lock screen gone after wm dismiss-keyguard" kg_gone && { lock_away_note "gone by wm dismiss-keyguard"; return 0; }
-    # The lock screen asks for the old PIN: the pad is up (or comes up now), the old PIN takes it away.
-    if sys_wait "$step" "the PIN pad after wm dismiss-keyguard" pad_ready && unlock_pin 0 && sys_wait "$step" "the lock screen gone after the old PIN" kg_gone; then
-        lock_away_note "gone by the old PIN on the pad"
-        return 0
-    fi
-    lock_away_note "the pad did not do it: $SYS_WHY"
-    # Asleep and awake again, so that the lock screen is made anew; then asked once more.
+    # Asleep and awake again, so that the lock screen is made anew (this took it away on Android 10 and 11); then asked once more.
     sys_sleep > /dev/null
     sys_wake > /dev/null
     dev wm dismiss-keyguard > /dev/null
@@ -625,7 +631,12 @@ lock_away() {
     h=${size#*x}
     dev input swipe $((w / 2)) $((h * 4 / 5)) $((w / 2)) $((h / 5)) 300 > /dev/null
     sys_wait "$step" "the lock screen gone after a swipe up" kg_gone && { lock_away_note "gone by a swipe"; return 0; }
-    lock_away_note "STILL THERE"
+    # The lock screen may still ask for the old PIN: the pad is up (or comes up now), the old PIN takes it away.
+    if sys_wait "$step" "the PIN pad after wm dismiss-keyguard" pad_ready && unlock_pin 0 && sys_wait "$step" "the lock screen gone after the old PIN" kg_gone; then
+        lock_away_note "gone by the old PIN on the pad"
+        return 0
+    fi
+    lock_away_note "STILL THERE: $SYS_WHY"
     sys_evidence lock_away_still_there
     return 1
 }

@@ -340,6 +340,10 @@ no_pin() {
     SCREEN_WENT_OFF=1
     sys_wait "$SYS_DEADLINE" "the PIN being cleared" pin_unset || note "$SYS_WHY"
     lock_away || note "the PIN is cleared but the lock screen stays: $SYS_WHY"
+    # The keyboard of the PIN pad can come up a moment after the lock screen went: wait for it a little, then put it down.
+    sys_wait 3 "the keyboard coming up" ime_shown > /dev/null
+    sys_keyboard_down || note "$SYS_WHY"
+    ime_note "after the PIN was put away"
 }
 no_lock_here() {
     [ -n "${NO_LOCK:-}" ] || return 1
@@ -381,7 +385,6 @@ s13() {
     sys_wait "$SYS_DEADLINE" "the app's window answering after the unlock" page_is_up || note "$SYS_WHY"
     if ! on_screen "Turn off" 30; then
         screenshot s13_after_unlock
-        sys_evidence s13_after_unlock
         fail "the alarm's own screen did not come up after the unlock: $(top_activity)${problems}"
         no_pin
         return
@@ -440,7 +443,6 @@ s13b() {
     sys_wait "$SYS_DEADLINE" "the app's window answering after the unlock" page_is_up || note "$SYS_WHY"
     if ! on_screen "Turn off" 30; then
         screenshot s13b_after_unlock
-        sys_evidence s13b_after_unlock
         fail "the alarm's own screen did not come up after unlocking on the lock screen: $(top_activity)${problems}"
         no_pin
         return
@@ -485,7 +487,6 @@ s13c() {
     top_is_backup && problems="$problems; the backup screen came up"
     start_app
     if ! on_screen "Turn off" 30; then
-        sys_evidence s13c_not_there
         fail "the alarm's own screen is not there when the app is opened: $(top_activity)${problems}"
         no_pin
         return
@@ -1534,7 +1535,7 @@ s40() {
     tap_in "Add widget" 0 0.5
     # The launcher asks the user first.
     local problems="" minute
-    launcher_add_widget || { fail "the widget was not added: $SYS_WHY; the launcher shows: $(launcher_texts | tr '\n' '|')"; sys_evidence s40_dialog; return; }
+    launcher_add_widget || { fail "the widget was not added: $SYS_WHY; the launcher shows: $(launcher_texts | tr '\n' '|')"; return; }
     sys_home "the launcher in front" launcher_up || problems="$problems; $SYS_WHY"
     minute=$(printf ':%02d' "$T_M")
     sys_wait "$SYS_DEADLINE" "the widget showing the time $minute" launcher_has "$minute" || problems="$problems; no time on it: $(launcher_texts | tr '\n' '|')"
@@ -1809,7 +1810,6 @@ s48() {
         [ -n "$(as_app "ls files/sounds/custom")" ] || problems="$problems; not copied"
     else
         problems="$problems; the picker never showed the file: $SYS_WHY"
-        sys_evidence s48_picker
         sys_press KEYCODE_BACK "the app getting the keys back from the picker" "$SYS_DEADLINE" focus_in_app || note "$SYS_WHY"
     fi
     dev am force-stop "$PKG"
@@ -1843,7 +1843,6 @@ s48() {
         [ "$(alarm_count)" = 1 ] || problems="$problems; undo left $(alarm_count) alarms"
     else
         problems="$problems; the picker never showed the backup: ${file:-no file name}: $SYS_WHY"
-        sys_evidence s48_no_backup
         sys_press KEYCODE_BACK "the app getting the keys back from the picker" "$SYS_DEADLINE" focus_in_app || note "$SYS_WHY"
     fi
     dev rm -f /sdcard/Download/mytune.ogg
@@ -2354,7 +2353,6 @@ s54() {
             sys_holds 2 "the camera keeping the keys" camera_has_keys || problems="$problems; the camera lost the keys: $SYS_WHY"
         else
             problems="$problems; no camera over the lock screen: $SYS_WHY"
-            sys_evidence s54_no_camera
         fi
         screenshot s54_camera_over_the_lock_screen
         locked || problems="$problems; the camera unlocked the phone"
@@ -3282,7 +3280,6 @@ s62() {
             press_back
         else
             problems="$problems; the picker did not offer the photo: $SYS_WHY"
-            sys_evidence s62_picker
             sys_press KEYCODE_BACK "the app getting the keys back from the picker" "$SYS_DEADLINE" focus_in_app || note "$SYS_WHY"
         fi
     fi
