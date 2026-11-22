@@ -21,11 +21,11 @@ maestro_flow() { # flow file
     # On a Linux runner MAESTRO is the maestro script itself (devtest/ci/closing.sh installs it).
     if [ "$(uname -s)" = Linux ]; then
         local rc
-        "$MAESTRO" --device "$SERIAL" test --debug-output "$OUT/debug" --flatten-debug-output "$HERE/$1" > "$OUT/maestro_$sc.log" 2>&1
+        "$MAESTRO" --device "$SERIAL" test --debug-output "$OUT/debug_$i" --flatten-debug-output "$HERE/$1" > "$OUT/maestro_${sc}_$i.log" 2>&1
         rc=$?
         # What the screen looked like where the flow ended or stopped.
-        "$ADB" -s "$SERIAL" exec-out screencap -p > "$OUT/end_$sc.png"
-        [ "$rc" = 0 ] || "$MAESTRO" --device "$SERIAL" hierarchy > "$OUT/hierarchy_$sc.json" 2>&1
+        "$ADB" -s "$SERIAL" exec-out screencap -p > "$OUT/end_${sc}_$i.png"
+        [ "$rc" = 0 ] || "$MAESTRO" --device "$SERIAL" hierarchy > "$OUT/hierarchy_${sc}_$i.json" 2>&1
         return "$rc"
     fi
     flow="${HERE}${bs}${1}"

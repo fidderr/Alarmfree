@@ -24,13 +24,17 @@ ui() {
     as_app "cd $FILES && rm -f debug_script_result.txt && echo ui:$1 > debug_action.tmp && mv debug_action.tmp debug_action.txt && i=0; while [ ! -e debug_script_result.txt ] && [ \$i -lt 500 ]; do sleep 0.02; i=\$((i + 1)); done; cat debug_script_result.txt 2> /dev/null"
 }
 
-# Ask the snapshot until it says what we wait for (a grep pattern), for up to $2 seconds.
+# Ask the snapshot until it says what we wait for (a grep pattern), for up to $2 seconds. With $3 set, a window that
+# does not answer (the app went to the background) is brought back to the front.
 wait_for() {
-    local pattern=$1 limit=${2:-20} i=0 snap=""
+    local pattern=$1 limit=${2:-20} revive=${3:-} i=0 snap=""
     while [ "$i" -lt "$limit" ]; do
         snap=$(ui snapshot 2>&1 | grep -v "^sh:")
         if echo "$snap" | grep -q -- "$pattern"; then
             return 0
+        fi
+        if [ -n "$revive" ] && ! echo "$snap" | grep -q '"screen":'; then
+            dev monkey -p "$PKG" 1 > /dev/null 2>&1
         fi
         sleep 1
         i=$((i + 1))
@@ -39,8 +43,8 @@ wait_for() {
     return 1
 }
 
-step() { # name pattern [seconds]
-    if wait_for "$2" "${3:-20}"; then
+step() { # name pattern [seconds] [revive]
+    if wait_for "$2" "${3:-20}" "${4:-}"; then
         echo "PASS  $1"
     else
         echo "FAIL  $1"
@@ -101,8 +105,9 @@ step "the alarm rings" '"ringing":true' 40
 "$ADB" -s "$SERIAL" exec-out screencap -p > "$OUT/slint_smoke_ring.png"
 
 ui press:ring-snooze > /dev/null
-step "snooze ends the ring screen" '"ringing":false' 20
-# Snoozing sends the app to the background, where the window does not answer.
+# Snoozing sends the app to the background, where the window does not answer: whether that happens before the first
+# question or after it, the wait brings the window back and reads the state from it.
+step "snooze ends the ring screen" '"ringing":false' 20 revive
 dev monkey -p "$PKG" 1 > /dev/null 2>&1
 step "the card says it is snoozed" '"when":"[^"]' 10
 
