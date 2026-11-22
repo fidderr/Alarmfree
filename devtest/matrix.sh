@@ -2019,7 +2019,8 @@ done_sheet() {
 open_row() {
     local i
     for i in 1 2 3; do
-        has_there "$1" || sheet_scroll
+        # Where the row is, if the screen was left scrolled either way (s50 once found no "Label" on Android 12).
+        has_there "$1" || { sheet_scroll_up; has_there "$1" || sheet_scroll; }
         tap_has "$1" 0 0.4
         await_ui 4 'editor_sheet!=None' && return 0
     done
