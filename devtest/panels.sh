@@ -291,11 +291,6 @@ scroll_clear() { # text [which of the rows that have it]
         y=$(where "$b" | cut -d' ' -f2)
         case "$y" in '' | *[!0-9]*) ;; *) [ "$y" -gt 1200 ] && [ $((y - 120)) -lt "$floor" ] && floor=$((y - 120)) ;; esac
     done
-<<<<<<< HEAD
-    # The editor's Save button has another name in every language ("Enregistrer", "Salva"), so it is not found above: its top
-    # edge is 240 px over the bottom of the window, and a row at its edge takes the tap for it (the editor is left).
-    [ "$(screen_no)" != 1 ] || { [ "$floor" -le $(($(window_size | cut -d' ' -f2) - 300)) ] || floor=$(($(window_size | cut -d' ' -f2) - 300)); }
-=======
     # The editor's Save button has another name in every language ("Enregistrer", "Salva"), so it is not found above. Its bar
     # is 12 + 52 + 16 dp high plus the bottom inset of the window, and a row that is not clear of it takes the tap for Save
     # (the editor is left): the line is the top edge of that bar less a margin, from the app's own window height, scale and
@@ -309,7 +304,6 @@ scroll_clear() { # text [which of the rows that have it]
         line=$(($(echo "$win" | cut -d' ' -f2) - ${inset:-0} - 92 * ${milli:-2625} / 1000))
         [ "$floor" -le "$line" ] || floor=$line
     fi
->>>>>>> edit-lock-limits-languages
     # Six tries, not three: on a busy machine a swipe now and then moves nothing (a scroll the app never saw).
     for i in 1 2 3 4 5 6; do
         # The row that will be tapped (the second argument picks one of several): a lower one that is still under the Save
