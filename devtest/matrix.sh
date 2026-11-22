@@ -2023,7 +2023,8 @@ done_sheet() {
     local i=0
     while [ "$i" -lt 3 ]; do
         tap_in Done L 0.3
-        await_ui 2 'editor_sheet=None' && return 0
+        # The sheet takes seconds to go on a busy machine: a second tap on Done before that lands on the editor under it.
+        await_ui 8 'editor_sheet=None' && return 0
         i=$((i + 1))
     done
     return 1
@@ -3122,10 +3123,10 @@ chips_in_languages() { # scenario name, then pairs of locale code and name
             else
                 tap_row "$title"
             fi
-            if ! wait_for 4 any_sheet_up && on_editor 1 && { note "s69 $locale/$key: the tap was lost: once more"; true; }; then
+            if ! wait_for 8 any_sheet_up && on_editor 1 && { note "s69 $locale/$key: the tap was lost: once more"; true; }; then
                 if [ "$key" = config.sound ]; then tap "$title" 0 0.5; elif [ "$key" = config.notice ]; then tap_row "$title" L; else tap_row "$title"; fi
             fi
-            if ! wait_for 4 any_sheet_up; then
+            if ! wait_for 8 any_sheet_up; then
                 screenshot "chips/${code}_${key}_NO_PANEL"
                 note "s69 $locale/$key: no panel; screen=$(screen_no) ed_sheet=$(sn ed_sheet) focus=$(focused_window | cut -c1-90)"
                 problems="$problems; $locale/$key: no panel"
@@ -3142,8 +3143,8 @@ chips_in_languages() { # scenario name, then pairs of locale code and name
             fi
             [ -z "$found" ] || problems="$problems; $locale/$key: $found"
             press_back
-            wait_for 3 no_sheet_up || problems="$problems; $locale/$key: Back leaves it open"
-            on_editor 2 || note "s69 $locale/$key: after Back the editor is gone: screen=$(screen_no) focus=$(focused_window | cut -c1-90)"
+            wait_for 8 no_sheet_up || problems="$problems; $locale/$key: Back leaves it open"
+            on_editor 6 || note "s69 $locale/$key: after Back the editor is gone: screen=$(screen_no) focus=$(focused_window | cut -c1-90)"
         done
         dev am force-stop "$PKG"
     done

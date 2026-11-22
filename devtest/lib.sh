@@ -1083,7 +1083,7 @@ fail() {
     write_log
 }
 note() { echo "      $1"; }
-write_log() { adb_ logcat -d -t 30000 -b all -v time 2> /dev/null | grep -E "AlarmFree|MobileSentinel|Sentinel|AlarmKit|AlarmClass|alarmfree|ActivityTaskManager.*(fidderr|Background)|BackgroundActivity|AndroidRuntime|FATAL|am_anr|ANR in" > "$OUT/$CURRENT.log"; anr_traces; }
+write_log() { adb_ logcat -d -t 30000 -b all -v time 2> /dev/null | grep -E "AlarmFree|MobileSentinel|Sentinel|AlarmKit|AlarmClass|alarmfree|ActivityTaskManager.*(fidderr|Background)|BackgroundActivity|AndroidRuntime|FATAL|am_anr|ANR in|WATCHDOG|Watchdog|system_server|audioserver|AudioFlinger|AudioService|Fatal signal" > "$OUT/$CURRENT.log"; anr_traces; }
 # What the system wrote about a not-responding app (stacks of its threads), kept with the log of a failed scenario.
 anr_traces() {
     timeout 60 "$ADB" -s "$SERIAL" shell "su 0 sh -c 'tail -n +1 /data/anr/* 2>/dev/null'" 2> /dev/null | head -c 400000 > "$OUT/$CURRENT.anr.txt"
