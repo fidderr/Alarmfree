@@ -1200,8 +1200,9 @@ s32() {
     # Under the Test alarm button until the screen is scrolled.
     sheet_scroll
     tap_scrolling "Save the record of how fast alarms rang"
-    sleep 0.5
-    [ "$(dev cat /sdcard/Download/alarmfree-rings.txt | grep -c ' sound ')" -ge 1 ] && record=yes
+    # The file is written a moment after the tap: wait for what is in it, not for half a second.
+    has_record() { [ "$(dev cat /sdcard/Download/alarmfree-rings.txt 2> /dev/null | grep -c ' sound ')" -ge 1 ]; }
+    wait_for 10 has_record && record=yes
     rm_download alarmfree-rings.txt
     if ! sound_on && [ "$(db_count '"hidden":true')" = 0 ] && [ "$(outcomes solved)" = 0 ] && [ "$record" = yes ]; then
         pass "rang ${SOUND_AT}s after its time, nothing left, nothing in history, its record saved"
