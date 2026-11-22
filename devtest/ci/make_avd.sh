@@ -4,6 +4,8 @@
 # Usage: devtest/ci/make_avd.sh <avd>      Needs ANDROID_HOME (sdkmanager and avdmanager in cmdline-tools).
 set -euo pipefail
 avd=$1
+export ANDROID_AVD_HOME="${ANDROID_AVD_HOME:-$HOME/.android/avd}"
+mkdir -p "$ANDROID_AVD_HOME"
 case "$avd" in
     afg16) api=36 ;; afg15) api=35 ;; afg14) api=34 ;; afg13) api=33 ;; afg12) api=31 ;; msd30) api=30 ;; msd29) api=29 ;;
     *) echo "unknown AVD $avd"; exit 1 ;;
@@ -14,7 +16,7 @@ image="system-images;android-$api;google_apis;x86_64"
 yes | "$bin/sdkmanager" --licenses > /dev/null || true
 "$bin/sdkmanager" --install "$image" "emulator" "platform-tools" > /dev/null
 echo no | "$bin/avdmanager" create avd -n "$avd" -k "$image" -d pixel --force
-cfg="$HOME/.android/avd/$avd.avd/config.ini"
+cfg="$ANDROID_AVD_HOME/$avd.avd/config.ini"
 cat >> "$cfg" << 'EOF'
 hw.lcd.width=1080
 hw.lcd.height=1920

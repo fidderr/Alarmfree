@@ -4,6 +4,7 @@
 # Needs ANDROID_HOME, /dev/kvm, an AVD made by make_avd.sh. Results: devtest-out/ci_<avd>/ and devtest-out/ci_<avd>.log.
 cd "$(dirname "$0")/../.." || exit 1
 avd=$1
+export ANDROID_AVD_HOME="${ANDROID_AVD_HOME:-$HOME/.android/avd}"
 export ADB="$ANDROID_HOME/platform-tools/adb" EMULATOR="$ANDROID_HOME/emulator/emulator"
 export SKIP_APK_CHECK=1 EVERYWHERE=1 LANES=1 PORT_BASE=5554 EMULATOR_GPU="${EMULATOR_GPU:-swiftshader_indirect}"
 export AVDS=$avd
