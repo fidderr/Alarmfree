@@ -37,7 +37,16 @@ while :; do
         id=${line%% *}
         cmd=${line#* }
         read -r delay < ../delay 2> /dev/null || delay=0
-        if [ ! -e ../silent ]; then
+        if [ -e ../nowin ]; then
+            case "$cmd" in
+                ui:await:*) t=${cmd#ui:await:}; ans="TIMEOUT after ${t%%:*}ms, the app had no window in front" ;;
+                ui:*) ans="ERR the app has no window in front" ;;
+                *) ans=OK ;;
+            esac
+            printf '%s
+' "$ans" > "debug_answer_$id.tmp"
+            mv "debug_answer_$id.tmp" "debug_answer_$id.txt"
+        elif [ ! -e ../silent ]; then
             (
                 sleep "$delay"
                 case "$cmd" in
@@ -216,6 +225,23 @@ chaos_step() { chaos_calls=$((chaos_calls + 1)); }
 CHAOS_ON=1 ui screen > /dev/null
 ui screen > /dev/null
 [ "$chaos_calls" = 1 ] && verdict "ui calls the sabotage hook, only in sabotage mode" 1 || verdict "ui calls the sabotage hook, only in sabotage mode ($chaos_calls)" 0
+stop_app_standin
+
+# 10. The app has no window in front: it answers at once, the channel stays open, and the helpers say it is no hang.
+new_case nowin
+touch "$DEV/nowin"
+said=$(ui screen)
+rc=$?
+[ "$rc" = 0 ] && [ "$said" = "ERR the app has no window in front" ] && [ ! -e "$DEV/files/debug_dead" ] && verdict "a command while the app has no window in front is answered with the error and no channel is closed" 1 || verdict "a command while the app has no window in front is answered with the error and no channel is closed (rc $rc, [$said])" 0
+page_is_up && verdict "page_is_up is false while the app has no window in front" 0 || verdict "page_is_up is false while the app has no window in front" 1
+err=$(await_ms 3000 '~moved' 2>&1 > /dev/null)
+rc=$?
+case "$err" in *"WAIT "*) wait_line=1 ;; *) wait_line=0 ;; esac
+case "$err" in *"the app had no window in front"*) said_it=1 ;; *) said_it=0 ;; esac
+[ "$rc" = 1 ] && [ "$wait_line" = 0 ] && [ "$said_it" = 1 ] && [ ! -e "$DEV/files/debug_dead" ] && verdict "an await while the app has no window in front returns 1 and prints no WAIT line" 1 || verdict "an await while the app has no window in front returns 1 and prints no WAIT line (rc $rc, [$err])" 0
+rm -f "$DEV/nowin"
+said=$(ui screen)
+[ "$said" = "answer to ui:screen" ] && verdict "after the window is back the next command is answered" 1 || verdict "after the window is back the next command is answered ([$said])" 0
 stop_app_standin
 
 exit "$bad"

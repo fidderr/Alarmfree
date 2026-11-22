@@ -629,12 +629,22 @@ ui() { # command: its answer, or "no answer from the app ..."
 # Conditions: key=value or key!=value of `ui ready` (screen, home_sheet, panel, editor_sheet,
 # theme_sheet, ringing, toast, first_frame, keyboard=up|down, win=<w>x<h>, resizes, input_seen), key>N, text=,
 # textc=, gone=, moved, stable (first frame drawn and no window resize for 1.2 s). A key the app does not know is
-# an error at once. UI_QUIET=1: no message.
+# an error at once. UI_QUIET=1: no message. While another screen is in front the app answers at once: `ERR the app has
+# no window in front` to a command, `TIMEOUT after <n>ms, the app had no window in front` to an await (which is run
+# when the window comes back in time); neither closes the channel.
 await_ms() { # milliseconds condition...
     local ms=$1 out
     shift
     out=$(UI_EXTRA=$(((ms + 999) / 1000)) ui "await:$ms:$(IFS=';'; echo "$*")")
     case "$out" in OK*) return 0 ;; esac
+    # Another screen was in front for the whole wait (the unlock screen, say): the app answered at once and the channel
+    # is fine, so this is no hang. The caller still sees the status 1.
+    case "$out" in
+        *"the app had no window in front"*)
+            [ -n "${UI_QUIET:-}" ] || echo "NOWIN  $CURRENT  the app had no window in front while waiting ${ms}ms for [$*]" >&2
+            return 1
+            ;;
+    esac
     [ -n "${UI_QUIET:-}" ] || echo "WAIT  $CURRENT  gave up after ${ms}ms waiting for [$*]: $out" >&2
     return 1
 }
@@ -728,7 +738,7 @@ has_there() {
     esac
     return 1
 }
-page_is_up() { case "$(ui window)" in "no answer from the app"*) return 1 ;; esac; }
+page_is_up() { case "$(ui window)" in "no answer from the app"* | "ERR the app has no window in front"*) return 1 ;; esac; }
 # Right now, and until it shows or is gone: a screen takes a moment to change. A window that is not
 # up yet does not count, once per scenario: a first start can take most of a minute when Android is
 # busy with something else, which the results then say.
