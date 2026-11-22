@@ -71,6 +71,19 @@ boot_leg() {
     timeout 60 "$ADB" -s "$SERIAL" emu avd snapshot save suite_clean > /dev/null 2>&1 || note "no snapshot saved"
 }
 
+# An emulator takes about 3.2 GB: with another one running, start this one only when that much and more is free
+# (4500 MB, MIN_FREE_MB), or the new one and the running one starve each other and freeze. At most 20 minutes.
+free_mem_mb() { powershell.exe -NoProfile -Command '[int]((Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory / 1024)' 2> /dev/null | tr -d ''; }
+wait_for_memory() {
+    local until=$((SECONDS + 1200)) free
+    while [ "$(tasklist 2> /dev/null | grep -c 'qemu-system')" -gt 0 ]; do
+        free=$(free_mem_mb)
+        [ "${free:-0}" -ge "${MIN_FREE_MB:-4500}" ] && return 0
+        [ "$SECONDS" -lt "$until" ] || { echo "NOTE  starting $AVD with only ${free:-?} MB free after 20 minutes of waiting"; return 0; }
+        sleep 20
+    done
+}
+
 # run_leg name tier avd port: one emulator from boot to shutdown. Its own folder, log and meta file.
 run_leg() {
     local name=$1 tier=$2 avd=$3 port=$4
@@ -88,6 +101,7 @@ run_leg() {
         # A leg that ends early (did not start, failed install, a run that stops) must not leave its emulator up: the
         # next leg on this lane takes the same port.
         trap emulator_stop EXIT
+        wait_for_memory
         local b=$SECONDS
         boot_leg || { echo "FAIL  $avd did not start"; exit 1; }
         boot_s=$((SECONDS - b))
