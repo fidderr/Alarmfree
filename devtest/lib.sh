@@ -1138,7 +1138,7 @@ history_count() { printf "SELECT count(*) FROM alarm_events;\n" | sql; }
 go_tab() { # Alarms / History / Settings; a touch in the first seconds of the window can be lost: again
     local want i=0
     case "$1" in
-        Alarms) want=0 ;;
+        Alarms | Wekkers) want=0 ;; # Wekkers: the Dutch name of the tab, as s51 asks for it with the language on Dutch
         History) want=2 ;;
         *) want=3 ;;
     esac

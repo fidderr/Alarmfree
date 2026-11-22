@@ -2126,7 +2126,9 @@ s50() {
         on_screen "$option" 4 || problems="$problems; no way to add $option"
         tap_in "$option" L 0.4
         # A new challenge can come with a sheet of its own for its settings.
-        is_there Difficulty && done_sheet_inner
+        # Math has its settings sheet (Difficulty), Steps has one too (How many steps): the Done of the Challenges sheet would
+        # otherwise be the first tap on Done that only closes that one (seen as a retry on every Android version).
+        { is_there Difficulty || is_there "How many steps"; } && done_sheet_inner
     done
     done_sheet
     sheet_scroll
