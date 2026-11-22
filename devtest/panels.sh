@@ -291,6 +291,19 @@ scroll_clear() { # text [which of the rows that have it]
         y=$(where "$b" | cut -d' ' -f2)
         case "$y" in '' | *[!0-9]*) ;; *) [ "$y" -gt 1200 ] && [ $((y - 120)) -lt "$floor" ] && floor=$((y - 120)) ;; esac
     done
+    # The editor's Save button has another name in every language ("Enregistrer", "Salva"), so it is not found above. Its bar
+    # is 12 + 52 + 16 dp high plus the bottom inset of the window, and a row that is not clear of it takes the tap for Save
+    # (the editor is left): the line is the top edge of that bar less a margin, from the app's own window height, scale and
+    # inset (what `ui window` and the snapshot say, not `wm density`: a window that keeps its scale after a density change
+    # is measured as it is drawn). 300 px at the phone, 1616 of 1920; also right at 1600x2560 and 2208x1840.
+    if [ "$(screen_no)" = 1 ]; then
+        local win inset line milli
+        win=$(window_size)
+        inset=$(sn insets_bottom_px | cut -d. -f1)
+        milli=$(printf '%.0f' "$(echo "$win" | cut -d' ' -f3)e3")
+        line=$(($(echo "$win" | cut -d' ' -f2) - ${inset:-0} - 92 * ${milli:-2625} / 1000))
+        [ "$floor" -le "$line" ] || floor=$line
+    fi
     # Six tries, not three: on a busy machine a swipe now and then moves nothing (a scroll the app never saw).
     for i in 1 2 3 4 5 6; do
         # The row that will be tapped (the second argument picks one of several): a lower one that is still under the Save

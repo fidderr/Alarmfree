@@ -1021,7 +1021,8 @@ set_alarm_volume() {
     dev media volume --stream 4 --set "$1" > /dev/null 2>&1
     # Android 14 refuses those for the alarm stream (AppOps: "com.android.server.media" is no package of the shell's
     # uid): the audio service's own call, as the shell's package, works (setStreamVolume is transaction 12 there).
-    if [ "$(alarm_volume)" != "$1" ] && [ "$(dev getprop ro.build.version.sdk | tr -d '')" = 34 ]; then
+    if [ "$(alarm_volume)" != "$1" ] && [ "$(dev getprop ro.build.version.sdk | tr -d '
+')" = 34 ]; then
         dev service call audio 12 i32 4 i32 "$1" i32 0 s16 com.android.shell > /dev/null 2>&1
     fi
 }
@@ -1079,7 +1080,19 @@ fail() {
     write_log
 }
 note() { echo "      $1"; }
-write_log() { adb_ logcat -d -t 30000 -b all -v time 2> /dev/null | grep -E "AlarmFree|MobileSentinel|Sentinel|AlarmKit|AlarmClass|alarmfree|ActivityTaskManager.*(fidderr|Background)|BackgroundActivity|AndroidRuntime|FATAL|am_anr|ANR in|WATCHDOG|Watchdog|system_server|audioserver|AudioFlinger|AudioService|Fatal signal" > "$OUT/$CURRENT.log"; anr_traces; }
+write_log() { adb_ logcat -d -t 30000 -b all -v time 2> /dev/null | grep -E "AlarmFree|MobileSentinel|Sentinel|AlarmKit|AlarmClass|alarmfree|ActivityTaskManager.*(fidderr|Background)|BackgroundActivity|AndroidRuntime|FATAL|am_anr|ANR in|WATCHDOG|Watchdog|system_server|audioserver|AudioFlinger|AudioService|Fatal signal" > "$OUT/$CURRENT.log"; anr_traces; app_story; }
+# What the app itself says happened to its rings: its diagnostic log (ring started / stopped and how) and the outcomes it
+# wrote to the history (times and outcomes only, no labels). Decides whether a ring that ended by itself was dismissed,
+# missed, ended by the ring limit or by a restart.
+app_story() {
+    {
+        echo "--- files/sentinel/diag.log"
+        as_app "cat files/sentinel/diag.1.log files/sentinel/diag.log 2>/dev/null | tail -n 60"
+        echo "--- alarm_events (alarm_id fire dismiss outcome)"
+        printf 'SELECT alarm_id, fire_timestamp, dismiss_timestamp, outcome FROM alarm_events ORDER BY fire_timestamp DESC LIMIT 10;
+' | sql
+    } 2> /dev/null > "$OUT/$CURRENT.story.txt"
+}
 # What the system wrote about a not-responding app (stacks of its threads), kept with the log of a failed scenario.
 anr_traces() {
     timeout 60 "$ADB" -s "$SERIAL" shell "su 0 sh -c 'tail -n +1 /data/anr/* 2>/dev/null'" 2> /dev/null | head -c 400000 > "$OUT/$CURRENT.anr.txt"
