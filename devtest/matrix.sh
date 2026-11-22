@@ -3085,7 +3085,12 @@ chips_in_languages() { # scenario name, then pairs of locale code and name
         shift 2
         use_settings '"Dark"' "\"$locale\"" '"setup_done":true,"language_follows_phone":false'
         start_app
-        on_card 10 || { problems="$problems; $locale: no card"; continue; }
+        wait_for 40 page_is_up
+        on_card 20 || { problems="$problems; $locale: no card"; dev am force-stop "$PKG"; continue; }
+        # Android resizes the new window about a second after its first frame, and a touch in that moment is lost.
+        local since=$((SECONDS - ${STARTED_AT:-0}))
+        [ "$since" -ge 3 ] || sleep $((3 - since))
+        UI_QUIET=1 await_settled 5
         press open a 0.6
         on_editor 5 || { problems="$problems; $locale: no editor"; continue; }
         for key in config.sound config.ring_limit config.edit_lock config.wake_check config.notice; do
