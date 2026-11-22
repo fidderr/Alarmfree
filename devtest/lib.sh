@@ -21,6 +21,9 @@ _here=${BASH_SOURCE[0]%/*}
 # The state of the device before each scenario, and the watchdog around it (run_unit in the runner of matrix.sh).
 # shellcheck disable=SC1091
 . "$_here/baseline.sh"
+# Android's own screens: the reads of the device, and the rule for acting there (a wait on a named state, act once, confirm).
+# shellcheck disable=SC1091
+. "$_here/system.sh"
 
 # Seconds from setting up an alarm until it rings: long enough to arm it and kill the app.
 LEAD="${LEAD:-6}"
