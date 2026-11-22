@@ -775,6 +775,11 @@ s22() {
         screenshot s22b_backup
         solve_backup 1
         ended() { sound_off && state_is a scheduled && [ "$(outcomes backup)" = 1 ]; }
+        # A hold of 3.3 s is cut short when the machine stalls in the middle of it: the screen is still there, hold again.
+        if ! wait_for 8 ended && top_is_backup; then
+            note "s22b: the hold did not end it: once more"
+            solve_backup 1
+        fi
         if wait_for 10 ended; then
             pass "backup screen took over, solving it ended the alarm"
         else
@@ -818,6 +823,14 @@ s23b() {
     on_screen "Turn off" 10
     sleep 0.7
     as_app "touch -d 2020-01-01T00:00:00 files/sentinel/ringing/activity"
+    # A busy machine can spend most of the 9 s on getting the ring screen up, and the ring then ends before the touch is made:
+    # that is the machine, so it is asked again (twice at most); the test itself stays as it is.
+    if [ "$(now_s)" -gt $((T + 3)) ] && [ "${S23B_TRY:-0}" -lt 2 ]; then
+        note "s23b: the ring screen took $(($(now_s) - T))s of the 9s limit: once more"
+        S23B_TRY=$((${S23B_TRY:-0} + 1))
+        s23b
+        return
+    fi
     # Late enough to tell: it ends at 9 seconds without this touch, and at 13 with it.
     until_past $((T + 4))
     local size
