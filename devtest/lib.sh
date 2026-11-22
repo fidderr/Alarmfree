@@ -1088,6 +1088,8 @@ write_log() { adb_ logcat -d -t 30000 -b all -v time 2> /dev/null | grep -E "Ala
 anr_traces() {
     timeout 60 "$ADB" -s "$SERIAL" shell "su 0 sh -c 'tail -n +1 /data/anr/* 2>/dev/null'" 2> /dev/null | head -c 400000 > "$OUT/$CURRENT.anr.txt"
     [ -s "$OUT/$CURRENT.anr.txt" ] || rm -f "$OUT/$CURRENT.anr.txt"
+    # Is the audio server alive, and has anything crashed (Android 11 on a runner: the audio policy service did not answer)?
+    timeout 60 "$ADB" -s "$SERIAL" shell "getprop init.svc.audioserver; ps -A | grep -i -E 'audioserver|media'; logcat -d -b crash | tail -40; logcat -d -b all -s audioserver:* AudioFlinger:* AudioPolicyService:* | tail -40" 2> /dev/null > "$OUT/$CURRENT.audio.txt"
 }
 
 # One row of history, `$2` days ago.

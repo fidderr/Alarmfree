@@ -3,7 +3,7 @@
 # for the job summary. Usage: devtest/ci/run.sh <avd>      Run from anywhere; needs the APK in build/ (APK=...).
 # Needs ANDROID_HOME, /dev/kvm, an AVD made by make_avd.sh. Results: devtest-out/ci_<avd>/ and devtest-out/ci_<avd>.log.
 cd "$(dirname "$0")/../.." || exit 1
-avd=$1
+avd=${1%%+*}
 export ANDROID_AVD_HOME="${ANDROID_AVD_HOME:-$HOME/.android/avd}"
 export ADB="$ANDROID_HOME/platform-tools/adb" EMULATOR="$ANDROID_HOME/emulator/emulator"
 export SKIP_APK_CHECK=1 EVERYWHERE=1 LANES=1 PORT_BASE=5554 EMULATOR_GPU="${EMULATOR_GPU:-swiftshader_indirect}"
@@ -27,7 +27,7 @@ done
 [ -z "$incomplete" ] || rc=1
 stop=$(grep -h '^STOP' "devtest-out/ci_$avd.log" 2> /dev/null | head -1)
 {
-    echo "### $avd (Android $(sed -n 's/.*android=\([^ ]*\).*/\1/p' "$meta" 2> /dev/null | head -1))"
+    echo "### $1 (Android $(sed -n 's/.*android=\([^ ]*\).*/\1/p' "$meta" 2> /dev/null | head -1))"
     echo
     echo "| passed | failed | skipped | minutes | suite rc |"
     echo "|---|---|---|---|---|"

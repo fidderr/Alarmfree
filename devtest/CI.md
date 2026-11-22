@@ -7,3 +7,6 @@
 - Duration: see the table (minutes) of the last run.
 - On a runner the suite uses `devtest/linux.sh` (start and stop of the emulator), AVDs from `devtest/ci/make_avd.sh`, and `devtest/ci/run.sh`. Windows behaviour is unchanged.
 - Known SDK bug (mobile-sentinel 0.7.0, `run_gradle` in build_sentinel.rs): it starts the relative path `target/sentinel-android/gradlew` with that folder as working directory, which fails on Linux ("No such file"). The workflow works around it with a symlink; the SDK should use an absolute path.
+
+- Options per version, joined by `+`: `msd30+default` (AOSP image without Google APIs), `afg15+c2` / `c3` (2 or 3 emulator cores instead of 4). Used in the push commit message: `[avds: afg15 msd30+default]`.
+- Each job also writes `host_load.txt` (load and free memory every 15 s) into its results; a failed scenario has `<name>.anr.txt` (system stack dumps) and `<name>.audio.txt` (audio server state).

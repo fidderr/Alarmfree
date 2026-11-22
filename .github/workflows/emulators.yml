@@ -3,7 +3,8 @@ name: Emulators
 # The device suite (devtest/, the same full list that EVERYWHERE=1 runs on the owner's PC) on GitHub's machines, one
 # Android version per machine, all at once. Start it: Actions > Emulators > Run workflow, or
 # `gh workflow run emulators.yml --ref <branch> -f version=all`. A push to ci-emulators also runs it: one version
-# (afg15), or those named in the commit message as `[avds: afg14 msd29]` or `[avds: all]`. See devtest/CI.md.
+# (afg15), or those named in the commit message as `[avds: afg14 msd29]` or `[avds: all]`. A version can carry options
+# joined by +: `msd30+default` (AOSP image without Google APIs), `afg15+c2` (2 emulator cores). See devtest/CI.md.
 on:
   workflow_dispatch:
     inputs:
@@ -34,7 +35,7 @@ jobs:
           else want=$(printf '%s' "$MSG" | sed -n 's/.*\[avds: *\([^]]*\)\].*/\1/p' | head -1); fi
           [ -n "$want" ] || want=afg15
           [ "$want" = all ] && want=$all
-          json=$(for a in $want; do case " $all " in *" $a "*) printf '"%s",' "$a" ;; esac; done)
+          json=$(for a in $want; do case " $all " in *" ${a%%+*} "*) printf '"%s",' "$a" ;; esac; done)
           echo "avds=[${json%,}]" >> "$GITHUB_OUTPUT"
           echo "AVDs: $want"
 
@@ -104,12 +105,15 @@ jobs:
       - name: Android image and AVD
         run: bash devtest/ci/make_avd.sh ${{ matrix.avd }}
       - name: Suite
-        run: bash devtest/ci/run.sh ${{ matrix.avd }}
+        run: |
+          # Host load every 15 s next to the suite: tells a starved machine from a failing app.
+          (while :; do echo "$(date +%T) $(cut -d' ' -f1-3 /proc/loadavg) $(awk '/MemAvailable/{print $2/1024" MB free"}' /proc/meminfo)"; sleep 15; done > host_load.txt) &
+          bash devtest/ci/run.sh ${{ matrix.avd }}
       - name: Pack the results
         if: always()
         run: |
           mkdir -p packed
-          tar czf "packed/${{ matrix.avd }}.tgz" devtest-out ~/.android/avd/${{ matrix.avd }}.avd/config.ini 2> /dev/null || true
+          tar czf "packed/${{ matrix.avd }}.tgz" host_load.txt devtest-out ~/.android/avd/${{ matrix.avd }}.avd/config.ini 2> /dev/null || true
           ls -l packed
       - uses: actions/upload-artifact@v5
         if: always()

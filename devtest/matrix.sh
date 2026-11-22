@@ -2025,6 +2025,8 @@ done_sheet() {
         tap_in Done L 0.3
         # The sheet takes seconds to go on a busy machine: a second tap on Done before that lands on the editor under it.
         await_ui 8 'editor_sheet=None' && return 0
+        note "done_sheet: still up after Done ($(sn ed_sheet), screen $(screen_no)), tap $((i + 1))"
+        screenshot "done_sheet_still_up_$i"
         i=$((i + 1))
     done
     return 1
@@ -3130,7 +3132,7 @@ chips_in_languages() { # scenario name, then pairs of locale code and name
             fi
             if ! wait_for 8 any_sheet_up; then
                 screenshot "chips/${code}_${key}_NO_PANEL"
-                note "s69 $locale/$key: no panel; screen=$(screen_no) ed_sheet=$(sn ed_sheet) focus=$(focused_window | cut -c1-90)"
+                note "s69 $locale/$key: no panel; row=$(where_has "$title" | cut -c1-40) win=$(window_size) screen=$(screen_no) ed_sheet=$(sn ed_sheet) focus=$(focused_window | cut -c1-90)"
                 problems="$problems; $locale/$key: no panel"
                 continue
             fi
