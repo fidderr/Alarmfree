@@ -7,6 +7,8 @@ avd=${1%%+*}
 export ANDROID_AVD_HOME="${ANDROID_AVD_HOME:-$HOME/.android/avd}"
 export ADB="$ANDROID_HOME/platform-tools/adb" EMULATOR="$ANDROID_HOME/emulator/emulator"
 export SKIP_APK_CHECK=1 EVERYWHERE=1 LANES=1 PORT_BASE=5554 EMULATOR_GPU="${EMULATOR_GPU:-swiftshader_indirect}"
+# +swangle in the version token: SwiftShader through ANGLE (the emulator's newer software renderer) instead of swiftshader_indirect.
+case "+$1+" in *+swangle+*) export EMULATOR_GPU=swangle_indirect ;; esac
 export AVDS=$avd
 "$ADB" start-server > /dev/null 2>&1
 start=$SECONDS
