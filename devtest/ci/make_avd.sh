@@ -22,18 +22,28 @@ yes | "$bin/sdkmanager" --licenses > /dev/null || true
 "$bin/sdkmanager" --install "$image" "emulator" "platform-tools" > /dev/null
 echo no | "$bin/avdmanager" create avd -n "$avd" -k "$image" -d pixel --force
 cfg="$ANDROID_AVD_HOME/$avd.avd/config.ini"
-cat >> "$cfg" << 'EOF'
+# The owner's afg* AVDs end with this block; msd30 and msd29 are different AVDs (audio in and out on, a back camera, no
+# hardware keyboard, GPS, heap 228M; read from their config.ini on 2026-11-22). Android 11 with audio output off left the
+# audio policy service unanswering on a runner, so those two are made like the local ones. +noaudio gives the old recipe.
+case "$avd" in
+    msd30 | msd29)
+        audio=yes camera=emulated gps=yes keyboard=no heap=228M
+        case "$opts" in *+noaudio+*) audio=no camera=none gps=no keyboard=yes heap=256 ;; esac
+        ;;
+    *) audio=no camera=none gps=no keyboard=yes heap=256 ;;
+esac
+cat >> "$cfg" << EOF
 hw.lcd.width=1080
 hw.lcd.height=1920
 hw.lcd.density=420
 hw.ramSize=2048
-vm.heapSize=256
-hw.audioInput=no
-hw.audioOutput=no
-hw.camera.back=none
+vm.heapSize=$heap
+hw.audioInput=$audio
+hw.audioOutput=$audio
+hw.camera.back=$camera
 hw.camera.front=none
-hw.gps=no
-hw.keyboard=yes
+hw.gps=$gps
+hw.keyboard=$keyboard
 hw.gpu.enabled=yes
 hw.gpu.mode=swiftshader_indirect
 disk.dataPartition.size=6G

@@ -16,6 +16,11 @@ on:
   push:
     branches: [ci-emulators]
 
+# A newer push to the same branch replaces its older run.
+concurrency:
+  group: emulators-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
 

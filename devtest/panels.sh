@@ -295,7 +295,9 @@ tap_row() { # text [which of the rows that have it, default the first]
     done
     # Six tries, not three: on a busy machine a swipe now and then moves nothing (a scroll the app never saw).
     for i in 1 2 3 4 5 6; do
-        y=$(where_has "$1" | cut -d' ' -f2)
+        # The row that will be tapped (the second argument picks one of several): a lower one that is still under the Save
+        # button would be a tap on Save, and the editor is left (German "no panel" on every key after it).
+        y=$(where_has "$1" "${2:-}" | cut -d' ' -f2)
         case "$y" in '' | *[!0-9]*) ;; *) [ "$y" -lt "$floor" ] && break ;; esac
         [ "$i" -lt 4 ] || note "tap_row $1: scroll $i, row at y=${y:-?}, floor $floor"
         sheet_scroll

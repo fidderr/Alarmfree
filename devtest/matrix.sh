@@ -2027,6 +2027,9 @@ done_sheet() {
         await_ui 8 'editor_sheet=None' && return 0
         note "done_sheet: still up after Done ($(sn ed_sheet), screen $(screen_no)), tap $((i + 1))"
         screenshot "done_sheet_still_up_$i"
+        # Looked at again before the next tap: a sheet that has closed since would pass that tap on to the editor under it.
+        sleep 1
+        [ "$(sn ed_sheet)" != None ] || return 0
         i=$((i + 1))
     done
     return 1
