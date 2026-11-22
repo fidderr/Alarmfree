@@ -35,6 +35,11 @@ gpu_for() {
 tier_setup() {
     local avd=$1 tier=$2
     LEG_LIST="" LEG_SKIP="" LEG_FIRST="" LEG_LAST=""
+    # SCENARIOS names the ones to run (matrix.sh takes them by name, as one.sh does): only those, on every emulator.
+    if [ -n "${SCENARIOS:-}" ]; then
+        LEG_LIST=$SCENARIOS
+        return
+    fi
     if [ "$tier" = quick ]; then
         LEG_LIST=$QUICK
         return

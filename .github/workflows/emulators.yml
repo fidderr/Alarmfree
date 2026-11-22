@@ -5,6 +5,8 @@ name: Emulators
 # `gh workflow run emulators.yml --ref <branch> -f version=all`. A push to ci-emulators also runs it: one version
 # (afg15), or those named in the commit message as `[avds: afg14 msd29]` or `[avds: all]`. A version can carry options
 # joined by +: `msd30+default` (AOSP image without Google APIs), `afg15+c2` (2 emulator cores). See devtest/CI.md.
+# A push to devtest-no-flake runs it the same way. Only some scenarios: the input `scenarios`, or `[only: s50 s53]` in the commit
+# message. Sabotage mode (touches dropped and steps delayed on purpose, devtest/chaos.sh): the input `chaos`, or `[chaos]`.
 on:
   workflow_dispatch:
     inputs:
@@ -13,8 +15,17 @@ on:
         type: choice
         default: all
         options: [all, afg16, afg15, afg14, afg13, afg12, msd30, msd29]
+      scenarios:
+        description: Only these scenarios, names with spaces between (empty means all)
+        type: string
+        default: ''
+      chaos:
+        description: Sabotage mode, touches dropped and steps delayed on purpose
+        type: choice
+        default: 'no'
+        options: ['no', 'yes']
   push:
-    branches: [ci-emulators]
+    branches: [ci-emulators, devtest-no-flake]
 
 # A newer push to the same branch replaces its older run.
 concurrency:
@@ -29,10 +40,14 @@ jobs:
     runs-on: ubuntu-slim
     outputs:
       avds: ${{ steps.pick.outputs.avds }}
+      scenarios: ${{ steps.pick.outputs.scenarios }}
+      chaos: ${{ steps.pick.outputs.chaos }}
     steps:
       - id: pick
         env:
           INPUT: ${{ inputs.version }}
+          INPUT_SCENARIOS: ${{ inputs.scenarios }}
+          INPUT_CHAOS: ${{ inputs.chaos }}
           MSG: ${{ github.event.head_commit.message }}
         run: |
           all="afg16 afg15 afg14 afg13 afg12 msd30 msd29"
@@ -40,9 +55,27 @@ jobs:
           else want=$(printf '%s' "$MSG" | sed -n 's/.*\[avds: *\([^]]*\)\].*/\1/p' | head -1); fi
           [ -n "$want" ] || want=afg15
           [ "$want" = all ] && want=$all
-          json=$(for a in $want; do case " $all " in *" ${a%%+*} "*) printf '"%s",' "$a" ;; esac; done)
+          # A version is a name from the list and options joined by +, letters and digits only: what follows it in a commit
+          # message is not passed on (the job steps below paste the name into a command line).
+          json=$(for a in $want; do case "$a" in *[!a-z0-9+]*) continue ;; esac; case " $all " in *" ${a%%+*} "*) printf '"%s",' "$a" ;; esac; done)
           echo "avds=[${json%,}]" >> "$GITHUB_OUTPUT"
           echo "AVDs: $want"
+          # Scenario names are letters, digits and underscores: anything else is dropped before it reaches a command line.
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+              only=$INPUT_SCENARIOS
+              [ "$INPUT_CHAOS" = yes ] && chaos=1 || chaos=""
+          else
+              only=$(printf '%s' "$MSG" | sed -n 's/.*\[only: *\([^]]*\)\].*/\1/p' | head -1)
+              case "$MSG" in *"[chaos]"*) chaos=1 ;; *) chaos="" ;; esac
+          fi
+          only=$(printf '%s' "$only" | tr -c 'A-Za-z0-9_' ' ' | tr -s ' ' | sed 's/^ //; s/ $//')
+          # [only: ...] that gives no name (a typo, a missing bracket) must not turn into a run of everything.
+          if [ "$GITHUB_EVENT_NAME" != workflow_dispatch ] && [ -z "$only" ]; then
+              case "$MSG" in *"[only:"*) echo "::error::the commit message has [only: ...] but no scenario name was read from it"; exit 1 ;; esac
+          fi
+          echo "scenarios=$only" >> "$GITHUB_OUTPUT"
+          echo "chaos=$chaos" >> "$GITHUB_OUTPUT"
+          echo "Scenarios: ${only:-all}   Sabotage: ${chaos:-off}"
 
   build:
     name: x86_64 debug APK
@@ -110,6 +143,9 @@ jobs:
       - name: Android image and AVD
         run: bash devtest/ci/make_avd.sh ${{ matrix.avd }}
       - name: Suite
+        env:
+          SCENARIOS: ${{ needs.plan.outputs.scenarios }}
+          CHAOS: ${{ needs.plan.outputs.chaos }}
         run: |
           # Host load every 15 s next to the suite: tells a starved machine from a failing app.
           (while :; do echo "$(date +%T) $(cut -d' ' -f1-3 /proc/loadavg) $(awk '/MemAvailable/{print $2/1024" MB free"}' /proc/meminfo)"; sleep 15; done > host_load.txt) &

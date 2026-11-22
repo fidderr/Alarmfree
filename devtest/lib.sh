@@ -13,6 +13,11 @@ PKG=com.fidderr.alarmfree
 ACTIVITY=android.app.NativeActivity
 OUT="${OUT:-devtest-out}"
 mkdir -p "$OUT"
+# Sabotage mode (CHAOS=1): touches dropped and steps delayed on purpose. Nothing happens without it.
+_here=${BASH_SOURCE[0]%/*}
+[ "$_here" != "${BASH_SOURCE[0]}" ] || _here=.
+# shellcheck disable=SC1091
+. "$_here/chaos.sh"
 
 # Seconds from setting up an alarm until it rings: long enough to arm it and kill the app.
 LEAD="${LEAD:-6}"
@@ -113,6 +118,7 @@ guard_input() {
     return 1
 }
 dev() {
+    [ -z "$CHAOS_ON" ] || chaos_touch "$@" || return 0
     case "$SERIAL:$*" in emulator-*) ;; *"input "*) guard_input "$@" || return 1 ;; esac
     case "$1" in
         dumpsys | cat | uiautomator) adb_ shell "$@" | tr -d '\r' ;;
@@ -604,6 +610,7 @@ sq_escape() {
 }
 ui() { # command: its answer, or "no answer from the app"
     local out
+    [ -z "$CHAOS_ON" ] || chaos_step
     out=$(as_app "cd files && rm -f debug_script_result.txt && print -r -- 'ui:$(sq_escape "$1")' > debug_action.tmp && mv debug_action.tmp debug_action.txt && i=0; while [ ! -e debug_script_result.txt ] && [ \$i -lt ${UI_WAIT:-300} ]; do sleep 0.01; i=\$((i + 1)); done; cat debug_script_result.txt 2> /dev/null")
     if [ -n "$out" ]; then
         echo "$out"
@@ -1062,6 +1069,7 @@ scenario() {
         echo "STOP  $CURRENT  device not responding" >> "$RESULTS"
         exit 2
     fi
+    chaos_hog_ensure
     # A dark screen fails everything after it, and says nothing about the app.
     if on_emulator && shells_open && [ "$(wakefulness)" != Awake ]; then
         note "the screen was off between scenarios: woken"

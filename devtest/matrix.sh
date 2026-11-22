@@ -3762,6 +3762,7 @@ RUN_START=$SECONDS
 # Started by itself, and not from a run that claimed the device already.
 [ -n "${RUN_ID:-}" ] || claim_device
 open_shells
+chaos_hog_start
 if on_emulator; then
     dev settings put global auto_time 0
     # What an earlier run that did not get to its end left.
@@ -3809,6 +3810,7 @@ for s in $RUN_LIST; do
     fi
     "$s"
 done
+chaos_hog_stop
 dev am force-stop "$PKG"
 echo
 echo "===== SUMMARY ($SERIAL) ====="
@@ -3816,3 +3818,4 @@ cat "$RESULTS"
 echo "passed: $(grep -c '^PASS' "$RESULTS")  failed: $(grep -c '^FAIL' "$RESULTS")  skipped: $(grep -c '^SKIP' "$RESULTS")  in $(((SECONDS - RUN_START) / 60)) min $(((SECONDS - RUN_START) % 60)) s"
 slow=$(sed -nE 's/^[A-Z]+ +([^ ]+) +\[([0-9]+)s\].*/\2 \1/p' "$RESULTS" | awk '$1 > 60 { printf "%s (%ss) ", $2, $1 }')
 [ -z "$slow" ] || echo "over a minute: $slow"
+chaos_footer
