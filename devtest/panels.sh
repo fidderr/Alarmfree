@@ -281,12 +281,10 @@ any_sheet_up() {
 }
 no_sheet_up() { ! any_sheet_up; }
 
-# A row of a screen that scrolls: where it is, wherever the screen was left.
-tap_row() { # text [which of the rows that have it, default the first]
-    has_there "$1" || { sheet_scroll_up; has_there "$1" || sheet_scroll; }
-    has_there "$1" || sheet_scroll
-    # A row in the tree can sit behind the Save or Done button that stays at the bottom, or the
-    # navigation bar: a touch there is theirs. Scroll until the row is clear of them.
+# Scroll until a row is clear of the Save or Done button that stays at the bottom, and the navigation bar: a row in the
+# tree can sit behind them, and a touch there is theirs (a tap meant for "Reminder" or "Full brightness" has saved the
+# alarm and left the editor).
+scroll_clear() { # text [which of the rows that have it]
     local i y b floor
     floor=$(( $(window_size | cut -d' ' -f2) - 200 ))
     for b in Save Done; do
@@ -299,9 +297,16 @@ tap_row() { # text [which of the rows that have it, default the first]
         # button would be a tap on Save, and the editor is left (German "no panel" on every key after it).
         y=$(where_has "$1" "${2:-}" | cut -d' ' -f2)
         case "$y" in '' | *[!0-9]*) ;; *) [ "$y" -lt "$floor" ] && break ;; esac
-        [ "$i" -lt 4 ] || note "tap_row $1: scroll $i, row at y=${y:-?}, floor $floor"
+        [ "$i" -lt 4 ] || note "scroll_clear $1: scroll $i, row at y=${y:-?}, floor $floor"
         sheet_scroll
     done
+}
+
+# A row of a screen that scrolls: where it is, wherever the screen was left.
+tap_row() { # text [which of the rows that have it, default the first]
+    has_there "$1" || { sheet_scroll_up; has_there "$1" || sheet_scroll; }
+    has_there "$1" || sheet_scroll
+    scroll_clear "$1" "${2:-}"
     # What stands on this screen now (the labelled swatches of the theme screen under a panel) is no choice of the panel.
     baseline_update
     tap_has "$1" "${2:-0}" 0.5

@@ -2043,6 +2043,7 @@ open_row() {
         # Where the row is, if the screen was left scrolled either way (s50 once found no "Label" on Android 12).
         # A keyboard left up by something before (the one of the last typing, which Android brings back) covers the rows.
         has_there "$1" || { hide_keyboard; sheet_scroll_up; has_there "$1" || sheet_scroll; }
+        scroll_clear "$1"
         tap_has "$1" 0 0.4
         await_ui 4 'editor_sheet!=None' && return 0
     done
@@ -2126,6 +2127,7 @@ s50() {
     tap_scrolling "10 min"
     done_sheet
     has_there "Full brightness" || sheet_scroll
+    scroll_clear "Full brightness"
     tap "Full brightness" 0 0.3
     screenshot s50_set
     tap Save 0 0.5
