@@ -2022,6 +2022,8 @@ s49() {
 done_sheet() {
     local i=0
     while [ "$i" -lt 3 ]; do
+        # A panel takes touches once it holds still (the first Done after a sheet within it is lost on a busy machine).
+        await_settled 4
         tap_in Done L 0.3
         # The sheet takes seconds to go on a busy machine: a second tap on Done before that lands on the editor under it.
         await_ui 8 'editor_sheet=None' && return 0
@@ -3122,6 +3124,7 @@ chips_in_languages() { # scenario name, then pairs of locale code and name
             title=$(python -I -c 'import json,sys; print(json.load(open(sys.argv[1],encoding="utf-8"))[sys.argv[2]])' "src/i18n/$code.json" "$key")
             # A row says its title and value together; the title alone is also there. By part of a text
             # "Son" would be the first line of the card ("Sonnera demain") in French.
+            pre="screen=$(screen_no) at=$(where_has "$title" "$([ "$key" = config.notice ] && echo L)" | cut -c1-30) save=$(where Save | cut -c1-30)"
             if [ "$key" = config.sound ]; then
                 tap "$title" 0 0.5
             elif [ "$key" = config.notice ]; then
@@ -3135,7 +3138,7 @@ chips_in_languages() { # scenario name, then pairs of locale code and name
             fi
             if ! wait_for 8 any_sheet_up; then
                 screenshot "chips/${code}_${key}_NO_PANEL"
-                note "s69 $locale/$key: no panel; row=$(where_has "$title" | cut -c1-40) win=$(window_size) screen=$(screen_no) ed_sheet=$(sn ed_sheet) focus=$(focused_window | cut -c1-90)"
+                note "s69 $locale/$key: no panel; before the tap: $pre; row=$(where_has "$title" | cut -c1-40) win=$(window_size) screen=$(screen_no) ed_sheet=$(sn ed_sheet) focus=$(focused_window | cut -c1-90)"
                 problems="$problems; $locale/$key: no panel"
                 continue
             fi
