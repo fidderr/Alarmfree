@@ -24,6 +24,9 @@ _here=${BASH_SOURCE[0]%/*}
 # The state of the device before each scenario, and the watchdog around it (run_unit in the runner of matrix.sh).
 # shellcheck disable=SC1091
 . "$_here/baseline.sh"
+# The snapshot of the screen and the device at the first FAIL of a scenario (and at an INFRA).
+# shellcheck disable=SC1091
+. "$_here/evidence.sh"
 
 # Seconds from setting up an alarm until it rings: long enough to arm it and kill the app.
 LEAD="${LEAD:-6}"
@@ -161,12 +164,24 @@ sql() {
 
 # Run a check again until it holds, for at most `$1` seconds.
 wait_for() {
-    local limit=$((SECONDS + $1))
+    local secs=$1 end now
     shift
-    until "$@"; do
-        [ "$SECONDS" -ge "$limit" ] && return 1
-        sleep 0.1
-    done
+    # N seconds really pass: SECONDS counts whole seconds, so a limit made from it ends up to a second early.
+    if [ -n "${EPOCHREALTIME:-}" ]; then
+        now=${EPOCHREALTIME/[.,]/}
+        end=$((now + secs * 1000000))
+        until "$@"; do
+            now=${EPOCHREALTIME/[.,]/}
+            [ "$now" -ge "$end" ] && return 1
+            sleep 0.1
+        done
+    else
+        end=$((SECONDS + secs + 1))
+        until "$@"; do
+            [ "$SECONDS" -ge "$end" ] && return 1
+            sleep 0.1
+        done
+    fi
 }
 
 main_pid() { dev pidof "$PKG"; }
@@ -1136,6 +1151,7 @@ skip() {
 }
 fail() {
     echo "FAIL  $CURRENT  [$(took)] $1${RETRY_NOTE:+  (ASKED AGAIN: $RETRY_NOTE)}" | tee -a "$RESULTS"
+    evidence_snapshot fail "$CURRENT" "$1"
     write_log
 }
 note() { echo "      $1"; }
