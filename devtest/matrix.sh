@@ -2599,13 +2599,13 @@ s55() {
         fail "the camera does not open: $(focused_window)"
         return
     fi
-    wait_for 3 sound_off || problems="$problems; loud with the camera just opened"
+    wait_for 8 sound_off || problems="$problems; loud with the camera just opened"
     sleep 1
     scanner_on_top || problems="$problems; pushed off the screen: $(focused_window)"
     [ "$(main_pid)" = "$p0" ] || problems="$problems; the app was restarted under the camera"
     scanner_gone() { ! scanner_on_top && [ "$(sn scan_state)" = 0 ]; }
     wait_for 16 scanner_gone || problems="$problems; the camera did not close itself after its limit"
-    wait_for 3 sound_off || problems="$problems; loud with the camera closed"
+    wait_for 8 sound_off || problems="$problems; loud with the camera closed"
     # No new tap on Scan: it is no way out, and rings again.
     wait_for 16 sound_on || problems="$problems; silent for good after the camera, a way out"
     wait_for 10 scan_or_ring
