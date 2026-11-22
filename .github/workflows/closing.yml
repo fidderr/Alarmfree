@@ -19,7 +19,7 @@ on:
         type: string
         default: '1'
   push:
-    branches: [noflake/closing]
+    branches: [noflake/closing, noflake/closing-on-integration]
 
 # A newer push to the same branch replaces its older run.
 concurrency:
