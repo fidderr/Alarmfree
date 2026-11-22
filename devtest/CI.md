@@ -10,3 +10,4 @@
 
 - Options per version, joined by `+`: `msd30+default` (AOSP image without Google APIs), `afg15+c2` / `c3` (2 or 3 emulator cores instead of 4). Used in the push commit message: `[avds: afg15 msd30+default]`.
 - Each job also writes `host_load.txt` (load and free memory every 15 s) into its results; a failed scenario has `<name>.anr.txt` (system stack dumps) and `<name>.audio.txt` (audio server state).
+- Asking again: a scenario that repeats a step (a lost touch, a machine that used a limit up) calls `retry_used` (lib.sh). Its PASS line says `(ASKED AGAIN: ...)` with the host load against the cores at that moment; the job summary lists every use, and a use on a machine that was not starved (load below the cores) is a FINDING that fails the job. s22b does not ask again: its purpose is that one hold ends the alarm.

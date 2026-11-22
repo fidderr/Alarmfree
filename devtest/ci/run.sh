@@ -27,6 +27,8 @@ for id in s13 s13b s13d; do
     grep -aqE "^(PASS|FAIL|SKIP)  ${id}_" "$res" 2> /dev/null || incomplete="$incomplete $id(never ran)"
 done
 [ -z "$incomplete" ] || rc=1
+# Asking again on a machine that was not starved is a finding: the job fails on it.
+grep -qs NOT-STARVED "devtest-out/ci_$avd/retries.txt" && rc=1
 stop=$(grep -h '^STOP' "devtest-out/ci_$avd.log" 2> /dev/null | head -1)
 {
     echo "### $1 (Android $(sed -n 's/.*android=\([^ ]*\).*/\1/p' "$meta" 2> /dev/null | head -1))"
@@ -34,6 +36,16 @@ stop=$(grep -h '^STOP' "devtest-out/ci_$avd.log" 2> /dev/null | head -1)
     echo "| passed | failed | skipped | minutes | suite rc |"
     echo "|---|---|---|---|---|"
     echo "| ${p:-0} | ${f:-0} | ${s:-0} | $(((SECONDS - start) / 60)) | $rc |"
+    # Every scenario that asked again, and whether the machine was starved at that moment (a retry on a machine that was
+    # not is a finding: it may be hiding a fault).
+    retries="devtest-out/ci_$avd/retries.txt"
+    if [ -s "$retries" ]; then
+        echo; echo "Passed or failed only after asking again:"; echo
+        sed 's/^/- `/; s/$/`/' "$retries" | cut -c1-230
+        if grep -q 'NOT-STARVED' "$retries"; then echo; echo "FINDING: asked again on a machine that was NOT starved: $(grep -c 'NOT-STARVED' "$retries") time(s)."; fi
+    else
+        echo; echo "Asked again: never."
+    fi
     [ -z "$incomplete" ] || { echo; echo "INCOMPLETE (no result): \`${incomplete# }\`"; }
     [ -z "$stop" ] || { echo; echo "STOPPED: \`$stop\`"; }
     if [ "${f:-0}" -gt 0 ]; then

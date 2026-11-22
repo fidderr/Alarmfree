@@ -934,6 +934,7 @@ tap_text() {
     for try in 1 2 3; do
         box=$(dev "uiautomator dump /data/local/tmp/af_ui.xml > /dev/null 2>&1; tr '>' '\\n' < /data/local/tmp/af_ui.xml | grep 'text=\"$1\"' | sed -E 's/.*bounds=\"\\[([0-9]+),([0-9]+)\\]\\[([0-9]+),([0-9]+)\\]\".*/\\1 \\2 \\3 \\4/' | head -1")
         [[ "$box" =~ ^[0-9]+\ [0-9]+\ [0-9]+\ [0-9]+$ ]] && break
+        retry_used "tap_text $1: the screen dump failed"
         sleep 1
     done
     # A dump that failed leaves an error text (sh: can't open ...) where the numbers go; in $(( )) that ends the whole run.
@@ -1051,6 +1052,7 @@ scenario() {
     PAGE_WAITED=""
     ARM_AT=""
     CURRENT=$1${VARIANT:-}
+    RETRY_NOTE=$RETRY_CARRY RETRY_CARRY=""
     SCENARIO_START=$SECONDS
     echo
     echo "=== $CURRENT"
@@ -1074,13 +1076,28 @@ scenario() {
     adb_ logcat -c
 }
 took() { echo "$((SECONDS - SCENARIO_START))s"; }
-pass() { echo "PASS  $CURRENT  [$(took)] $1" | tee -a "$RESULTS"; }
+pass() { echo "PASS  $CURRENT  [$(took)] $1${RETRY_NOTE:+  (ASKED AGAIN: $RETRY_NOTE)}" | tee -a "$RESULTS"; }
+# A scenario that asks again (a lost touch, a machine that used the limit up) says so in its result line, and a retry on a
+# machine that was not starved is a finding: the host's load against its cores is read at that moment (a runner; a PC says
+# "load unknown"). One line per use in retries.txt of the results, which the CI table lists.
+RETRY_NOTE="" RETRY_CARRY=""
+retry_used() { # what was asked again, and why
+    local load cores verdict=unknown
+    load=$(cut -d' ' -f1 /proc/loadavg 2> /dev/null)
+    cores=$(nproc 2> /dev/null)
+    if [ -n "$load" ] && [ -n "$cores" ]; then
+        if awk -v l="$load" -v c="$cores" 'BEGIN { exit !(l >= c) }'; then verdict=starved; else verdict=NOT-STARVED; fi
+    fi
+    RETRY_NOTE="${RETRY_NOTE:+$RETRY_NOTE, }$1 [host load ${load:-?}/${cores:-?}: $verdict]"
+    echo "$CURRENT | $1 | host load ${load:-?} of ${cores:-?} cores: $verdict" >> "$OUT/retries.txt"
+    note "ASKED AGAIN: $1 (host load ${load:-?}/${cores:-?}: $verdict)"
+}
 # The log of what went wrong, right when it did. It takes a moment, so only then.
 skip() {
     echo "SKIP  $CURRENT  [$(took)] $1" | tee -a "$RESULTS"
 }
 fail() {
-    echo "FAIL  $CURRENT  [$(took)] $1" | tee -a "$RESULTS"
+    echo "FAIL  $CURRENT  [$(took)] $1${RETRY_NOTE:+  (ASKED AGAIN: $RETRY_NOTE)}" | tee -a "$RESULTS"
     write_log
 }
 note() { echo "      $1"; }
@@ -1126,6 +1143,7 @@ go_tab() { # Alarms / History / Settings; a touch in the first seconds of the wi
         *) want=3 ;;
     esac
     while [ "$i" -lt 3 ]; do
+        [ "$i" = 0 ] || retry_used "go_tab $1: the first touch did not change the screen"
         tap "$1" L 0.3
         wait_for 2 on_screen_no "$want" && return 0
         i=$((i + 1))

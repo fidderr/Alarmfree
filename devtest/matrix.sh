@@ -392,7 +392,7 @@ s13() {
     # The app's window has just started in a new process: a tap in the moment Android resizes it once
     # more is lost (seen on s36 as well), and the screen is still there to be tapped again.
     if ! wait_for 3 finished; then
-        note "s13: the first tap on Turn off was lost: once more"
+        retry_used "s13: the first tap on Turn off was lost"
         tap "Turn off" 0 0.5
     fi
     wait_for 8 finished || problems="$problems; after turning it off: sound=$(sound_on && echo ON || echo off) state=$(state a) solved=$(outcomes solved)"
@@ -458,7 +458,7 @@ s13b() {
     finished() { sound_off && state_is b scheduled && [ "$(outcomes solved)" = 1 ]; }
     # As in s13: a tap in the moment Android resizes the new window once more is lost.
     if ! wait_for 3 finished; then
-        note "s13b: the first tap on Turn off was lost: once more"
+        retry_used "s13b: the first tap on Turn off was lost"
         tap "Turn off" 0 0.5
     fi
     wait_for 8 finished || problems="$problems; after turning it off: sound=$(sound_on && echo ON || echo off) state=$(state b) solved=$(outcomes solved)"
@@ -775,11 +775,6 @@ s22() {
         screenshot s22b_backup
         solve_backup 1
         ended() { sound_off && state_is a scheduled && [ "$(outcomes backup)" = 1 ]; }
-        # A hold of 3.3 s is cut short when the machine stalls in the middle of it: the screen is still there, hold again.
-        if ! wait_for 8 ended && top_is_backup; then
-            note "s22b: the hold did not end it: once more"
-            solve_backup 1
-        fi
         if wait_for 10 ended; then
             pass "backup screen took over, solving it ended the alarm"
         else
@@ -826,7 +821,8 @@ s23b() {
     # A busy machine can spend most of the 9 s on getting the ring screen up, and the ring then ends before the touch is made:
     # that is the machine, so it is asked again (twice at most); the test itself stays as it is.
     if [ "$(now_s)" -gt $((T + 3)) ] && [ "${S23B_TRY:-0}" -lt 2 ]; then
-        note "s23b: the ring screen took $(($(now_s) - T))s of the 9s limit: once more"
+        retry_used "s23b: the ring screen took $(($(now_s) - T))s of the 9s limit"
+        RETRY_CARRY=$RETRY_NOTE
         S23B_TRY=$((${S23B_TRY:-0} + 1))
         s23b
         return
@@ -935,7 +931,8 @@ s26() {
             # The cold start of the window starves the sound of its CPU on an emulator with 2 cores and
             # no GPU (seen: 3 to 7 s from the broadcast to the sound, 0.1 s on a phone and on a quiet
             # emulator). A real fault repeats: it counts only when it does it three times running.
-            note "s26: the sound came ${delivery}ms after delivery on a busy emulator: once more"
+            retry_used "s26: the sound came ${delivery}ms after delivery"
+            RETRY_CARRY=$RETRY_NOTE
             dev dumpsys deviceidle unforce > /dev/null
             S26_AGAIN=$((${S26_AGAIN:-0} + 1)) s26 "$run"
             return
@@ -992,7 +989,8 @@ s28() {
         # (the window's first frame takes that long), and the alarm armed for it never arrives, with
         # nothing in the log. A second start is the same test; it fails when that happens twice.
         if on_emulator && [ -z "${S28_AGAIN:-}" ]; then
-            note "s28: the alarm armed for $T did not ring (state=$(state a)): once more"
+            retry_used "s28: the alarm armed for $T did not ring (state=$(state a))"
+            RETRY_CARRY=$RETRY_NOTE
             S28_AGAIN=1 s28
             unset S28_AGAIN
             return
@@ -1293,7 +1291,7 @@ s34() {
                 for _ in 1 2 3 4 5 6; do
                     case "$after" in *"$result"*) sleep 0.8; after=$(clipped) ;; *) break ;; esac
                 done
-                case "$after" in *"$result"*) dev input swipe 900 341 100 341 300 ;; *) break ;; esac
+                case "$after" in *"$result"*) retry_used "s34 $locale: the chip was still out after the swipe"; dev input swipe 900 341 100 341 300 ;; *) break ;; esac
             done
             case "$after" in *"$result"*) after=$(clipped) ;; esac
             case "$after" in
@@ -1421,7 +1419,7 @@ s37() {
     local problems=""
     swipe_card
     # The first touch in the first seconds of a window can be lost: once more.
-    is_there "Skip the next ring" || swipe_card
+    is_there "Skip the next ring" || { retry_used "s37: the first swipe moved nothing"; swipe_card; }
     screenshot s37_swiped
     is_there "Skip the next ring" || problems="$problems; did not move: $(texts_of)"
     is_there Delete || problems="$problems; delete not in view"
@@ -2040,7 +2038,7 @@ done_sheet() {
         tap_in Done L 0.3
         # The sheet takes seconds to go on a busy machine: a second tap on Done before that lands on the editor under it.
         await_ui 8 'editor_sheet=None' && return 0
-        note "done_sheet: still up after Done ($(sn ed_sheet), screen $(screen_no)), tap $((i + 1))"
+        retry_used "done_sheet: still up after Done ($(sn ed_sheet)), tap $((i + 1))"
         screenshot "done_sheet_still_up_$i"
         # Looked at again before the next tap: a sheet that has closed since would pass that tap on to the editor under it.
         sleep 1
@@ -3148,7 +3146,7 @@ chips_in_languages() { # scenario name, then pairs of locale code and name
             else
                 tap_row "$title"
             fi
-            if ! wait_for 8 any_sheet_up && on_editor 1 && { note "s69 $locale/$key: the tap was lost: once more"; true; }; then
+            if ! wait_for 8 any_sheet_up && on_editor 1 && { retry_used "s69 $locale/$key: the tap opened no panel"; true; }; then
                 if [ "$key" = config.sound ]; then tap "$title" 0 0.5; elif [ "$key" = config.notice ]; then tap_row "$title" L; else tap_row "$title"; fi
             fi
             if ! wait_for 8 any_sheet_up; then
