@@ -1072,6 +1072,7 @@ s25() {
     # the background, without ending anything.
     local seen
     seen="screen=$(sn screen) sheet=$(sn home_sheet) panel=$(sn panel_open) ringing=$(sn ringing) preview=$(sn ed_preview)"
+    window_past_late_resize
     press_back
     wait_for 5 not_on_top || problems="$problems; Back on Home stayed on top ($seen; now $(sn screen) $(sn home_sheet) $(sn panel_open))"
     [ "$(main_pid)" = "$p0" ] || problems="$problems; main $p0 to $(main_pid)"
@@ -3090,9 +3091,7 @@ chips_in_languages() { # scenario name, then pairs of locale code and name
         wait_for 40 page_is_up
         on_card 20 || { problems="$problems; $locale: no card"; dev am force-stop "$PKG"; continue; }
         # Android resizes the new window about a second after its first frame, and a touch in that moment is lost.
-        local since=$((SECONDS - ${STARTED_AT:-0}))
-        [ "$since" -ge 3 ] || sleep $((3 - since))
-        UI_QUIET=1 await_settled 5
+        window_past_late_resize
         press open a 0.6
         on_editor 5 || { problems="$problems; $locale: no editor"; continue; }
         # Android brings back the keyboard of the last typing for the app's window: it would cover the rows.
