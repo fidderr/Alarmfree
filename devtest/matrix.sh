@@ -2501,7 +2501,9 @@ s56() {
     # Into the challenge, where it is quiet: this is where one could go back to sleep.
     into_challenge() {
         wait_for 15 ring_or_run
-        is_there "Turn off" && tap "Turn off" 0 0.3
+        # Through the window's events: a finger's tap on a window that has just come up (after the kills here) can be
+        # lost, and this step is only the way into the challenge.
+        is_there "Turn off" && tap_in "Turn off" 0 0.3
         wait_for 10 run_up || problems="$problems; no challenge after $1"
         wait_for 5 sound_off || problems="$problems; still loud in the challenge after $1"
     }
