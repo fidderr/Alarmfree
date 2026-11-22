@@ -72,14 +72,14 @@ boot_leg() {
 }
 
 # An emulator takes about 3.2 GB: with another one running, start this one only when that much and more is free
-# (4500 MB, MIN_FREE_MB), or the new one and the running one starve each other and freeze. At most 20 minutes.
+# (4500 MB, MIN_FREE_MB), or the new one and the running one starve each other and freeze. It waits as long as it
+# takes (the other leg ends sooner or later and then nothing runs any more).
 free_mem_mb() { powershell.exe -NoProfile -Command '[int]((Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory / 1024)' 2> /dev/null | tr -d ''; }
 wait_for_memory() {
-    local until=$((SECONDS + 1200)) free
+    local free
     while [ "$(tasklist 2> /dev/null | grep -c 'qemu-system')" -gt 0 ]; do
         free=$(free_mem_mb)
         [ "${free:-0}" -ge "${MIN_FREE_MB:-4500}" ] && return 0
-        [ "$SECONDS" -lt "$until" ] || { echo "NOTE  starting $AVD with only ${free:-?} MB free after 20 minutes of waiting"; return 0; }
         sleep 20
     done
 }
