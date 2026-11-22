@@ -21,21 +21,23 @@
 set -euo pipefail
 
 cd "$(dirname "$0")"
-SDK_HOME="${ANDROID_HOME:-$LOCALAPPDATA/Android/Sdk}"
+SDK_HOME="${ANDROID_HOME:-${LOCALAPPDATA:-}/Android/Sdk}"
 export PATH="$PATH:$HOME/.cargo/bin:$SDK_HOME/platform-tools"
 export ANDROID_HOME="$SDK_HOME"
 # Slint's prebuilt Skia needs NDK r30.
 export ANDROID_NDK_ROOT="$SDK_HOME/ndk/30.0.16248370" ANDROID_NDK_HOME="$SDK_HOME/ndk/30.0.16248370"
 export JAVA_HOME="${JAVA_HOME:-C:/Program Files/Microsoft/jdk-17.0.21.21-hotspot}"
-NDK_BIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/windows-x86_64/bin"
+# Windows is the owner's PC; Linux is the CI runner (.github/workflows/emulators.yml).
+if [ "$(uname -s)" = Linux ]; then HOST_TAG=linux-x86_64 CMD_EXT="" EXE_EXT=""; else HOST_TAG=windows-x86_64 CMD_EXT=.cmd EXE_EXT=.exe; fi
+NDK_BIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/$HOST_TAG/bin"
 # The oldest Android the app runs on, from sentinel.toml: what the native code is linked and compiled for.
 MIN_SDK=$(sed -n 's/^min_sdk *= *\([0-9][0-9]*\).*/\1/p' sentinel.toml)
 [ -n "$MIN_SDK" ] || { echo "ERROR: sentinel.toml has no min_sdk"; exit 1; }
 # What C code in dependencies (SQLite) is compiled with, and what links the library.
 for triple in aarch64-linux-android x86_64-linux-android; do
   var="${triple//-/_}"
-  export "CC_$var=$NDK_BIN/${triple}${MIN_SDK}-clang.cmd" "CXX_$var=$NDK_BIN/${triple}${MIN_SDK}-clang++.cmd" "AR_$var=$NDK_BIN/llvm-ar.exe"
-  export "CARGO_TARGET_$(echo "$var" | tr a-z A-Z)_LINKER=$NDK_BIN/${triple}${MIN_SDK}-clang.cmd"
+  export "CC_$var=$NDK_BIN/${triple}${MIN_SDK}-clang$CMD_EXT" "CXX_$var=$NDK_BIN/${triple}${MIN_SDK}-clang++$CMD_EXT" "AR_$var=$NDK_BIN/llvm-ar$EXE_EXT"
+  export "CARGO_TARGET_$(echo "$var" | tr a-z A-Z)_LINKER=$NDK_BIN/${triple}${MIN_SDK}-clang$CMD_EXT"
 done
 TARGET="${TARGET:-aarch64-linux-android}"
 SENTINEL_MANIFEST="${SENTINEL_MANIFEST:-../mobile-sentinel/Cargo.toml}"

@@ -311,14 +311,18 @@ until_past() { # wait until device time is past unix second $1
 AVD="${AVD:-afg16}"
 EMULATOR="${EMULATOR:-$LOCALAPPDATA/Android/Sdk/emulator/emulator.exe}"
 
+[ "$(uname -s)" = Linux ] && . "$(dirname "${BASH_SOURCE[0]}")/linux.sh"
+
 emulator_start() {
     still_ours || return 0
+    [ "$(uname -s)" = Linux ] && { linux_emulator_start; return; }
     powershell.exe -NoProfile -Command "Start-Process -WindowStyle Hidden -FilePath '$(cygpath -w "$EMULATOR")' -ArgumentList '-avd $AVD -no-window -no-audio -no-boot-anim -no-snapshot -gpu ${EMULATOR_GPU:-host} -port ${SERIAL#emulator-}'"
 }
 
 # This emulator, and not another one running next to it.
 emulator_stop() {
     still_ours || return 0
+    [ "$(uname -s)" = Linux ] && { linux_emulator_stop; return; }
     powershell.exe -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { \$_.Name -match 'emulator|qemu' -and \$_.CommandLine -match '-port ${SERIAL#emulator-}' } | ForEach-Object { Stop-Process -Id \$_.ProcessId -Force -ErrorAction SilentlyContinue }"
     sleep 1
 }

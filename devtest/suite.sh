@@ -43,7 +43,7 @@ wait_boot_completed() { # seconds
 }
 boot_leg() {
     local dir="$USERPROFILE/.android/avd/$AVD.avd/snapshots/suite_clean"
-    if [ -n "${NO_SNAPSHOT_BOOT:-}" ]; then
+    if [ -n "${NO_SNAPSHOT_BOOT:-}" ] || [ "$(uname -s)" = Linux ]; then
         reboot_and_wait
         return
     fi

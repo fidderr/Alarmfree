@@ -1,0 +1,117 @@
+name: Emulators
+
+# The device suite (devtest/, the same full list that EVERYWHERE=1 runs on the owner's PC) on GitHub's machines, one
+# Android version per machine, all at once. Start it: Actions > Emulators > Run workflow, or
+# `gh workflow run emulators.yml --ref <branch> -f version=all`. A push to ci-emulators also runs it: one version
+# (afg15), or those named in the commit message as `[avds: afg14 msd29]` or `[avds: all]`. See devtest/CI.md.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: One Android version (AVD name) or all
+        type: choice
+        default: all
+        options: [all, afg16, afg15, afg14, afg13, afg12, msd30, msd29]
+  push:
+    branches: [ci-emulators]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  plan:
+    runs-on: ubuntu-slim
+    outputs:
+      avds: ${{ steps.pick.outputs.avds }}
+    steps:
+      - id: pick
+        env:
+          INPUT: ${{ inputs.version }}
+          MSG: ${{ github.event.head_commit.message }}
+        run: |
+          all="afg16 afg15 afg14 afg13 afg12 msd30 msd29"
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then want=$INPUT
+          else want=$(printf '%s' "$MSG" | sed -n 's/.*\[avds: *\([^]]*\)\].*/\1/p' | head -1); fi
+          [ -n "$want" ] || want=afg15
+          [ "$want" = all ] && want=$all
+          json=$(for a in $want; do case " $all " in *" $a "*) printf '"%s",' "$a" ;; esac; done)
+          echo "avds=[${json%,}]" >> "$GITHUB_OUTPUT"
+          echo "AVDs: $want"
+
+  build:
+    name: x86_64 debug APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          path: Alarmfree
+      # build.sh finds the SDK's build tool at ../mobile-sentinel.
+      - uses: actions/checkout@v5
+        with:
+          repository: fidderr/mobile-sentinel
+          ref: main
+          path: mobile-sentinel
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-linux-android
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            Alarmfree
+            mobile-sentinel
+      # The runner image has NDK 30 (build.sh wants exactly 30.0.16248370) and JDK 17 as the default.
+      - name: Build
+        working-directory: Alarmfree
+        run: |
+          test -d "$ANDROID_HOME/ndk/30.0.16248370" || "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;30.0.16248370"
+          TARGET=x86_64-linux-android ./build.sh
+      - uses: actions/upload-artifact@v5
+        with:
+          name: apk
+          path: Alarmfree/build/alarmfree-slint-debug.apk
+          retention-days: 3
+
+  suite:
+    name: ${{ matrix.avd }}
+    needs: [plan, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        avd: ${{ fromJSON(needs.plan.outputs.avds) }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        with:
+          name: apk
+          path: build
+      - name: KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          ls -l /dev/kvm
+      # The suite calls `python` and uses Pillow for one picture comparison.
+      - name: Tools
+        run: |
+          sudo ln -sf "$(command -v python3)" /usr/local/bin/python
+          python3 -c 'import PIL' 2> /dev/null || sudo apt-get install -y python3-pil
+          sudo apt-get install -y sqlite3 > /dev/null || true
+      - name: Android image and AVD
+        run: bash devtest/ci/make_avd.sh ${{ matrix.avd }}
+      - name: Suite
+        run: bash devtest/ci/run.sh ${{ matrix.avd }}
+      - name: Pack the results
+        if: always()
+        run: |
+          mkdir -p packed
+          tar czf "packed/${{ matrix.avd }}.tgz" devtest-out ~/.android/avd/${{ matrix.avd }}.avd/config.ini 2> /dev/null || true
+          ls -l packed
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: results-${{ matrix.avd }}
+          path: packed/${{ matrix.avd }}.tgz
+          retention-days: 3
+          compression-level: 0
