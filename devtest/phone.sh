@@ -58,7 +58,10 @@ mkdir -p "$OUT"
         # The feedback round (s70 to s75), on the phone: NO_BOOT, NO_INSTALL and NO_LOCK keep it to the app.
         NO_BOOT=1 NO_INSTALL=1 KEEP=1 timeout "${LIMIT:-3000}" bash devtest/feedback.sh phone "$SERIAL" "$@" || echo "STOP  the run ended with $?"
     else
-        timeout "${LIMIT:-3000}" bash devtest/matrix.sh "$@" || echo "STOP  the run ended with $?"
+        timeout "${LIMIT:-3000}" bash devtest/matrix.sh "$@"
+        # 1 is a FAIL and 4 an INFRA in the results: the run itself ended as it should.
+        run_rc=$?
+        case $run_rc in 0 | 1 | 4) ;; *) echo "STOP  the run ended with $run_rc" ;; esac
     fi
 ) > "devtest-out/$NAME.log" 2>&1
 sed -n '/===== SUMMARY/,$p' "devtest-out/$NAME.log" | grep -E '^(FAIL|STOP|SKIP|NOTE|passed:|over a minute)' | cut -c1-300 | sort -u

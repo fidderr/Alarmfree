@@ -3753,6 +3753,8 @@ s62p() {
 
 . "$(dirname "$0")/panels.sh"
 . "$(dirname "$0")/a11y_audit.sh"
+# The scenarios that need a device and test the runner itself (baseline, watchdog, INFRA): by name only.
+. "$(dirname "$0")/selftest.sh"
 
 ALL="s01 s03 s04 s05 s06 s07 s10 s11 s13 s13b s13d s14 s15 s16 s16b s17 s19 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s34 s36 s37 s38 s39 s40 s42 s43 s44 s45 s46 s47 s48 s49 s50 s51 s52 s53 s55 s56 s57 s58 s59 s60 s61 s62 s63 s65 s66 s67 s68 s68b s69a s69b s69c s69d big_screens s54"
 ON_A_PHONE="s01 s03 s04 s05 s06 s07 s10 s15 s16 s16b s17 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s36 s37 s38 s39 s42 s43 s45 s46 s47 s49 s50 s51 s52 s53 s55 s57 s58 s59 s61 s62"
@@ -3769,6 +3771,8 @@ if on_emulator; then
     dev wm size reset
     dev wm density reset
     dev locksettings set-disabled false > /dev/null
+    # A PIN that a run which was killed in s13 or s54 left, before the first reading of the baseline.
+    dev locksettings clear --old 1234 > /dev/null 2>&1
     # The one time Android 12 explains full screen, over the scanner, it takes the keys.
     dev settings put secure immersive_mode_confirmations confirmed
     # A clean app has no warning on its list: on an emulator that was just made it would have
@@ -3808,8 +3812,9 @@ for s in $RUN_LIST; do
         wait_for 180 boot_done
         open_shells
     fi
-    "$s"
+    run_unit "$s"
 done
+selftest_cleanup
 chaos_hog_stop
 dev am force-stop "$PKG"
 echo
@@ -3818,4 +3823,10 @@ cat "$RESULTS"
 echo "passed: $(grep -c '^PASS' "$RESULTS")  failed: $(grep -c '^FAIL' "$RESULTS")  skipped: $(grep -c '^SKIP' "$RESULTS")  in $(((SECONDS - RUN_START) / 60)) min $(((SECONDS - RUN_START) % 60)) s"
 slow=$(sed -nE 's/^[A-Z]+ +([^ ]+) +\[([0-9]+)s\].*/\2 \1/p' "$RESULTS" | awk '$1 > 60 { printf "%s (%ss) ", $2, $1 }')
 [ -z "$slow" ] || echo "over a minute: $slow"
+# A device that broke is not a failed app: its lines are apart (baseline.sh).
+if grep -q '^INFRA' "$RESULTS"; then
+    echo "the device broke (INFRA, not a failure of the app): $(grep -c '^INFRA' "$RESULTS") line(s), $(grep '^INFRA' "$RESULTS" | grep -vc 'rerun follows') standing after the rerun"
+fi
 chaos_footer
+run_exit_code "$RESULTS"
+exit $?

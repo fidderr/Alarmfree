@@ -6,6 +6,9 @@
 # Settings: LANES, PORT_BASE (lane n uses PORT_BASE + 2n), APK, SKIP_APK_CHECK=1, NO_SNAPSHOT_BOOT=1
 
 . devtest/tiers.sh
+# infra_standing: an INFRA line that no second run followed (baseline.sh).
+# shellcheck disable=SC1091
+. devtest/baseline.sh
 export APK="${APK:-build/alarmfree-slint-debug.apk}"
 LANES="${LANES:-2}"
 PORT_BASE="${PORT_BASE:-5600}"
@@ -128,7 +131,7 @@ run_leg() {
     local rc=$?
     echo "rc=$rc" >> "$meta"
     echo "=== $avd (rc $rc)"
-    sed -n '/===== SUMMARY/,$p' "$log" | grep -E '^(FAIL|STOP|passed:|over a minute)'
+    sed -n '/===== SUMMARY/,$p' "$log" | grep -E '^(FAIL|INFRA|STOP|passed:|over a minute)'
     grep -E '^(FAIL|STOP)' "$log" | grep -v "^FAIL  [a-z0-9_]* " | head -3
 }
 
@@ -150,6 +153,7 @@ suite_table() {
         printf '%-8s %-8s %7s %7s %8s %3s:%02d  %s\n' "$avd" "${android:--}" "${p:-0}" "${f:-0}" "$(grep -c '^SKIP' "$res" 2> /dev/null)" "$(((${s:-0}) / 60))" "$(((${s:-0}) % 60))" \
             "$(grep -h '^STOP' "devtest-out/${name}_$avd.log" 2> /dev/null | head -1)$([ "${rc:-0}" != 0 ] && echo " rc=$rc")"
         grep -h '^FAIL' "$res" 2> /dev/null | sed 's/^/           /' | cut -c1-200
+        grep -h '^INFRA' "$res" 2> /dev/null | sed 's/^/           /' | cut -c1-200
     done
 }
 
@@ -181,6 +185,10 @@ suite_main() {
     for avd in "${avds[@]}"; do
         grep -q '^FAIL\|^STOP' "devtest-out/${name}_$avd/results.txt" 2> /dev/null && return 1
         grep -q '^STOP' "devtest-out/${name}_$avd.log" 2> /dev/null && return 1
+    done
+    # The device broke and the second run did not pass: 4, so that it is told apart from a failed app (1).
+    for avd in "${avds[@]}"; do
+        infra_standing "devtest-out/${name}_$avd/results.txt" && return 4
     done
     return 0
 }

@@ -18,6 +18,9 @@ _here=${BASH_SOURCE[0]%/*}
 [ "$_here" != "${BASH_SOURCE[0]}" ] || _here=.
 # shellcheck disable=SC1091
 . "$_here/chaos.sh"
+# The state of the device before each scenario, and the watchdog around it (run_unit in the runner of matrix.sh).
+# shellcheck disable=SC1091
+. "$_here/baseline.sh"
 
 # Seconds from setting up an alarm until it rings: long enough to arm it and kill the app.
 LEAD="${LEAD:-6}"
@@ -365,6 +368,8 @@ stopped_state_saved() {
     [ "$since" -ge 12 ] || sleep $((12 - since))
 }
 reboot_only() {
+    # A restart that is meant is no finding of the watchdog.
+    watchdog_announce_restart
     case "$SERIAL" in
         emulator-*)
             stopped_state_saved
@@ -401,6 +406,8 @@ reboot_only() {
             fi
             ;;
     esac
+    # The new processes are the ones the watchdog holds the rest of the scenario to.
+    watchdog_rebase
 }
 
 # ---- A clean app ----
