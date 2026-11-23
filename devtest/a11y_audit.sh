@@ -64,7 +64,8 @@ label_dump_screen() { # name
     for i in 1 2 3 4 5; do
         dev uiautomator dump /sdcard/ui.xml > /dev/null
         adb_ exec-out cat /sdcard/ui.xml > "$OUT/labels/$1.xml"
-        [ "$(grep -c 'com.fidderr.alarmfree' "$OUT/labels/$1.xml")" -gt 6 ] && break
+        # The dump is one line: grep -c counts matching lines (0 or 1), not occurrences. Count them with -o.
+        [ "$(grep -o 'com.fidderr.alarmfree' "$OUT/labels/$1.xml" | wc -l)" -gt 6 ] && break
         sleep 1
     done
     python -I devtest/label_check.py "$1" < "$OUT/labels/$1.xml"
@@ -117,7 +118,8 @@ names_here() { # screen
     names_dumped() {
         dev uiautomator dump /sdcard/ui.xml > /dev/null 2>&1 # lint-ok: the tree a screen reader gets is the subject of this scenario
         adb_ exec-out cat /sdcard/ui.xml > "$f" 2> /dev/null
-        [ "$(grep -c 'com.fidderr.alarmfree' "$f")" -gt 6 ]
+        # The dump is one line: grep -c counts matching lines (0 or 1), not occurrences. Count them with -o.
+        [ "$(grep -o 'com.fidderr.alarmfree' "$f" | wc -l)" -gt 6 ]
     }
     if ! wait_for 15 names_dumped; then
         NAMES_PROBLEMS="$NAMES_PROBLEMS; $1: no tree of the window"
