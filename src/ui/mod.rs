@@ -514,10 +514,7 @@ pub fn run() -> Result<(), slint::PlatformError> {
     {
         ready::install(&ui);
         ui.global::<DevMark>().set_on(true);
-        ui.global::<DevMark>().on_pointer(|what, kind| {
-            let kind = ["", "down", "up", "cancel"][kind.clamp(0, 3) as usize];
-            trace!("pointer {kind} at {what}");
-        });
+        ui.global::<DevMark>().on_note(|line| trace!("{line}"));
     }
     let ctx = new_ctx(&ui, settings, alarms);
     CTX.with(|slot| *slot.borrow_mut() = Rc::downgrade(&ctx));

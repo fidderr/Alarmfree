@@ -116,7 +116,7 @@ export component PrimaryButton inherits Rectangle {
         color: root.quiet ? Pal.text : Pal.on-accent;
     }
     TouchArea {
-        pointer-event(e) => { DevMark.pointer(root.text, e.kind == PointerEventKind.down ? 1 : e.kind == PointerEventKind.up ? 2 : 3); }
+        pointer-event(e) => { DevMark.note("\{e.kind == PointerEventKind.down ? "down" : e.kind == PointerEventKind.up ? "up" : "cancel"} at \{root.text} \{self.mouse-x / 1px},\{self.mouse-y / 1px} in \{self.width / 1px}x\{self.height / 1px}"); }
         clicked => { root.clicked(); }
     }
 }
@@ -168,7 +168,7 @@ export component Sheet inherits Rectangle {
         background: Pal.surface;
         border-top-left-radius: 28px;
         border-top-right-radius: 28px;
-        TouchArea { pointer-event(e) => { DevMark.pointer("sheet panel", e.kind == PointerEventKind.down ? 1 : e.kind == PointerEventKind.up ? 2 : 3); } }
+        TouchArea { pointer-event(e) => { DevMark.note("\{e.kind == PointerEventKind.down ? "down" : e.kind == PointerEventKind.up ? "up" : "cancel"} at sheet panel"); } }
         Rectangle {
             y: 10px;
             width: 36px;
@@ -220,6 +220,9 @@ export component Sheet inherits Rectangle {
             y: 74px;
             height: parent.height - 74px - root.done-room - (root.wanted > panel.height ? 8px : 0px);
             interactive: !root.locked;
+            changed content-y => { DevMark.note("sheet scroll y \{self.content-y / 1px} of \{(self.height - self.content-height) / 1px}"); }
+            changed height => { DevMark.note("sheet scroll area height \{self.height / 1px} content \{self.content-height / 1px}"); }
+            changed content-height => { DevMark.note("sheet content height {self.content-height / 1px} area {self.height / 1px}"); }
             content-height: body.preferred-height + (root.done-text == "" ? Insets.bottom + 20px : 24px);
             content-width: self.width;
             body := VerticalLayout {

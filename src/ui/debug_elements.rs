@@ -148,11 +148,25 @@ fn logical(ui: &MainWindow, x: f32, y: f32) -> LogicalPosition {
 thread_local!(static TRACE: std::cell::RefCell<std::collections::VecDeque<String>> = const { std::cell::RefCell::new(std::collections::VecDeque::new()) });
 
 /// The last lines of what the window's touch handlers saw, with the time in ms since start.
-const TRACE_LINES: usize = 160;
+const TRACE_LINES: usize = 400;
 
 pub(super) fn trace(line: String) {
     TRACE.with(|t| {
         let mut t = t.borrow_mut();
+        // The same line again (an input event every 16 ms) only counts.
+        if let Some(last) = t.back_mut() {
+            if let Some((_, said)) = last.split_once(' ') {
+                let said = said.rsplit_once(" x").map_or(said, |(said, _)| said);
+                if said == line {
+                    let count = last
+                        .rsplit_once(" x")
+                        .and_then(|(_, n)| n.parse::<u32>().ok());
+                    let head = last.split_once(' ').map_or("", |(ms, _)| ms).to_owned();
+                    *last = format!("{head} {line} x{}", count.unwrap_or(1) + 1);
+                    return;
+                }
+            }
+        }
         if t.len() == TRACE_LINES {
             t.pop_front();
         }

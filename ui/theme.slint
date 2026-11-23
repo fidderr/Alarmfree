@@ -64,7 +64,7 @@ export global Zoom {
 // Set by the devtest build only: a chip whose text is cut short says so in its description.
 export global DevMark {
     in property <bool> on: false;
-    // A press, release or cancel (1, 2, 3) that reached the touch area of a button or of a
-    // sheet's panel: the devtest build writes it in its trace.
-    callback pointer(string, int);
+    // A line for the devtest build's trace: a press, release or cancel that reached the touch
+    // area of a button or of a sheet's panel, and how a sheet's scroll area is laid out.
+    callback note(string);
 }
