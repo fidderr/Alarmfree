@@ -205,8 +205,8 @@ probe_run() {
 probe_open_label() {
     open_row Label || return 1
     await_settled 3 > /dev/null 2>&1
-    # The text before the touch is always the same, so that 20 Backspaces clear it.
-    ui "set:0:mytune-label" > /dev/null
+    # The text before the touch is always the same, so that 20 Backspaces clear it (PROBE_BASE="" starts from an empty label).
+    ui "set:0:${PROBE_BASE-mytune-label}" > /dev/null
 }
 probe_close_label() { done_sheet; }
 
@@ -251,3 +251,148 @@ t11_probe_rename() { probe_rename_body t11_probe_rename; }
 # The same with no input method on: where the faults are the input method's, they are gone here.
 t12_probe_label_noime() { PROBE_NO_IME=1 probe_label_body t12_probe_label_noime; }
 t13_probe_rename_noime() { PROBE_NO_IME=1 probe_rename_body t13_probe_rename_noime; }
+
+# t16_probe_softkeys: the same field, but typed the way a person does it: by touching the keys of the keyboard itself.
+# The positions of the keys are read once, from the keyboard's own window (uiautomator dump, a key carries its letter as
+# text or description); where they cannot be read the probe ends with SKIP and never guesses.
+#   per round: empty label, one touch on the field, wait for keyboard=up, a fixed word without a pause between the
+#   touches, Backspace twice, two more letters, then the text is read back. Nothing of the keyboard is switched off:
+#   the word is no word of any language, nothing ends it, so there is nothing to correct; a capital first letter
+#   (auto-capitalisation) is counted as right and counted apart.
+PROBE_WORD=qzxvkj
+PROBE_TAIL=mw
+declare -A PROBE_KEY=()
+
+# "<key> <x> <y>" for each key of the typed letters and the Backspace key found in the keyboard's window; <key> is the
+# letter or `del`. Reads the dump from stdin.
+probe_keys_parse() { # letters
+    python -I -c '
+import re, sys
+import xml.etree.ElementTree as ET
+want = set(sys.argv[1])
+dele = {"delete", "backspace", "verwijderen", "wissen"}
+try:
+    root = ET.parse(sys.stdin).getroot()
+except ET.ParseError:
+    sys.exit(0)
+best = {}
+for n in root.iter():
+    m = re.match(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]$", n.get("bounds", ""))
+    pkg = n.get("package", "").lower()
+    if not m or not ("inputmethod" in pkg or "keyboard" in pkg):
+        continue
+    x1, y1, x2, y2 = map(int, m.groups())
+    area = (x2 - x1) * (y2 - y1)
+    if area <= 0:
+        continue
+    names = [n.get("text", "").strip().lower(), n.get("content-desc", "").strip().lower()]
+    found = [c for c in names if len(c) == 1 and c in want]
+    if any(c in dele for c in names) or re.search(r"delete|backspace|key_pos_del", n.get("resource-id", ""), re.I):
+        found = ["del"]
+    for key in found[:1]:
+        if key not in best or area < best[key][0]:
+            best[key] = (area, (x1 + x2) // 2, (y1 + y2) // 2)
+for key, (_, x, y) in best.items():
+    print(key, x, y)
+' "$1" 2> /dev/null
+}
+
+# Fills PROBE_KEY from the keyboard on the screen. True when the keys of the word and Backspace are all found.
+probe_keys_read() {
+    local dump="$OUT/probe_text_t16.keys.xml" file=/data/local/tmp/af_keys.xml mode key x y letters
+    letters="$PROBE_WORD$PROBE_TAIL"
+    PROBE_KEY=()
+    # The window flag exists from Android 11 on; before it the dump holds the app's window only.
+    for mode in --windows ""; do
+        # shellcheck disable=SC2086
+        dev uiautomator dump $mode "$file" > /dev/null 2>&1 # lint-ok: the positions of the keys are read once per run, from the keyboard's own window
+        dev cat "$file" > "$dump" 2> /dev/null
+        while read -r key x y; do
+            [ -z "$key" ] || PROBE_KEY[$key]="$x $y"
+        done < <(probe_keys_parse "$letters" < "$dump")
+        probe_keys_missing > /dev/null || return 0
+    done
+    return 1
+}
+
+# Prints the keys that are not found; false when none is missing.
+probe_keys_missing() {
+    local i c missing=""
+    for ((i = 0; i < ${#PROBE_WORD} + ${#PROBE_TAIL}; i++)); do
+        c=${PROBE_WORD:i:1}
+        [ "$i" -lt "${#PROBE_WORD}" ] || c=${PROBE_TAIL:i-${#PROBE_WORD}:1}
+        [ -n "${PROBE_KEY[$c]:-}" ] || missing="$missing$c"
+    done
+    [ -n "${PROBE_KEY[del]:-}" ] || missing="$missing delete"
+    [ -n "$missing" ] || return 1
+    echo "$missing"
+}
+
+# The touches of one round as one device command: they follow each other with nothing added between them.
+probe_soft_sequence() {
+    local i seq=""
+    for ((i = 0; i < ${#PROBE_WORD}; i++)); do
+        seq="${seq}input tap ${PROBE_KEY[${PROBE_WORD:i:1}]}; " # lint-ok: touching the keys of another app's keyboard is the point of this probe
+    done
+    seq="${seq}input tap ${PROBE_KEY[del]}; input tap ${PROBE_KEY[del]}; " # lint-ok: the keyboard's own Backspace key
+    for ((i = 0; i < ${#PROBE_TAIL}; i++)); do
+        seq="${seq}input tap ${PROBE_KEY[${PROBE_TAIL:i:1}]}; " # lint-ok: the last letters
+    done
+    echo "$seq"
+}
+
+t16_probe_softkeys() {
+    local rounds=${ROUNDS:-20} n right=0 capital=0 skipped=0 want fx fy fw row final wrong="" seq missing
+    scenario t16_probe_softkeys
+    fresh
+    seed mytune-label "$(alarm_json mytune-label 7 0 "$EVERY_DAY" null)"
+    arm mytune-label
+    on_card 10
+    press open mytune-label 0.8
+    on_editor || { fail "no editor"; return; }
+    want="${PROBE_WORD:0:$((${#PROBE_WORD} - 2))}$PROBE_TAIL"
+    PROBE_BASE=""
+    for ((n = 1; n <= rounds; n++)); do
+        probe_open_label || { skipped=$((skipped + 1)); continue; }
+        row=$(probe_field)
+        case "$row" in [0-9]*) ;; *) skipped=$((skipped + 1)); probe_close_label; continue ;; esac
+        read -r fx fy fw <<< "$row"
+        dev input tap "$fx" "$fy" # lint-ok: a real touch on the field brings the keyboard up
+        if ! await_ui 8 'keyboard=up'; then
+            skipped=$((skipped + 1))
+            probe_close_label
+            continue
+        fi
+        await_settled 2 > /dev/null 2>&1
+        if [ "$n" = 1 ] || [ "${#PROBE_KEY[@]}" -eq 0 ]; then
+            # The keys sit in the same places in every round: read once.
+            if ! wait_for 8 probe_keys_read; then
+                missing=$(probe_keys_missing)
+                skip "no keys found in the keyboard's window (not found: ${missing:-everything}); dump in probe_text_t16.keys.xml"
+                probe_close_label
+                PROBE_BASE=mytune-label
+                return
+            fi
+        fi
+        probe_mark "t16 round $n"
+        seq=$(probe_soft_sequence)
+        dev "$seq"
+        await_settled 2 > /dev/null 2>&1
+        final=$(probe_base)
+        if [ "$final" = "$want" ]; then
+            right=$((right + 1))
+        elif [ "$final" = "${want^}" ]; then
+            right=$((right + 1))
+            capital=$((capital + 1))
+        else
+            wrong="$wrong [$final]"
+        fi
+        probe_close_label
+    done
+    PROBE_BASE=mytune-label
+    if [ "$right" -eq "$rounds" ]; then
+        pass "$right of $rounds right, typed on the keys of the keyboard, expected [$want]; nothing of the keyboard switched off; first letter capital in $capital"
+    else
+        fail "$right of $rounds right, $skipped rounds not run, expected [$want]; wrong:$wrong; nothing of the keyboard switched off; first letter capital in $capital"
+    fi
+}
