@@ -727,15 +727,16 @@ sn() {
 # Which screen: 0 alarms, 1 editor, 2 history, 3 settings, 4 reliability, 5 theme.
 screen_no() { ui screen | sed -nE 's/^screen=([0-9]+).*/\1/p'; }
 on_screen_no() { [ "$(screen_no)" = "$1" ]; }
-# A button of the window by its callback name, as a tap would (see src/ui/debug.rs).
+# A button of the window by its callback name (see src/ui/debug.rs): the callback is called, nothing is touched. It says the
+# handler works, not that a person can reach the button: a sheet in front, a place off screen or under the keyboard do not stop it.
+# For a button with no text and for what a scenario only passes through; what a scenario shows is a tap.
 press() { # callback [argument]
     local said
     said=$(ui "press:$1:${2:-}")
-    [ "$said" = OK ] || echo "press $1: $said" >&2
     # The callback has run when the app says OK; what it moved is still settling.
     UI_QUIET=1 await_settled 3
     SETTLED_AT=$SECONDS
-    [ "$said" = OK ]
+    [ "$said" = OK ] || step_failed "press $1: $said"
 }
 # The middle of the first text on screen that says this, in device pixels ("x y"), or "none".
 where() { ui "find${2:+@$2}:$1"; }
@@ -782,18 +783,35 @@ still_where() { # command text [which]
 }
 # A touch through the app: the app finds the element and delivers the press through its own window
 # events, and answers after it ran. Nothing is sent from outside, so no touch is lost on the way and no
-# position can be out of date. It fails when the app says the element is not there. A real touch is
+# position can be out of date. It fails when the app says the element is not there, is outside the window or under the
+# keyboard (the places a finger cannot reach), and not when something else covers it or it is disabled: the window's own
+# hit test decides who gets the touch, as with a finger. A real touch is
 # `finger`: for where the touch itself is the subject, and for a text field that has to bring up the
 # keyboard (only a real touch does).
+#
+# A step that failed (the app says the element is not there, a touch that never arrived, a tab that did not open) is
+# written to step_failed.txt; a scenario that goes on after it cannot end with PASS (see `pass`). A place that tries and
+# falls back on purpose says so with TAP_MAY_FAIL=1 in front of the step.
+STEP_FAILED_FILE="$OUT/step_failed.txt"
+step_failed() { # what: says it, keeps it for pass(), returns 1
+    echo "$1" >&2
+    [ -n "${TAP_MAY_FAIL:-}" ] || echo "$1" >> "$STEP_FAILED_FILE"
+    return 1
+}
 tap_through() { # command, what to say when it fails
     local said
-    [ "$SETTLED_AT" = "$SECONDS" ] || UI_QUIET=1 await_settled 2
+    # Settled and not being resized (the window is resized by Android a moment after a keyboard goes away or a window
+    # comes up): the answer comes at once when it is.
+    UI_QUIET=1 await_ui 5 stable
     said=$(ui "$1")
+    # The keyboard that was put away is still in the app's insets for a moment: the element is asked for again once it is down.
+    case "$said" in
+        "ERR under the keyboard"*) UI_QUIET=1 await_ui 2 'keyboard=down' && said=$(ui "$1") ;;
+    esac
     UI_QUIET=1 await_settled 3
     SETTLED_AT=$SECONDS
     [ "$said" = OK ] && return 0
-    echo "$2 (the app said: $said)" >&2
-    return 1
+    step_failed "$2 (the app said: $said)"
 }
 tap() { tap_through "tap${2:+@$2}:$1" "nothing says $1"; } # text [which of them] [seconds, not read]
 # The time of the editor, which a touch there opens the time sheet.
@@ -802,36 +820,94 @@ tap_has() { tap_through "tapc${2:+@$2}:$1" "nothing has $1"; } # text [which] [s
 tap_in() { tap "$@"; }
 # A touch at a place, in device pixels.
 tap_xy() { tap_through "tapxy:$1 $2" "no touch at $1 $2"; } # x y
-# The real touch, from outside the app: read where the text is, once it holds still, and press there with a
-# finger. Only for what the touch itself is the subject of, and for a text field that brings up the keyboard.
-finger() { # text [which of them] [seconds to wait]
+# The real touch, from outside the app, for what the touch itself is the subject of and for a text field that
+# has to bring up the keyboard. Acknowledged: the app counts the input Android hands it (`input_seen`, real touches and
+# keys, never the taps made inside the app). One touch, then wait for the count to rise (FINGER_ACK_MS, 8000: a
+# touch that has to land inside a short time says less). It did not rise and the screen is as it was: the touch never
+# arrived, so it is sent again (at most 3 times again, each one a NOTE line in the results). It did not rise but the
+# screen changed, or the app is no longer in front: the touch is not sent again. Where the app cannot say (another
+# screen in front, no count), one touch as before.
+input_seen() { ui ready | sed -nE 's/.* input_seen=([0-9]+).*/\1/p'; }
+# What a touch can change on the screen: not the frame count, a toast or a preview that ends by itself.
+ready_shape() { ui ready | tr ' ' '\n' | grep -E '^(screen|home_sheet|panel|editor_sheet|theme_sheet|ringing|scan_state|run_active|keyboard|win)=' | tr '\n' ' '; }
+finger_do() { # what it is, then the device command (input tap x y, input swipe ...)
+    local what=$1 before now shape out try=1 ack=${FINGER_ACK_MS:-8000}
+    shift
+    before=$(input_seen)
+    case "$before" in
+        '' | *[!0-9]*)
+            dev "$@"
+            after_input
+            return 0
+            ;;
+    esac
+    shape=$(ready_shape)
+    while :; do
+        dev "$@"
+        out=$(UI_EXTRA=$(((ack + 999) / 1000)) ui "await:$ack:input_seen>$before")
+        case "$out" in
+            OK*)
+                SETTLED_AT=$SECONDS
+                return 0
+                ;;
+            *"no window in front"*) return 0 ;;
+            TIMEOUT*) ;;
+            *)
+                step_failed "$what: $out"
+                return 1
+                ;;
+        esac
+        # Counted after the wait ran out (a busy app works off its input late): that is an arrived touch, not one to send again.
+        now=$(input_seen)
+        case "$now" in
+            '' | *[!0-9]*) ;;
+            *)
+                if [ "$now" -gt "$before" ]; then
+                    SETTLED_AT=$SECONDS
+                    return 0
+                fi
+                ;;
+        esac
+        if [ "$(ready_shape)" != "$shape" ]; then
+            echo "NOTE  $CURRENT  $what: the app counted no input but its screen changed, not sent again" | tee -a "$RESULTS" >&2
+            return 0
+        fi
+        if [ "$try" -ge 4 ]; then
+            step_failed "$what: no input reached the app in 4 touches"
+            return 1
+        fi
+        try=$((try + 1))
+        echo "NOTE  $CURRENT  touch lost by Android: $what, sent again (touch $try of 4)" | tee -a "$RESULTS" >&2
+    done
+}
+finger() { # text [which of them] [seconds, not read]
     local xy
     xy=$(still_where where "$1" "${2:-}")
     case "$xy" in
         [0-9]*) ;;
         *)
-            echo "nothing says $1" >&2
+            step_failed "nothing says $1"
             return 1
             ;;
     esac
     # shellcheck disable=SC2086
-    dev input tap $xy
-    after_input
+    finger_do "touch on $1" input tap $xy
 }
-finger_has() { # text [which] [seconds]
+finger_has() { # text [which] [seconds, not read]
     local xy
     xy=$(still_where where_has "$1" "${2:-}")
     case "$xy" in
         [0-9]*) ;;
         *)
-            echo "nothing has $1" >&2
+            step_failed "nothing has $1"
             return 1
             ;;
     esac
     # shellcheck disable=SC2086
-    dev input tap $xy
-    after_input
+    finger_do "touch on $1" input tap $xy
 }
+finger_xy() { finger_do "touch at $1 $2" input tap "$1" "$2"; } # x y
+finger_swipe() { finger_do "swipe $1 $2 to $3 $4" input swipe "$@"; } # x1 y1 x2 y2 milliseconds
 click_text() { tap "$@"; }
 # The n-th text field on screen takes this text.
 set_field() { type_field "$@"; }
@@ -1122,6 +1198,7 @@ scenario() {
     CURRENT=$1${VARIANT:-}
     RETRY_NOTE=$RETRY_CARRY RETRY_CARRY=""
     SCENARIO_START=$SECONDS
+    : > "$STEP_FAILED_FILE"
     echo
     echo "=== $CURRENT"
     still_ours || give_way
@@ -1145,7 +1222,18 @@ scenario() {
     adb_ logcat -c
 }
 took() { echo "$((SECONDS - SCENARIO_START))s"; }
-pass() { echo "PASS  $CURRENT  [$(took)] $1${RETRY_NOTE:+  (ASKED AGAIN: $RETRY_NOTE)}" | tee -a "$RESULTS"; }
+# No PASS after a step of the scenario failed (a tap that found no element, a touch that never arrived): the scenario goes on
+# after a failed step, so the failure is kept (step_failed) and ends it here.
+pass() {
+    local failed=""
+    [ ! -s "$STEP_FAILED_FILE" ] || failed=$(< "$STEP_FAILED_FILE")
+    if [ -n "$failed" ]; then
+        fail "a step failed, so this is no PASS (${1:-no text}): ${failed//$'
+'/; }"
+        return
+    fi
+    echo "PASS  $CURRENT  [$(took)] $1${RETRY_NOTE:+  (ASKED AGAIN: $RETRY_NOTE)}" | tee -a "$RESULTS"
+}
 # A scenario that asks again (a lost touch, a machine that used the limit up) says so in its result line, and a retry on a
 # machine that was not starved is a finding: the host's load against its cores is read at that moment (a runner; a PC says
 # "load unknown"). One line per use in retries.txt of the results, which the CI table lists.
@@ -1205,20 +1293,16 @@ history_row() { # id days_ago
 history_count() { printf "SELECT count(*) FROM alarm_events;\n" | sql; }
 
 # The bottom bar: Alarms, History or Settings.
-go_tab() { # Alarms / History / Settings; a touch in the first seconds of the window can be lost: again
-    local want i=0
+go_tab() { # Alarms / History / Settings: ends on that screen, or returns 1 and says which screen the app shows
+    local want
     case "$1" in
         Alarms | Wekkers) want=0 ;; # Wekkers: the Dutch name of the tab, as s51 asks for it with the language on Dutch
         History) want=2 ;;
         *) want=3 ;;
     esac
-    while [ "$i" -lt 3 ]; do
-        [ "$i" = 0 ] || retry_used "go_tab $1: the first touch did not change the screen"
-        tap "$1" L 0.3
-        wait_for 2 on_screen_no "$want" && return 0
-        i=$((i + 1))
-    done
-    return 1
+    tap "$1" L 0.3 || return 1
+    await_ui 8 "screen=$want" && return 0
+    step_failed "go_tab $1: the app shows screen $(screen_no), not $want"
 }
 
 # Scroll the panel on top (or the screen) up by about a screen, as a finger does: 1100 px, from
@@ -1243,8 +1327,7 @@ swipe_ys() { # scroll | back -> x y x y in device pixels
 }
 sheet_scroll() {
     # shellcheck disable=SC2046
-    dev input swipe $(swipe_ys scroll) 400
-    after_input
+    finger_swipe $(swipe_ys scroll) 400
 }
 # A tap on what the text names, once it is clear of the bottom of the window: on a window with a
 # navigation bar (3-button navigation) or a Done button that stays at the bottom of a panel, what is
@@ -1276,8 +1359,7 @@ set_field_clear() { # n text
         case "$f" in '' | *[!0-9]*) break ;; esac
         [ "$f" -lt $((d - 80)) ] && break
         read -r x1 y1 x2 y2 <<< "$(swipe_ys scroll)"
-        dev input swipe 26 "$y1" 26 "$y2" 400
-        after_input
+        finger_swipe 26 "$y1" 26 "$y2" 400
     done
     set_field "$1" "$2"
 }
@@ -1286,8 +1368,7 @@ sheet_nudge() {
     local h
     h=$(window_size | cut -d' ' -f2)
     case "$h" in '' | *[!0-9]*) h=1920 ;; esac
-    dev input swipe 540 $((h * 70 / 100)) 540 $((h * 45 / 100)) 700
-    after_input
+    finger_swipe 540 $((h * 70 / 100)) 540 $((h * 45 / 100)) 700
 }
 # A row of a long list into the middle of the window, by short swipes (a fling carries a long one
 # past it, by a different distance each time): there it is neither under the title nor under the
@@ -1304,16 +1385,16 @@ centre_row() { # text [has]
             '' | *[!0-9]*)
                 # Not in the window: below it first, then above.
                 if [ "$i" -le 4 ]; then
-                    dev input swipe "$w" $((h * 70 / 100)) "$w" $((h * 45 / 100)) 700
+                    finger_swipe "$w" $((h * 70 / 100)) "$w" $((h * 45 / 100)) 700
                 else
-                    dev input swipe "$w" $((h * 45 / 100)) "$w" $((h * 70 / 100)) 700
+                    finger_swipe "$w" $((h * 45 / 100)) "$w" $((h * 70 / 100)) 700
                 fi
                 ;;
             *)
                 if [ "$y" -gt $((h * 75 / 100)) ]; then
-                    dev input swipe "$w" $((h * 70 / 100)) "$w" $((h * 50 / 100)) 700
+                    finger_swipe "$w" $((h * 70 / 100)) "$w" $((h * 50 / 100)) 700
                 elif [ "$y" -lt $((h * 20 / 100)) ]; then
-                    dev input swipe "$w" $((h * 45 / 100)) "$w" $((h * 65 / 100)) 700
+                    finger_swipe "$w" $((h * 45 / 100)) "$w" $((h * 65 / 100)) 700
                 else
                     return 0
                 fi
@@ -1364,6 +1445,5 @@ hide_keyboard() {
 }
 sheet_scroll_up() {
     # shellcheck disable=SC2046
-    dev input swipe $(swipe_ys back) 400
-    after_input
+    finger_swipe $(swipe_ys back) 400
 }
