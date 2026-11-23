@@ -107,6 +107,8 @@ tap() { finger "$@"; }
 tap_has() { finger_has "$@"; }
 tap_in() { finger "$@"; }
 tap_xy() { dev input tap "$1" "$2"; after_input; }
+# No debug channel to count input in a release build: one touch.
+finger_do() { shift; dev "$@"; after_input; }
 
 # The n-th text field takes this text: a touch on it, the old text taken out, the new one typed
 # through the keyboard's key events, as a person does it.

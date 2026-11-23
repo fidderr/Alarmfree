@@ -16,6 +16,13 @@ panel_problem() {
     echo "$PANEL_N  $1" >> "$OUT/panels${VARIANT:-}/problems.txt"
 }
 
+# A tab of the bottom bar, or the tour ends here and says which screen the app shows.
+panel_tab() { # name
+    go_tab "$1" && return 0
+    panel_problem "the $1 tab did not open: $(ui screen)"
+    return 1
+}
+
 # What the screen under a panel has that can be on or off: a panel's scrim leaves it in the element
 # tree but a touch on it only closes the panel. Taken at every stop without a panel.
 PANEL_BASELINE=""
@@ -93,7 +100,7 @@ look_through() { # name
         [ -z "$prev" ] || moved=1
         prev=$sig
         [ -n "$first_sig" ] || first_sig=$sig
-        dev input swipe $((w / 2)) $((h * 75 / 100)) $((w / 2)) $((h * 30 / 100)) 300
+        finger_swipe $((w / 2)) $((h * 75 / 100)) $((w / 2)) $((h * 30 / 100)) 300
         sleep 0.5
     done
     # Back to the top, for what comes next: only when it moved, and from inside what moved (a drag
@@ -102,7 +109,7 @@ look_through() { # name
         local k=0
         # Short pulls until it is where it was: a long one past the top would pull a panel shut.
         while [ "$k" -lt 16 ] && [ "$(layout_sig)" != "$first_sig" ]; do
-            dev input swipe $((w / 2)) $((h * 45 / 100)) $((w / 2)) $((h * 70 / 100)) 250
+            finger_swipe $((w / 2)) $((h * 45 / 100)) $((w / 2)) $((h * 70 / 100)) 250
             sleep 0.4
             k=$((k + 1))
         done
@@ -573,7 +580,7 @@ s57_full() {
     start_app
     on_screen "No alarms yet" 15 || panel_problem "no empty list"
     look_through home_empty
-    go_tab History
+    panel_tab History || { fail "${PANEL_PROBLEMS#; }"; return; }
     wait_for 4 on_screen_no 2
     look_through history_empty
     dev am force-stop "$PKG"
@@ -738,7 +745,7 @@ s57_full() {
     on_home 5 || panel_problem "not back on the list from the editor"
 
     # History.
-    go_tab History
+    panel_tab History || { fail "${PANEL_PROBLEMS#; }"; return; }
     wait_for 5 on_screen_no 2
     look_through history
     press h-delete-history "" 0.5
@@ -765,7 +772,7 @@ s57_full() {
             y=$(where "$prev_chip" | cut -d' ' -f2)
             case "$y" in '' | *[!0-9]*) y=$(where "This month" | cut -d' ' -f2) ;; esac
             case "$y" in '' | *[!0-9]*) y=341 ;; esac
-            dev input swipe 900 "$y" 100 "$y" 300
+            finger_swipe 900 "$y" 100 "$y" 300
             sleep 0.6
             k=$((k + 1))
         done
@@ -779,7 +786,7 @@ s57_full() {
     done
 
     # Settings, and what is behind them.
-    go_tab Settings
+    panel_tab Settings || { fail "${PANEL_PROBLEMS#; }"; return; }
     wait_for 5 on_screen_no 3
     look_through settings
     panel_rows settings 3
@@ -982,7 +989,7 @@ s57() {
     on_home 5 || panel_problem "not back on the list from the editor"
     # History.
     note "s57 ring look and challenges: $((SECONDS - t0)) s"
-    go_tab History
+    panel_tab History || { S57_LITE=; fail "${PANEL_PROBLEMS#; }"; return; }
     wait_for 5 on_screen_no 2
     baseline_update
     press h-delete-history "" 0.5
@@ -992,7 +999,7 @@ s57() {
     [ -z "$found" ] || panel_problem "history: $found"
     # Settings: every row, a panel or a screen.
     note "s57 history: $((SECONDS - t0)) s"
-    go_tab Settings
+    panel_tab Settings || { S57_LITE=; fail "${PANEL_PROBLEMS#; }"; return; }
     wait_for 5 on_screen_no 3
     panel_rows settings 3
     note "s57 settings rows: $((SECONDS - t0)) s"

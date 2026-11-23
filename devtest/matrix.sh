@@ -821,7 +821,8 @@ s23b() {
     local size
     size=$(dev wm size | tail -1 | sed 's/.*: //')
     # On the alarm's clock, where a touch does nothing else.
-    dev input tap $((${size%x*} / 2)) $((${size#*x} / 5))
+    # The limit of the ring is 9 s: the touch is waited for 1.5 s, not 8.
+    FINGER_ACK_MS=1500 finger_xy $((${size%x*} / 2)) $((${size#*x} / 5))
     until_past $((T + 11))
     if ! sound_on; then
         fail "stopped despite the touch, state=$(state a)"
@@ -1162,7 +1163,7 @@ open_new_editor() {
 
 # The bottom bar and the reliability screen.
 open_reliability() {
-    go_tab Settings
+    go_tab Settings || return 1
     await_ui 5 "screen=3" || return 1
     tap Reliability 0 0.3
     await_ui 5 "screen=4"
@@ -1271,7 +1272,7 @@ s34() {
         result=$(clipped)
         # The period chips are a row that scrolls: what sticks out has to come into the window by a swipe.
         if [ -n "$result" ]; then
-            dev input swipe 900 341 100 341 300
+            finger_swipe 900 341 100 341 300
             sleep 0.8
             after=$(clipped)
             # A slow machine is still scrolling after the swipe, or lost it: ask again until the chip has come in, and swipe
@@ -1280,7 +1281,7 @@ s34() {
                 for _ in 1 2 3 4 5 6; do
                     case "$after" in *"$result"*) sleep 0.8; after=$(clipped) ;; *) break ;; esac
                 done
-                case "$after" in *"$result"*) retry_used "s34 $locale: the chip was still out after the swipe"; dev input swipe 900 341 100 341 300 ;; *) break ;; esac
+                case "$after" in *"$result"*) retry_used "s34 $locale: the chip was still out after the swipe"; finger_swipe 900 341 100 341 300 ;; *) break ;; esac
             done
             case "$after" in *"$result"*) after=$(clipped) ;; esac
             case "$after" in
@@ -1402,7 +1403,7 @@ s37() {
                 return 1
                 ;;
         esac
-        dev input swipe $((w * 70 / 100)) "$y" $((w * 15 / 100)) "$y" 300
+        finger_swipe $((w * 70 / 100)) "$y" $((w * 15 / 100)) "$y" 300
         sleep 0.7
     }
     local problems=""
@@ -1445,7 +1446,7 @@ s38() {
     arm a
     on_home 10
     local problems="" accent
-    go_tab Settings
+    go_tab Settings || { fail "no Settings tab: $(ui screen)"; return; }
     await_ui 5 "screen=3"
     tap_has Theme 0 0.5
     await_ui 5 "screen=5" || problems="$problems; no theme screen"
@@ -1886,6 +1887,8 @@ s49() {
     arm a
     on_card 10
     local problems="" x y before free typed
+    # The room the window has is measured with the keyboard down (Android can bring one back that the baseline did not see).
+    hide_keyboard
     before=$(free_px)
     # The window is resized once more a moment after it came up (seen on Android 15 at 2208x1840: a smaller reading at
     # first): the room it has is what two readings a second apart agree on.
@@ -1893,10 +1896,10 @@ s49() {
     wait_for 10 steady
     press open a 0.8
     on_editor
-    tap_has Label 0 0.6
+    tap_has Label 0 0.6 || { fail "no Label row on the editor, the app shows: $(ui ready | grep -oE 'keyboard=[a-z]+ win=[0-9x]+')"; hide_keyboard; return; }
     await_ui 3 'editor_sheet!=None' || problems="$problems; no label panel"
     read -r x y <<< "$(field_xy)"
-    dev input tap "$x" "$y"
+    finger_xy "$x" "$y"
     made_room() {
         free=$(free_px)
         [ "$free" -lt $((before - 100)) ] 2> /dev/null
@@ -1925,7 +1928,7 @@ s49() {
     tap "Try its challenges" 0 0.8
     wait_for 5 run_up || problems="$problems; no typing challenge"
     read -r x y <<< "$(field_xy)"
-    dev input tap "$x" "$y"
+    finger_xy "$x" "$y"
     wait_for 6 made_room
     screenshot s49_typing
     read -r x y <<< "$(field_xy)"
@@ -2111,7 +2114,7 @@ s51() {
     arm a
     on_home 10
     local problems="" row columns
-    go_tab Settings
+    go_tab Settings || { fail "no Settings tab: $(ui screen)"; return; }
     await_ui 5 "screen=3"
     pick() { # row, then the choice of what it opens
         tap_has "$1" 0 0.5 || note "no row $1 on: $(texts_of | cut -c1-300)"
@@ -2162,7 +2165,7 @@ s51() {
     has "$(row_time)" '2:05 PM'
     has "$(texts_of)" Wekkers
     # A week that starts on Sunday: zondag first, in the day buttons of the editor.
-    go_tab Wekkers
+    go_tab Wekkers || { fail "no Wekkers tab: $(ui screen)"; return; }
     press open a 0.8
     on_editor
     has "$(texts_of)" 'Zondag|Maandag|Dinsdag|Woensdag|Donderdag|Vrijdag|Zaterdag'
@@ -2241,7 +2244,7 @@ s52() {
     tap "On or off: a" 0 0.5
     [ "$(db_enabled a)" = true ] && await_state a scheduled 3 || problems="$problems; not back on: $(db_enabled a) $(state a)"
     # One row of the history.
-    go_tab History
+    go_tab History || { fail "no History tab: $(ui screen)"; return; }
     await_ui 5 "screen=2"
     local before xy
     before=$(history_count)
@@ -2728,10 +2731,10 @@ s58() {
     await_ui 4 'editor_sheet!=None'
     tap Discard
     on_home 5
-    go_tab Settings
+    go_tab Settings || { fail "no Settings tab: $(ui screen)"; return; }
     centre_row "Touch feedback"
     tap "Touch feedback"
-    go_tab Alarms
+    go_tab Alarms || { fail "no Alarms tab: $(ui screen)"; return; }
     on_card 5
     press open a
     on_editor
@@ -3074,7 +3077,7 @@ s61() {
     arm a
     on_home 10
     local problems="" token_n
-    go_tab Settings
+    go_tab Settings || { fail "no Settings tab: $(ui screen)"; return; }
     await_ui 5 "screen=3"
     tap_has Theme 0 0.5
     await_ui 5 "screen=5" || problems="$problems; no theme screen"
@@ -3103,14 +3106,20 @@ s61() {
     x=$((x - $(awk -v s="$scale" 'BEGIN { printf "%d", 70 * s }')))
     # A panel takes touches once it holds still.
     await_settled
-    dev input swipe "$x" "$y" "$((x + 20))" "$((y + 20))" 300
-    after_input
+    finger_swipe "$x" "$y" "$((x + 20))" "$((y + 20))" 300
     [ "$(sn pal_accent)" != "$before" ] || problems="$problems; the wheel does nothing"
     screenshot s61_wheel
     # In a code.
     set_field 0 '#c06020'
     [ "$(sn pal_accent)" = "#c06020" ] || problems="$problems; the code gives $(sn pal_accent)"
-    done_sheet_theme() { hide_keyboard; tap Done; }
+    done_sheet_theme() {
+        hide_keyboard
+        tap Done && await_ui 8 'theme_sheet=false' || {
+            problems="$problems; the theme sheet is still up after Done: $(ui ready | grep -oE 'theme_sheet=[a-z]+')"
+            note "after Done: $(ui texts | grep -oE '\{[^{}]*"t":"Done"[^{}]*\}' | tr '\n' ' ') $(ui ready)"
+            screenshot s61_done_still_up
+        }
+    }
     done_sheet_theme
     # A theme of one's own, from what is on screen.
     tap "Your own theme" 0 0.5
