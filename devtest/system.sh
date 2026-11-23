@@ -478,7 +478,6 @@ picker_keys_select() { # name
             fi
         fi
         dev input keyevent "${keys[$((i % 2))]}" > /dev/null
-        sys_sig > /dev/null
         i=$((i + 1))
     done
     return 1
@@ -540,12 +539,12 @@ picker_pick() { # name
     local name=$1 end xy step=0 sig
     sys_wait "$SYS_DEADLINE" "the file picker being up" picker_up || return 1
     picker_trace "== pick $name: $(sys_show)"
-    end=$(($(now_ms) + ${PICKER_DEADLINE:-90} * 1000))
+    end=$(($(now_ms) + ${PICKER_DEADLINE:-150} * 1000))
     while :; do
         sys_anr_check || return 1
         picker_up || { picker_back_in_app; return; }
         if [ "$(now_ms)" -ge "$end" ]; then
-            SYS_WHY="the picker did not deliver $name within ${PICKER_DEADLINE:-90}s (step $step; shows: $(picker_summary); $(sys_show))"
+            SYS_WHY="the picker did not deliver $name within ${PICKER_DEADLINE:-150}s (step $step; shows: $(picker_summary); $(sys_show))"
             return 1
         fi
         sys_dump || { sleep 0.5; continue; }

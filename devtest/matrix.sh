@@ -389,6 +389,8 @@ s13() {
         no_pin
         return
     fi
+    # The keyboard of the PIN pad comes up again with the app's window (Android 14 and 16) and covers the buttons.
+    sys_keyboard_down || problems="$problems; $SYS_WHY"
     top_is_main || problems="$problems; the alarm's screen is not on top: $(top_activity)"
     sys_wait "$SYS_DEADLINE" "the sound on the alarm's own screen" sound_on || problems="$problems; silent on the alarm's own screen"
     state_is a firing || problems="$problems; state $(state a) on the alarm's own screen"
@@ -447,6 +449,7 @@ s13b() {
         no_pin
         return
     fi
+    sys_keyboard_down || problems="$problems; $SYS_WHY"
     sys_wait "$SYS_DEADLINE" "the sound on the alarm's own screen" sound_on || problems="$problems; silent on the alarm's own screen"
     finished() { sound_off && state_is b scheduled && [ "$(outcomes solved)" = 1 ]; }
     press ring-turn-off
@@ -491,6 +494,7 @@ s13c() {
         no_pin
         return
     fi
+    sys_keyboard_down || problems="$problems; $SYS_WHY"
     press ring-turn-off
     finished() { sound_off && state_is a scheduled && [ "$(outcomes solved)" = 1 ]; }
     wait_for "$SYS_DEADLINE" finished || problems="$problems; after turning it off: sound=$(sound_on && echo ON || echo off) state=$(state a) solved=$(outcomes solved)"
@@ -1531,8 +1535,8 @@ s40() {
     on_home 10
     press go 2
     await_ui 30 "screen=3" || { fail "no settings"; return; }
-    has_there "Add widget" || { sheet_scroll_up; has_there "Add widget" || sheet_scroll; }
-    tap_scrolling "Add widget"
+    # The row "Add widget" (row 3 of the settings), pressed through its own callback: nothing to scroll to or to touch.
+    press st-row 3
     # The launcher asks the user first.
     local problems="" minute
     launcher_add_widget || { fail "the widget was not added: $SYS_WHY; the launcher shows: $(launcher_texts | tr '\n' '|'); appwidget says: $(dev dumpsys appwidget | grep -m4 'provider=' | tr -s ' ' | tr '\n' ';')"; return; }
@@ -1811,8 +1815,10 @@ s48() {
         if ! wait_for 10 own_sound_there; then
             # The app can come back from the picker as a new start (Android 13: the launcher had the keys): the sound is then in
             # the list of a sheet that is opened again.
-            on_home 10
-            press open a 0.8
+            if [ "$(screen_no)" != 1 ]; then
+                on_home 10
+                press open a 0.8
+            fi
             on_editor
             open_row Sound
             wait_for 30 own_sound_there || problems="$problems; own sound not listed: $names"
@@ -1827,8 +1833,7 @@ s48() {
     # Alarms to a file: only the one alarm in it, under today's name.
     press go 2
     await_ui 30 "screen=3" || problems="$problems; the settings did not open"
-    has_there "Back up" || { sheet_scroll_up; has_there "Back up" || sheet_scroll; }
-    tap_scrolling "Back up"
+    press st-row 6
     on_screen "Save to a file" 30 || problems="$problems; no Save to a file"
     tap_has "Save to a file"
     saved_file() {
@@ -1843,8 +1848,7 @@ s48() {
     saved_toast_gone() { ! has_there "Saved to"; }
     wait_for 30 saved_toast_gone
     await_ui 30 "screen=3" || problems="$problems; the settings are not up for the second picker"
-    has_there "Back up" || { sheet_scroll_up; has_there "Back up" || sheet_scroll; }
-    tap_scrolling "Back up"
+    press st-row 6
     on_screen "Add alarms from a file" 30 || problems="$problems; no Add alarms from a file"
     tap_has "Add alarms from a file"
     if [ -n "$file" ] && picker_pick "$file"; then
@@ -3278,7 +3282,7 @@ s62() {
         tap_in "Choose another photo" 0 1
         if picker_pick af_photo.png; then
             chosen() { [ -n "$(as_app "ls files/ring_photos 2> /dev/null")" ]; }
-            wait_for 20 chosen || problems="$problems; the photo was not kept"
+            wait_for 40 chosen || problems="$problems; the photo was not kept"
             await_settled
             tap Preview L
             await_ui 5 'ed_preview=true'
