@@ -1398,6 +1398,44 @@ tap_scrolling() { # text
     done
     tap_has "$1" 0 0.3
 }
+# Where a row ends and where the bar under its page starts ("row_bottom bar_top", device pixels), from the app's tree: the
+# row is the element that says exactly the first text, the bar's top is the highest of the others that are on screen. "none"
+# when the row or every bar text is missing.
+row_and_bar() { # row-text bar-text...
+    ui texts | python -I -c '
+import json, sys
+row, bars = sys.argv[1], sys.argv[2:]
+items = json.loads(sys.stdin.read() or "[]")
+def find(t):
+    return next((e for e in items if e["t"] == t), None)
+r = find(row)
+tops = [e["y"] - e["h"] / 2 for e in map(find, bars) if e]
+print("%d %d" % (r["y"] + r["h"] / 2, min(tops)) if r and tops else "none")
+' "$@"
+}
+# Tap a row of a page that scrolls under a bar of its own (the reliability screen: "Test alarm" or "Cancel the test alarm" stays at
+# the bottom). The tree lists a row that is under the bar as well, with its middle behind the bar's button, and a tap there is the
+# button's: the whole row has to be above the bar first. The bar's top is the highest of the bar texts (the arguments after the
+# row's text) less 12 dp, the bar's own padding. The page is scrolled until the row is clear, six times at most, and no tap is
+# made when it never is. The keyboard is put away first: a swipe that starts on it moves nothing.
+tap_above_bar() { # row-text bar-text...
+    local row=$1 i seen r_bottom="" top="" pad milli
+    hide_keyboard
+    milli=$(printf '%.0f' "$(window_size | cut -d' ' -f3)e3")
+    pad=$((12 * ${milli:-2625} / 1000))
+    for i in 1 2 3 4 5 6; do
+        seen=$(row_and_bar "$@")
+        case "$seen" in
+            [0-9]*)
+                r_bottom=${seen% *}
+                top=${seen#* }
+                [ "$r_bottom" -le $((top - pad)) ] && { tap_has "$row" 0 0.3; return; }
+                ;;
+        esac
+        sheet_scroll
+    done
+    step_failed "no clear place to tap '$row': its bottom ${r_bottom:-none}, the bar's top ${top:-none} less $pad px, after six scrolls"
+}
 # A phone's keyboard stays up over a sheet's Done button: Back puts it away (an emulator has none).
 # Asked twice: the input method's own dump can say it is hidden while it still covers the window (the Done button
 # under it then takes a tap as a key: "#c0y6020", seen on Android 15), and the app's insets say how far it reaches.

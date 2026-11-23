@@ -492,10 +492,48 @@ unit_wrote_fail() {
     return 1
 }
 
+# A fault of the device image that is known: what the system log says when it happens, per unit. s53 on the Android 11 image of
+# the CI (msd30): the settings screen of the fix button for "Stay allowed when unused" is launched and system_server crashes
+# in the system's own code (`FATAL EXCEPTION IN SYSTEM PROCESS`, a SecurityException when it binds the permission controller's
+# RoleControllerService as itself, run 45169682262 and the run before). The app is not in that stack. A unit that broke the
+# device like this the first time runs again on a restarted device and says so in a NOTE; the second break stands as INFRA.
+KNOWN_FAULT_s53='Unable to find app for caller .* when binding service .*RoleControllerService'
+# Prints the log line when the log of the device holds the signature of this unit's known fault (every buffer: the crash text of
+# the system process was not in the main, system and crash buffers that the watchdog reads, run 45169682262).
+known_fault() { # unit
+    local var="KNOWN_FAULT_$1" sig line
+    sig=${!var-}
+    [ -n "$sig" ] || return 1
+    line=$(dev "logcat -d -b all 2> /dev/null | grep -m1 -E '$sig'" 2> /dev/null | tr -d '\r')
+    # The log that a failed scenario keeps (its own 30000 lines of every buffer, written when it failed) and the evidence file.
+    [ -n "$line" ] || line=$(grep -a -m1 -h -E "$sig" "$OUT/${CURRENT:-$1}.log" "$OUT/$1.infra.log" 2> /dev/null | tr -d '\r')
+    [ -n "$line" ] || return 1
+    printf '%s\n' "${line:0:200}"
+}
+
+# The results the unit wrote since RES_MARK become one NOTE (what the scenario said stays in it); other lines stay.
+known_record() { # unit what
+    local s=$1 what=$2 i said="" line
+    local -a all out
+    mapfile -t all < "$RESULTS"
+    out=("${all[@]:0:RES_MARK}")
+    for ((i = RES_MARK; i < ${#all[@]}; i++)); do
+        line=${all[i]}
+        if [[ $line =~ ^(PASS|FAIL|SKIP)\ \ ([^\ ]+)\ +(\[[0-9]+s\])\ (.*)$ ]]; then
+            [ -n "$said" ] || said="${BASH_REMATCH[1]} ${BASH_REMATCH[4]:0:140}"
+        else
+            out+=("$line")
+        fi
+    done
+    out+=("NOTE  $s  the first run met a known fault of this device image ($what); the device is restarted and the scenario runs again; the first run said: ${said:-nothing}")
+    printf '%s\n' "${out[@]}" > "$RESULTS"
+    echo "${out[${#out[@]} - 1]}"
+}
+
 # One scenario of the runner: the baseline, the scenario, the watchdog, and the one rerun on a restarted device.
 # A unit that runs a function of another name (one scenario at one screen size) passes it as the second word.
 run_unit() { # name [function]
-    local s=$1 fn=${2:-$1} attempt=1 what t0 follow bl_ok
+    local s=$1 fn=${2:-$1} attempt=1 what t0 follow bl_ok known
     while :; do
         t0=$SECONDS
         what=""
@@ -523,10 +561,15 @@ run_unit() { # name [function]
         [ "$attempt" != 1 ] || follow=" [rerun follows]"
         infra_evidence "$s"
         evidence_snapshot infra "$s" "$what"
-        infra_record "$s" "$t0" "$what" "$follow"
+        if [ "$attempt" = 1 ] && [ -n "$bl_ok" ] && known=$(known_fault "$s"); then
+            known_record "$s" "$known"
+        else
+            infra_record "$s" "$t0" "$what" "$follow"
+            BL_PREV=$s
+            [ "$attempt" = 1 ] || return 0
+            echo "INFRA  $s  the device is restarted and the scenario runs once more"
+        fi
         BL_PREV=$s
-        [ "$attempt" = 1 ] || return 0
-        echo "INFRA  $s  the device is restarted and the scenario runs once more"
         if ! reboot_and_wait; then
             echo "STOP  $s  the device did not come back after the restart ($what)" | tee -a "$RESULTS"
             exit 2

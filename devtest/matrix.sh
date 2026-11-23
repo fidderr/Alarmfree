@@ -1254,10 +1254,12 @@ s32() {
     # The window is up before its bottom bar has painted, on a loaded emulator.
     # The window comes back on the screen it was left on: the one the ring was started from.
     on_screen_no 4 || { on_screen Settings 15 || screenshot s32_no_settings; open_reliability; }
-    on_screen "Save the record of how fast alarms rang" 8
-    # Under the Test alarm button until the screen is scrolled.
-    sheet_scroll
-    tap_scrolling "Save the record of how fast alarms rang"
+    # The page follows the ring that ended while it was open: its button is "Test alarm" again, not "Cancel the test alarm",
+    # and the record can be saved. Without that the tap below met a page that changed under it.
+    on_screen "Test alarm" 10 || { fail "the reliability screen still waits for the test alarm after it rang: $(texts_of | cut -c1-200)"; return; }
+    on_screen "Save the record of how fast alarms rang" 10 || { fail "no way to save the record after the ring: $(texts_of | cut -c1-200)"; return; }
+    # The row is under the Test alarm button until the screen is scrolled: the tap waits until the whole row is above the bar.
+    tap_above_bar "Save the record of how fast alarms rang" "Test alarm" "Cancel the test alarm"
     # The file is written a moment after the tap: wait for what is in it, not for half a second.
     has_record() { [ "$(dev cat /sdcard/Download/alarmfree-rings.txt 2> /dev/null | grep -c ' sound ')" -ge 1 ]; }
     wait_for 10 has_record && record=yes
@@ -1265,7 +1267,7 @@ s32() {
     if ! sound_on && [ "$(db_count '"hidden":true')" = 0 ] && [ "$(outcomes solved)" = 0 ] && [ "$record" = yes ]; then
         pass "rang ${SOUND_AT}s after its time, nothing left, nothing in history, its record saved"
     elif [ "$record" != yes ]; then
-        fail "no record of the ring in Downloads"
+        fail "no record of the ring in Downloads (test alarms now: $(db_count '"hidden":true'))"
     else
         fail "sound=$(sound_on && echo ON || echo off) hidden=$(db_count '"hidden":true') solved=$(outcomes solved)"
     fi

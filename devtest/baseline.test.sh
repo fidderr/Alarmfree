@@ -137,6 +137,7 @@ fake_command() {
             # What is behind the app is the lock screen, when there is one.
             if [ "$(st_get keyguard)" = true ] || [ "$(st_get kgpol)" = true ]; then fd_set focus 'mCurrentFocus=Window{fc62baa u0 NotificationShade}'; else fd_set focus "$CLEAN_FOCUS"; fi
             ;;
+        "logcat -d -b all"*) fake_script "$c" ;;
         "su 0 id -u"*) [ -n "${NOROOT:-}" ] || echo 0 ;;
         "cmd alarm set-timezone"*) fd_set zone "${c##* }" ;;
         "cmd uimode night"*) fd_set night "${c##* }" ;;
@@ -188,6 +189,18 @@ sx() {
                 fail "something odd"
             else
                 pass "fine"
+            fi
+            ;;
+        role_crash | role_crash_always)
+            # Run 45169682262, Android 11, s53: system_server crashed in the settings screen of a fix button.
+            if [ ! -e "$DIR/once" ] || [ "$SX" = role_crash_always ]; then
+                : > "$DIR/once"
+                printf '%s
+' '11-23 12:22:34.217 E/AndroidRuntime(  515): java.lang.SecurityException: Unable to find app for caller android.app.ActivityThread$ApplicationThread@d8b803b (pid=515) when binding service Intent { act=android.app.role.RoleControllerService cmp=com.google.android.permissioncontroller/com.android.role.controller.service.RoleControllerServiceImpl }' >> "$DIR/devlog"
+                st_set ss $(($(st_get ss) + 1))
+                fail "Back from fix button 0: the screen of fix button 0 drawn did not come within 30s"
+            else
+                pass "deleting a sound, 1 fix buttons"
             fi
             ;;
         break_always)
@@ -541,6 +554,31 @@ if has "$rf" 'rerun follows\]$' && has "$rf" '^INFRA  sx  .*scenario said: PASS 
 else
     verdict "broken again on the rerun: INFRA stands ($(cat "$rf"))" 0
 fi
+KNOWN_SIG='Unable to find app for caller .* when binding service .*RoleControllerService'
+run_case r_known run SX=role_crash KNOWN_FAULT_sx="$KNOWN_SIG"
+rf=$(res r_known)
+if [ "$(lines "$rf")" = 2 ] && has "$rf" '^NOTE  sx  the first run met a known fault of this device image .*Unable to find app for caller.*the first run said: FAIL Back from fix button 0' && has "$rf" '^PASS  sx  ' && ! has "$rf" '^INFRA' && ! has "$rf" '^FAIL' && [ "$(lines "$tmp/r_known/reboots")" = 1 ]; then
+    verdict "a known fault of the image (system_server crash in the permission controller bind): one NOTE with what the first run said, one restart, the rerun counts, no INFRA" 1
+else
+    verdict "a known fault of the image: one NOTE, one restart, the rerun counts ($(cat "$rf"))" 0
+fi
+(. "$here/baseline.sh"; run_exit_code "$rf"; echo $? > "$tmp/r_known/code")
+[ "$(first "$tmp/r_known/code")" = 0 ] && verdict "the run of a known fault that passed the second time exits 0" 1 || verdict "the run of a known fault that passed the second time exits 0" 0
+run_case r_known_twice run SX=role_crash_always KNOWN_FAULT_sx="$KNOWN_SIG"
+rf=$(res r_known_twice)
+if has "$rf" '^NOTE  sx  the first run met a known fault' && has "$rf" '^INFRA  sx  .*system_server restarted' && ! has "$rf" 'rerun follows\]$' && [ "$(lines "$tmp/r_known_twice/reboots")" = 1 ]; then
+    verdict "the known fault again on the rerun: INFRA stands, only one restart" 1
+else
+    verdict "the known fault again on the rerun: INFRA stands ($(cat "$rf"))" 0
+fi
+(. "$here/baseline.sh"; run_exit_code "$rf"; echo $? > "$tmp/r_known_twice/code")
+[ "$(first "$tmp/r_known_twice/code")" = 4 ] && verdict "and the run exits 4" 1 || verdict "and the run exits 4" 0
+run_case r_known_other run SX=role_crash
+rf=$(res r_known_other)
+has "$rf" '^INFRA  sx  .*system_server restarted .*\[rerun follows\]$' && ! has "$rf" '^NOTE' && verdict "the same log line for a unit that has no known fault is INFRA as before" 1 || verdict "the same log line for a unit that has no known fault is INFRA ($(cat "$rf"))" 0
+run_case r_known_nosig run SX=break_once KNOWN_FAULT_sx="$KNOWN_SIG"
+rf=$(res r_known_nosig)
+has "$rf" '^INFRA  sx  .*\[rerun follows\]$' && ! has "$rf" '^NOTE' && verdict "a restart without the signature in the log of a unit with a known fault is INFRA" 1 || verdict "a restart without the signature is INFRA ($(cat "$rf"))" 0
 run_case r_syscrash run SX=system_crash
 has "$(res r_syscrash)" 'crash in the system log: .*FATAL EXCEPTION IN SYSTEM PROCESS' && verdict "a crash of the system process in the log is INFRA" 1 || verdict "a crash of the system process in the log is INFRA ($(cat "$(res r_syscrash)"))" 0
 # An audio server that restarted while the scenario passed does not overrule the PASS (run 45065611089, Android 12, s03):

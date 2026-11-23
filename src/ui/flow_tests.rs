@@ -1555,3 +1555,24 @@ fn every_text_field_has_a_name_for_a_screen_reader() {
     assert!(seen >= 5, "the walk found only {seen} text inputs");
     assert!(found.is_empty(), "nameless text fields: {found:#?}");
 }
+
+/// A test alarm that rings while the reliability screen stays open (the phone locked, the ring dismissed, the
+/// window back on the same screen): the page says so again, with the "Test alarm" button and not "Cancel".
+#[test]
+fn reliability_page_follows_a_test_alarm_that_rang() {
+    let f = Flow::new(Vec::new());
+    reliability::open(&f.ctx, false);
+    f.settle();
+    f.expect(f.screen() == SCREEN_RELIABILITY, "no reliability screen");
+    f.expect(f.tap("Test alarm"), "no Test alarm button");
+    f.expect(f.has("Cancel the test alarm"), "no Cancel while it waits");
+    // The ring ends: the app loads its alarms again (ring::poll) and the test alarm is gone from them.
+    f.ctx.alarms.borrow_mut().retain(|alarm| !alarm.test);
+    f.settle();
+    f.settle();
+    f.expect(
+        f.has("Test alarm") && !f.has("Cancel the test alarm"),
+        format!("after the ring: {:?}", f.texts()),
+    );
+    f.finish();
+}

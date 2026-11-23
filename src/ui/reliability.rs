@@ -25,6 +25,8 @@ pub struct State {
     /// The checks as listed, to know which row was tapped.
     order: Vec<Check>,
     last: Option<HealthReport>,
+    /// What the screen showed of the test alarm and the ring record, to see when a ring changed them.
+    shown: Option<(bool, usize)>,
     timer: slint::Timer,
 }
 
@@ -92,7 +94,11 @@ pub fn open(ctx: &Rc<Ctx>, first_run: bool) {
             move || {
                 if let Some(ctx) = weak.upgrade() {
                     let fresh = report();
-                    let changed = ctx.reliability.borrow().last.as_ref() != Some(&fresh);
+                    // A test alarm that rang while this screen stayed open: its button and the ring record are new.
+                    let changed = {
+                        let state = ctx.reliability.borrow();
+                        state.last.as_ref() != Some(&fresh) || state.shown != Some(ring_view(&ctx))
+                    };
                     if changed {
                         sync(&ctx);
                     }
@@ -103,6 +109,17 @@ pub fn open(ctx: &Rc<Ctx>, first_run: bool) {
     sync(ctx);
     ui.set_panel_open(false);
     ui.set_screen(SCREEN_RELIABILITY);
+}
+
+/// Whether a test alarm is waiting, and how long the SDK's ring record is.
+fn ring_view(ctx: &Ctx) -> (bool, usize) {
+    let log = crate::platform::alarm_kit_optional()
+        .map(|kit| kit.timing_log())
+        .unwrap_or_default();
+    (
+        ctx.alarms.borrow().iter().any(|alarm| alarm.test),
+        log.len(),
+    )
 }
 
 fn sync(ctx: &Ctx) {
@@ -158,6 +175,7 @@ fn sync(ctx: &Ctx) {
     let mut state = ctx.reliability.borrow_mut();
     state.order = checks;
     state.last = Some(health);
+    state.shown = Some((rel.get_test_pending(), log.len()));
 }
 
 pub fn fix(ctx: &Ctx, index: usize) {
