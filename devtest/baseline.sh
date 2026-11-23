@@ -110,12 +110,22 @@ baseline_parse() { # text
     case "$fs" in null | 1 | 1.0 | 1.00) BL_VAL[font]=1.0 ;; esac
 }
 
+# The app's own word for the keyboard (`keyboard=up|down` of `ui ready`: what the window's insets say), asked only while the app
+# is in front. The input method service lags a change (run 45085128218: mInputShown=false and mImeWindowVis=0 right after the PIN,
+# true and 3 a little later; s49 started with the insets saying up and the baseline having read false), so the keyboard is up
+# when either of the two says so.
+baseline_app_keyboard() { UI_QUIET=1 ui ready 2> /dev/null | sed -n 's/.*keyboard=\([a-z]*\).*/\1/p' | head -1; }
+baseline_app_in_front() { case "${BL_VAL[focus]-}" in *"${PKG:-com.fidderr.alarmfree}/"*) return 0 ;; esac; return 1; }
+
 # One call to the device. Returns 1 when it did not answer.
 baseline_read() {
     local out
     out=$(dev "$BASELINE_SCRIPT" 2> /dev/null)
     BL_RAW=$out
     baseline_parse "$out"
+    if [ "${BL_VAL[ime]-}" = false ] && on_emulator && baseline_app_in_front && [ "$(baseline_app_keyboard)" = up ]; then
+        BL_VAL[ime]=true
+    fi
     [ -n "${BL_VAL[boot]+x}" ]
 }
 
@@ -298,6 +308,8 @@ baseline_drop_stale_ime() {
     on_emulator || return 0
     shown=$(dev dumpsys input_method 2> /dev/null)
     case "$shown" in '' | *mInputShown=true*) return 0 ;; esac
+    # The app says it is up: it is.
+    baseline_app_in_front && [ "$(baseline_app_keyboard)" = up ] && return 0
     for k in "${BL_BAD[@]}"; do [ "$k" = ime ] || keep+=("$k"); done
     BL_BAD=(${keep[@]+"${keep[@]}"})
 }

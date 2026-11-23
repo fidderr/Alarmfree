@@ -23,14 +23,16 @@ RESULTS="$OUT/results.txt"
 : > "$RESULTS"
 CALLS="$DIR/calls"
 : > "$CALLS"
+# The app's own word for the keyboard (what `ui ready` says): a state of its own in the table, put down by Back.
+baseline_app_keyboard() { st_get appkb; }
 
 CLEAN_FOCUS='mCurrentFocus=Window{3c4d u0 com.google.android.apps.nexuslauncher/com.google.android.apps.nexuslauncher.NexusLauncherActivity}'
 # What the device is like, one file per value: a change made inside a pipe (dev dumpsys ... | tr) must stay.
 mkdir -p "$DIR/st"
 st_set() { printf '%s' "$2" > "$DIR/st/$1"; }
 st_get() { local v=""; read -r v < "$DIR/st/$1" || :; printf '%s' "$v"; }
-ST_KEYS="boot bootid ss audio wake keyguard kgpol pin ime imestale focus size dpi font idle autotime zone rot_auto rot_user night timeout stay"
-st_set boot 1; st_set bootid boot-1; st_set ss 812; st_set audio 640; st_set wake Awake; st_set keyguard false; st_set pin false
+ST_KEYS="appkb boot bootid ss audio wake keyguard kgpol pin ime imestale focus size dpi font idle autotime zone rot_auto rot_user night timeout stay"
+st_set appkb down; st_set boot 1; st_set bootid boot-1; st_set ss 812; st_set audio 640; st_set wake Awake; st_set keyguard false; st_set pin false
 st_set ime false; st_set imestale false; st_set kgpol false; st_set focus 'mCurrentFocus=Window{1a2b u0 com.fidderr.alarmfree/android.app.NativeActivity}'
 st_set size 1080x2400; st_set dpi 420; st_set font null; st_set idle false; st_set autotime 0; st_set zone Europe/Amsterdam
 st_set rot_auto 0; st_set rot_user 0; st_set night no; st_set timeout 86400000; st_set stay 0
@@ -112,6 +114,7 @@ fake_command() {
         "settings get secure default_input_method"*) echo com.google.android.inputmethod.latin/com.android.inputmethod.latin.LatinIME ;;
         "am force-stop com.google.android.inputmethod.latin"*) fd_set ime false ;;
         "input keyevent KEYCODE_BACK"*)
+            fd_set appkb down
             # BACK_KEEPS_IME=1: Android 14 to 16 after the PIN, where Back does not take the keyboard down.
             [ -n "${BACK_KEEPS_IME:-}" ] || fd_set ime false
             [ -z "${BACK_LOCKS:-}" ] || { st_set keyguard true; st_set focus 'mCurrentFocus=Window{fc62baa u0 NotificationShade}'; }
@@ -449,6 +452,15 @@ if has "$tmp/ime_stuck/calls" 'am force-stop com.google.android.inputmethod.lati
 else
     verdict "a keyboard that Back does not take down is put away by stopping the input method ($(cat "$(res ime_stuck)" 2> /dev/null))" 0
 fi
+# The system's input method says hidden while the app's own word says the keyboard is up (the lag of the service): the keyboard is up.
+run_case ime_app clean PRE="st_set appkb up"
+if has "$tmp/ime_app/calls" 'KEYCODE_BACK' && [ "$(first "$tmp/ime_app/rc")" = 0 ] && ! has "$(res ime_app)" '^INFRA'; then
+    verdict "the app's word keyboard=up counts when the input method service still says hidden (Back, no INFRA)" 1
+else
+    verdict "the app's word keyboard=up counts when the input method service still says hidden ($(cat "$(res ime_app)" 2> /dev/null))" 0
+fi
+run_case ime_app_down clean
+! has "$tmp/ime_app_down/calls" 'KEYCODE_BACK' && verdict "a keyboard that neither says is up: no Back key" 1 || verdict "a keyboard that neither says is up: no Back key" 0
 run_case night_a16 clean PRE="st_set night custom_bedtime"
 [ "$(first "$tmp/night_a16/rc")" = 0 ] && [ "$(st_get_of night_a16 night)" = no ] && verdict "night mode custom_bedtime at the first reading is compared (put to no on an emulator)" 1 || verdict "night mode custom_bedtime at the first reading is compared ($(st_get_of night_a16 night))" 0
 run_case night_phone leftover PRE="st_set night custom_bedtime" LEFT=night=no SERIAL=R58M12345A
