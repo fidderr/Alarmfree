@@ -1154,11 +1154,11 @@ tap_trash() {
 open_new_editor() {
     local i=0
     while [ "$i" -lt 3 ]; do
-        tap "Create new alarm" 0 0.8
+        TAP_MAY_FAIL=1 tap "Create new alarm" 0 0.8
         on_editor 2 && return 0
         i=$((i + 1))
     done
-    return 1
+    step_failed "open_new_editor: no editor came up in 3 touches"
 }
 
 # The bottom bar and the reliability screen.
@@ -1953,7 +1953,7 @@ done_sheet() {
     while [ "$i" -lt 3 ]; do
         # A panel takes touches once it holds still (the first Done after a sheet within it is lost on a busy machine).
         await_settled 4
-        tap_in Done L 0.3
+        TAP_MAY_FAIL=1 tap_in Done L 0.3
         # The sheet takes seconds to go on a busy machine: a second tap on Done before that lands on the editor under it.
         await_ui 8 'editor_sheet=None' && return 0
         retry_used "done_sheet: still up after Done ($(sn ed_sheet)), tap $((i + 1))"
@@ -1963,7 +1963,7 @@ done_sheet() {
         [ "$(sn ed_sheet)" != None ] || return 0
         i=$((i + 1))
     done
-    return 1
+    step_failed "done_sheet: the sheet is still up after 3 touches on Done: $(sn ed_sheet)"
 }
 # Open a row of the editor, and wait for its panel.
 # A touch that lands while the sheet before it is still closing is dropped, and everything after it
@@ -1975,10 +1975,10 @@ open_row() {
         # A keyboard left up by something before (the one of the last typing, which Android brings back) covers the rows.
         has_there "$1" || { hide_keyboard; sheet_scroll_up; has_there "$1" || sheet_scroll; }
         scroll_clear "$1"
-        tap_has "$1" 0 0.4
+        TAP_MAY_FAIL=1 tap_has "$1" 0 0.4
         await_ui 4 'editor_sheet!=None' && return 0
     done
-    return 1
+    step_failed "open_row $1: no panel came up in 3 touches"
 }
 # The number of an own sound's row in the sound sheet: the bundled ones first, then the own ones by
 # name. Counted from the files, because a scrolled list shows only part of its rows.
@@ -2639,7 +2639,7 @@ not_vibrating() { ! vibrating_now; }
 start_stop_says() {
     if is_there 'Stop preview'; then echo true; elif is_there 'Play preview'; then echo false; else echo none; fi
 }
-start_stop() { is_there 'Stop preview' && tap 'Stop preview' 0 0.3 || tap 'Play preview' 0 0.3; }
+start_stop() { is_there 'Stop preview' && TAP_MAY_FAIL=1 tap 'Stop preview' 0 0.3 || tap 'Play preview' 0 0.3; }
 
 # Trying a sound and a vibration: a tap picks a sound and plays it for a few seconds, Start plays it
 # for longer, and Stop, closing and time all end it. A tap on a pattern vibrates, for just as long.

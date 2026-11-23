@@ -1215,3 +1215,43 @@ fn every_language_can_be_picked() {
     }
     f.finish();
 }
+
+/// A tap through the app is no more than a finger can do: not outside the window, not under the keyboard (the window keeps its
+/// full height with the keyboard up), and what is on screen above it is still touched.
+#[test]
+fn a_tap_through_the_app_stops_where_a_finger_cannot_reach() {
+    let f = Flow::new(vec![daily("a", 7, 0, "Work")]);
+    let said = |c: &str| f.cmd(c);
+    f.expect(said("tapxy:100 100") == "OK", "no touch inside the window");
+    for outside in [
+        "tapxy:100 6000",
+        "tapxy:1080 100",
+        "tapxy:-1 100",
+        "tapxy:100 -1",
+    ] {
+        f.expect(
+            said(outside).starts_with("ERR outside the window"),
+            format!("{outside}: {}", said(outside)),
+        );
+    }
+    // The keyboard: 400 logical pixels at scale 3 = 1200 px of the 6000.
+    f.ui.global::<Insets>().set_bottom(400.0);
+    f.expect(
+        said("tapxy:100 4799") == "OK",
+        "no touch just above the keyboard",
+    );
+    for under in ["tapxy:100 4800", "tapxy:100 5999"] {
+        f.expect(
+            said(under).starts_with("ERR under the keyboard"),
+            format!("{under}: {}", said(under)),
+        );
+    }
+    // The bars alone are no keyboard: a touch there is the app's.
+    f.ui.global::<Insets>().set_bottom(40.0);
+    f.expect(
+        said("tapxy:100 5990") == "OK",
+        "a touch in the bar's inset is refused",
+    );
+    f.ui.global::<Insets>().set_bottom(0.0);
+    f.finish();
+}

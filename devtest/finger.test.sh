@@ -12,6 +12,7 @@ cat > "$tmp/drive.sh" << 'E'
 export OUT="$DIR/out" TMPDIR="$DIR" RESULTS="$DIR/results.txt" CURRENT=case
 mkdir -p "$OUT"
 . "$LIB"
+CURRENT=case
 SENT="$DIR/sent.log"
 : > "$SENT"
 : > "$RESULTS"
@@ -32,6 +33,7 @@ ui() {
             echo "$line"
             ;;
         tap*) echo "${TAP_ANSWER:-OK}" ;;
+        press:*) echo "${PRESS_ANSWER:-OK}" ;;
         screen) echo "screen=${SCREEN_NOW:-0}" ;;
         *) echo OK ;;
     esac
@@ -43,7 +45,32 @@ await_ui() { echo "await_ui $*" >> "$SENT"; [ -z "${AWAIT_UI_FAIL:-}" ]; }
 screen_no() { echo "${SCREEN_NOW:-0}"; }
 still_where() { echo "100 200"; }
 SETTLED_AT=""
+# The result line of a scenario that ends here: the real pass(), a fail() that only writes its line.
+fail() { echo "FAIL  $CURRENT  $1" >> "$RESULTS"; }
+SCENARIO_START=$SECONDS
+: > "$STEP_FAILED_FILE"
 case "$CASE" in
+    tap_then_pass)
+        tap "Hello" 2
+        pass "all fine"
+        ;;
+    tolerated_then_pass)
+        TAP_MAY_FAIL=1 tap "Hello" 2
+        pass "all fine"
+        ;;
+    finger_then_pass)
+        finger Hello
+        pass "all fine"
+        ;;
+    press_then_pass)
+        press open a
+        pass "all fine"
+        ;;
+    tab_then_pass)
+        go_tab Settings
+        pass "all fine"
+        ;;
+    clean_pass) pass "all fine" ;;
     finger_ok) finger Hello ;;
     finger_swipe) finger_swipe 1 2 3 4 300 ;;
     tap) tap "Hello" 2 ;;
@@ -145,6 +172,44 @@ verdict "go_tab taps once through the app and waits for the screen it names" \
 run_case tabbad go_tab AWAIT_FILE="$tmp/f_ok" AWAIT_UI_FAIL=1 SCREEN_NOW=0
 verdict "go_tab fails, and says which screen the app shows, when the screen is not reached" \
     "$(has tabbad 'rc=1' && grep -q 'the app shows screen 0, not 3' "$tmp/tabbad/stdout" && echo 1)"
+
+# What the app refuses because a finger could not do it (under the keyboard, outside the window) fails the tap with the app's words;
+# once the keyboard is down the element is asked for again.
+run_case kbd tap AWAIT_FILE="$tmp/f_ok" TAP_ANSWER="ERR under the keyboard: 5 5000, it starts at 4800"
+verdict "a tap under the keyboard waits for the keyboard to go, asks again, and fails with the app's words when it stays"     "$([ "$(grep -c '^ui tap@2:Hello' "$tmp/kbd/sent.log")" = 2 ] && has kbd 'await_ui 2 keyboard=down' && has kbd 'rc=1' && grep -q 'the app said: ERR under the keyboard' "$tmp/kbd/stdout" && echo 1)"
+run_case kbd2 tap AWAIT_FILE="$tmp/f_ok" TAP_ANSWER="ERR under the keyboard: 5 5000, it starts at 4800" AWAIT_UI_FAIL=1
+verdict "the keyboard that does not go is not waited for twice: one ask"     "$([ "$(grep -c '^ui tap@2:Hello' "$tmp/kbd2/sent.log")" = 1 ] && has kbd2 'rc=1' && echo 1)"
+run_case outside tap_xy AWAIT_FILE="$tmp/f_ok" TAP_ANSWER="ERR outside the window (1080x2400): 5 9000"
+verdict "a touch outside the window fails the step with the app's words, no waiting"     "$(has outside 'rc=1' && ! has outside 'keyboard=down' && grep -q 'the app said: ERR outside the window' "$tmp/outside/stdout" && echo 1)"
+
+# A touch that arrived after the wait ran out: the count is read again, and the touch is not sent twice.
+printf 'frames=1 screen=0 input_seen=7\nframes=1 screen=0 input_seen=7\nframes=1 screen=0 input_seen=8\n' > "$tmp/f_ready_late"
+run_case late finger_ok AWAIT_FILE="$tmp/f_lost_always" READY_FILE="$tmp/f_ready_late"
+verdict "a touch counted only after the wait ran out is not sent again, and it is no failure" \
+    "$([ "$(taps late)" = 1 ] && has late 'rc=0' && ! grep -q 'touch lost' "$tmp/late/out/results.txt" && echo 1)"
+
+# The count never moves and the app answers: the touch is still sent again (the late-count read must not hide a lost touch).
+printf 'frames=1 screen=0 input_seen=7
+' > "$tmp/f_ready_same"
+run_case notlate finger_ok AWAIT_FILE="$tmp/f_lost_always" READY_FILE="$tmp/f_ready_same"
+verdict "a count that stays where it was does not stop the resends"     "$([ "$(taps notlate)" = 4 ] && has notlate 'rc=1' && echo 1)"
+
+# No PASS after a failed step: the results of the case say FAIL with the step in the line, and no PASS.
+no_pass() { # name, what the FAIL line has to say
+    grep -q "^FAIL  case  a step failed, so this is no PASS (all fine): $2" "$tmp/$1/out/results.txt"         && ! grep -q '^PASS' "$tmp/$1/out/results.txt"
+}
+run_case pass_tap tap_then_pass AWAIT_FILE="$tmp/f_ok" TAP_ANSWER=none
+verdict "a scenario that ends with PASS after a tap the app did not find ends with FAIL, naming the tap"     "$(no_pass pass_tap 'nothing says Hello' && echo 1)"
+run_case pass_tol tolerated_then_pass AWAIT_FILE="$tmp/f_ok" TAP_ANSWER=none
+verdict "a step marked TAP_MAY_FAIL fails for its caller but does not stop the PASS"     "$(grep -q '^PASS  case' "$tmp/pass_tol/out/results.txt" && ! grep -q '^FAIL' "$tmp/pass_tol/out/results.txt" && echo 1)"
+run_case pass_finger finger_then_pass AWAIT_FILE="$tmp/f_lost_always"
+verdict "a real touch that never arrived leaves no PASS"     "$(no_pass pass_finger 'touch on Hello: no input reached the app in 4 touches' && echo 1)"
+run_case pass_press press_then_pass AWAIT_FILE="$tmp/f_ok" PRESS_ANSWER="ERR unknown callback open"
+verdict "a press the app does not know leaves no PASS"     "$(no_pass pass_press 'press open: ERR unknown callback' && echo 1)"
+run_case pass_tab tab_then_pass AWAIT_FILE="$tmp/f_ok" AWAIT_UI_FAIL=1 SCREEN_NOW=0
+verdict "a tab that did not open leaves no PASS"     "$(no_pass pass_tab 'go_tab Settings: the app shows screen 0, not 3' && echo 1)"
+run_case pass_clean clean_pass AWAIT_FILE="$tmp/f_ok"
+verdict "a scenario with no failed step keeps its PASS"     "$(grep -q '^PASS  case' "$tmp/pass_clean/out/results.txt" && ! grep -q '^FAIL' "$tmp/pass_clean/out/results.txt" && echo 1)"
 
 [ "$bad" = 0 ] || { echo "FAIL  some finger cases"; exit 1; }
 echo "PASS  all finger cases"
