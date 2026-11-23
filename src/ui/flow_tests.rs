@@ -1255,3 +1255,82 @@ fn a_tap_through_the_app_stops_where_a_finger_cannot_reach() {
     f.ui.global::<Insets>().set_bottom(0.0);
     f.finish();
 }
+
+/// The sheet of the accent colour on a phone-sized window, with the keyboard animated up and down
+/// the way Android does it (the area it covers changes in many small steps).
+struct PhoneSheet {
+    f: Flow,
+    scale: f32,
+}
+
+impl PhoneSheet {
+    fn open() -> PhoneSheet {
+        use slint::platform::WindowEvent;
+        let f = Flow::new(vec![daily("a", 7, 0, "a")]);
+        let scale = 2.625f32;
+        let window = f.ui.window();
+        window.dispatch_event(WindowEvent::ScaleFactorChanged {
+            scale_factor: scale,
+        });
+        window.set_size(slint::PhysicalSize::new(1080, 1920));
+        window.dispatch_event(WindowEvent::Resized {
+            size: slint::LogicalSize::new(1080.0 / scale, 1920.0 / scale),
+        });
+        f.settle();
+        assert!(f.tap_last("Settings"));
+        assert!(f.tap_has("Theme"));
+        assert!(f.tap("Sand"));
+        assert!(f.tap_has("Choose your own colour"));
+        PhoneSheet { f, scale }
+    }
+
+    fn keyboard_in(&self, from: f32, to: f32, steps: usize) {
+        for step in 1..=steps {
+            let height = from + (to - from) * step as f32 / steps as f32;
+            self.f.ui.window().set_virtual_keyboard(
+                slint::LogicalPosition::new(0.0, (1920.0 - height) / self.scale),
+                slint::LogicalSize::new(1080.0 / self.scale, height / self.scale),
+                i_slint_core::InternalToken,
+            );
+            i_slint_backend_testing::mock_elapsed_time(std::time::Duration::from_millis(16));
+        }
+    }
+
+    fn done_y(&self) -> Option<i64> {
+        let rows: Vec<serde_json::Value> = serde_json::from_str(&self.f.cmd("texts")).unwrap();
+        rows.iter()
+            .find(|r| r["t"] == "Done")
+            .and_then(|r| r["y"].as_i64())
+    }
+}
+
+/// R-8 (s61): with the keyboard up the sheet's content is taller and scrolls; when the keyboard went
+/// down while that scroll was still settling, the content stayed a few points off its limit. The
+/// next touch put it back between a press and its release, so the release fell beside the button
+/// and Done did nothing. A finger meets this as a Done that needs a second tap.
+#[test]
+fn done_on_the_colour_sheet_works_after_the_keyboard_went_down() {
+    for steps in [3usize, 5] {
+        let p = PhoneSheet::open();
+        let rest = p.done_y();
+        p.f.cmd("settext:0:#c06020");
+        let kb = |from: f32, to: f32, wait: u64| {
+            p.keyboard_in(from, to, steps);
+            i_slint_backend_testing::mock_elapsed_time(std::time::Duration::from_millis(wait));
+        };
+        kb(0.0, 750.0, 600);
+        kb(750.0, 0.0, 0);
+        kb(0.0, 750.0, 0);
+        kb(750.0, 0.0, 1500);
+        p.f.expect(
+            p.done_y() == rest,
+            format!("{steps} steps: Done at {:?}, not at {rest:?}", p.done_y()),
+        );
+        p.f.expect(p.f.tap("Done"), "no Done");
+        p.f.expect(
+            !p.f.ui.global::<Thm>().get_sheet_open(),
+            format!("{steps} steps: the sheet is still up after Done"),
+        );
+        p.f.finish();
+    }
+}
