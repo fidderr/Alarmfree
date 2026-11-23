@@ -328,22 +328,34 @@ probe_keys_missing() {
     echo "$missing"
 }
 
-# The touches of one round as one device command: they follow each other with nothing added between them.
-probe_soft_sequence() {
-    local i seq=""
-    for ((i = 0; i < ${#PROBE_WORD}; i++)); do
-        seq="${seq}input tap ${PROBE_KEY[${PROBE_WORD:i:1}]}; " # lint-ok: touching the keys of another app's keyboard is the point of this probe
-    done
-    seq="${seq}input tap ${PROBE_KEY[del]}; input tap ${PROBE_KEY[del]}; " # lint-ok: the keyboard's own Backspace key
-    for ((i = 0; i < ${#PROBE_TAIL}; i++)); do
-        seq="${seq}input tap ${PROBE_KEY[${PROBE_TAIL:i:1}]}; " # lint-ok: the last letters
-    done
-    echo "$seq"
+# The places of the touches of one round, one "x y" per line.
+probe_soft_taps() {
+    local i
+    for ((i = 0; i < ${#PROBE_WORD}; i++)); do echo "${PROBE_KEY[${PROBE_WORD:i:1}]}"; done
+    echo "${PROBE_KEY[del]}"
+    echo "${PROBE_KEY[del]}"
+    for ((i = 0; i < ${#PROBE_TAIL}; i++)); do echo "${PROBE_KEY[${PROBE_TAIL:i:1}]}"; done
 }
 
-t16_probe_softkeys() {
-    local rounds=${ROUNDS:-20} n right=0 capital=0 skipped=0 want fx fy fw row final wrong="" seq missing
-    scenario t16_probe_softkeys
+# The touches of one round: as one device command, so that they follow each other with nothing added between them, or
+# (PROBE_SLOW) each in a device call of its own, which puts a call's time between two touches.
+probe_soft_type() {
+    local xy seq=""
+    if [ -n "${PROBE_SLOW:-}" ]; then
+        while read -r xy; do
+            dev input tap $xy # lint-ok: touching the keys of another app's keyboard is the point of this probe
+        done < <(probe_soft_taps)
+        return
+    fi
+    while read -r xy; do
+        seq="${seq}input tap $xy; " # lint-ok: touching the keys of another app's keyboard is the point of this probe
+    done < <(probe_soft_taps)
+    dev "$seq"
+}
+
+probe_soft_body() { # scenario name
+    local name=$1 rounds=${ROUNDS:-20} n right=0 capital=0 skipped=0 want fx fy fw row final wrong="" missing
+    scenario "$name"
     fresh
     seed mytune-label "$(alarm_json mytune-label 7 0 "$EVERY_DAY" null)"
     arm mytune-label
@@ -374,11 +386,11 @@ t16_probe_softkeys() {
                 return
             fi
         fi
-        probe_mark "t16 round $n"
-        seq=$(probe_soft_sequence)
-        dev "$seq"
+        probe_mark "$name round $n"
+        probe_soft_type
         await_settled 2 > /dev/null 2>&1
         final=$(probe_base)
+        printf '%s\t%s\n' "$n" "$final" >> "$OUT/probe_text_$name.tsv"
         if [ "$final" = "$want" ]; then
             right=$((right + 1))
         elif [ "$final" = "${want^}" ]; then
@@ -396,3 +408,7 @@ t16_probe_softkeys() {
         fail "$right of $rounds right, $skipped rounds not run, expected [$want]; wrong:$wrong; nothing of the keyboard switched off; first letter capital in $capital"
     fi
 }
+
+t16_probe_softkeys() { probe_soft_body t16_probe_softkeys; }
+# The same with a device call between two touches, to tell a race of the keyboard with the app from a plain fault.
+t17_probe_softkeys_slow() { PROBE_SLOW=1 probe_soft_body t17_probe_softkeys_slow; }
