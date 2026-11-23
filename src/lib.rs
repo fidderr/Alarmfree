@@ -36,12 +36,11 @@ pub mod ui;
 fn android_main(app: slint::android::AndroidApp) {
     // mobile-sentinel's `foregrounding::on_back` handles Back, so Slint registers no
     // `OnBackInvokedCallback` of its own.
-    let options = slint::android::InitOptions::new()
-        .with_back_invoked_callback(slint::android::BackInvokedCallback::Disabled);
+    let builder = slint::android::BackendBuilder::new(app).with_back_callback_priority(None);
     // The debug channel needs to know whether the UI can run (`debug_hooks`), and the devtest harness
     // checks that a real touch reached the app (`input_seen` in `ui:ready`).
     #[cfg(debug_assertions)]
-    let options = options.with_event_listener(|event| {
+    let builder = builder.with_event_listener(|event| {
         use slint::android::android_activity::{MainEvent, PollEvent};
         let PollEvent::Main(event) = event else {
             return;
@@ -56,7 +55,7 @@ fn android_main(app: slint::android::AndroidApp) {
             _ => {}
         }
     });
-    slint::android::init_with_options(app, options).expect("start the UI backend");
+    builder.init().expect("start the UI backend");
     if let Err(e) = ui::run() {
         log::error!("[AlarmFree] the UI stopped: {e}");
     }
