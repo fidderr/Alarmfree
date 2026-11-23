@@ -330,7 +330,8 @@ pub fn run(ui: &MainWindow, command: &str) -> Option<String> {
             },
             None => "ERR set: <n>:<text>".to_owned(),
         },
-        // `settext:<n>:<text>`: the same through the keys.
+        // `settext:<n>:<text>`: the same through the keys. The answer is `OK <x> <y>`, the place of the field in device
+        // pixels, for `heldat`.
         "settext" => match arg.split_once(':') {
             Some((n, value)) => match n
                 .parse::<usize>()
@@ -339,12 +340,30 @@ pub fn run(ui: &MainWindow, command: &str) -> Option<String> {
             {
                 Some((_, seen)) => {
                     type_into(ui, seen.x, seen.y, value);
-                    "OK".to_owned()
+                    format!("OK {} {}", seen.x.round() as i32, seen.y.round() as i32)
                 }
                 None => "none".to_owned(),
             },
             None => "ERR settext: <n>:<text>".to_owned(),
         },
+        // `heldat:<x>:<y>`: what the field that was typed into holds now: the field that has the focus, or else the one
+        // at that place (the app builds a field again for a new text and the focus is gone for a moment, and the keyboard
+        // moves the sheet, so the number of the field says nothing). `TEXT:<text>`, or `GONE` when neither is there (the
+        // last key of a challenge's text takes its field away).
+        "heldat" => {
+            let held = caret(ui).map(|c| c.text).or_else(|| {
+                let (x, y) = arg.split_once(':')?;
+                let (x, y) = (x.parse::<f32>().ok()?, y.parse::<f32>().ok()?);
+                inputs(ui)
+                    .into_iter()
+                    .find(|(_, s)| (s.x - x).abs() < 3.0 && (s.y - y).abs() < 3.0)
+                    .map(|(_, s)| s.text)
+            });
+            match held {
+                Some(text) => format!("TEXT:{text}"),
+                None => "GONE".to_owned(),
+            }
+        }
         // What sticks out of the window at the sides, has no room, or is a chip cut short: the stops of a visual check.
         "overflow" => {
             let w = ui.window().size().width as f32;

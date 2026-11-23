@@ -837,20 +837,28 @@ click_text() { tap "$@"; }
 set_field() { type_field "$@"; }
 # The same through the keys, which runs the field's own handler for what is typed.
 type_field() { # n text
-    local said try=0
+    local said held place
     # The keyboard moves the sheet: tap a field only once the layout stands still, or the tap
     # lands where the field was (the second text went into the first field).
     await_settled 6 || return 1
-    while [ "$try" -lt 3 ]; do
-        said=$(ui "settext:$1:$2")
-        [ "$said" = OK ] || { echo "no field $1 (the app said [$said]; fields: $(ui inputs | cut -c1-500); $(ui ready | cut -c1-300))" >&2; return 1; }
-        await_settled 3
-        # What the field says now, from the element channel: not what was sent.
-        [ "$(field_value "$1")" = "$2" ] && return 0
-        try=$((try + 1))
-        note "field $1 holds [$(field_value "$1")], not [$2]: typed again"
-    done
-    echo "field $1 does not take [$2]: it holds [$(field_value "$1")]" >&2
+    # One typing. The app tells where the field was; the read-back asks for the field that has the focus, or else the
+    # one at that place, and not for a number in the list of fields: the keyboard pushes the sheet up and the
+    # number moves (GONE: the last key of a challenge's text takes the field away, the scenario checks the result).
+    said=$(ui "settext:$1:$2")
+    case "$said" in
+        "OK "*) ;;
+        *)
+            echo "no field $1 (the app said [$said]; fields: $(ui inputs | cut -c1-500))" >&2
+            return 1
+            ;;
+    esac
+    await_settled 3
+    place=${said#OK }
+    held=$(ui "heldat:${place// /:}")
+    case "$held" in
+        "TEXT:$2" | GONE) return 0 ;;
+    esac
+    echo "field $1 does not take [$2]: it holds [$held]; fields: $(ui inputs | cut -c1-500)" >&2
     return 1
 }
 fields() { ui inputs; }
