@@ -1737,7 +1737,7 @@ s44() {
     # The log since this scenario began holds the app's start. A native method the SDK registers with a wrong
     # signature is a warning there at every launch (the accelerometer one was, until SDK 0.7.1).
     local badjni
-    badjni=$(adb_ logcat -d 2> /dev/null | tr -d '' | grep -m1 'Failed to register native method com.mobilesentinel')
+    badjni=$(adb_ logcat -d -b all 2> /dev/null | tr -d '' | grep -m1 'Failed to register native method com.mobilesentinel')
     adb_ logcat -c
     tap "Turn off" 0 0.5
     wait_for 5 run_up
@@ -1750,7 +1750,7 @@ s44() {
     await_state a scheduled 5
     starts=$(adb_ logcat -d 2> /dev/null | grep -c 'Accelerometer started')
     # Android 15 and 16 say it when the sensor is first used, which is after the first look.
-    [ -n "$badjni" ] || badjni=$(adb_ logcat -d 2> /dev/null | tr -d '' | grep -m1 'Failed to register native method com.mobilesentinel')
+    [ -n "$badjni" ] || badjni=$(adb_ logcat -d -b all 2> /dev/null | tr -d '' | grep -m1 'Failed to register native method com.mobilesentinel')
     if [ -n "$badjni" ]; then
         fail "the log of the app's start holds: ${badjni#*: }"
     elif [ "$(state a)" = scheduled ] && [ "$(outcomes solved)" = 1 ] && [ "$starts" -ge 2 ] && ! sound_on; then
