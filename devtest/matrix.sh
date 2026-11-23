@@ -3233,8 +3233,11 @@ s61() {
     [ "$(sn pal_accent)" = "#c06020" ] || problems="$problems; the code gives $(sn pal_accent)"
     done_sheet_theme() {
         hide_keyboard
-        tap Done && await_ui 8 'theme_sheet=false' ||
+        tap Done && await_ui 8 'theme_sheet=false' || {
             problems="$problems; the theme sheet is still up after Done: $(ui ready | grep -oE 'theme_sheet=[a-z]+')"
+            note "after Done: $(ui texts | grep -oE '\{[^{}]*"t":"Done"[^{}]*\}' | tr '\n' ' ') $(ui ready)"
+            screenshot s61_done_still_up
+        }
     }
     done_sheet_theme
     # A theme of one's own, from what is on screen.
