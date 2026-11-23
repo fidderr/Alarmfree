@@ -35,8 +35,9 @@ now_ms() {
 sys_focus() { dev "dumpsys window displays 2> /dev/null | grep -m1 mCurrentFocus" | sed -E 's/.*mCurrentFocus=//; s/^Window\{[0-9a-f]+ u0 //; s/\}$//'; }
 
 # One line that says what the device shows, for the message of a wait that ran out.
+sys_top() { dev "dumpsys activity activities 2> /dev/null | grep -E 'topResumedActivity|ResumedActivity:' | head -1 | sed -E 's/.* u0 ([^ ]+) .*/\\1/'" | tr -d '\n'; }
 sys_show() {
-    echo "focus=$(sys_focus | tr -d '\n') top=$(top_activity | tr -d '\n') keyguard=$(kg_state) user=$(user_unlocked && echo unlocked || echo locked) screen=$(wakefulness)"
+    echo "focus=$(sys_focus | tr -d '\n') top=$(sys_top) keyguard=$(kg_state) user=$(user_unlocked && echo unlocked || echo locked) screen=$(wakefulness)"
 }
 
 # A dialog "<something> isn't responding" in front. Of Android itself (System UI after a boot on Android 15, a Settings
@@ -482,6 +483,20 @@ picker_keys_select() { # name
     done
     return 1
 }
+# What picker_pick did and saw, one line per step (picker_trace.txt in the results).
+picker_trace() { printf '%s %s %s
+' "$(date +%T.%N | cut -c1-12)" "${CURRENT:-?}" "$*" >> "$OUT/picker_trace.txt"; }
+# The state for half a second after a touch, for the record: who has the keys, and a picture.
+picker_watch() { # label rounds
+    local i=0
+    while [ "$i" -lt "$2" ]; do
+        picker_trace "$1 +$i: $(sys_focus | tr -d '
+')"
+        i=$((i + 1))
+        sleep 0.5
+    done
+    screen_may_be_taken && adb_ exec-out screencap -p > "$OUT/picker_$1.png" 2> /dev/null
+}
 # A screen of another app opened from the picker's task (the preview of an audio file or a photo): it is not the app and not
 # the picker.
 picker_preview_up() { sys_focus | grep -v -e documentsui -e "$PKG" -e '^$' -e '^null' | grep -q .; }
@@ -495,8 +510,34 @@ picker_back_in_app() {
     start_app
     sys_wait "$SYS_DEADLINE" "the app in front after it was started again" focus_in_app
 }
+# One touch on the file. A preview that comes up is closed with Back (once), which brings the picker again.
+picker_touch_file() { # name xy
+    picker_trace "touch on $1 at $2"
+    # shellcheck disable=SC2086
+    dev input tap $2 > /dev/null
+    picker_watch after_touch 8
+    sys_wait 2 "the picker closing after the touch on $1" focus_in_app && return 0
+    if picker_preview_up; then
+        picker_trace "a preview is up: $(sys_focus | tr -d '
+'): Back once"
+        dev input keyevent KEYCODE_BACK > /dev/null
+        sys_wait "$SYS_DEADLINE" "the picker coming back after Back from the preview" picker_up || return 1
+        picker_watch after_back 2
+    fi
+    return 1
+}
+picker_keys_file() { # name
+    picker_trace "keys for $1"
+    picker_keys_select "$1"
+    picker_watch after_keys 8
+    sys_wait 15 "the picker closing after the keys on $1" focus_in_app
+}
+# Choose the file. The order of the ways depends on the picker: Google's (Android 12 to 16) only previews a file on a touch, so
+# the keys come first, then a touch (which focuses the file, and on Android 13 is what makes the keys work), then the keys again;
+# the picker of Android 10 and 11 takes the touch, then the keys. Each way is tried once, and only after the one before left the
+# file in the list.
 picker_pick() { # name
-    local name=$1 end xy tapped=0 keyed=0 sig
+    local name=$1 end xy step=0 sig
     sys_wait "$SYS_DEADLINE" "the file picker being up" picker_up || return 1
     picker_trace "== pick $name: $(sys_show)"
     end=$(($(now_ms) + ${PICKER_DEADLINE:-90} * 1000))
@@ -504,38 +545,27 @@ picker_pick() { # name
         sys_anr_check || return 1
         picker_up || { picker_back_in_app; return; }
         if [ "$(now_ms)" -ge "$end" ]; then
-            SYS_WHY="the picker did not deliver $name within ${PICKER_DEADLINE:-90}s (tapped=$tapped keys=$keyed; shows: $(picker_summary); $(sys_show))"
+            SYS_WHY="the picker did not deliver $name within ${PICKER_DEADLINE:-90}s (step $step; shows: $(picker_summary); $(sys_show))"
             return 1
         fi
         sys_dump || { sleep 0.5; continue; }
         sig=$(sys_nodes list | cksum | cut -d' ' -f1)
         if xy=$(sys_nodes find "label~$name" pkg~documentsui); then
-            if [ "$tapped" = 0 ] && ! picker_is_google; then
-                tapped=1
-                picker_trace "touch on $name at $xy"
-                # shellcheck disable=SC2086
-                dev input tap $xy > /dev/null
-                picker_watch after_touch 8
-                sys_wait 2 "the picker closing after the touch on $name" focus_in_app && return 0
-                # A screen of another app took the keys (the preview of the file, Android 12 and later: the touch opened
-                # it and did not choose): Back once brings the picker again, and the file is chosen with the keys.
-                if picker_preview_up; then
-                    picker_trace "a preview is up: $(sys_focus | tr -d '
-'): Back once"
-                    dev input keyevent KEYCODE_BACK > /dev/null
-                    sys_wait "$SYS_DEADLINE" "the picker coming back after Back from the preview" picker_up || return 1
-                    picker_watch after_back 2
-                fi
-            elif [ "$keyed" = 0 ]; then
-                keyed=1
-                picker_trace "keys for $name"
-                picker_keys_select "$name"
-                picker_watch after_keys 8
-                sys_wait 15 "the picker closing after the keys on $name" focus_in_app && return 0
+            local way
+            if picker_is_google; then
+                case $step in 0) way=keys ;; 1) way=touch ;; 2) way=keys ;; *) way=none ;; esac
             else
-                SYS_WHY="$name is listed but neither the touch nor the keys chose it (shows: $(picker_summary); $(sys_show))"
-                return 1
+                case $step in 0) way=touch ;; 1) way=keys ;; *) way=none ;; esac
             fi
+            step=$((step + 1))
+            case $way in
+                touch) picker_touch_file "$name" "$xy" && return 0 ;;
+                keys) picker_keys_file "$name" && return 0 ;;
+                *)
+                    SYS_WHY="$name is listed but neither the touch nor the keys chose it (shows: $(picker_summary); $(sys_show))"
+                    return 1
+                    ;;
+            esac
         elif xy=$(sys_nodes find label=Downloads pkg~documentsui); then
             picker_trace "touch on Downloads at $xy"
             # shellcheck disable=SC2086

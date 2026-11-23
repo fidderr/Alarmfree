@@ -1531,7 +1531,8 @@ s40() {
     on_home 10
     press go 2
     await_ui 30 "screen=3" || { fail "no settings"; return; }
-    tap_in "Add widget" 0 0.5
+    has_there "Add widget" || { sheet_scroll_up; has_there "Add widget" || sheet_scroll; }
+    tap_scrolling "Add widget"
     # The launcher asks the user first.
     local problems="" minute
     launcher_add_widget || { fail "the widget was not added: $SYS_WHY; the launcher shows: $(launcher_texts | tr '\n' '|'); appwidget says: $(dev dumpsys appwidget | grep -m4 'provider=' | tr -s ' ' | tr '\n' ';')"; return; }
@@ -1805,7 +1806,8 @@ s48() {
             esac
             return 1
         }
-        [ -n "$(as_app "ls files/sounds/custom")" ] || problems="$problems; not copied"
+        sound_copied() { [ -n "$(as_app "ls files/sounds/custom")" ]; }
+        wait_for 30 sound_copied || problems="$problems; not copied"
         if ! wait_for 10 own_sound_there; then
             # The app can come back from the picker as a new start (Android 13: the launcher had the keys): the sound is then in
             # the list of a sheet that is opened again.
@@ -2358,7 +2360,7 @@ s54() {
         sys_wake || problems="$problems; $SYS_WHY"
         challenge_is_up() { focus_in_app && is_there SCAN; }
         sys_wait "$SYS_DEADLINE" "the challenge after the power button" challenge_is_up || problems="$problems; no challenge after the power button: $SYS_WHY"
-        press scan
+        tap SCAN
         camera_has_keys() { focused_window | grep -q SentinelScannerActivity; }
         if sys_wait "$SYS_DEADLINE" "the camera screen having the keys" camera_has_keys; then
             sys_holds 2 "the camera keeping the keys" camera_has_keys || problems="$problems; the camera lost the keys: $SYS_WHY"
