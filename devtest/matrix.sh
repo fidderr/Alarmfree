@@ -2081,8 +2081,8 @@ s50() {
     tap "+5" 0 0.2
     tap Weekend 0 0.3
     open_row Label
-    type_field 0 Morning
-    type_field 1 'Take pills'
+    type_field 0 Morning || problems="$problems; label field: $(field_value 0)"
+    type_field 1 'Take pills' || problems="$problems; note field: $(field_value 1)"
     # On a slow emulator the keyboard comes up late and stays over the lower half of everything after this
     # (the whole editor then failed at once, 156 s, with the keyboard in the picture).
     on_emulator && hide_keyboard
@@ -3751,6 +3751,8 @@ s62p() {
 . "$(dirname "$0")/a11y_audit.sh"
 # The scenarios that need a device and test the runner itself (baseline, watchdog, INFRA): by name only.
 . "$(dirname "$0")/selftest.sh"
+# The probe of typed text in the text fields: by name only (probe_text.sh).
+. "$(dirname "$0")/probe_text.sh"
 
 ALL="s01 s03 s04 s05 s06 s07 s10 s11 s13 s13b s13d s14 s15 s16 s16b s17 s19 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s34 s36 s37 s38 s39 s40 s42 s43 s44 s45 s46 s47 s48 s49 s50 s51 s52 s53 s55 s56 s57 s58 s59 s60 s61 s62 s63 s65 s66 s67 s68 s68b s69a s69b s69c s69d big_screens s54"
 ON_A_PHONE="s01 s03 s04 s05 s06 s07 s10 s15 s16 s16b s17 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s36 s37 s38 s39 s42 s43 s45 s46 s47 s49 s50 s51 s52 s53 s55 s57 s58 s59 s61 s62"

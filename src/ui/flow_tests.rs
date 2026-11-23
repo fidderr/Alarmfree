@@ -488,10 +488,19 @@ fn s52_alarm_menu() {
 }
 
 impl Flow {
-    fn set_field(&self, n: usize, text: &str) {
+    /// One typing, then what that field holds (`heldat`), as `type_field` of devtest/lib.sh does it.
+    fn type_into(&self, n: usize, text: &str) -> String {
         let said = self.cmd(&format!("settext:{n}:{text}"));
-        assert_eq!(said, "OK", "field {n}");
+        let place = said
+            .strip_prefix("OK ")
+            .unwrap_or_else(|| panic!("field {n}: {said}"))
+            .replace(' ', ":");
         self.settle();
+        self.cmd(&format!("heldat:{place}"))
+    }
+    fn set_field(&self, n: usize, text: &str) {
+        let held = self.type_into(n, text);
+        assert_eq!(held, format!("TEXT:{text}"), "field {n}");
     }
     fn done(&self) {
         assert!(self.tap_last("Done"), "no Done: {:?}", self.texts());
@@ -876,7 +885,13 @@ fn s67_reminder_sheet() {
     f.expect(!f.has_part("Your text"), "text shows with the reminder off");
     f.expect(f.tap_last("15 min"), "no 15 min");
     // A text too long for a reminder is cut.
-    f.set_field(0, &"x".repeat(130));
+    // The field holds the cut text, not what was sent.
+    let held = f.type_into(0, &"x".repeat(130));
+    f.expect(
+        held == format!("TEXT:{}", "x".repeat(120)),
+        format!("the field holds [{held}], not the cut text"),
+    );
+    f.settle();
     f.expect(
         draft_reminder(&f).text.chars().count() == 120,
         format!(
