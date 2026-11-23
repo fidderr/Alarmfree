@@ -3527,6 +3527,8 @@ s65() {
         done
     }
     old_font=$(dev settings get system font_scale)
+    # An unset font scale reads as the word null: writing that back leaves 1.3 in place.
+    case "$old_font" in null | "") old_font=1.0 ;; esac
     dev wm size 1080x2376
     # One look on the phone (a real window changing its density); both looks and every row are
     # checked in cargo test (ui::flow_tests::s65_large_size_fits).
