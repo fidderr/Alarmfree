@@ -79,6 +79,7 @@ def measure(files):
     units = all_units()
     order = run_order(units)
     total = {u: 0.0 for u in units}
+    seen = {u: set() for u in units}  # the unit_times files a unit is in: a part has only some of the units
     for f in files:
         if os.path.basename(f) == "unit_times.txt":
             # `name seconds` per call of run_unit: the unit is the name (a size's scenarios, name@size, are big_screens).
@@ -88,6 +89,7 @@ def measure(files):
                     u = "big_screens" if "@" in w[0] else w[0]
                     if u in total:
                         total[u] += int(w[1])
+                        seen[u].add(f)
             continue
         at = 0
         for line in open(f, encoding="utf-8", errors="replace"):
@@ -104,7 +106,7 @@ def measure(files):
             total[u] += secs + PER_RESULT
     n = max(1, len(files))
     for u in order:
-        print(u, max(1, round(total[u] / n)))
+        print(u, max(1, round(total[u] / (len(seen[u]) or n))))
 
 
 def main(argv):

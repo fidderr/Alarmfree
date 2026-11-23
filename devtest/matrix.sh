@@ -974,6 +974,13 @@ s26() {
             # The cold start of the window starves the sound of its CPU on an emulator with 2 cores and
             # no GPU (seen: 3 to 7 s from the broadcast to the sound, 0.1 s on a phone and on a quiet
             # emulator). A real fault repeats: it counts only when it does it three times running.
+            # What the guest was doing while the sound waited (the open question of real-questions #2: CPU or one slow step).
+            {
+                echo "=== s26 run $run, ask $((${S26_AGAIN:-0} + 1)): sound ${delivery}ms after delivery, ${ms}ms after its time"
+                dev "top -H -b -n 1 2> /dev/null | head -25; ps -A 2> /dev/null | grep -E 'dex2oat|odrefresh|compile' | head; dumpsys cpuinfo 2> /dev/null | head -12; dumpsys jobscheduler 2> /dev/null | grep -iE 'dexopt|idle' | head -6" | tr -d ''
+                echo "--- the app's timing marks"
+                adb_ logcat -d -b all 2> /dev/null | tr -d '' | grep -E 'MobileSentinel.(FiringAudio|Ring|Timing)|JOB_HEADS_UP|timing' | tail -30 | cut -c1-200
+            } >> "$OUT/s26_slow.txt" 2> /dev/null
             retry_used "s26: the sound came ${delivery}ms after delivery"
             RETRY_CARRY=$RETRY_NOTE
             dev dumpsys deviceidle unforce > /dev/null
