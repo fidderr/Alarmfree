@@ -193,8 +193,8 @@ s07() {
 # resumed must have the next watchdog armed at once: a second end of the process in the first moments after
 # the resume then finds one. Without it only Android's own restart of the service is left, whose delay grows
 # with every kill (1 s, then 4 s, 16 s, 64 s). A script from the host cannot hit that moment, so the debug build
-# has a hook: with the file sentinel/debug_die_after_watchdog_resume its alarm process ends itself once, 0.3 s
-# after the watchdog resumed the ring. Kills from outside run Android's delay up until the watchdog is the first
+# has a hook: with the file sentinel/debug_die_after_watchdog_resume its alarm process ends itself once, right
+# after it asked for the resume, before its service exists. Kills from outside run Android's delay up until the watchdog is the first
 # to come (it fires 6 s after the last tick), the hook ends that resumed ring, and the ring has to be back within
 # the watchdog's own time. If the watchdog never came, there was no such moment: SKIP, never a PASS by luck.
 s07d() {
@@ -223,7 +223,7 @@ s07d() {
         skip "the watchdog did not resume the ring in $kills kills, so there was no moment to hit (sound=$(sound_on && echo on || echo OFF), sentinel=$(sentinel_pid))"
         return
     fi
-    # The hook ends the process 0.3 s later: the sound goes off, and only then does a sound mean the ring is back.
+    # The hook ends the process at once: the sound goes off, and only then does a sound mean the ring is back.
     if ! wait_for 5 sound_off; then
         fail "the hook took its file after $kills kills, but the ring process did not end (sound still on)"
         return
@@ -1749,6 +1749,8 @@ s44() {
     done
     await_state a scheduled 5
     starts=$(adb_ logcat -d 2> /dev/null | grep -c 'Accelerometer started')
+    # Android 15 and 16 say it when the sensor is first used, which is after the first look.
+    [ -n "$badjni" ] || badjni=$(adb_ logcat -d 2> /dev/null | tr -d '' | grep -m1 'Failed to register native method com.mobilesentinel')
     if [ -n "$badjni" ]; then
         fail "the log of the app's start holds: ${badjni#*: }"
     elif [ "$(state a)" = scheduled ] && [ "$(outcomes solved)" = 1 ] && [ "$starts" -ge 2 ] && ! sound_on; then
