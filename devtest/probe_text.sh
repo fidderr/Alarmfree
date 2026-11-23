@@ -80,6 +80,13 @@ else:
 ' "$1" "$2" "$3"
 }
 
+# Has the focused field at least $1 characters?
+probe_grown() {
+    local t
+    IFS='|' read -r t _ <<< "$(probe_read)"
+    [ "${#t}" -ge "$1" ]
+}
+
 # One line into the device log, to line a round up with what the input method says.
 probe_mark() { dev log -t PROBE "$1" > /dev/null 2>&1; }
 
@@ -93,7 +100,7 @@ probe_pause() { # milliseconds
 # probe_round <tsv> <n> <mode> <pause>: the field is open, nothing typed yet. Sets PROBE_VERDICT and PROBE_CURSOR
 # (end, wrong, or unknown: where the touch put the cursor).
 probe_round() {
-    local tsv=$1 n=$2 mode=$3 p=$4 row fx fy fw base tx t0 c0="-" cur c anchor pre seq="" k final fc line
+    local typed tsv=$1 n=$2 mode=$3 p=$4 row fx fy fw base tx t0 c0="-" cur c anchor pre seq="" k final fc line
     PROBE_VERDICT="NOFIELD" PROBE_CURSOR=unknown
     row=$(probe_field)
     case "$row" in [0-9]*) ;; *)
@@ -117,8 +124,12 @@ probe_round() {
     esac
     case "$mode" in
         kb | slow)
+            typed=0
             for k in $PROBE_KEYS; do
                 probe_key "$k"
+                typed=$((typed + 1))
+                # The key arrives a moment after the call returns: read the cursor when the text has grown, not before.
+                wait_for 3 probe_grown $((${#base} + typed))
                 IFS='|' read -r cur c anchor pre <<< "$(probe_read)"
                 seq="${seq}${cur}|${c}|${anchor};"
                 # The cursor after the first key says where the touch put it.
@@ -353,55 +364,60 @@ probe_soft_type() {
     dev "$seq"
 }
 
-probe_soft_body() { # scenario name
-    local name=$1 rounds=${ROUNDS:-20} n right=0 capital=0 skipped=0 want fx fy fw row final wrong="" missing
-    scenario "$name"
-    fresh
-    seed mytune-label "$(alarm_json mytune-label 7 0 "$EVERY_DAY" null)"
-    arm mytune-label
-    on_card 10
-    press open mytune-label 0.8
-    on_editor || { fail "no editor"; return; }
+# The device log from this round's begin mark to now, for a wrong round: what the keyboard and the app said, with the
+# trace of the vendored backend when it is on. `logcat -d` reads the whole buffer, which is why it is taken at once.
+probe_slice() { # scenario name, round
+    adb_ logcat -d -b all -v time 2> /dev/null | awk -v m="$1 round $2 begin" 'index($0, m) { p = 1 } p' | head -n 4000 > "$OUT/probe_text_$1.wrong_$2.logcat"
+}
+
+# Verdict of a typed text: right, right with a capital first letter (CAP), or wrong. The control types into a field with
+# no auto-capitalisation, so it compares without regard to case.
+probe_soft_judge() { # want final
+    if [ "$2" = "$1" ]; then
+        echo OK
+    elif [ "$2" = "${1^}" ]; then
+        echo CAP
+    else
+        echo WRONG
+    fi
+}
+
+# probe_soft_body <scenario name> <open command> <close command> <field read command>: the rounds of t16, t17 and t18. The
+# open command leaves the keyboard up over a focused empty field; the read command prints the text of that field.
+probe_soft_rounds() {
+    local name=$1 open=$2 close=$3 read=$4 rounds=${ROUNDS:-40} n right=0 capital=0 skipped=0 want final wrong="" missing
+    adb_ logcat -G 16M > /dev/null 2>&1
     want="${PROBE_WORD:0:$((${#PROBE_WORD} - 2))}$PROBE_TAIL"
-    PROBE_BASE=""
     for ((n = 1; n <= rounds; n++)); do
-        probe_open_label || { skipped=$((skipped + 1)); continue; }
-        row=$(probe_field)
-        case "$row" in [0-9]*) ;; *) skipped=$((skipped + 1)); probe_close_label; continue ;; esac
-        read -r fx fy fw <<< "$row"
-        dev input tap "$fx" "$fy" # lint-ok: a real touch on the field brings the keyboard up
-        if ! await_ui 8 'keyboard=up'; then
-            skipped=$((skipped + 1))
-            probe_close_label
-            continue
-        fi
-        await_settled 2 > /dev/null 2>&1
-        if [ "$n" = 1 ] || [ "${#PROBE_KEY[@]}" -eq 0 ]; then
+        $open || { skipped=$((skipped + 1)); continue; }
+        if [ "${#PROBE_KEY[@]}" -eq 0 ]; then
             # The keys sit in the same places in every round: read once.
             if ! wait_for 8 probe_keys_read; then
                 missing=$(probe_keys_missing)
                 skip "no keys found in the keyboard's window (not found: ${missing:-everything}); dump in probe_text_t16.keys.xml"
-                probe_close_label
-                PROBE_BASE=mytune-label
+                $close
                 return
             fi
         fi
-        probe_mark "$name round $n"
+        probe_mark "$name round $n begin"
         probe_soft_type
         await_settled 2 > /dev/null 2>&1
-        final=$(probe_base)
+        final=$($read)
+        probe_mark "$name round $n end [$final]"
         printf '%s\t%s\n' "$n" "$final" >> "$OUT/probe_text_$name.tsv"
-        if [ "$final" = "$want" ]; then
-            right=$((right + 1))
-        elif [ "$final" = "${want^}" ]; then
-            right=$((right + 1))
-            capital=$((capital + 1))
-        else
-            wrong="$wrong [$final]"
-        fi
-        probe_close_label
+        case "$(probe_soft_judge "$want" "$final")" in
+            OK) right=$((right + 1)) ;;
+            CAP)
+                right=$((right + 1))
+                capital=$((capital + 1))
+                ;;
+            *)
+                wrong="$wrong [$final]"
+                probe_slice "$name" "$n"
+                ;;
+        esac
+        $close
     done
-    PROBE_BASE=mytune-label
     if [ "$right" -eq "$rounds" ]; then
         pass "$right of $rounds right, typed on the keys of the keyboard, expected [$want]; nothing of the keyboard switched off; first letter capital in $capital"
     else
@@ -409,6 +425,90 @@ probe_soft_body() { # scenario name
     fi
 }
 
+probe_soft_body() { # scenario name
+    scenario "$1"
+    fresh
+    seed mytune-label "$(alarm_json mytune-label 7 0 "$EVERY_DAY" null)"
+    arm mytune-label
+    on_card 10
+    press open mytune-label 0.8
+    on_editor || { fail "no editor"; return; }
+    PROBE_BASE=""
+    probe_soft_rounds "$1" probe_soft_open probe_close_label probe_base
+    PROBE_BASE=mytune-label
+}
+
+# The label field of the app, empty, with the keyboard up after one real touch.
+probe_soft_open() {
+    local row fx fy fw
+    probe_open_label || return 1
+    row=$(probe_field)
+    case "$row" in [0-9]*) ;; *)
+        probe_close_label
+        return 1
+        ;;
+    esac
+    read -r fx fy fw <<< "$row"
+    dev input tap "$fx" "$fy" # lint-ok: a real touch on the field brings the keyboard up
+    if ! await_ui 8 'keyboard=up'; then
+        probe_close_label
+        return 1
+    fi
+    await_settled 2 > /dev/null 2>&1
+}
+
 t16_probe_softkeys() { probe_soft_body t16_probe_softkeys; }
 # The same with a device call between two touches, to tell a race of the keyboard with the app from a plain fault.
 t17_probe_softkeys_slow() { PROBE_SLOW=1 probe_soft_body t17_probe_softkeys_slow; }
+
+# t18_probe_softkeys_control: the same touches on a text field of Android itself (the search of Settings, a plain
+# EditText of another app), to tell what the keyboard does on its own from what the app does to it.
+PROBE_CONTROL_INTENTS=("-a android.settings.APP_SEARCH_SETTINGS" "-a android.intent.action.INSERT -t vnd.android.cursor.dir/contact")
+
+# The text of the first EditText of the screen, from one dump.
+probe_control_read() {
+    dev uiautomator dump /data/local/tmp/af_ctl.xml > /dev/null 2>&1 # lint-ok: the text of a field of another app can only be read this way
+    dev cat /data/local/tmp/af_ctl.xml 2> /dev/null | python -I -c '
+import sys
+import xml.etree.ElementTree as ET
+try:
+    root = ET.parse(sys.stdin).getroot()
+except ET.ParseError:
+    sys.exit(0)
+for n in root.iter():
+    if n.get("class") == "android.widget.EditText":
+        print(n.get("text", ""))
+        break
+' 2> /dev/null
+}
+
+# Starts the field of the control fresh; the first call looks for an intent that brings a keyboard up and remembers it.
+probe_control_open() {
+    local intent
+    for intent in "${PROBE_CONTROL_INTENTS[@]}"; do
+        [ -z "${PROBE_CONTROL_INTENT:-}" ] || [ "$intent" = "$PROBE_CONTROL_INTENT" ] || continue
+        # shellcheck disable=SC2086
+        dev am start -S $intent > /dev/null 2>&1
+        if wait_for 10 keyboard_up; then
+            PROBE_CONTROL_INTENT=$intent
+            # The dump takes the time the app's own wait for a still layout takes in t16.
+            probe_control_read > /dev/null
+            return 0
+        fi
+    done
+    return 1
+}
+probe_control_close() { dev input keyevent KEYCODE_BACK > /dev/null 2>&1; } # lint-ok: leaves the field of the other app
+
+t18_probe_softkeys_control() {
+    scenario t18_probe_softkeys_control
+    fresh
+    PROBE_CONTROL_INTENT=""
+    if ! probe_control_open; then
+        skip "no field of Android's own found: no keyboard came up for ${PROBE_CONTROL_INTENTS[*]}"
+        return
+    fi
+    probe_control_close
+    probe_soft_rounds t18_probe_softkeys_control probe_control_open probe_control_close probe_control_read
+    dev am force-stop com.google.android.settings.intelligence > /dev/null 2>&1
+}
