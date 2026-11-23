@@ -3611,8 +3611,10 @@ s63c() {
         problems="$problems; did not ring: no sound within 40s past T"
     elif ! wait_for 6 top_is_main; then
         problems="$problems; sound at +${SOUND_AT}s, but the app's screen did not come up in 6s (on top: $(top_activity), state=$(state a))"
-    elif ! await_state a firing 3 || ! on_screen "Turn off" 3; then
-        problems="$problems; the screen came up, but the ring was not taken up: state=$(state a), on top: $(top_activity)"
+    elif ! await_state a firing 3; then
+        problems="$problems; the screen came up, but the app's state did not become firing: state=$(state a), on top: $(top_activity)"
+    elif ! on_screen "Turn off" 15; then
+        problems="$problems; the state is firing, but the ring screen did not draw 'Turn off' in 15s: on top: $(top_activity)"
     fi
     local said
     said=$(as_app "grep -c 'not taken up' files/sentinel/diag.log 2> /dev/null")
