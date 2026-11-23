@@ -2099,8 +2099,8 @@ s50() {
     tap "+5" 0 0.2
     tap Weekend 0 0.3
     open_row Label
-    type_field 0 Morning
-    type_field 1 'Take pills'
+    type_field 0 Morning || problems="$problems; label field: $(field_value 0)"
+    type_field 1 'Take pills' || problems="$problems; note field: $(field_value 1)"
     # On a slow emulator the keyboard comes up late and stays over the lower half of everything after this
     # (the whole editor then failed at once, 156 s, with the keyboard in the picture).
     on_emulator && hide_keyboard
