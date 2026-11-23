@@ -3239,7 +3239,8 @@ s61() {
             note "after Done: $(ui texts | grep -oE '\{[^{}]*"t":"Done"[^{}]*\}' | tr '\n' ' ') $(ui ready)"
             local trace
             trace=$(ui trace)
-            note "trace (ms since start, newest last): ${trace: -4500}"
+            [ "${#trace}" -le 4500 ] || trace=${trace: -4500}
+            note "trace (ms since start, newest last): $trace"
             screenshot s61_done_still_up
         }
     }
