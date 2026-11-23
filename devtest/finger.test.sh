@@ -117,8 +117,8 @@ verdict "a touch that was not counted, with the screen as before, is sent again 
     "$([ "$(taps lost1)" = 2 ] && has lost1 'rc=0' && grep -q 'touch lost by Android' "$tmp/lost1/out/results.txt" && echo 1)"
 
 run_case lost3 finger_ok AWAIT_FILE="$tmp/f_lost_always"
-verdict "a touch that never arrives is sent 4 times in all, then fails with a line that says so" \
-    "$([ "$(taps lost3)" = 4 ] && has lost3 'rc=1' && grep -q 'no input reached the app in 4 touches' "$tmp/lost3/stdout" && echo 1)"
+verdict "a touch that never arrives is sent 6 times in all, then fails with a line that says so" \
+    "$([ "$(taps lost3)" = 6 ] && has lost3 'rc=1' && grep -q 'no input reached the app in 6 touches' "$tmp/lost3/stdout" && echo 1)"
 
 run_case changed finger_ok AWAIT_FILE="$tmp/f_lost_always" READY_FILE="$tmp/f_ready_changed"
 verdict "no count but the screen changed: not touched again" \
@@ -129,7 +129,7 @@ frames=1 screen=0 toast=false input_seen=7
 frames=2 screen=0 toast=true input_seen=7
 ' > "$tmp/f_ready_toast"
 run_case toast finger_ok AWAIT_FILE="$tmp/f_lost_always" READY_FILE="$tmp/f_ready_toast"
-verdict "a toast that comes or goes is not a change of the screen: the touch is still sent again"     "$([ "$(taps toast)" = 4 ] && has toast 'rc=1' && echo 1)"
+verdict "a toast that comes or goes is not a change of the screen: the touch is still sent again"     "$([ "$(taps toast)" = 6 ] && has toast 'rc=1' && echo 1)"
 
 run_case ack finger_ok AWAIT_FILE="$tmp/f_ok" FINGER_ACK_MS=1500
 verdict "FINGER_ACK_MS sets how long the count is waited for"     "$(has ack 'await:1500:input_seen>7' && echo 1)"
@@ -213,7 +213,7 @@ verdict "a touch counted only after the wait ran out is not sent again, and it i
 printf 'frames=1 screen=0 input_seen=7
 ' > "$tmp/f_ready_same"
 run_case notlate finger_ok AWAIT_FILE="$tmp/f_lost_always" READY_FILE="$tmp/f_ready_same"
-verdict "a count that stays where it was does not stop the resends"     "$([ "$(taps notlate)" = 4 ] && has notlate 'rc=1' && echo 1)"
+verdict "a count that stays where it was does not stop the resends"     "$([ "$(taps notlate)" = 6 ] && has notlate 'rc=1' && echo 1)"
 
 # No PASS after a failed step: the results of the case say FAIL with the step in the line, and no PASS.
 no_pass() { # name, what the FAIL line has to say
@@ -224,7 +224,7 @@ verdict "a scenario that ends with PASS after a tap the app did not find ends wi
 run_case pass_tol tolerated_then_pass AWAIT_FILE="$tmp/f_ok" TAP_ANSWER=none
 verdict "a step marked TAP_MAY_FAIL fails for its caller but does not stop the PASS"     "$(grep -q '^PASS  case' "$tmp/pass_tol/out/results.txt" && ! grep -q '^FAIL' "$tmp/pass_tol/out/results.txt" && echo 1)"
 run_case pass_finger finger_then_pass AWAIT_FILE="$tmp/f_lost_always"
-verdict "a real touch that never arrived leaves no PASS"     "$(no_pass pass_finger 'touch on Hello: no input reached the app in 4 touches' && echo 1)"
+verdict "a real touch that never arrived leaves no PASS"     "$(no_pass pass_finger 'touch on Hello: no input reached the app in 6 touches' && echo 1)"
 run_case pass_press press_then_pass AWAIT_FILE="$tmp/f_ok" PRESS_ANSWER="ERR unknown callback open"
 verdict "a press the app does not know leaves no PASS"     "$(no_pass pass_press 'press open: ERR unknown callback' && echo 1)"
 run_case pass_tab tab_then_pass AWAIT_FILE="$tmp/f_ok" AWAIT_UI_FAIL=1 SCREEN_NOW=0

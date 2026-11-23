@@ -855,7 +855,7 @@ tap_xy() { tap_through "tapxy:$1 $2" "no touch at $1 $2"; } # x y
 # has to bring up the keyboard. Acknowledged: the app counts the input Android hands it (`input_seen`, real touches and
 # keys, never the taps made inside the app). One touch, then wait for the count to rise (FINGER_ACK_MS, 8000: a
 # touch that has to land inside a short time says less). It did not rise and the screen is as it was: the touch never
-# arrived, so it is sent again (at most 3 times again, each one a NOTE line in the results). It did not rise but the
+# arrived, so it is sent again (at most 5 times again, each one a NOTE line in the results). It did not rise but the
 # screen changed, or the app is no longer in front: the touch is not sent again. Where the app cannot say (another
 # screen in front, no count), one touch as before.
 input_seen() { ui ready | sed -nE 's/.* input_seen=([0-9]+).*/\1/p'; }
@@ -903,8 +903,8 @@ finger_do() { # what it is, then the device command (input tap x y, input swipe 
             echo "NOTE  $CURRENT  $what: the app counted no input but its screen changed, not sent again" | tee -a "$RESULTS" >&2
             return 0
         fi
-        if [ "$try" -ge 4 ]; then
-            step_failed "$what: no input reached the app in 4 touches"
+        if [ "$try" -ge 6 ]; then
+            step_failed "$what: no input reached the app in 6 touches"
             return 1
         fi
         try=$((try + 1))
