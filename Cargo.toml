@@ -35,6 +35,13 @@ rusqlite = { version = "0.31", features = ["bundled"] }
 [target.'cfg(target_os = "android")'.dependencies]
 slint = { git = "https://github.com/fidderr/slint", rev = "f0890e242d8b529782239ac6af39a5d03f3fc730", default-features = false, features = ["std", "compat-1-20", "system-fonts", "backend-android-activity-06", "renderer-skia", "accessibility"] }
 
+[dependencies.i-slint-core]
+git = "https://github.com/fidderr/slint"
+rev = "f0890e242d8b529782239ac6af39a5d03f3fc730"
+optional = true
+default-features = false
+features = ["std"]
+
 [dependencies.i-slint-backend-testing]
 git = "https://github.com/fidderr/slint"
 rev = "f0890e242d8b529782239ac6af39a5d03f3fc730"
@@ -51,7 +58,7 @@ slint-build = { git = "https://github.com/fidderr/slint", rev = "f0890e242d8b529
 default = []
 # What devtest/ needs to look at the Slint elements (src/ui/debug_elements.rs). Debug builds made by
 # ./build.sh only: never in a release.
-devtest = ["dep:i-slint-backend-testing"]
+devtest = ["dep:i-slint-backend-testing", "dep:i-slint-core"]
 
 # Release builds. Size-first: the .so is the biggest thing users download. No `strip` here: the Android Gradle
 # plugin strips the shipped .so and keeps symbols for Play crash reports.
@@ -95,3 +102,4 @@ accesskit_android = { git = "https://github.com/fidderr/accesskit", rev = "764f0
 opt-level = 2
 [profile.dev.package.i-slint-backend-testing]
 opt-level = 2
+

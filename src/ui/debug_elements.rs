@@ -19,6 +19,40 @@ struct Seen {
     /// What it is to a screen reader (`Button`, `Switch`, ...), and whether it is checked or selected.
     role: String,
     on: Option<bool>,
+    /// Only for the text field that has the focus: where its cursor and selection are.
+    caret: Option<Caret>,
+}
+
+/// The cursor and the other end of the selection of the focused text field, in characters, and the
+/// middle of that field in device pixels (to tell which row of `inputs` it is).
+struct Caret {
+    text: String,
+    cursor: usize,
+    anchor: usize,
+    preedit: String,
+    x: f32,
+    y: f32,
+}
+
+fn caret(ui: &MainWindow) -> Option<Caret> {
+    use i_slint_core::items::TextInput;
+    let inner = i_slint_core::window::WindowInner::from_pub(ui.window());
+    let item = inner.focus_item.borrow().upgrade()?;
+    let input = item.downcast::<TextInput>()?;
+    let input = input.as_pin_ref();
+    let text = input.text();
+    let chars = |bytes: usize| text.get(..bytes).map_or(0, |t| t.chars().count());
+    let geometry = item.geometry();
+    let origin = item.map_to_native_window(geometry.origin);
+    let s = scale(ui);
+    Some(Caret {
+        text: text.to_string(),
+        cursor: chars(input.cursor_position(&text)),
+        anchor: chars(input.anchor_position(&text)),
+        preedit: input.preedit_text().to_string(),
+        x: (origin.x + geometry.size.width / 2.0) * s,
+        y: (origin.y + geometry.size.height / 2.0) * s,
+    })
 }
 
 fn scale(ui: &MainWindow) -> f32 {
@@ -44,6 +78,7 @@ fn seen_in_window(ui: &MainWindow, e: &ElementHandle, text: String) -> Option<Se
         on: e
             .accessible_checked()
             .or_else(|| e.accessible_item_selected()),
+        caret: None,
     };
     let inside =
         seen.x >= 0.0 && seen.y >= 0.0 && seen.x < win.width as f32 && seen.y < win.height as f32;
@@ -113,6 +148,15 @@ fn inputs(ui: &MainWindow) -> Vec<(ElementHandle, Seen)> {
             Some((e, seen))
         })
         .collect();
+    // The field with the focus carries its cursor and selection.
+    if let Some(c) = caret(ui) {
+        if let Some((_, seen)) = found
+            .iter_mut()
+            .find(|(_, s)| (s.x - c.x).abs() < 1.5 && (s.y - c.y).abs() < 1.5)
+        {
+            seen.caret = Some(c);
+        }
+    }
     found.sort_by_key(|a| (a.1.y as i32, a.1.x as i32));
     let mut known = std::collections::HashSet::new();
     found.retain(|(_, s)| known.insert((s.x as i32, s.y as i32)));
@@ -123,11 +167,18 @@ fn json(list: &[Seen]) -> String {
     let rows: Vec<serde_json::Value> = list
         .iter()
         .map(|s| {
-            serde_json::json!({
+            let mut row = serde_json::json!({
                 "t": s.text, "x": s.x.round() as i32, "y": s.y.round() as i32,
                 "w": s.w.round() as i32, "h": s.h.round() as i32,
                 "r": s.role, "on": s.on,
-            })
+            });
+            if let Some(c) = &s.caret {
+                row["f"] = true.into();
+                row["c"] = c.cursor.into();
+                row["a"] = c.anchor.into();
+                row["pre"] = c.preedit.clone().into();
+            }
+            row
         })
         .collect();
     serde_json::Value::Array(rows).to_string()
@@ -254,6 +305,16 @@ pub fn run(ui: &MainWindow, command: &str) -> Option<String> {
             let all: Vec<Seen> = inputs(ui).into_iter().map(|(_, s)| s).collect();
             json(&all)
         }
+        // The focused text field: its text, cursor and selection end (in characters), the preedit text, and its
+        // middle in device pixels. `none` when no text field has the focus.
+        "cursor" => match caret(ui) {
+            Some(c) => serde_json::json!({
+                "t": c.text, "c": c.cursor, "a": c.anchor, "pre": c.preedit,
+                "x": c.x.round() as i32, "y": c.y.round() as i32,
+            })
+            .to_string(),
+            None => "none".to_owned(),
+        },
         // `set:<n>:<text>`: the n-th text field on screen takes this text.
         "set" => match arg.split_once(':') {
             Some((n, value)) => match n
