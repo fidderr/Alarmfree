@@ -1897,7 +1897,7 @@ s48() {
             fi
             on_editor
             open_row Sound
-            wait_for 30 own_sound_there || problems="$problems; own sound not listed: $names"
+            wait_for 30 own_sound_there || problems="$problems; own sound not listed: $names (files/sounds/custom: $(as_app "ls files/sounds/custom 2> /dev/null" | tr '\n' ' '); imports: $(as_app "ls files/sentinel_imports 2> /dev/null" | tr '\n' ' '); picker log: $(adb_ logcat -d -s MobileSentinel.FilePicker:I 2> /dev/null | tr -d '\r' | tail -3 | cut -c1-120 | tr '\n' '|'))"
         fi
     else
         problems="$problems; the picker never showed the file: $SYS_WHY"
