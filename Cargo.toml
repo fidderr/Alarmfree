@@ -33,26 +33,26 @@ rusqlite = { version = "0.31", features = ["bundled"] }
 
 # The UI is Slint, drawn on the GPU by Skia: no WebView. Android hosts it in a NativeActivity.
 [target.'cfg(target_os = "android")'.dependencies]
-slint = { git = "https://github.com/fidderr/slint", rev = "ad02f8899bd6f1e3c399f43658d44bd8b56f0a07", default-features = false, features = ["std", "compat-1-20", "system-fonts", "backend-android-activity-06", "renderer-skia", "accessibility"] }
+slint = { git = "https://github.com/fidderr/slint", rev = "54eaff99c2e3accecfd114cc793326770e9836f8", default-features = false, features = ["std", "compat-1-20", "system-fonts", "backend-android-activity-06", "renderer-skia", "accessibility"] }
 
 [dependencies.i-slint-core]
 git = "https://github.com/fidderr/slint"
-rev = "ad02f8899bd6f1e3c399f43658d44bd8b56f0a07"
+rev = "54eaff99c2e3accecfd114cc793326770e9836f8"
 optional = true
 default-features = false
 features = ["std"]
 
 [dependencies.i-slint-backend-testing]
 git = "https://github.com/fidderr/slint"
-rev = "ad02f8899bd6f1e3c399f43658d44bd8b56f0a07"
+rev = "54eaff99c2e3accecfd114cc793326770e9836f8"
 optional = true
 default-features = false
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
-slint = { git = "https://github.com/fidderr/slint", rev = "ad02f8899bd6f1e3c399f43658d44bd8b56f0a07" }
+slint = { git = "https://github.com/fidderr/slint", rev = "54eaff99c2e3accecfd114cc793326770e9836f8" }
 
 [build-dependencies]
-slint-build = { git = "https://github.com/fidderr/slint", rev = "ad02f8899bd6f1e3c399f43658d44bd8b56f0a07" }
+slint-build = { git = "https://github.com/fidderr/slint", rev = "54eaff99c2e3accecfd114cc793326770e9836f8" }
 
 [features]
 default = []
@@ -83,8 +83,8 @@ codegen-units = 16
 incremental = true
 
 [dev-dependencies]
-i-slint-backend-testing = { git = "https://github.com/fidderr/slint", rev = "ad02f8899bd6f1e3c399f43658d44bd8b56f0a07", default-features = false }
-i-slint-core = { git = "https://github.com/fidderr/slint", rev = "ad02f8899bd6f1e3c399f43658d44bd8b56f0a07", default-features = false, features = ["std", "accessibility-text"] }
+i-slint-backend-testing = { git = "https://github.com/fidderr/slint", rev = "54eaff99c2e3accecfd114cc793326770e9836f8", default-features = false }
+i-slint-core = { git = "https://github.com/fidderr/slint", rev = "54eaff99c2e3accecfd114cc793326770e9836f8", default-features = false, features = ["std", "accessibility-text"] }
 accesskit = "0.25"
 tempfile = "3"
 proptest = "1"

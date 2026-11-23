@@ -1364,6 +1364,22 @@ fn a_held_tap_does_not_wait_where_a_finger_cannot_reach() {
     f.finish();
 }
 
+/// The size of the emulator suite's phone (1080 x 1920 at 2.625); returns the scale.
+fn phone_window(f: &Flow) -> f32 {
+    use slint::platform::WindowEvent;
+    let scale = 2.625f32;
+    let window = f.ui.window();
+    window.dispatch_event(WindowEvent::ScaleFactorChanged {
+        scale_factor: scale,
+    });
+    window.set_size(slint::PhysicalSize::new(1080, 1920));
+    window.dispatch_event(WindowEvent::Resized {
+        size: slint::LogicalSize::new(1080.0 / scale, 1920.0 / scale),
+    });
+    f.settle();
+    scale
+}
+
 /// The sheet of the accent colour on a phone-sized window, with the keyboard animated up and down
 /// the way Android does it (the area it covers changes in many small steps).
 struct PhoneSheet {
@@ -1373,18 +1389,8 @@ struct PhoneSheet {
 
 impl PhoneSheet {
     fn open() -> PhoneSheet {
-        use slint::platform::WindowEvent;
         let f = Flow::new(vec![daily("a", 7, 0, "a")]);
-        let scale = 2.625f32;
-        let window = f.ui.window();
-        window.dispatch_event(WindowEvent::ScaleFactorChanged {
-            scale_factor: scale,
-        });
-        window.set_size(slint::PhysicalSize::new(1080, 1920));
-        window.dispatch_event(WindowEvent::Resized {
-            size: slint::LogicalSize::new(1080.0 / scale, 1920.0 / scale),
-        });
-        f.settle();
+        let scale = phone_window(&f);
         assert!(f.tap_last("Settings"));
         assert!(f.tap_has("Theme"));
         assert!(f.tap("Sand"));
@@ -1440,5 +1446,51 @@ fn done_on_the_colour_sheet_works_after_the_keyboard_went_down() {
             format!("{steps} steps: the sheet is still up after Done"),
         );
         p.f.finish();
+    }
+}
+
+/// R-8b: the alarm list is a scroll area too (not a Sheet). When the window gets taller (rotation, split
+/// screen) while a flick of the list towards its end is still running, the flick ended at the old end,
+/// past the new one, and the first touch on a card moved the list between the press and the release, so
+/// the switch was not hit.
+#[test]
+fn the_first_tap_on_a_card_lands_after_the_window_grew_during_a_flick_to_the_end() {
+    let scale = 2.625f32;
+    for wait in [0u64, 4, 8, 12, 16, 24, 40] {
+        let alarms: Vec<AlarmData> = (0..12)
+            .map(|i| daily(&format!("a{i}"), 5, i as u8, &format!("alarm {i}")))
+            .collect();
+        let f = Flow::new(alarms);
+        phone_window(&f);
+        let window = f.ui.window();
+        let at = |y: f32| slint::LogicalPosition::new(100.0, y);
+        let left = slint::platform::PointerEventButton::Left;
+        window.dispatch_event(slint::platform::WindowEvent::PointerPressed {
+            position: at(600.0),
+            button: left,
+        });
+        for step in 1..=8 {
+            i_slint_backend_testing::mock_elapsed_time(std::time::Duration::from_millis(8));
+            window.dispatch_event(slint::platform::WindowEvent::PointerMoved {
+                position: at(600.0 - 40.0 * step as f32),
+            });
+        }
+        window.dispatch_event(slint::platform::WindowEvent::PointerReleased {
+            position: at(280.0),
+            button: left,
+        });
+        i_slint_backend_testing::mock_elapsed_time(std::time::Duration::from_millis(wait));
+        window.set_size(slint::PhysicalSize::new(1080, 2400));
+        window.dispatch_event(slint::platform::WindowEvent::Resized {
+            size: slint::LogicalSize::new(1080.0 / scale, 2400.0 / scale),
+        });
+        f.settle();
+        f.expect(saved("a11").enabled, "a11 starts on");
+        f.expect(f.tap("On or off: alarm 11"), "no switch on the last card");
+        f.expect(
+            !saved("a11").enabled,
+            format!("{wait} ms: the first tap on the last card did not reach its switch"),
+        );
+        f.finish();
     }
 }
