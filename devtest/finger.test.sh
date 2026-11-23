@@ -89,12 +89,22 @@ verdict "a touch that was not counted, with the screen as before, is sent again 
     "$([ "$(taps lost1)" = 2 ] && has lost1 'rc=0' && grep -q 'touch lost by Android' "$tmp/lost1/out/results.txt" && echo 1)"
 
 run_case lost3 finger_ok AWAIT_FILE="$tmp/f_lost_always"
-verdict "a touch that never arrives is sent 3 times in all, then fails with a line that says so" \
-    "$([ "$(taps lost3)" = 3 ] && has lost3 'rc=1' && grep -q 'no input reached the app in 3 touches' "$tmp/lost3/stdout" && echo 1)"
+verdict "a touch that never arrives is sent 4 times in all, then fails with a line that says so" \
+    "$([ "$(taps lost3)" = 4 ] && has lost3 'rc=1' && grep -q 'no input reached the app in 4 touches' "$tmp/lost3/stdout" && echo 1)"
 
 run_case changed finger_ok AWAIT_FILE="$tmp/f_lost_always" READY_FILE="$tmp/f_ready_changed"
 verdict "no count but the screen changed: not touched again" \
     "$([ "$(taps changed)" = 1 ] && has changed 'rc=0' && echo 1)"
+
+printf 'frames=1 screen=0 toast=false input_seen=7
+frames=1 screen=0 toast=false input_seen=7
+frames=2 screen=0 toast=true input_seen=7
+' > "$tmp/f_ready_toast"
+run_case toast finger_ok AWAIT_FILE="$tmp/f_lost_always" READY_FILE="$tmp/f_ready_toast"
+verdict "a toast that comes or goes is not a change of the screen: the touch is still sent again"     "$([ "$(taps toast)" = 4 ] && has toast 'rc=1' && echo 1)"
+
+run_case ack finger_ok AWAIT_FILE="$tmp/f_ok" FINGER_ACK_MS=1500
+verdict "FINGER_ACK_MS sets how long the count is waited for"     "$(has ack 'await:1500:input_seen>7' && echo 1)"
 
 run_case nowin finger_ok AWAIT_FILE="$tmp/f_nowin"
 verdict "the app left the front after the touch: not touched again" \

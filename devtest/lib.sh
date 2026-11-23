@@ -806,14 +806,16 @@ tap_in() { tap "$@"; }
 tap_xy() { tap_through "tapxy:$1 $2" "no touch at $1 $2"; } # x y
 # The real touch, from outside the app, for what the touch itself is the subject of and for a text field that
 # has to bring up the keyboard. Acknowledged: the app counts the input Android hands it (`input_seen`, real touches and
-# keys, never the taps made inside the app). One touch, then wait for the count to rise. It did not rise and the
-# screen is as it was: the touch never arrived, so it is sent again (at most 3 in all, each one a NOTE line in the
-# results). It did not rise but the screen changed, or the app is no longer in front: the touch is not sent again.
-# Where the app cannot say (another screen in front, no count), one touch as before.
+# keys, never the taps made inside the app). One touch, then wait for the count to rise (FINGER_ACK_MS, 8000: a
+# touch that has to land inside a short time says less). It did not rise and the screen is as it was: the touch never
+# arrived, so it is sent again (at most 3 times again, each one a NOTE line in the results). It did not rise but the
+# screen changed, or the app is no longer in front: the touch is not sent again. Where the app cannot say (another
+# screen in front, no count), one touch as before.
 input_seen() { ui ready | sed -nE 's/.* input_seen=([0-9]+).*/\1/p'; }
-ready_shape() { ui ready | sed -E 's/ (frames|input_seen|resizes)=[0-9]+//g'; }
+# What a touch can change on the screen: not the frame count, a toast or a preview that ends by itself.
+ready_shape() { ui ready | tr ' ' '\n' | grep -E '^(screen|home_sheet|panel|editor_sheet|theme_sheet|ringing|scan_state|run_active|keyboard|win)=' | tr '\n' ' '; }
 finger_do() { # what it is, then the device command (input tap x y, input swipe ...)
-    local what=$1 before shape out try=1
+    local what=$1 before shape out try=1 ack=${FINGER_ACK_MS:-8000}
     shift
     before=$(input_seen)
     case "$before" in
@@ -826,7 +828,7 @@ finger_do() { # what it is, then the device command (input tap x y, input swipe 
     shape=$(ready_shape)
     while :; do
         dev "$@"
-        out=$(UI_EXTRA=8 ui "await:8000:input_seen>$before")
+        out=$(UI_EXTRA=$(((ack + 999) / 1000)) ui "await:$ack:input_seen>$before")
         case "$out" in
             OK*)
                 SETTLED_AT=$SECONDS
@@ -843,12 +845,12 @@ finger_do() { # what it is, then the device command (input tap x y, input swipe 
             echo "NOTE  $CURRENT  $what: the app counted no input but its screen changed, not sent again" | tee -a "$RESULTS" >&2
             return 0
         fi
-        if [ "$try" -ge 3 ]; then
-            echo "$what: no input reached the app in 3 touches" >&2
+        if [ "$try" -ge 4 ]; then
+            echo "$what: no input reached the app in 4 touches" >&2
             return 1
         fi
         try=$((try + 1))
-        echo "NOTE  $CURRENT  touch lost by Android: $what, sent again (touch $try of 3)" | tee -a "$RESULTS" >&2
+        echo "NOTE  $CURRENT  touch lost by Android: $what, sent again (touch $try of 4)" | tee -a "$RESULTS" >&2
     done
 }
 finger() { # text [which of them] [seconds, not read]

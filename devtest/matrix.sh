@@ -832,7 +832,8 @@ s23b() {
     local size
     size=$(dev wm size | tail -1 | sed 's/.*: //')
     # On the alarm's clock, where a touch does nothing else.
-    finger_xy $((${size%x*} / 2)) $((${size#*x} / 5))
+    # The limit of the ring is 9 s: the touch is waited for 1.5 s, not 8.
+    FINGER_ACK_MS=1500 finger_xy $((${size%x*} / 2)) $((${size#*x} / 5))
     until_past $((T + 11))
     if ! sound_on; then
         fail "stopped despite the touch, state=$(state a)"
@@ -1971,6 +1972,8 @@ s49() {
     arm a
     on_card 10
     local problems="" x y before free typed
+    # The room the window has is measured with the keyboard down (Android can bring one back that the baseline did not see).
+    hide_keyboard
     before=$(free_px)
     # The window is resized once more a moment after it came up (seen on Android 15 at 2208x1840: a smaller reading at
     # first): the room it has is what two readings a second apart agree on.
@@ -1978,7 +1981,7 @@ s49() {
     wait_for 10 steady
     press open a 0.8
     on_editor
-    tap_has Label 0 0.6
+    tap_has Label 0 0.6 || { fail "no Label row on the editor, the app shows: $(ui ready | grep -oE 'keyboard=[a-z]+ win=[0-9x]+')"; hide_keyboard; return; }
     await_ui 3 'editor_sheet!=None' || problems="$problems; no label panel"
     read -r x y <<< "$(field_xy)"
     finger_xy "$x" "$y"
