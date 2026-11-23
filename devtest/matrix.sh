@@ -222,6 +222,10 @@ WATCHER
     timeout 60 "$ADB" -s "$SERIAL" shell "su 0 sh /data/local/tmp/s07d_watcher.sh" > "$OUT/s07d_watcher.txt" 2>&1 &
     local watcher=$!
     sleep 1 # lint-ok: the watcher on the device has to be listening before the kill
+    # Twice: a service that was killed again soon after its restart gets a longer restart delay from Android, which is
+    # what leaves the watchdog (6 s) as the way back, as in the log of s07c on Android 13.
+    kill_sentinel
+    wait_for 8 sentinel_up
     kill_sentinel
     killed_at() { dev "cat $killed_file 2> /dev/null" | tr -dc 0-9; }
     have_killed_at() { [ -n "$(killed_at)" ]; }
@@ -3556,19 +3560,21 @@ s63() {
 s63b() {
     scenario s63b_ring_with_the_app_cached
     fresh
-    next_minute 21
+    next_minute 26
     seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
     arm a
-    until_past $((T - 7))
+    until_past $((T - 12))
     adb_ logcat -c -b all
     go_home
-    probe_other_apps deep
+    probe_other_apps deep4
     until_past $((T - 1))
     local at_ring frozen=no
     at_ring=$(probe_main_state)
     adb_ logcat -d -b events 2> /dev/null | tr -d '\r' | grep -E 'am_freeze' | grep -q 'com\.fidderr\.alarmfree\]' && frozen=yes
     dev am force-stop com.android.settings
     dev am force-stop com.google.android.contacts
+    dev am force-stop com.android.chrome
+    dev am force-stop com.google.android.apps.messaging
     case "$at_ring" in
         *cch*) ;;
         *) skip "the main process is not cached at the ring: $at_ring"; return ;;
@@ -3605,6 +3611,8 @@ s63c() {
         problems="$problems; did not ring: no sound within 40s past T"
     elif ! wait_for 6 top_is_main; then
         problems="$problems; sound at +${SOUND_AT}s, but the app's screen did not come up in 6s (on top: $(top_activity), state=$(state a))"
+    elif ! await_state a firing 3 || ! on_screen "Turn off" 3; then
+        problems="$problems; the screen came up, but the ring was not taken up: state=$(state a), on top: $(top_activity)"
     fi
     local said
     said=$(as_app "grep -c 'not taken up' files/sentinel/diag.log 2> /dev/null")
