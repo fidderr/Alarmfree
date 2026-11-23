@@ -3463,7 +3463,11 @@ s63() {
         dev rm -f /sdcard/af_ui.xml
         return $found
     }
-    if await_ring a 40 && on_screen "Turn off" 15; then
+    if ! await_ring a 40; then
+        problems="$problems; $RING_WHY"
+    elif ! on_screen "Turn off" 15; then
+        problems="$problems; the app took the ring up, but its screen did not come up in 15s (on top: $(top_activity))"
+    else
         t0=$SECONDS
         sleep 1
         banner_up && seen="$seen $((SECONDS - t0))s"
@@ -3474,8 +3478,6 @@ s63() {
         own_notifications | grep -q 'id=900[12]' || problems="$problems; no notification while it rings"
         tap "Turn off" 0 0.3
         wait_for 8 sound_off || problems="$problems; still ringing after turning it off"
-    else
-        problems="$problems; did not ring: state=$(state a)"
     fi
     if [ -z "$problems" ]; then
         pass "no banner over the alarm's screen, the notification stays in the list"
