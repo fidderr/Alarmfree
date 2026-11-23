@@ -40,8 +40,8 @@ _ev_app_script() { # id
     local id=$1
     printf '%s' "cd $DATA/files 2> /dev/null || { echo \"the app has no files folder\"; exit 0; }
 if [ -e debug_dead ]; then echo \"not asked: an earlier request got no answer and the channel is closed\"; exit 0; fi
-for n in 1 2; do
-    case \$n in 1) c=ui:ready ;; *) c=ui:texts ;; esac
+for n in 1 2 3; do
+    case \$n in 1) c=ui:ready ;; 2) c=ui:texts ;; *) c=ui:trace ;; esac
     id=$id\$n
     a=debug_answer_\$id.txt
     printf \"%s\\n\" \"\$id \$c\" > debug_request.tmp && mv debug_request.tmp debug_request.txt

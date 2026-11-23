@@ -1327,13 +1327,15 @@ s34() {
             finger_swipe 900 341 100 341 300
             sleep 0.8
             after=$(clipped)
-            # A slow machine is still scrolling after the swipe, or lost it: ask again until the chip has come in, and swipe
-            # again twice (a row that cannot be scrolled in stays out through all of it).
+            # The longest words need more than one swipe to come in (a swipe moves the row about 800 px and the row is longer): look
+            # when the row has come to rest, and swipe again while the same chip is still out, three more times at most (a row that
+            # cannot be scrolled in stays out through all of it). Runs 45207471615 and 45218660851: this was an ask-again that fired
+            # on machines that were not starved, in Finnish, and the second swipe always brought the chip in.
             for _ in 1 2 3; do
                 for _ in 1 2 3 4 5 6; do
                     case "$after" in *"$result"*) sleep 0.8; after=$(clipped) ;; *) break ;; esac
                 done
-                case "$after" in *"$result"*) retry_used "s34 $locale: the chip was still out after the swipe"; finger_swipe 900 341 100 341 300 ;; *) break ;; esac
+                case "$after" in *"$result"*) finger_swipe 900 341 100 341 300 ;; *) break ;; esac
             done
             case "$after" in *"$result"*) after=$(clipped) ;; esac
             case "$after" in
@@ -3463,8 +3465,7 @@ s63b() {
     elif ! on_screen "Turn off" 5; then
         problems="$problems; the app took the ring up, but its screen is not on top 5s later (on top: $(top_activity))"
     else
-        tap "Turn off" 0 0.3
-        wait_for 8 sound_off || problems="$problems; still ringing after turning it off"
+        tap_turn_off || problems="$problems; $TURN_OFF_WHY"
     fi
     if [ -z "$problems" ]; then
         pass "taken up within 5s of the sound with the main process $at_ring, its screen on top"

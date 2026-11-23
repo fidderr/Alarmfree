@@ -63,4 +63,40 @@ run_case slow 1670 50 199
 verdict "a page that moves a little each swipe is scrolled until the row is clear (four swipes), then tapped" "$([ "$(cat "$tmp/slow/rc")" = rc=0 ] && [ "$(count slow scroll)" = 4 ] && [ "$(count slow tap:)" = 1 ] && echo 1)"
 run_case cancel 1560 100 300 1683 "Cancel the test alarm"
 verdict "the other bar text counts as the bar too" "$([ "$(cat "$tmp/cancel/rc")" = rc=0 ] && [ "$(count cancel tap:)" = 1 ] && [ "$(count cancel scroll)" -ge 1 ] && echo 1)"
+
+# tap_turn_off (lib.sh): a tap that did not take is read and made once more; a ring that goes on after that fails.
+cat > "$tmp/drive2.sh" << 'D'
+# Env: LIB DIR TAKES (the tap number from which the sound ends: 1, 2, or 9 = never), RINGING (what the app says after a tap that did
+# not end the ring), BUTTON (1: the button is still listed).
+export OUT="$DIR/out" TMPDIR="$DIR"
+mkdir -p "$OUT"
+. "$LIB"
+RESULTS="$OUT/results.txt"
+: > "$RESULTS"
+CURRENT=sx
+echo 0 > "$DIR/taps"
+tap() { echo "tap:$1" >> "$DIR/calls"; echo $(($(cat "$DIR/taps") + 1)) > "$DIR/taps"; }
+wait_for() { shift; "$@"; }
+sound_off() { [ "$(cat "$DIR/taps")" -ge "$TAKES" ]; }
+sn() { echo "$RINGING"; }
+is_there() { [ "${BUTTON:-1}" = 1 ]; }
+ui() { case "$1" in ready) echo "frames=3 keyboard=up win=1080x1920" ;; trace) echo "tap_at 540,1046 areas [Turn off]" ;; esac; }
+tap_turn_off
+echo "rc=$?" > "$DIR/rc"
+echo "$TURN_OFF_WHY" > "$DIR/why"
+D
+run_case2() { # name TAKES RINGING BUTTON
+    mkdir -p "$tmp/$1"
+    env LIB="$here/lib.sh" DIR="$tmp/$1" TAKES="$2" RINGING="$3" BUTTON="${4:-1}" bash "$tmp/drive2.sh" > "$tmp/$1/stdout" 2> "$tmp/$1/stderr"
+}
+run_case2 off_first 1 true
+verdict "Turn off that ends the ring at the first tap: one tap, no NOTE" "$([ "$(cat "$tmp/off_first/rc")" = rc=0 ] && [ "$(count off_first tap:)" = 1 ] && [ ! -s "$tmp/off_first/out/results.txt" ] && echo 1)"
+run_case2 off_second 2 true
+verdict "a first tap that did not take (the app still rings and shows the button): read, one more tap, a NOTE with what the app traced" "$([ "$(cat "$tmp/off_second/rc")" = rc=0 ] && [ "$(count off_second tap:)" = 2 ] && grep -q '^NOTE  sx  the tap on Turn off did not end the ring (ringing=true, keyboard=up).*tap_at 540,1046' "$tmp/off_second/out/results.txt" && echo 1)"
+run_case2 off_never 9 true
+verdict "a ring that goes on after the second tap is a failure that says so (two taps, not three)" "$([ "$(cat "$tmp/off_never/rc")" = rc=1 ] && [ "$(count off_never tap:)" = 2 ] && [ "$(cat "$tmp/off_never/why")" = "still ringing after turning it off twice" ] && echo 1)"
+run_case2 off_gone 9 false
+verdict "a ring that the app no longer shows but whose sound is on is not tapped again: one tap, a failure" "$([ "$(cat "$tmp/off_gone/rc")" = rc=1 ] && [ "$(count off_gone tap:)" = 1 ] && [ "$(cat "$tmp/off_gone/why")" = "still ringing after turning it off" ] && echo 1)"
+run_case2 off_nobutton 9 true 0
+verdict "no button on screen any more: not tapped again" "$([ "$(cat "$tmp/off_nobutton/rc")" = rc=1 ] && [ "$(count off_nobutton tap:)" = 1 ] && echo 1)"
 exit $bad

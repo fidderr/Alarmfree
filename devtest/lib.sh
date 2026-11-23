@@ -1418,6 +1418,24 @@ tops = [e["y"] - e["h"] / 2 for e in map(find, bars) if e]
 print("%d %d" % (r["y"] + r["h"] / 2, min(tops)) if r and tops else "none")
 ' "$@"
 }
+# Turn off a ring that has no challenge, through the app, and wait for the sound to end (TURN_OFF_WHY says what was seen when it did not).
+# A tap that answered OK while the app still says it rings and still shows the button did not take (run 45218660851, Android 12, s63b:
+# the keyboard of Android was up over the ring screen): the app is read first, and the tap is made once more with a NOTE that keeps
+# what the app traced; a ring that goes on after that is the failure.
+tap_turn_off() {
+    TURN_OFF_WHY=""
+    tap "Turn off" 0 0.3
+    wait_for 8 sound_off && return 0
+    if [ "$(sn ringing)" = true ] && is_there "Turn off"; then
+        echo "NOTE  $CURRENT  the tap on Turn off did not end the ring (ringing=true, $(ui ready | grep -oE 'keyboard=[a-z]+')): tapped once more; the app traced: $(ui trace | tail -c 300)" | tee -a "$RESULTS" >&2
+        tap "Turn off" 0 0.3
+        wait_for 8 sound_off && return 0
+        TURN_OFF_WHY="still ringing after turning it off twice"
+    else
+        TURN_OFF_WHY="still ringing after turning it off"
+    fi
+    return 1
+}
 # Tap a row of a page that scrolls under a bar of its own (the reliability screen: "Test alarm" or "Cancel the test alarm" stays at
 # the bottom). The tree lists a row that is under the bar as well, with its middle behind the bar's button, and a tap there is the
 # button's: the whole row has to be above the bar first. The bar's top is the highest of the bar texts (the arguments after the
