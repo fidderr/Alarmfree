@@ -94,6 +94,15 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-linux-android
+      # sdk-patches/*.patch: changes to the SDK that are tried here before they are made in its own repo. They are part of the
+      # app's files, so they are part of the key of the APK below.
+      - name: Patch the SDK
+        run: |
+          for p in Alarmfree/sdk-patches/*.patch; do
+              [ -e "$p" ] || continue
+              echo "Applying $p to the SDK checkout"
+              git -C mobile-sentinel apply --whitespace=nowarn "$(realpath "$p")"
+          done
       # The built APK is kept in the cache under a key of everything it is built from, so a run that changed only test
       # scripts skips the build. The key holds: every file of the app except devtest/, docs/, store/, .github/ and .git
       # (source, ui, assets, build.rs, Cargo.toml, Cargo.lock, build.sh, sentinel.toml, .cargo/), the commit of the SDK that

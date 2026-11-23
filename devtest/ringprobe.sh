@@ -2,7 +2,7 @@
 # The ring-screen probe: an alarm rings while the app sits in the background, and the probe records when the main process took
 # the ring up and when the ring screen came on. By name only (like selftest.sh), sourced by matrix.sh:
 #   SCENARIOS="t11_ring_after_home_1s t12_ring_after_home_5s t13_ring_after_home_15s t14_ring_after_home_40s"
-#   t10_ring_probe_smoke   1 round of each of 1 s and 5 s, to see that the probe itself reads.
+#   t10_ring_probe_smoke   2 rounds of each of 5, 15, 1 and 40 s, to see that the probe itself reads.
 # `Home` is pressed N seconds before the ring (N = 1, 5, 15, 40), PROBE_ROUNDS times (20), and each round is watched for
 # PROBE_WATCH seconds (25) past the ring. One line per round in $OUT/ringprobe.txt (columns in PROBE_HEADER), the raw lines of
 # the log that the numbers come from in $OUT/ringprobe_<name>_<n>.log, and a PASS line with the counts. The probe passes when
@@ -42,7 +42,8 @@ probe_times() { # logfile (logcat -v epoch)
             if ($0 ~ /am_unfreeze|unfreezing|Unfreez/ && $0 ~ /com\.fidderr\.alarmfree(\]|$| )/ && $0 !~ /alarmfree:sentinel/) note("unfreeze", e)
             if ($0 ~ /wm_set_resumed_activity.*com\.fidderr\.alarmfree/) note("resumed", e)
             if ($0 ~ /sysui_heads_up_status.*com\.fidderr\.alarmfree/) note("banner", e)
-            if ($0 ~ /[Bb]ackground activity (start|launch)|BAL_BLOCK|Abort background activity/) bal++
+            if ($0 ~ /[Bb]ackground activity (start|launch)[^
+]*(blocked|aborted|not allowed)|BAL_BLOCK|Abort background activity|Background activity launch blocked/) bal++
         }
         END {
             n = split("rx sound hu_sent hu_recv freeze unfreeze resumed banner", ks, " ")
@@ -57,14 +58,17 @@ probe_procs() {
         sed -E 's/^ *#[0-9]+: *//; s/ProcessRecord\{[0-9a-f]+ /{/; s/ +/ /g' | tr '\n' '~' | cut -c1-160
 }
 
-# The end of a round, as a person sees it: the ring's own button, or only the banner, or neither.
+# The end of a round, as a person sees it: the app's screen on top (and its own button), or only the banner, or neither.
 probe_end() {
     local x
+    if top_is_main; then
+        if UI_QUIET=1 await_text "Turn off" 3; then echo turn_off; else echo app_on_top; fi
+        return
+    fi
     dev uiautomator dump --windows /sdcard/af_probe.xml > /dev/null 2>&1 # lint-ok: what is on screen with the main process stalled
     x=$(dev cat /sdcard/af_probe.xml 2> /dev/null)
     dev rm -f /sdcard/af_probe.xml
     case "$x" in
-        *'text="Turn off"'*) echo turn_off ;;
         *'text="Tap to open"'*) echo banner ;;
         *) echo none ;;
     esac
@@ -101,10 +105,20 @@ probe_round() { # moment n
     done
     procs3=$(probe_procs)
     end=$(probe_end)
-    log="$OUT/ringprobe_${CURRENT}_$n.log"
+    log="$OUT/ringprobe_${CURRENT}_m${moment}_$n.log"
     adb_ logcat -d -b all -v epoch 2> /dev/null | tr -d '\r' |
         grep -E "AlarmRx|FiringAudio|Guardian|SentinelJobsInit|am_freeze|am_unfreeze|freezing|unfreez|wm_set_resumed|wm_create_activity|sysui_heads_up|notification_enqueue.*alarmfree|ackground activity|BAL_|Job heads-up|AlarmKit|ActivityTaskManager.*alarmfree" > "$log"
     times=$(probe_times "$log")
+    # A round where nothing rang at all: what the alarm manager and the app say about the alarm.
+    case "$times" in
+        "- "*)
+            {
+                echo "NO RING: armed at ms: $(armed_at_ms a), T*1000 = $((T * 1000)), device time now $(now_s)"
+                dev "dumpsys alarm | grep -i -B1 -A3 alarmfree | head -40"
+                as_app "tail -n 8 files/sentinel/diag.log"
+            } >> "$log" 2>&1
+            ;;
+    esac
     PROBE_LINE="$AVD_NAME $moment $n $T $times $fire_s $screen_s $((T - home_at)) $end ${procs1:--}|${procs2:--}|${procs3:--}"
     [ -s "$OUT/ringprobe.txt" ] || echo "$PROBE_HEADER" > "$OUT/ringprobe.txt"
     echo "$PROBE_LINE" >> "$OUT/ringprobe.txt"
@@ -133,9 +147,9 @@ ring_probe() { # moment
 }
 
 t10_ring_probe_smoke() {
+    local m
     CURRENT_PROBE=t10_ring_probe_smoke
-    PROBE_ROUNDS=1 ring_probe 5
-    PROBE_ROUNDS=1 ring_probe 1
+    for m in 5 15 1 40; do PROBE_ROUNDS=2 ring_probe "$m"; done
 }
 t11_ring_after_home_1s() { CURRENT_PROBE=t11_ring_after_home_1s ring_probe 1; }
 t12_ring_after_home_5s() { CURRENT_PROBE=t12_ring_after_home_5s ring_probe 5; }
