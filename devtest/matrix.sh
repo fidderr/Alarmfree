@@ -190,59 +190,51 @@ s07() {
 }
 
 # The ring's watchdog (an exact alarm a few seconds ahead) brings a ring back after a kill. A ring it has
-# resumed must have the next watchdog armed at once: a second kill in the first moments after the resume
-# then finds one. Without it only Android's own restart of the service is left, whose delay grows 1 s, 10 s, 40 s.
-# The second kill has to land inside that moment, which a script from the host cannot hit: a root shell on
-# the device waits for the watchdog's line in the log and kills the alarm process 0.3 s later. If the ring did
-# not come back through the watchdog the first time, there is no such moment: SKIP, never a PASS by luck.
+# resumed must have the next watchdog armed at once: a second end of the process in the first moments after
+# the resume then finds one. Without it only Android's own restart of the service is left, whose delay grows
+# with every kill (1 s, then 4 s, 16 s, 64 s). A script from the host cannot hit that moment, so the debug build
+# has a hook: with the file sentinel/debug_die_after_watchdog_resume its alarm process ends itself once, 0.3 s
+# after the watchdog resumed the ring. Kills from outside run Android's delay up until the watchdog is the first
+# to come (it fires 6 s after the last tick), the hook ends that resumed ring, and the ring has to be back within
+# the watchdog's own time. If the watchdog never came, there was no such moment: SKIP, never a PASS by luck.
 s07d() {
-    scenario s07d_kill_again_just_after_the_watchdog_resumed_the_ring
-    on_emulator || { skip "the kill inside the first second needs a root shell: emulators only"; return; }
+    scenario s07d_end_again_just_after_the_watchdog_resumed_the_ring
+    on_emulator || { skip "the kills need a root shell: emulators only"; return; }
     fresh
     next_minute
     seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
     arm a
     await_ring a 30 || { fail "never started: $RING_WHY"; return; }
-    local sh_file="$OUT/s07d_watcher.sh" killed_file=/data/local/tmp/s07d_killed
-    cat > "$sh_file" <<WATCHER
-rm -f $killed_file
-logcat -b main -T 1 MobileSentinel.AlarmRx:I '*:S' | while read -r line; do
-    case "\$line" in
-    *'instance=ring#watchdog'*)
-        sleep 0.3
-        kill -9 \$(pidof $PKG:sentinel)
-        date +%s > $killed_file
-        break
-        ;;
-    esac
-done
-WATCHER
-    adb_ push "$sh_file" /data/local/tmp/s07d_watcher.sh > /dev/null
-    dev rm -f "$killed_file"
-    timeout 60 "$ADB" -s "$SERIAL" shell "su 0 sh /data/local/tmp/s07d_watcher.sh" > "$OUT/s07d_watcher.txt" 2>&1 &
-    local watcher=$!
-    sleep 1 # lint-ok: the watcher on the device has to be listening before the kill
-    # Twice: a service that was killed again soon after its restart gets a longer restart delay from Android, which is
-    # what leaves the watchdog (6 s) as the way back, as in the log of s07c on Android 13.
-    kill_sentinel
-    wait_for 8 sentinel_up
-    kill_sentinel
-    killed_at() { dev "cat $killed_file 2> /dev/null" | tr -dc 0-9; }
-    have_killed_at() { [ -n "$(killed_at)" ]; }
-    if ! wait_for 25 have_killed_at; then
-        kill "$watcher" 2> /dev/null
-        skip "the ring did not come back through the watchdog within 25s of the first kill, so there was no moment to hit (sound=$(sound_on && echo on || echo OFF), sentinel=$(sentinel_pid))"
+    local hook=files/sentinel/debug_die_after_watchdog_resume
+    as_app "mkdir -p files/sentinel && touch $hook"
+    hook_taken() { [ "$(as_app "test -e $hook && echo there || echo gone")" = gone ]; }
+    local kills=0 at=""
+    while [ "$kills" -lt 5 ]; do
+        kill_sentinel
+        kills=$((kills + 1))
+        # 8 s: the watchdog comes 6 s after the last tick, if the service is not back before it.
+        if wait_for 8 hook_taken; then
+            at=$(now_s)
+            break
+        fi
+    done
+    if [ -z "$at" ]; then
+        as_app "rm -f $hook"
+        skip "the watchdog did not resume the ring in $kills kills, so there was no moment to hit (sound=$(sound_on && echo on || echo OFF), sentinel=$(sentinel_pid))"
         return
     fi
-    local at
-    at=$(killed_at)
+    # The hook ends the process 0.3 s later: the sound goes off, and only then does a sound mean the ring is back.
+    if ! wait_for 5 sound_off; then
+        fail "the hook took its file after $kills kills, but the ring process did not end (sound still on)"
+        return
+    fi
     up_again() { sound_on && [ -n "$(main_pid)" ] && top_is_app; }
-    # The watchdog's time: 6 s ahead, and the ring started again. Android's own restart after this kill is 10 s or more.
-    until up_again || [ "$(now_s)" -gt $((at + 9)) ]; do sleep 0.3; done # lint-ok: polling with its own bound
+    # The watchdog's time: 6 s ahead, and the ring started again. Android's own restart after this end is 16 s or more.
+    until up_again || [ "$(now_s)" -gt $((at + 12)) ]; do sleep 0.3; done # lint-ok: polling with its own bound
     if up_again; then
-        pass "back $(($(now_s) - at))s after a kill 0.3s after the watchdog resumed the ring"
+        pass "back $(($(now_s) - at))s after the process ended just after the watchdog resumed the ring (kills from outside: $kills)"
     else
-        fail "not back 9s after the second kill: sound=$(sound_on && echo on || echo OFF) state=$(state a) main=$(main_pid) sentinel=$(sentinel_pid)"
+        fail "not back 12s after the process ended just after the watchdog resumed the ring: sound=$(sound_on && echo on || echo OFF) state=$(state a) main=$(main_pid) sentinel=$(sentinel_pid)"
     fi
 }
 
@@ -1742,6 +1734,10 @@ s44() {
         done
     }
     on_screen "Turn off" 10
+    # The log since this scenario began holds the app's start. A native method the SDK registers with a wrong
+    # signature is a warning there at every launch (the accelerometer one was, until SDK 0.7.1).
+    local badjni
+    badjni=$(adb_ logcat -d 2> /dev/null | tr -d '' | grep -m1 'Failed to register native method com.mobilesentinel')
     adb_ logcat -c
     tap "Turn off" 0 0.5
     wait_for 5 run_up
@@ -1753,8 +1749,10 @@ s44() {
     done
     await_state a scheduled 5
     starts=$(adb_ logcat -d 2> /dev/null | grep -c 'Accelerometer started')
-    if [ "$(state a)" = scheduled ] && [ "$(outcomes solved)" = 1 ] && [ "$starts" -ge 2 ] && ! sound_on; then
-        pass "both counted, the sensor started $starts times, in $rounds rounds of shaking"
+    if [ -n "$badjni" ]; then
+        fail "the log of the app's start holds: ${badjni#*: }"
+    elif [ "$(state a)" = scheduled ] && [ "$(outcomes solved)" = 1 ] && [ "$starts" -ge 2 ] && ! sound_on; then
+        pass "both counted, the sensor started $starts times, in $rounds rounds of shaking, no native method failed to register"
     else
         fail "state=$(state a) solved=$(outcomes solved) sensor started $starts times, on screen '$(texts_of)'"
     fi
