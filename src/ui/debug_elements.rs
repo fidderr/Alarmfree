@@ -257,6 +257,83 @@ fn type_into(ui: &MainWindow, x: f32, y: f32, value: &str) {
     }
 }
 
+thread_local! {
+    static TAP_WAITS: std::cell::RefCell<Vec<std::rc::Rc<slint::Timer>>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// How often a held tap looks for its element again.
+const TAP_WAIT_STEP: std::time::Duration = std::time::Duration::from_millis(30);
+/// A tap that waited longer than this says so in its answer, so slow screens stay visible.
+const TAP_WAIT_SAID: std::time::Duration = std::time::Duration::from_secs(1);
+
+/// `tapwait:<ms>:<command>`, for a `tap`, `tapc` or `tapxy` command: the tap is made as soon as its element is on screen,
+/// and when there is none after `<ms>` the answer is `none`, as for the command alone. Any other answer (the tap was made, or
+/// a place a finger cannot reach, which waiting does not change) comes at once. The wait is held here, in one request, and
+/// is no loop of requests from outside. An answer `OK` after more than a second is `OK waited <n>ms`.
+pub fn start_tap_wait(
+    ui: slint::Weak<MainWindow>,
+    spec: &str,
+    reply: impl FnOnce(String) + Send + 'static,
+) {
+    let (ms, command) = spec.split_once(':').unwrap_or((spec, ""));
+    let name = command.split([':', '@']).next().unwrap_or("");
+    let Ok(ms) = ms.parse::<u64>() else {
+        reply(format!("ERR tapwait: <ms>:<command>, not {spec}"));
+        return;
+    };
+    if !matches!(name, "tap" | "tapc" | "tapxy") {
+        reply(format!("ERR tapwait waits for a tap, not for {name}"));
+        return;
+    }
+    let (limit, command, started) = (
+        std::time::Duration::from_millis(ms),
+        command.to_owned(),
+        std::time::Instant::now(),
+    );
+    let answer = move |ui: &MainWindow| -> Option<String> {
+        let said = run(ui, &command)?;
+        if said == "none" {
+            return None;
+        }
+        let waited = started.elapsed();
+        Some(if said == "OK" && waited >= TAP_WAIT_SAID {
+            format!("OK waited {}ms", waited.as_millis())
+        } else {
+            said
+        })
+    };
+    let Some(window) = ui.upgrade() else {
+        reply("ERR no window".to_owned());
+        return;
+    };
+    if let Some(said) = answer(&window) {
+        reply(said);
+        return;
+    }
+    let timer = std::rc::Rc::new(slint::Timer::default());
+    let handle = timer.clone();
+    let mut reply = Some(reply);
+    timer.start(slint::TimerMode::Repeated, TAP_WAIT_STEP, move || {
+        let said = match ui.upgrade() {
+            None => Some("ERR no window".to_owned()),
+            Some(window) => {
+                answer(&window).or_else(|| (started.elapsed() >= limit).then(|| "none".to_owned()))
+            }
+        };
+        if let Some(said) = said {
+            handle.stop();
+            if let Some(reply) = reply.take() {
+                reply(said);
+            }
+        }
+    });
+    TAP_WAITS.with(|all| {
+        let mut all = all.borrow_mut();
+        all.retain(|t| t.running());
+        all.push(timer);
+    });
+}
+
 /// The commands. `None` when the command is not one of these.
 pub fn run(ui: &MainWindow, command: &str) -> Option<String> {
     let (name, arg) = command.split_once(':').unwrap_or((command, ""));

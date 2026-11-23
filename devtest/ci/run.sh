@@ -84,6 +84,16 @@ stop=$(grep -h '^STOP' "devtest-out/ci_$avd.log" 2> /dev/null | head -1)
     else
         echo; echo "Asked again: never."
     fi
+    # Steps that were allowed to fail (TAP_MAY_FAIL) and did, and taps that waited over a second for their element.
+    tolerated="devtest-out/ci_$avd/tolerated_steps.txt"
+    if [ -s "$tolerated" ]; then
+        echo; echo "Steps that were allowed to fail and did (scenario | step | line):"; echo
+        sort "$tolerated" | uniq -c | sed 's/^ *\([0-9]*\) /- `\1x /; s/$/`/' | cut -c1-230
+    fi
+    if grep -aq '^NOTE .* waited .* for its element' "$res" 2> /dev/null; then
+        echo; echo "Taps that waited over a second for their element:"; echo
+        grep -a '^NOTE .* waited .* for its element' "$res" | cut -c1-200 | sed 's/^/- `/; s/$/`/'
+    fi
     [ -z "$incomplete" ] || { echo; echo "INCOMPLETE (no result): \`${incomplete# }\`"; }
     [ -z "$stop" ] || { echo; echo "STOPPED: \`$stop\`"; }
     if [ "${f:-0}" -gt 0 ]; then

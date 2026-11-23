@@ -19,6 +19,7 @@ SENT="$DIR/sent.log"
 n_await=0
 ui() {
     echo "ui $1" >> "$SENT"
+    case "$1" in tapwait:*) echo "${UI_EXTRA:-none}" > "$DIR/extra" ;; esac
     case "$1" in
         ready) if [ -n "$READY_FILE" ]; then
             n_ready=$(($(cat "$DIR/n_ready" 2> /dev/null || echo 0) + 1))
@@ -150,16 +151,16 @@ verdict "a swipe goes through the same acknowledgement" \
     "$([ "$(taps swipe)" = 2 ] && has swipe 'dev input swipe 1 2 3 4 300' && echo 1)"
 
 run_case tap tap AWAIT_FILE="$tmp/f_ok"
-verdict "tap sends no touch from outside, only tap@2:Hello to the app, after the window is stable" \
-    "$([ "$(taps tap)" = 0 ] && has tap 'await_ui 5 stable' && has tap 'ui tap@2:Hello' && has tap 'rc=0' && echo 1)"
+verdict "tap sends no touch from outside, only tap@2:Hello to the app, held there for 5 s, after the window is stable" \
+    "$([ "$(taps tap)" = 0 ] && has tap 'await_ui 5 stable' && has tap 'ui tapwait:5000:tap@2:Hello' && has tap 'rc=0' && echo 1)"
 
 run_case taph tap_has AWAIT_FILE="$tmp/f_ok"
 verdict "tap_has sends tapc@L:Hello to the app" \
-    "$([ "$(taps taph)" = 0 ] && has taph 'ui tapc@L:Hello' && echo 1)"
+    "$([ "$(taps taph)" = 0 ] && has taph 'ui tapwait:5000:tapc@L:Hello' && echo 1)"
 
 run_case tapx tap_xy AWAIT_FILE="$tmp/f_ok"
 verdict "tap_xy sends tapxy:10 20 to the app" \
-    "$([ "$(taps tapx)" = 0 ] && has tapx 'ui tapxy:10 20' && echo 1)"
+    "$([ "$(taps tapx)" = 0 ] && has tapx 'ui tapxy:10 20' && ! has tapx 'tapwait' && echo 1)"
 
 run_case tapnone tap AWAIT_FILE="$tmp/f_ok" TAP_ANSWER=none
 verdict "tap fails when the app says the element is not there, and says what the app said" \
@@ -167,7 +168,7 @@ verdict "tap fails when the app says the element is not there, and says what the
 
 run_case tabok go_tab AWAIT_FILE="$tmp/f_ok"
 verdict "go_tab taps once through the app and waits for the screen it names" \
-    "$([ "$(taps tabok)" = 0 ] && has tabok 'ui tap@L:Settings' && has tabok 'await_ui 8 screen=3' && has tabok 'rc=0' && echo 1)"
+    "$([ "$(taps tabok)" = 0 ] && has tabok 'ui tapwait:5000:tap@L:Settings' && has tabok 'await_ui 8 screen=3' && has tabok 'rc=0' && echo 1)"
 
 run_case tabbad go_tab AWAIT_FILE="$tmp/f_ok" AWAIT_UI_FAIL=1 SCREEN_NOW=0
 verdict "go_tab fails, and says which screen the app shows, when the screen is not reached" \
@@ -176,11 +177,31 @@ verdict "go_tab fails, and says which screen the app shows, when the screen is n
 # What the app refuses because a finger could not do it (under the keyboard, outside the window) fails the tap with the app's words;
 # once the keyboard is down the element is asked for again.
 run_case kbd tap AWAIT_FILE="$tmp/f_ok" TAP_ANSWER="ERR under the keyboard: 5 5000, it starts at 4800"
-verdict "a tap under the keyboard waits for the keyboard to go, asks again, and fails with the app's words when it stays"     "$([ "$(grep -c '^ui tap@2:Hello' "$tmp/kbd/sent.log")" = 2 ] && has kbd 'await_ui 2 keyboard=down' && has kbd 'rc=1' && grep -q 'the app said: ERR under the keyboard' "$tmp/kbd/stdout" && echo 1)"
+verdict "a tap under the keyboard waits for the keyboard to go, asks again, and fails with the app's words when it stays"     "$([ "$(grep -c '^ui tapwait:5000:tap@2:Hello' "$tmp/kbd/sent.log")" = 2 ] && has kbd 'await_ui 2 keyboard=down' && has kbd 'rc=1' && grep -q 'the app said: ERR under the keyboard' "$tmp/kbd/stdout" && echo 1)"
 run_case kbd2 tap AWAIT_FILE="$tmp/f_ok" TAP_ANSWER="ERR under the keyboard: 5 5000, it starts at 4800" AWAIT_UI_FAIL=1
-verdict "the keyboard that does not go is not waited for twice: one ask"     "$([ "$(grep -c '^ui tap@2:Hello' "$tmp/kbd2/sent.log")" = 1 ] && has kbd2 'rc=1' && echo 1)"
+verdict "the keyboard that does not go is not waited for twice: one ask"     "$([ "$(grep -c '^ui tapwait:5000:tap@2:Hello' "$tmp/kbd2/sent.log")" = 1 ] && has kbd2 'rc=1' && echo 1)"
 run_case outside tap_xy AWAIT_FILE="$tmp/f_ok" TAP_ANSWER="ERR outside the window (1080x2400): 5 9000"
 verdict "a touch outside the window fails the step with the app's words, no waiting"     "$(has outside 'rc=1' && ! has outside 'keyboard=down' && grep -q 'the app said: ERR outside the window' "$tmp/outside/stdout" && echo 1)"
+
+# The wait of a tap: held in the app (one request), 5 s unless told, none for TAP_WAIT=0, a NOTE when it took over a second.
+run_case wait2 tap AWAIT_FILE="$tmp/f_ok" TAP_WAIT=2
+verdict "TAP_WAIT sets how long the app holds the tap, and the channel waits that long on top of its deadline" \
+    "$(has wait2 'ui tapwait:2000:tap@2:Hello' && [ "$(cat "$tmp/wait2/extra")" = 2 ] && echo 1)"
+run_case wait0 tap AWAIT_FILE="$tmp/f_ok" TAP_WAIT=0
+verdict "TAP_WAIT=0 is the plain tap, answered at once, with no wait in the app" \
+    "$(has wait0 'ui tap@2:Hello' && ! has wait0 'tapwait' && has wait0 'rc=0' && echo 1)"
+run_case waited tap AWAIT_FILE="$tmp/f_ok" TAP_ANSWER="OK waited 2300ms"
+verdict "a tap that waited over a second is a tap that landed, and the results say how long it waited" \
+    "$(has waited 'rc=0' && grep -q 'NOTE  case  the tap (tap@2:Hello) waited 2300ms for its element' "$tmp/waited/out/results.txt" && [ ! -s "$tmp/waited/out/step_failed.txt" ] && echo 1)"
+run_case waitnone tap AWAIT_FILE="$tmp/f_ok" TAP_ANSWER=none TAP_WAIT=3
+verdict "a tap whose element never came fails after the wait, and the line says what the app said, how long it waited and where the step is" \
+    "$(has waitnone 'rc=1' && grep -q 'nothing says Hello (the app said: none, waited 3s) \[drive.sh:' "$tmp/waitnone/stdout" && grep -q 'waited 3s' "$tmp/waitnone/out/step_failed.txt" && echo 1)"
+run_case nowait tap AWAIT_FILE="$tmp/f_ok" TAP_ANSWER=none TAP_WAIT=0
+verdict "a tap that must not wait says no wait in its failure line" \
+    "$(has nowait 'rc=1' && grep -q 'the app said: none) \[' "$tmp/nowait/stdout" && echo 1)"
+run_case tol tolerated_then_pass AWAIT_FILE="$tmp/f_ok" TAP_ANSWER=none
+verdict "a step that may fail is written to tolerated_steps.txt with its scenario and its line, and stays out of step_failed.txt" \
+    "$(grep -q '^case | nothing says Hello (the app said: none, waited 5s) | drive.sh:' "$tmp/tol/out/tolerated_steps.txt" && [ ! -s "$tmp/tol/out/step_failed.txt" ] && echo 1)"
 
 # A touch that arrived after the wait ran out: the count is read again, and the touch is not sent twice.
 printf 'frames=1 screen=0 input_seen=7\nframes=1 screen=0 input_seen=7\nframes=1 screen=0 input_seen=8\n' > "$tmp/f_ready_late"

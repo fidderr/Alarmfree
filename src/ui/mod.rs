@@ -128,6 +128,16 @@ pub fn debug_command(command: String, reply: impl FnOnce(String) + Send + 'stati
             }
             return;
         }
+        #[cfg(feature = "devtest")]
+        if let Some(spec) = command.strip_prefix("tapwait:") {
+            let mut ui = None;
+            with_ctx(|ctx| ui = Some(ctx.ui.clone()));
+            match ui {
+                Some(ui) => debug_elements::start_tap_wait(ui, spec, reply),
+                None => reply("ERR the UI is not up".to_owned()),
+            }
+            return;
+        }
         let mut answer = String::from("ERR the UI is not up");
         with_ctx(|ctx| answer = debug::run(ctx, &command));
         reply(answer);

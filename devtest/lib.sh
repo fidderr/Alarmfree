@@ -791,27 +791,58 @@ still_where() { # command text [which]
 #
 # A step that failed (the app says the element is not there, a touch that never arrived, a tab that did not open) is
 # written to step_failed.txt; a scenario that goes on after it cannot end with PASS (see `pass`). A place that tries and
-# falls back on purpose says so with TAP_MAY_FAIL=1 in front of the step.
+# falls back on purpose says so with TAP_MAY_FAIL=1 in front of the step; those are written to tolerated_steps.txt of the
+# results (scenario | step | line), which the CI summary lists, so a step that fails often on purpose does not go unseen.
 STEP_FAILED_FILE="$OUT/step_failed.txt"
 step_failed() { # what: says it, keeps it for pass(), returns 1
-    echo "$1" >&2
-    [ -n "${TAP_MAY_FAIL:-}" ] || echo "$1" >> "$STEP_FAILED_FILE"
+    # The first line outside this file that asked for the step: "matrix.sh:2675".
+    local site="" i
+    for ((i = 1; i < ${#BASH_SOURCE[@]}; i++)); do
+        case "${BASH_SOURCE[i]}" in
+            */lib.sh | lib.sh) ;;
+            *)
+                site="${BASH_SOURCE[i]##*/}:${BASH_LINENO[i - 1]}"
+                break
+                ;;
+        esac
+    done
+    echo "$1${site:+ [$site]}" >&2
+    if [ -n "${TAP_MAY_FAIL:-}" ]; then
+        echo "$CURRENT | $1 | ${site:-?}" >> "$OUT/tolerated_steps.txt"
+    else
+        echo "$1${site:+ [$site]}" >> "$STEP_FAILED_FILE"
+    fi
     return 1
 }
+# A tap waits for its element in the app, in one request (`tapwait`, src/ui/debug_elements.rs): TAP_WAIT seconds, 5 when
+# not set, `TAP_WAIT=20 tap X` for a slow screen. `TAP_WAIT=0 tap X` is for a tap that must not wait: its element is
+# expected to be there now, or its absence is the fallback. A touch at a place has no element to wait for. When the wait
+# took more than a second the app says so and the results get a NOTE, so slow screens stay visible.
 tap_through() { # command, what to say when it fails
-    local said
+    local said cmd=$1 wait=${TAP_WAIT:-5} waited="" extra=""
+    case "$1" in
+        tapxy:*) wait=0 ;;
+    esac
+    [ "$wait" -le 0 ] || { cmd="tapwait:$((wait * 1000)):$1"; extra=$wait; }
     # Settled and not being resized (the window is resized by Android a moment after a keyboard goes away or a window
     # comes up): the answer comes at once when it is.
     UI_QUIET=1 await_ui 5 stable
-    said=$(ui "$1")
+    said=$(UI_EXTRA=$extra ui "$cmd")
     # The keyboard that was put away is still in the app's insets for a moment: the element is asked for again once it is down.
     case "$said" in
-        "ERR under the keyboard"*) UI_QUIET=1 await_ui 2 'keyboard=down' && said=$(ui "$1") ;;
+        "ERR under the keyboard"*) UI_QUIET=1 await_ui 2 'keyboard=down' && said=$(UI_EXTRA=$extra ui "$cmd") ;;
     esac
     UI_QUIET=1 await_settled 3
     SETTLED_AT=$SECONDS
+    case "$said" in
+        "OK waited "*)
+            echo "NOTE  $CURRENT  the tap ($1) waited ${said#OK waited } for its element" | tee -a "$RESULTS" >&2
+            return 0
+            ;;
+    esac
     [ "$said" = OK ] && return 0
-    step_failed "$2 (the app said: $said)"
+    [ "$wait" -le 0 ] || waited=", waited ${wait}s"
+    step_failed "$2 (the app said: $said$waited)"
 }
 tap() { tap_through "tap${2:+@$2}:$1" "nothing says $1"; } # text [which of them] [seconds, not read]
 # The time of the editor, which a touch there opens the time sheet.

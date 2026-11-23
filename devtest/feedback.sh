@@ -227,7 +227,8 @@ s74() {
     on_screen_is 0 || problems="$problems; back does not return to the alarms"
     # Hiding it keeps it away, also after a restart.
     on_screen "Something went wrong last time. Send a report?" 3 || problems="$problems; banner gone before it was dismissed"
-    { TAP_MAY_FAIL=1 tap_in "Dismiss" 0 0.5 || tap_in "Do not show this here" 1 0.5; } || problems="$problems; no dismiss button"
+    # The trouble banner's own button (ui/feedback.slint); "Do not show this here" belongs to the reliability banner.
+    tap_in "Dismiss" 0 0.5 || problems="$problems; no dismiss button"
     is_not_there "Something went wrong last time. Send a report?" || problems="$problems; still there after dismissing"
     dev am force-stop "$PKG"
     start_app

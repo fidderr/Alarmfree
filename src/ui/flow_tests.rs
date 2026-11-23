@@ -1256,6 +1256,99 @@ fn a_tap_through_the_app_stops_where_a_finger_cannot_reach() {
     f.finish();
 }
 
+/// Run a held tap (`tapwait:<ms>:<command>`) the way the channel does: the answer comes from the app's own timer. Time is
+/// moved by the testing backend in steps of 30 ms and the clock of the wait is real, so each step also lets 30 ms pass.
+fn held_tap(f: &Flow, spec: &str, meanwhile: impl Fn(u32)) -> (String, std::time::Duration) {
+    let (send, answers) = std::sync::mpsc::channel();
+    let started = std::time::Instant::now();
+    debug_elements::start_tap_wait(f.ui.as_weak(), spec, move |said| {
+        let _ = send.send(said);
+    });
+    for step in 0..400 {
+        if let Ok(said) = answers.try_recv() {
+            return (said, started.elapsed());
+        }
+        meanwhile(step);
+        i_slint_backend_testing::mock_elapsed_time(std::time::Duration::from_millis(30));
+        std::thread::sleep(std::time::Duration::from_millis(30));
+    }
+    panic!("no answer to {spec}");
+}
+
+/// A tap that waits for its element: the element comes up a moment after the tap was asked for, and the tap lands on it.
+#[test]
+fn a_held_tap_lands_when_its_element_appears_after_a_moment() {
+    let f = Flow::new(vec![daily("a", 7, 0, "Work")]);
+    // "Theme" is a row of the settings screen, which is not open yet.
+    f.expect(!f.has_part("Theme"), "Theme is up before Settings is open");
+    let opened = std::cell::Cell::new(false);
+    let (said, took) = held_tap(&f, "2000:tapc:Theme", |step| {
+        if step == 3 && !opened.replace(true) {
+            f.expect(
+                debug_elements::run(&f.ui, "tap@L:Settings").as_deref() == Some("OK"),
+                "no Settings tab",
+            );
+        }
+    });
+    f.expect(said == "OK", format!("the held tap said {said}"));
+    f.expect(
+        took < std::time::Duration::from_millis(1500),
+        format!("the held tap took {took:?}"),
+    );
+    f.expect(
+        f.ui.get_screen() == 5,
+        format!(
+            "the tap on Theme did not open the theme screen: screen {}",
+            f.ui.get_screen()
+        ),
+    );
+    f.finish();
+}
+
+/// An element that is there at once is tapped at once, with no waiting in the answer.
+#[test]
+fn a_held_tap_on_an_element_that_is_there_answers_at_once() {
+    let f = Flow::new(vec![daily("a", 7, 0, "Work")]);
+    let (said, took) = held_tap(&f, "2000:tap@L:Settings", |_| {});
+    f.expect(said == "OK", format!("the held tap said {said}"));
+    f.expect(
+        took < std::time::Duration::from_millis(200),
+        format!("the held tap took {took:?}"),
+    );
+    f.finish();
+}
+
+/// An element that never comes: the answer is `none`, after the time given and not before.
+#[test]
+fn a_held_tap_on_an_element_that_never_comes_says_none_after_its_time() {
+    let f = Flow::new(vec![daily("a", 7, 0, "Work")]);
+    let (said, took) = held_tap(&f, "300:tap:No such text on this screen", |_| {});
+    f.expect(said == "none", format!("the held tap said {said}"));
+    f.expect(
+        took >= std::time::Duration::from_millis(300)
+            && took < std::time::Duration::from_millis(1500),
+        format!("the held tap took {took:?} for 300 ms"),
+    );
+    f.finish();
+}
+
+/// What a finger cannot reach is refused at once, not waited for; a tap that is no tap is refused at once too.
+#[test]
+fn a_held_tap_does_not_wait_where_a_finger_cannot_reach() {
+    let f = Flow::new(vec![daily("a", 7, 0, "Work")]);
+    f.ui.global::<Insets>().set_bottom(400.0);
+    // The row of the alarm is in the top part of the 6000 px window; the keyboard covers y >= 4800.
+    let (said, took) = held_tap(&f, "2000:tapxy:100 5000", |_| {});
+    f.expect(
+        said.starts_with("ERR under the keyboard") && took < std::time::Duration::from_millis(200),
+        format!("tapxy under the keyboard: {said} after {took:?}"),
+    );
+    f.ui.global::<Insets>().set_bottom(0.0);
+    let (said, _) = held_tap(&f, "2000:find:Settings", |_| {});
+    f.expect(said.starts_with("ERR"), format!("find is no tap: {said}"));
+    f.finish();
+}
+
 /// The sheet of the accent colour on a phone-sized window, with the keyboard animated up and down
 /// the way Android does it (the area it covers changes in many small steps).
 struct PhoneSheet {
