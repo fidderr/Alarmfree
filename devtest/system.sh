@@ -418,10 +418,13 @@ shade_button_gone() { # label
     done
 }
 # A button of one of this app's notifications in the shade: the shade open (and again after a quiet 12 s, when the notification
-# was folded away), the button's place read, one touch, and the button gone from the tree. The touch is repeated only when
-# a read 20 s after it still shows the button.
-tap_in_shade() { # label
+# was folded away), the button's place read, one touch, and then what the touch must have done: the effect the scenario names
+# (`check...`, a state of the app: the alarm skipped), or without one the button gone from the tree. The button gone alone says
+# little (the shade can close for other reasons), so a scenario names its effect. The touch is repeated only when a read 20 s after
+# it shows no effect and the button is there again.
+tap_in_shade() { # label [check...]
     local label=$1 end opened now
+    shift
     screen_awake || sys_wake || return 1
     kg_gone || { dev wm dismiss-keyguard > /dev/null; sys_wait "$SYS_DEADLINE" "the lock screen gone" kg_gone || return 1; }
     shade_set closed || return 1
@@ -434,9 +437,16 @@ tap_in_shade() { # label
         if shade_button_xy "$label"; then
             # shellcheck disable=SC2086
             dev input tap $SHADE_XY > /dev/null
-            sys_wait 20 "the $label button gone from the shade" shade_button_gone "$label" && return 0
+            if [ $# -gt 0 ]; then
+                sys_wait 20 "the effect of the touch on $label in the shade" "$@" && return 0
+            else
+                sys_wait 20 "the $label button gone from the shade" shade_button_gone "$label" && return 0
+            fi
+            opened=0
             continue
         fi
+        # No button: it was folded away, or the touch did its work and the effect is only late.
+        if [ $# -gt 0 ] && "$@"; then return 0; fi
         now=$(now_ms)
         if [ $((now - opened)) -ge 12000 ]; then
             shade_set closed || return 1
@@ -444,7 +454,7 @@ tap_in_shade() { # label
         fi
         sleep 0.3
     done
-    SYS_WHY="no $label button in the shade within 90s ($(sys_show))"
+    SYS_WHY="no effect of $label in the shade within 90s ($(sys_show))"
     return 1
 }
 

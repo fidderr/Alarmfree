@@ -2807,7 +2807,7 @@ s60() {
     wait_for 180 reminded || { fail "no notice with a Skip"; return; }
     kill_all
     wait_for 30 no_process
-    tap_in_shade Skip || problems="$problems; no Skip to tap: $SYS_WHY"
+    tap_in_shade Skip skipped || problems="$problems; no Skip to tap: $SYS_WHY"
     shade_set closed || problems="$problems; $SYS_WHY"
     skipped() { printf "SELECT data FROM alarms WHERE id='a';\n" | sql | grep -q "\"skip_until_ms\":$((T * 1000))"; }
     wait_for 15 skipped || problems="$problems; not skipped: $(printf "SELECT data FROM alarms WHERE id='a';\n" | sql | grep -o '"skip_until_ms":[^,]*')"
@@ -2815,7 +2815,7 @@ s60() {
     wait_for 8 moved || problems="$problems; armed for $(armed_at_ms a), was $armed"
     # Taken back.
     wait_for 8 done_notice || problems="$problems; nothing to take it back with"
-    tap_in_shade Undo || problems="$problems; no Undo to tap: $SYS_WHY"
+    tap_in_shade Undo not_skipped || problems="$problems; no Undo to tap: $SYS_WHY"
     shade_set closed || problems="$problems; $SYS_WHY"
     not_skipped() { printf "SELECT data FROM alarms WHERE id='a';\n" | sql | grep -q '"skip_until_ms":null'; }
     wait_for 15 not_skipped || problems="$problems; undo did nothing"
@@ -2825,7 +2825,7 @@ s60() {
     # Skipped for good this time, from a list that is open: the list says so.
     start_app
     on_card 10
-    tap_in_shade Skip || problems="$problems; no second Skip to tap: $SYS_WHY"
+    tap_in_shade Skip skipped || problems="$problems; no second Skip to tap: $SYS_WHY"
     shade_set closed || problems="$problems; $SYS_WHY"
     wait_for 15 skipped || problems="$problems; not skipped the second time"
     says_it() { has_text=$(row_when); case "$has_text" in Skips*) return 0 ;; esac; return 1; }
@@ -2881,7 +2881,7 @@ s67() {
     own_notifications | grep -q "channel=$loud" && problems="$problems; the silent reminder is on the sound channel"
     shade_set open || problems="$problems; $SYS_WHY"
     adb_ exec-out screencap -p > "$OUT/s67_reminder_shade.png"
-    tap_in_shade Skip || problems="$problems; no Skip to tap: $SYS_WHY"
+    tap_in_shade Skip skipped || problems="$problems; no Skip to tap: $SYS_WHY"
     shade_set closed || problems="$problems; $SYS_WHY"
     wait_for 15 skipped || problems="$problems; Skip on the 8 hour reminder did not skip the ring"
     # A 15 minute reminder, with sound.
