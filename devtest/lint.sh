@@ -29,7 +29,8 @@ done
 
 if [ ${#files[@]} -eq 0 ]; then
     for f in "$here"/*.sh; do
-        case "${f##*/}" in lib.sh | lint.sh | chaos.sh | *.test.sh) continue ;; esac
+        # probe.sh: measuring scripts for Android's own screens, by name only, in no run of the suite.
+        case "${f##*/}" in lib.sh | lint.sh | chaos.sh | probe.sh | *.test.sh) continue ;; esac
         while IFS= read -r line || [ -n "$line" ]; do
             if [[ $line =~ ^[[:space:]]*scenario[[:space:]] ]]; then
                 files+=("$f")

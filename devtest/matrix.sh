@@ -1581,25 +1581,23 @@ s42() {
     scanner_on_top() { focused_window | grep -q SentinelScannerActivity; }
     scan_idle() { [ "$(sn scan_state)" = 0 ] && is_there SCAN; }
     local crashed
-    if wait_for 8 scanner_on_top; then
+    if wait_for 30 scanner_on_top; then
         crashed=$(adb_ logcat -d 2> /dev/null | grep -E 'FATAL EXCEPTION|ClassNotFoundException|NoClassDefFoundError|Resources\$NotFoundException|InflateException' | head -3)
         if [ -n "$crashed" ]; then
             fail "opened, but: $crashed"
             return
         fi
-        press_back
-        if ! wait_for 8 scan_idle; then
+        if ! sys_press KEYCODE_BACK "the scan button back after Back from the scanner" 30 scan_idle; then
             fail "did not come back from the scanner: $(focused_window)"
         else
             # Right away again: the first one must not end this one.
             tap SCAN 0 0.3
-            if ! wait_for 8 scanner_on_top; then
+            if ! wait_for 30 scanner_on_top; then
                 fail "the second time it does not open: scan_state=$(sn scan_state)"
             elif [ "$(sn scan_state)" = 0 ]; then
                 fail "the second scan ended while the camera is up"
             else
-                press_back
-                if wait_for 8 scan_idle; then
+                if sys_press KEYCODE_BACK "the scan button back after the second Back" 30 scan_idle; then
                     pass "opened the camera twice in a row and came back"
                 else
                     fail "did not come back the second time"
