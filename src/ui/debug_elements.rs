@@ -7,7 +7,7 @@ use i_slint_backend_testing::{ElementHandle, ElementQuery};
 use slint::platform::{Key, PointerEventButton, WindowEvent};
 use slint::{ComponentHandle, LogicalPosition};
 
-use super::MainWindow;
+use super::{Insets, MainWindow};
 
 /// One element on screen, in device pixels: its middle and its size.
 struct Seen {
@@ -206,6 +206,24 @@ fn tap_at(ui: &MainWindow, x: f32, y: f32) {
     });
 }
 
+/// Why a finger could not touch this place of the window, in device pixels: it is outside the window, or the keyboard is
+/// over it (the window keeps its full height while the keyboard is up, so a place under it is inside the window).
+fn out_of_reach(ui: &MainWindow, x: f32, y: f32) -> Option<String> {
+    let win = ui.window().size();
+    let (w, h) = (win.width as f32, win.height as f32);
+    if !(x >= 0.0 && y >= 0.0 && x < w && y < h) {
+        return Some(format!("ERR outside the window ({w}x{h}): {x} {y}"));
+    }
+    let keyboard = ui.global::<Insets>().get_bottom() * scale(ui);
+    if keyboard > super::ready::KEYBOARD_MIN_PX && y >= h - keyboard {
+        return Some(format!(
+            "ERR under the keyboard: {x} {y}, it starts at {}",
+            (h - keyboard).round()
+        ));
+    }
+    None
+}
+
 fn key(ui: &MainWindow, text: slint::SharedString) {
     let window = ui.window();
     window.dispatch_event(WindowEvent::KeyPressed { text: text.clone() });
@@ -265,10 +283,10 @@ pub fn run(ui: &MainWindow, command: &str) -> Option<String> {
             };
             if name.starts_with("tap") {
                 match hit {
-                    Some(s) => {
+                    Some(s) => out_of_reach(ui, s.x, s.y).unwrap_or_else(|| {
                         tap_at(ui, s.x, s.y);
                         "OK".to_owned()
-                    }
+                    }),
                     None => "none".to_owned(),
                 }
             } else {
@@ -279,10 +297,10 @@ pub fn run(ui: &MainWindow, command: &str) -> Option<String> {
         "tapxy" => {
             let mut n = arg.split(' ').filter_map(|v| v.parse::<f32>().ok());
             match (n.next(), n.next()) {
-                (Some(x), Some(y)) => {
+                (Some(x), Some(y)) => out_of_reach(ui, x, y).unwrap_or_else(|| {
                     tap_at(ui, x, y);
                     "OK".to_owned()
-                }
+                }),
                 _ => "ERR tapxy: x y".to_owned(),
             }
         }

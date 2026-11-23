@@ -56,7 +56,7 @@ const KEYS: [&str; 16] = [
     "input_seen",
 ];
 /// Bottom inset from which the window counts as covered by the keyboard (the bars alone are less).
-const KEYBOARD_MIN_PX: f32 = 400.0;
+pub(super) const KEYBOARD_MIN_PX: f32 = 400.0;
 /// `stable`: no change of the window size for this long after the first frame.
 const STABLE_MS: u64 = 1200;
 
