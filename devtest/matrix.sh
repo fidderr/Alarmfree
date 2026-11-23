@@ -1257,8 +1257,8 @@ s32() {
     # The page follows the ring that ended while it was open: its button is "Test alarm" again, not "Cancel the test alarm",
     # and the record can be saved. Without that the tap below met a page that changed under it.
     on_screen "Test alarm" 10 || { fail "the reliability screen still waits for the test alarm after it rang: $(texts_of | cut -c1-200)"; return; }
-    on_screen "Save the record of how fast alarms rang" 10 || { fail "no way to save the record after the ring: $(texts_of | cut -c1-200)"; return; }
-    # The row is under the Test alarm button until the screen is scrolled: the tap waits until the whole row is above the bar.
+    # The row is below the page's window until the screen is scrolled (the tree lists a row only once part of it is in the window,
+    # and then its middle can still be behind the Test alarm button): the tap waits until the whole row is above the bar.
     tap_above_bar "Save the record of how fast alarms rang" "Test alarm" "Cancel the test alarm"
     # The file is written a moment after the tap: wait for what is in it, not for half a second.
     has_record() { [ "$(dev cat /sdcard/Download/alarmfree-rings.txt 2> /dev/null | grep -c ' sound ')" -ge 1 ]; }
