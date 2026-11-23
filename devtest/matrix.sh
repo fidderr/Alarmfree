@@ -1529,6 +1529,10 @@ s38() {
     screenshot s38_rename_typed
     press sound-rename-done "" 0.6
     screenshot s38_rename_done
+    # The sheet is short while the keyboard goes down and has its height back when Android has given the inset back (run 45191082131,
+    # Android 10: the list was read 0.6 s after Done, with the rows below Thriller not laid out yet): wait for the keyboard, then for the row.
+    await_ui 10 'keyboard=down' || problems="$problems; the keyboard is still up after the rename: $(ui ready | grep -oE 'keyboard=[a-z]+')"
+    wait_for 10 has_there Morning || scroll_until Morning
     names=$(texts_of)
     case "$names" in
         *Morning*) ;;
@@ -1687,15 +1691,20 @@ s44() {
     seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null air 0 0 3 1 '[["challenge.shake","{\"count\":2}"],["challenge.shake","{\"count\":2}"]]')"
     arm a
     await_ring a 30 || { fail "never started"; return; }
+    # Closed loop: the acceleration is held until the app has counted a shake (the sensor listener of a slow emulator gets few
+    # samples: run 45191082131, Android 11, the first challenge took 16 s of open-loop pulses and the second got none), then the
+    # rest value goes in for longer than the detector's own cooldown (300 ms). The count after each pulse is kept for the failure.
+    local trail="" missed=0
+    shake_moved() { [ "$(sn shakes)" != "$1" ]; }
     shake() {
-        local i=0
-        while [ "$i" -lt 3 ]; do
-            adb_ emu sensor set acceleration 40:40:40 > /dev/null
-            sleep 0.35
-            adb_ emu sensor set acceleration 0:0:9.8 > /dev/null
-            sleep 0.35
-            i=$((i + 1))
-        done
+        local c0 c1
+        c0=$(sn shakes)
+        adb_ emu sensor set acceleration 40:40:40 > /dev/null
+        wait_for 3 shake_moved "$c0" || missed=$((missed + 1))
+        c1=$(sn shakes)
+        trail="$trail $c0>$c1"
+        adb_ emu sensor set acceleration 0:0:9.8 > /dev/null
+        sleep 0.45 # lint-ok: the detector's cooldown (300 ms) has to pass before the next shake counts
     }
     on_screen "Turn off" 10
     # The log since this scenario began holds the app's start. A native method the SDK registers with a wrong
@@ -1705,10 +1714,9 @@ s44() {
     adb_ logcat -c
     tap "Turn off" 0 0.5
     wait_for 5 run_up
-    local rounds=0 starts
-    while [ "$rounds" -lt 5 ] && state_is a firing; do
+    local rounds=0 starts deadline=$((SECONDS + 90))
+    while [ "$SECONDS" -lt "$deadline" ] && state_is a firing; do
         shake
-        sleep 1
         rounds=$((rounds + 1))
     done
     await_state a scheduled 5
@@ -1718,9 +1726,9 @@ s44() {
     if [ -n "$badjni" ]; then
         fail "the log of the app's start holds: ${badjni#*: }"
     elif [ "$(state a)" = scheduled ] && [ "$(outcomes solved)" = 1 ] && [ "$starts" -ge 2 ] && ! sound_on; then
-        pass "both counted, the sensor started $starts times, in $rounds rounds of shaking, no native method failed to register"
+        pass "both counted, the sensor started $starts times, in $rounds shakes (counts:$trail), no native method failed to register"
     else
-        fail "state=$(state a) solved=$(outcomes solved) sensor started $starts times, on screen '$(texts_of)'"
+        fail "state=$(state a) solved=$(outcomes solved) sensor started $starts times, $rounds shakes in 90 s ($missed not counted in 3 s; counts:$trail), on screen '$(texts_of)'"
     fi
 }
 

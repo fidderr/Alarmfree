@@ -72,6 +72,8 @@ fn snapshot(ui: &MainWindow) -> String {
         "run_active": ui.global::<Run>().get_active(),
         "type_passage": ui.global::<Run>().get_type_cells().iter().map(|c| c.ch.to_string()).collect::<String>(),
         "run_idle_left": ui.global::<Run>().get_idle_left(),
+        // Shakes the sensor listener has counted since the challenge began (what the shake challenge counts).
+        "shakes": mobile_sentinel::sensors::shake_count(),
         "scan_state": ui.global::<Run>().get_scan_state(),
         "scanner_open": super::challenge_run::scanner_open(),
     });
