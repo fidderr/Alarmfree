@@ -115,4 +115,12 @@ out=$(LINT_LIST="$dir/stale.txt" bash "$lint" --report)
 out=$(bash "$lint" --report)
 [[ $out != *STALE* ]] && [[ $out != *"not on the list"* ]] && verdict "the list of the repository matches the code (no new hit, no stale entry)" 1 || verdict "the list of the repository matches the code" 0
 
+# A script with a CR at the end of its lines (CRLF) cannot run on the Linux machines (run 45280008934: every part stopped at the first line of matrix.sh).
+crs=""
+for f in "$here"/*.sh "$here"/ci/*.sh "$here"/ci/*.py; do
+    [ -f "$f" ] || continue
+    [ "$(tr -cd '\r' < "$f" | wc -c)" -le 5 ] || crs="$crs ${f##*/}" # a few CR inside a quoted word are fine, a CRLF file has one per line
+done
+[ -z "$crs" ] && verdict "no script or tool of devtest has CRLF line ends (it would not run on a Linux machine)" 1 || verdict "no script or tool of devtest has CRLF line ends (found in:$crs)" 0
+
 exit "$bad"
