@@ -42,6 +42,7 @@ claim_device() {
     RUN_ID="$$.$RANDOM$RANDOM"
     export RUN_ID
     echo "$RUN_ID" > "$OWNER_FILE"
+    rm -f "$DEAD_FILE"
 }
 still_ours() {
     local owner=""
@@ -59,6 +60,7 @@ give_way() {
 # Nothing may hang a run: an unresponsive device fails instead of waiting forever.
 adb_() {
     still_ours || give_way
+    device_is_dead && return 124
     # While a unit runs on a GitHub machine, what adb says about a lost connection is kept (link_stderr, baseline.sh).
     if [ -n "${LINK_PID:-}" ]; then
         timeout 120 "$ADB" -s "$SERIAL" "$@" 2> >(link_stderr)
@@ -71,10 +73,26 @@ device_ok() { [ "$(timeout 20 "$ADB" -s "$SERIAL" shell echo ok | tr -d '\r')" =
 # starts in the credential-encrypted directory.
 DATA="/data/user_de/0/$PKG"
 
+# A device that does not answer at all (run 45231328491, msd29, s26: the guest stopped answering adb after the screen was off and the clock
+# jumped; every call then took its whole timeout, 90 to 120 s, and the scenario's loops went on for 90 minutes until the job was cancelled).
+# When the shell of the device does not answer within ASK_TIMEOUT and a plain `adb shell echo ok` does not either, the flag file says so:
+# every call after it fails at once (124, no output) until the shells are opened again (open_shells: after a restart, after the link is
+# back), so the scenario ends in seconds and the watchdog turns the unit into INFRA and a rerun on a restarted device.
+DEAD_FILE="${DEAD_FILE:-${TMPDIR:-/tmp}/af_devtest_dead_$SERIAL}"
+device_is_dead() { [ -e "$DEAD_FILE" ]; }
+device_dead_check() { # after a shell that did not answer
+    device_is_dead && return 0
+    [ "$(timeout "${DEAD_PROBE_S:-20}" "$ADB" -s "$SERIAL" shell echo ok 2> /dev/null | tr -d '')" = ok ] && return 1
+    : > "$DEAD_FILE"
+    echo "NOTE  ${CURRENT:-?}  the device does not answer (the shell did not in ${ASK_TIMEOUT:-90} s and neither does adb): every call fails at once from here" >&2
+    return 0
+}
+
 # Two shells on the device that stay open, one as adb and one as the app. Starting adb for
 # every call took 110 ms, a call in an open shell takes 30, and a scenario makes hundreds. Open
 # them from the script itself, not from a subshell: what a subshell opens goes with it.
 open_shells() {
+    rm -f "$DEAD_FILE"
     { coproc DEV_SH { "$ADB" -s "$SERIAL" shell -T sh 2>&1; }; } 2> /dev/null
     exec 5>&"${DEV_SH[1]}" 6<&"${DEV_SH[0]}"
     DEV_PID=$DEV_SH_PID
@@ -97,11 +115,13 @@ shells_open() { kill -0 "$DEV_PID" 2> /dev/null && kill -0 "$APP_PID" 2> /dev/nu
 ask() { # pid in out command
     local pid=$1 line text="" rest
     still_ours || give_way
+    device_is_dead && return 124
     printf '{ %s\n} < /dev/null 2>&1; echo "__DONE__$?"\n' "$4" >&"$2"
     while :; do
         if ! IFS= read -r -t "${ASK_TIMEOUT:-90}" line <&"$3"; then
             echo "NOTE  no answer from the device shell to: ${4:0:160}" >&2
             kill "$pid" 2> /dev/null
+            device_dead_check
             return 124
         fi
         line=${line%$'\r'}
@@ -396,6 +416,7 @@ stopped_state_saved() {
 reboot_only() {
     # A restart that is meant is no finding of the watchdog.
     watchdog_announce_restart
+    rm -f "$DEAD_FILE"
     case "$SERIAL" in
         emulator-*)
             stopped_state_saved
@@ -1051,9 +1072,18 @@ sound_after_t_ms() {
 
 # Wait for the sound to stop; sets STOPPED_AT to seconds past T. Fails after `limit` seconds past T.
 await_silence() {
-    local limit=$1 n
+    local limit=$1 n gone=0
     while :; do
         n=$(now_s)
+        case "$n" in
+            '' | *[!0-9]*)
+                gone=$((gone + 1))
+                [ "$gone" -lt 3 ] || { step_failed "await_silence: the device gave no time (date +%s) three times in a row"; return 1; }
+                sleep 0.5 # lint-ok: a device that does not answer, bounded by the three tries
+                continue
+                ;;
+        esac
+        gone=0
         [ "$n" -gt $((T + limit)) ] && return 1
         if sound_off; then
             # Silent for good: the player that stalls hands over to the next sound, with a gap.
@@ -1069,9 +1099,19 @@ await_silence() {
 
 # Seconds from T until the sound starts, or empty after `limit` seconds past T.
 await_sound() {
-    local limit=${1:-30} n
+    local limit=${1:-30} n gone=0
     while :; do
         n=$(now_s)
+        # No clock from the device three times in a row: it is not there, and the number below would be an error forever.
+        case "$n" in
+            '' | *[!0-9]*)
+                gone=$((gone + 1))
+                [ "$gone" -lt 3 ] || { step_failed "await_sound: the device gave no time (date +%s) three times in a row"; return 1; }
+                sleep 0.5 # lint-ok: a device that does not answer, bounded by the three tries
+                continue
+                ;;
+        esac
+        gone=0
         [ "$n" -gt $((T + limit)) ] && return 1
         if sound_on; then
             SOUND_AT=$((n - T))
