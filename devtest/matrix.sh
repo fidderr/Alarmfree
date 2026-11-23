@@ -1543,7 +1543,7 @@ s40() {
     launcher_add_widget || { fail "the widget was not added: $SYS_WHY; the launcher shows: $(launcher_texts | tr '\n' '|'); appwidget says: $(dev dumpsys appwidget | grep -m4 'provider=' | tr -s ' ' | tr '\n' ';')"; return; }
     sys_home "the launcher in front" launcher_up || problems="$problems; $SYS_WHY"
     minute=$(printf ':%02d' "$T_M")
-    sys_wait "$SYS_DEADLINE" "the widget showing the time $minute" launcher_has "$minute" || problems="$problems; no time on it: $(launcher_texts | tr '\n' '|')"
+    sys_wait 60 "the widget showing the time $minute" launcher_has "$minute" || problems="$problems; no time on it: $(launcher_texts | tr '\n' '|')"
     # Follows a change, without the widget being asked.
     start_app
     on_home 8
@@ -1551,7 +1551,7 @@ s40() {
     on_card 5
     tap_in "On or off: a" 0 1
     sys_home "the launcher in front" launcher_up || problems="$problems; $SYS_WHY"
-    sys_wait "$SYS_DEADLINE" "the widget saying No alarm set" launcher_has "No alarm set" || problems="$problems; still old: $(launcher_texts | tr '\n' '|')"
+    sys_wait 60 "the widget saying No alarm set" launcher_has "No alarm set" || problems="$problems; still old: $(launcher_texts | tr '\n' '|')"
     remove_widgets
     if [ -z "$problems" ]; then
         pass "placed, shows the next ring, follows a change"
