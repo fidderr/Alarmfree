@@ -240,6 +240,8 @@ export component ChallengeDetailSheet inherits Rectangle {
                 border-color: Pal.line;
                 background: Pal.bg;
                 code := TextInput {
+                    accessible-label: Tr.t("challenge.config.scan_value");
+                    accessible-placeholder-text: Tr.t("challenge.config.scan_placeholder");
                     x: 12px;
                     width: parent.width - 24px;
                     text: Cfg.detail-code;
