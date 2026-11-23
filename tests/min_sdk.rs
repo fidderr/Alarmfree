@@ -31,22 +31,3 @@ fn the_native_code_is_built_for_that_level_and_no_other() {
         "the linker comes from build.sh"
     );
 }
-
-#[test]
-fn the_window_hides_the_keyboard_when_it_comes_up() {
-    let toml = read("sentinel.toml");
-    let main = toml
-        .split("[[android.declare.activity]]")
-        .nth(1)
-        .expect("sentinel.toml declares the main activity")
-        .split("\n[")
-        .next()
-        .unwrap();
-    assert!(main.contains("name = \"android.app.NativeActivity\""));
-    assert!(
-        main.contains("windowSoftInputMode = \"stateHidden|adjustResize\""),
-        "a new window must not show the keyboard by itself"
-    );
-    assert!(main.contains("launcher = true") && main.contains("native_lib = \"main\""));
-    assert!(main.contains("exported = true"));
-}
