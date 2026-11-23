@@ -2937,8 +2937,7 @@ dependencies = [
 [[package]]
 name = "mobile-sentinel"
 version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3feda3b40aa35b5a7accb24809c0fd416b310c1cfa91b3dab045c5a9befb83fb"
+source = "git+https://github.com/fidderr/mobile-sentinel?rev=6ba5849fb9c20f79c25fd65eab8b1142831832a7#6ba5849fb9c20f79c25fd65eab8b1142831832a7"
 dependencies = [
  "android_logger",
  "chrono",

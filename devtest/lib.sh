@@ -1078,8 +1078,25 @@ await_sound() {
 
 # The sound is on and the app has taken it up. The app hears of the ring by a broadcast, which
 # a starved emulator can hold for a while: the sound does not wait for it.
-await_ring() { # id [seconds past T]
-    await_sound "${2:-30}" && await_state "$1" firing 30
+await_ring() { # id [seconds past T for the sound] [seconds from the sound for the app to take the ring up, 30]
+    local takeup=${3:-30}
+    RING_WHY=""
+    if ! await_sound "${2:-30}"; then
+        RING_WHY="did not ring: no sound within ${2:-30}s past T"
+        return 1
+    fi
+    await_state "$1" firing "$takeup" && return 0
+    # It rang. What did not happen is the app taking the ring up (its own state, then its screen): the main process says why.
+    RING_WHY="rang (sound at +${SOUND_AT}s) but the app did not take the ring up in ${takeup}s: state=$(state "$1"), main process: $(main_process_state)"
+    return 1
+}
+RING_WHY=""
+# The main process as the system lists it (importance and process state), or gone, and whether it is frozen: a cached app
+# is frozen 10 s after it went cached (Android 14 and up) and a broadcast that is queued for it is not delivered.
+main_process_state() {
+    local s
+    s=$(dev "dumpsys activity lru | grep 'com.fidderr.alarmfree/u'" | sed -nE 's/^ *#[0-9]+: *(.*) [0-9]+:com\.fidderr\.alarmfree\/u.*/\1/p' | head -1)
+    echo "${s:-gone}"
 }
 
 top_is_backup() { dev "dumpsys activity activities | grep -E 'topResumedActivity|ResumedActivity:' | head -1 | grep -q SentinelBackupActivity" > /dev/null; }
