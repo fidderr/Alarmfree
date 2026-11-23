@@ -7,6 +7,7 @@
 #   t17_ring_after_home_90s     Home 90 s before the ring
 #   t18_ring_cached_not_frozen  Home 7 s before the ring, then Settings and Contacts in front: the app is cached, not yet frozen
 #   t19_ring_cached_frozen      the same 34 s before the ring: the app is cached and frozen
+#   t20/t21 (four_apps)         the same with four other apps (Settings, Contacts, Chrome, Messages), Home 12 and 34 s before the ring
 #   t10_ring_probe_smoke        2 rounds each of 5, 15, 1, 40 s, to see that the probe itself reads.
 # For t11 to t14 and t17 `Home` is pressed N seconds before the ring (N = 1, 5, 15, 40, 90), PROBE_ROUNDS times (20), and each round
 # is watched for PROBE_WATCH seconds (25) past the ring. One line per round in $OUT/ringprobe.txt (columns in PROBE_HEADER), the raw
@@ -80,6 +81,18 @@ probe_end() {
     esac
 }
 
+# Other apps in front, one after the other, each until it is on top (Settings, Contacts, and for deep4 Chrome and Messages).
+top_pkg_is() { dev "dumpsys activity activities | grep -E 'topResumedActivity|ResumedActivity:' | head -1" | grep -q "$1"; }
+probe_other_apps() { # kind
+    local pkg list="com.android.settings com.google.android.contacts"
+    [ "$1" != deep4 ] || list="$list com.android.chrome com.google.android.apps.messaging"
+    for pkg in $list; do
+        dev monkey -p "$pkg" -c android.intent.category.LAUNCHER 1 > /dev/null 2>&1
+        wait_for 8 top_pkg_is "$pkg" || echo "not on top after its start: $pkg" >> "$OUT/ringprobe_top_$CURRENT.txt"
+    done
+    echo "on top after the other apps: $(top_activity)" >> "$OUT/ringprobe_top_$CURRENT.txt"
+}
+
 # One round. kind: home (Home `moment` seconds before the ring), quick (Home right after the app was started, as s63 does),
 # app (Home `moment` seconds before the ring, then Settings in front), deep (Home, then Settings, then Contacts: this app is cached). Appends a line to ringprobe.txt, sets PROBE_LINE.
 probe_round() { # kind moment n
@@ -100,11 +113,9 @@ probe_round() { # kind moment n
     home_at=$(now_s)
     pid_main=$(main_pid)
     [ "$kind" != app ] || dev am start -a android.settings.SETTINGS > /dev/null
-    # deep: two other apps after Home, so that this one is no longer the previous app but a cached one.
-    if [ "$kind" = deep ]; then
-        dev am start -a android.settings.SETTINGS > /dev/null
-        dev monkey -p com.google.android.contacts -c android.intent.category.LAUNCHER 1 > /dev/null 2>&1
-        echo "on top after the two apps: $(top_activity)" >> "$OUT/ringprobe_top_$CURRENT.txt"
+    # deep: two other apps after Home, so that this one is no longer the previous app but a cached one. deep4: four.
+    if [ "$kind" = deep ] || [ "$kind" = deep4 ]; then
+        probe_other_apps "$kind"
     fi
     # Watch until the end of the window.
     while :; do
@@ -141,8 +152,13 @@ probe_round() { # kind moment n
     [ -s "$OUT/ringprobe.txt" ] || echo "$PROBE_HEADER" > "$OUT/ringprobe.txt"
     echo "$PROBE_LINE" >> "$OUT/ringprobe.txt"
     echo "main pid at Home: $pid_main, device time at Home: $home_at" >> "$log"
-    [ "$kind" != app ] && [ "$kind" != deep ] || dev am force-stop com.android.settings
-    [ "$kind" != deep ] || dev am force-stop com.google.android.contacts
+    case "$kind" in
+        app | deep | deep4) dev am force-stop com.android.settings ;;
+    esac
+    case "$kind" in
+        deep | deep4) dev am force-stop com.google.android.contacts ;;
+    esac
+    [ "$kind" != deep4 ] || { dev am force-stop com.android.chrome; dev am force-stop com.google.android.apps.messaging; }
 }
 
 ring_probe() { # kind moment
@@ -179,4 +195,6 @@ t15_ring_after_quick_home() { CURRENT_PROBE=t15_ring_after_quick_home ring_probe
 t16_ring_over_another_app() { CURRENT_PROBE=t16_ring_over_another_app ring_probe app 34; }
 t18_ring_cached_not_frozen() { CURRENT_PROBE=t18_ring_cached_not_frozen ring_probe deep 7; }
 t19_ring_cached_frozen() { CURRENT_PROBE=t19_ring_cached_frozen ring_probe deep 34; }
+t20_ring_cached_four_apps_12s() { CURRENT_PROBE=t20_ring_cached_four_apps_12s ring_probe deep4 12; }
+t21_ring_cached_four_apps_34s() { CURRENT_PROBE=t21_ring_cached_four_apps_34s ring_probe deep4 34; }
 t17_ring_after_home_90s() { CURRENT_PROBE=t17_ring_after_home_90s ring_probe home 90; }
