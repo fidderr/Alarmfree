@@ -202,6 +202,7 @@ export component HistoryScreen inherits Rectangle {
                 border-color: Pal.line;
                 background: Pal.bg;
                 input := TextInput {
+                    accessible-label: Tr.t("filter.last_prefix") + " " + Tr.t("filter.days_unit");
                     x: 12px;
                     width: parent.width - 24px;
                     text <=> root.custom-text;

@@ -241,6 +241,7 @@ component TypingBody inherits VerticalLayout {
         border-color: input.has-focus ? Pal.accent : Pal.line;
         background: Pal.surface;
         input := TextInput {
+            accessible-label: Tr.t("challenge.typing.placeholder");
             x: 12px;
             y: 12px;
             width: parent.width - 24px;

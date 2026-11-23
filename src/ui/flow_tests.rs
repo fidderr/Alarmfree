@@ -5,6 +5,7 @@
 //! docs/test-moves.md.
 
 use std::cell::RefCell;
+use std::collections::BTreeSet;
 use std::rc::Rc;
 
 use super::a11y_tests::alarm;
@@ -1493,4 +1494,64 @@ fn the_first_tap_on_a_card_lands_after_the_window_grew_during_a_flick_to_the_end
         );
         f.finish();
     }
+}
+
+/// Every text input on the screen, found by walking the elements, that has no accessible label.
+/// Android's adapter shows no placeholder as a hint, so the label is the only name an empty field has.
+fn unnamed_inputs(f: &Flow, screen: &str, found: &mut BTreeSet<String>, seen: &mut usize) {
+    use i_slint_backend_testing::{AccessibleRole, ElementQuery};
+    let inputs = ElementQuery::from_root(&f.ui)
+        .match_descendants()
+        .match_accessible_role(AccessibleRole::TextInput)
+        .find_all();
+    for input in inputs {
+        *seen += 1;
+        if input.accessible_label().is_none_or(|l| l.trim().is_empty()) {
+            let id = input.id().map(|i| i.to_string()).unwrap_or_default();
+            found.insert(format!("{screen}: {id} has no label"));
+        }
+    }
+}
+
+/// A person who cannot see the screen lands on a text field and hears its name: no field of any
+/// screen is nameless while it is empty. New fields are found by walking, not listed by hand.
+#[test]
+fn every_text_field_has_a_name_for_a_screen_reader() {
+    let f = Flow::new(Vec::new());
+    let mut found = BTreeSet::new();
+    let mut seen = 0;
+    f.expect(f.tap("Create new alarm"), "no create button");
+    unnamed_inputs(&f, "editor", &mut found, &mut seen);
+    for row in ["Label", "Vibration", "Snooze", "Sound"] {
+        f.open_row(row);
+        unnamed_inputs(&f, row, &mut found, &mut seen);
+        if f.has("Done") {
+            f.done();
+        }
+    }
+    f.expect(f.tap_has("Time:"), "no time button");
+    f.expect(f.tap("Type it"), "no Type it");
+    unnamed_inputs(&f, "time sheet", &mut found, &mut seen);
+    f.done();
+    f.finish();
+    for challenge in ["Scan", "Typing"] {
+        let c = Flow::new(Vec::new());
+        c.expect(c.tap("Create new alarm"), "no create button");
+        c.open_row("Challenges");
+        c.expect(c.tap("Add a challenge"), "no add");
+        c.expect(c.tap_last(challenge), format!("no {challenge}"));
+        unnamed_inputs(&c, challenge, &mut found, &mut seen);
+        if challenge == "Typing" {
+            c.expect(c.tap("Try"), "no Try");
+            unnamed_inputs(&c, "typing run", &mut found, &mut seen);
+        }
+        c.finish();
+    }
+    let g = Flow::new(Vec::new());
+    g.expect(g.tap_last("History"), "no History tab");
+    g.press("h-period", "6");
+    unnamed_inputs(&g, "history period", &mut found, &mut seen);
+    g.finish();
+    assert!(seen >= 5, "the walk found only {seen} text inputs");
+    assert!(found.is_empty(), "nameless text fields: {found:#?}");
 }
