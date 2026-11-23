@@ -220,6 +220,13 @@ fn shade(accent: Accent, light: bool) -> Rgb {
     }
 }
 
+fn set_sheet_open(thm: &Thm<'_>, open: bool) {
+    if thm.get_sheet_open() != open {
+        trace!("sheet open {open}");
+    }
+    thm.set_sheet_open(open);
+}
+
 /// The colour sheet: the swatches to start from, the wheel and the note.
 fn sync_sheet(ctx: &Ctx, reset_field: bool) {
     let Some(ui) = ctx.ui.upgrade() else {
@@ -231,7 +238,7 @@ fn sync_sheet(ctx: &Ctx, reset_field: bool) {
         (state.picking, state.wheel, state.typed.clone())
     };
     let Some(role) = role else {
-        thm.set_sheet_open(false);
+        set_sheet_open(&thm, false);
         return;
     };
     let dark = ctx.system_dark.get();
@@ -267,7 +274,7 @@ fn sync_sheet(ctx: &Ctx, reset_field: bool) {
     );
     thm.set_sheet_swatches(super::refill(thm.get_sheet_swatches(), swatches));
     thm.set_adjusted(chosen.is_some_and(|colour| colour != shown));
-    thm.set_sheet_open(true);
+    set_sheet_open(&thm, true);
     let hue = ui.global::<Hue>();
     let can_be_auto = matches!(role, Role::Card | Role::Text);
     hue.set_show_auto(can_be_auto);
@@ -317,6 +324,7 @@ pub fn accent_picked(ctx: &Ctx, index: usize) {
 }
 
 pub fn role_open(ctx: &Ctx, index: i32) {
+    trace!("role_open {index}");
     let Some(role) = Role::from_index(index) else {
         return;
     };
@@ -335,6 +343,7 @@ pub fn role_open(ctx: &Ctx, index: i32) {
 }
 
 pub fn close_sheet(ctx: &Ctx) {
+    trace!("close_sheet picking {:?}", ctx.theme.borrow().picking);
     ctx.theme.borrow_mut().picking = None;
     save(ctx);
     sync_sheet(ctx, false);
@@ -394,6 +403,7 @@ fn apply_colour(ctx: &Ctx, colour: Rgb, reset_field: bool) {
 }
 
 pub fn wheel_touched(ctx: &Ctx, x: f64, y: f64) {
+    trace!("wheel touched {x:.0},{y:.0}");
     let colour = {
         let mut state = ctx.theme.borrow_mut();
         state.typed = None;
@@ -412,6 +422,7 @@ pub fn wheel_brightness(ctx: &Ctx, percent: i32) {
 }
 
 pub fn wheel_code(ctx: &Ctx, text: &str) {
+    trace!("wheel code {text}");
     let parsed = Rgb::parse(text);
     {
         let mut state = ctx.theme.borrow_mut();
@@ -449,6 +460,7 @@ pub fn wheel_auto(ctx: &Ctx) {
 }
 
 pub fn released(ctx: &Ctx) {
+    trace!("wheel released");
     if ctx.theme.borrow().picking.is_some() {
         save(ctx);
     }

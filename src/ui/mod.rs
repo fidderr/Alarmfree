@@ -16,6 +16,17 @@ use crate::models::{AlarmData, AppSettings};
 
 slint::include_modules!();
 
+/// A line of the devtest trace (`ui trace`): what the window and its handlers saw, for finding
+/// out why a touch had no effect. Nothing in a build for users.
+#[cfg(any(test, all(debug_assertions, feature = "devtest")))]
+macro_rules! trace {
+    ($($arg:tt)*) => { $crate::ui::debug_elements::trace(format!($($arg)*)) };
+}
+#[cfg(not(any(test, all(debug_assertions, feature = "devtest"))))]
+macro_rules! trace {
+    ($($arg:tt)*) => {};
+}
+
 #[cfg(test)]
 mod a11y_tests;
 mod challenge_run;
@@ -503,6 +514,10 @@ pub fn run() -> Result<(), slint::PlatformError> {
     {
         ready::install(&ui);
         ui.global::<DevMark>().set_on(true);
+        ui.global::<DevMark>().on_pointer(|what, kind| {
+            let kind = ["", "down", "up", "cancel"][kind.clamp(0, 3) as usize];
+            trace!("pointer {kind} at {what}");
+        });
     }
     let ctx = new_ctx(&ui, settings, alarms);
     CTX.with(|slot| *slot.borrow_mut() = Rc::downgrade(&ctx));

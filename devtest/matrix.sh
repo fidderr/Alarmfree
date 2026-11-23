@@ -3195,6 +3195,7 @@ s61() {
     seed a "$(alarm_json a 7 0 "$EVERY_DAY" null)"
     arm a
     on_home 10
+    ui trace_clear > /dev/null
     local problems="" token_n
     go_tab Settings || { fail "no Settings tab: $(ui screen)"; return; }
     await_ui 5 "screen=3"
@@ -3236,6 +3237,9 @@ s61() {
         tap Done && await_ui 8 'theme_sheet=false' || {
             problems="$problems; the theme sheet is still up after Done: $(ui ready | grep -oE 'theme_sheet=[a-z]+')"
             note "after Done: $(ui texts | grep -oE '\{[^{}]*"t":"Done"[^{}]*\}' | tr '\n' ' ') $(ui ready)"
+            local trace
+            trace=$(ui trace)
+            note "trace (ms since start, newest last): ${trace: -4500}"
             screenshot s61_done_still_up
         }
     }

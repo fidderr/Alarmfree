@@ -75,7 +75,7 @@ const SOFT_MS: u128 = 400;
 /// A screen that is drawn and moves all the time counts as settled this long after its conditions hold.
 const ANIMATING_MS: Duration = Duration::from_millis(500);
 
-fn now_ms() -> u64 {
+pub(super) fn now_ms() -> u64 {
     static START: OnceLock<Instant> = OnceLock::new();
     START.get_or_init(Instant::now).elapsed().as_millis() as u64
 }
@@ -105,6 +105,7 @@ pub fn install(ui: &MainWindow) {
 
 /// Android handed the app input (called from the platform's event listener).
 pub fn note_input() {
+    trace!("android input");
     INPUT_SEEN.fetch_add(1, Ordering::Relaxed);
 }
 

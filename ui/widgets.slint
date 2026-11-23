@@ -115,7 +115,10 @@ export component PrimaryButton inherits Rectangle {
         font-weight: 500;
         color: root.quiet ? Pal.text : Pal.on-accent;
     }
-    TouchArea { clicked => { root.clicked(); } }
+    TouchArea {
+        pointer-event(e) => { DevMark.pointer(root.text, e.kind == PointerEventKind.down ? 1 : e.kind == PointerEventKind.up ? 2 : 3); }
+        clicked => { root.clicked(); }
+    }
 }
 
 // A panel that slides up over the screen. `close` fires on the dimmed area.
@@ -165,7 +168,7 @@ export component Sheet inherits Rectangle {
         background: Pal.surface;
         border-top-left-radius: 28px;
         border-top-right-radius: 28px;
-        TouchArea { }
+        TouchArea { pointer-event(e) => { DevMark.pointer("sheet panel", e.kind == PointerEventKind.down ? 1 : e.kind == PointerEventKind.up ? 2 : 3); } }
         Rectangle {
             y: 10px;
             width: 36px;

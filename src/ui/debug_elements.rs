@@ -145,8 +145,54 @@ fn logical(ui: &MainWindow, x: f32, y: f32) -> LogicalPosition {
     LogicalPosition::new(x / s, y / s)
 }
 
+thread_local!(static TRACE: std::cell::RefCell<std::collections::VecDeque<String>> = const { std::cell::RefCell::new(std::collections::VecDeque::new()) });
+
+/// The last lines of what the window's touch handlers saw, with the time in ms since start.
+const TRACE_LINES: usize = 160;
+
+pub(super) fn trace(line: String) {
+    TRACE.with(|t| {
+        let mut t = t.borrow_mut();
+        if t.len() == TRACE_LINES {
+            t.pop_front();
+        }
+        t.push_back(format!("{} {line}", super::ready::now_ms()));
+    });
+}
+
+/// Every touch area that holds the point, bottom one first: the last one is what takes a press.
+fn touch_areas_at(ui: &MainWindow, x: f32, y: f32) -> String {
+    let s = scale(ui);
+    ElementQuery::from_root(ui)
+        .match_descendants()
+        .match_inherits("TouchArea")
+        .find_all()
+        .into_iter()
+        .filter_map(|e| {
+            let (size, pos) = (e.size(), e.absolute_position());
+            let (left, top) = (pos.x * s, pos.y * s);
+            let inside =
+                x >= left && x < left + size.width * s && y >= top && y < top + size.height * s;
+            inside.then(|| {
+                format!(
+                    "{}x{}@{},{}",
+                    (size.width * s) as i32,
+                    (size.height * s) as i32,
+                    left as i32,
+                    top as i32
+                )
+            })
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 /// A touch at a place of the window, in device pixels, through the same events the platform sends.
 fn tap_at(ui: &MainWindow, x: f32, y: f32) {
+    trace(format!(
+        "tap_at {x:.0},{y:.0} areas [{}]",
+        touch_areas_at(ui, x, y)
+    ));
     let position = logical(ui, x, y);
     let window = ui.window();
     window.dispatch_event(WindowEvent::PointerMoved { position });
@@ -190,6 +236,12 @@ pub fn run(ui: &MainWindow, command: &str) -> Option<String> {
     };
     Some(match name {
         "texts" => json(&texts(ui)),
+        // The trace lines (see `trace`), and an empty trace.
+        "trace" => TRACE.with(|t| t.borrow().iter().cloned().collect::<Vec<_>>().join(" | ")),
+        "trace_clear" => {
+            TRACE.with(|t| t.borrow_mut().clear());
+            "OK".to_owned()
+        }
         // The readiness signals: first frame, screen, sheet and panel (see `ready`).
         "ready" => super::ready::state(ui),
         // The first text that says exactly this (`findc`: has it in it); `find@2:` takes the
