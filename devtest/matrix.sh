@@ -189,6 +189,59 @@ s07() {
     back_after_kill s07c_kill_both_mid_ring kill_all
 }
 
+# The ring's watchdog (an exact alarm a few seconds ahead) brings a ring back after a kill. A ring it has
+# resumed must have the next watchdog armed at once: a second kill in the first moments after the resume
+# then finds one. Without it only Android's own restart of the service is left, whose delay grows 1 s, 10 s, 40 s.
+# The second kill has to land inside that moment, which a script from the host cannot hit: a root shell on
+# the device waits for the watchdog's line in the log and kills the alarm process 0.3 s later. If the ring did
+# not come back through the watchdog the first time, there is no such moment: SKIP, never a PASS by luck.
+s07d() {
+    scenario s07d_kill_again_just_after_the_watchdog_resumed_the_ring
+    on_emulator || { skip "the kill inside the first second needs a root shell: emulators only"; return; }
+    fresh
+    next_minute
+    seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
+    arm a
+    await_ring a 30 || { fail "never started: $RING_WHY"; return; }
+    local sh_file="$OUT/s07d_watcher.sh" killed_file=/data/local/tmp/s07d_killed
+    cat > "$sh_file" <<WATCHER
+rm -f $killed_file
+logcat -b main -T 1 MobileSentinel.AlarmRx:I '*:S' | while read -r line; do
+    case "\$line" in
+    *'instance=ring#watchdog'*)
+        sleep 0.3
+        kill -9 \$(pidof $PKG:sentinel)
+        date +%s > $killed_file
+        break
+        ;;
+    esac
+done
+WATCHER
+    adb_ push "$sh_file" /data/local/tmp/s07d_watcher.sh > /dev/null
+    dev rm -f "$killed_file"
+    timeout 60 "$ADB" -s "$SERIAL" shell "su 0 sh /data/local/tmp/s07d_watcher.sh" > "$OUT/s07d_watcher.txt" 2>&1 &
+    local watcher=$!
+    sleep 1 # lint-ok: the watcher on the device has to be listening before the kill
+    kill_sentinel
+    killed_at() { dev "cat $killed_file 2> /dev/null" | tr -dc 0-9; }
+    have_killed_at() { [ -n "$(killed_at)" ]; }
+    if ! wait_for 25 have_killed_at; then
+        kill "$watcher" 2> /dev/null
+        skip "the ring did not come back through the watchdog within 25s of the first kill, so there was no moment to hit (sound=$(sound_on && echo on || echo OFF), sentinel=$(sentinel_pid))"
+        return
+    fi
+    local at
+    at=$(killed_at)
+    up_again() { sound_on && [ -n "$(main_pid)" ] && top_is_app; }
+    # The watchdog's time: 6 s ahead, and the ring started again. Android's own restart after this kill is 10 s or more.
+    until up_again || [ "$(now_s)" -gt $((at + 9)) ]; do sleep 0.3; done # lint-ok: polling with its own bound
+    if up_again; then
+        pass "back $(($(now_s) - at))s after a kill 0.3s after the watchdog resumed the ring"
+    else
+        fail "not back 9s after the second kill: sound=$(sound_on && echo on || echo OFF) state=$(state a) main=$(main_pid) sentinel=$(sentinel_pid)"
+    fi
+}
+
 # Notifications denied: the sound must still play. Denying the overlay is in s26.
 s10() {
     scenario s10_notifications_denied
@@ -3473,7 +3526,7 @@ s63() {
         dev rm -f /sdcard/af_ui.xml
         return $found
     }
-    if ! await_ring a 40; then
+    if ! await_ring a 40 5; then
         problems="$problems; $RING_WHY"
     elif ! on_screen "Turn off" 15; then
         problems="$problems; the app took the ring up, but its screen did not come up in 15s (on top: $(top_activity))"
@@ -3491,6 +3544,74 @@ s63() {
     fi
     if [ -z "$problems" ]; then
         pass "no banner over the alarm's screen, the notification stays in the list"
+    else
+        fail "${problems#; }"
+    fi
+}
+
+# The main process is cached, not yet frozen, at the ring: Android 14 and 15 hold a broadcast back for such an app
+# (a receiver registered at run time), 16 delivers it. The app must take the ring up within 5 s of the sound, and its
+# screen must be on top. Where the phone does not get the app into that state (older versions, or it was frozen already),
+# the result is SKIP with the state it had: never a PASS for a state the test did not reach.
+s63b() {
+    scenario s63b_ring_with_the_app_cached
+    fresh
+    next_minute 21
+    seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
+    arm a
+    until_past $((T - 7))
+    adb_ logcat -c -b all
+    go_home
+    probe_other_apps deep
+    until_past $((T - 1))
+    local at_ring frozen=no
+    at_ring=$(probe_main_state)
+    adb_ logcat -d -b events 2> /dev/null | tr -d '\r' | grep -E 'am_freeze' | grep -q 'com\.fidderr\.alarmfree\]' && frozen=yes
+    dev am force-stop com.android.settings
+    dev am force-stop com.google.android.contacts
+    case "$at_ring" in
+        *cch*) ;;
+        *) skip "the main process is not cached at the ring: $at_ring"; return ;;
+    esac
+    [ "$frozen" = no ] || { skip "the main process was frozen before the ring: $at_ring"; return; }
+    local problems=""
+    if ! await_ring a 40 5; then
+        problems="$problems; $RING_WHY"
+    elif ! on_screen "Turn off" 5; then
+        problems="$problems; the app took the ring up, but its screen is not on top 5s later (on top: $(top_activity))"
+    else
+        tap "Turn off" 0 0.3
+        wait_for 8 sound_off || problems="$problems; still ringing after turning it off"
+    fi
+    if [ -z "$problems" ]; then
+        pass "taken up within 5s of the sound with the main process $at_ring, its screen on top"
+    else
+        fail "${problems#; } (main process at the ring: $at_ring)"
+    fi
+}
+
+# The guardian does not trust its one heads-up: the debug build is told (a file) to ignore it, as if Android held it back,
+# and the guardian has to bring the ring screen up itself, about 2 s after the heads-up it sent.
+s63c() {
+    scenario s63c_ring_with_the_heads_up_held_back
+    fresh
+    next_minute
+    seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
+    arm a
+    as_app "mkdir -p files/sentinel && touch files/sentinel/debug_hold_heads_up"
+    go_home
+    local problems=""
+    if ! await_sound 40; then
+        problems="$problems; did not ring: no sound within 40s past T"
+    elif ! wait_for 6 top_is_main; then
+        problems="$problems; sound at +${SOUND_AT}s, but the app's screen did not come up in 6s (on top: $(top_activity), state=$(state a))"
+    fi
+    local said
+    said=$(as_app "grep -c 'not taken up' files/sentinel/diag.log 2> /dev/null")
+    [ "${said:-0}" -ge 1 ] 2> /dev/null || problems="$problems; the guardian did not say it started the screen itself"
+    as_app "rm -f files/sentinel/debug_hold_heads_up"
+    if [ -z "$problems" ]; then
+        pass "the heads-up was held back, the guardian brought the ring screen up itself (state=$(state a))"
     else
         fail "${problems#; }"
     fi
@@ -3770,7 +3891,7 @@ s62p() {
 # The ring-screen probe (Home before a ring, what the main process does): by name only.
 . "$(dirname "$0")/ringprobe.sh"
 
-ALL="s01 s03 s04 s05 s06 s07 s10 s11 s13 s13b s13d s14 s15 s16 s16b s17 s19 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s34 s36 s37 s38 s39 s40 s42 s43 s44 s45 s46 s47 s48 s49 s50 s51 s52 s53 s55 s56 s57 s58 s59 s60 s61 s62 s63 s65 s66 s67 s68 s68b s69a s69b s69c s69d big_screens s54"
+ALL="s01 s03 s04 s05 s06 s07 s07d s10 s11 s13 s13b s13d s14 s15 s16 s16b s17 s19 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s34 s36 s37 s38 s39 s40 s42 s43 s44 s45 s46 s47 s48 s49 s50 s51 s52 s53 s55 s56 s57 s58 s59 s60 s61 s62 s63 s63b s63c s65 s66 s67 s68 s68b s69a s69b s69c s69d big_screens s54"
 ON_A_PHONE="s01 s03 s04 s05 s06 s07 s10 s15 s16 s16b s17 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s36 s37 s38 s39 s42 s43 s45 s46 s47 s49 s50 s51 s52 s53 s55 s57 s58 s59 s61 s62"
 
 : > "$RESULTS"

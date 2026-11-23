@@ -1036,15 +1036,16 @@ await_sound() {
 
 # The sound is on and the app has taken it up. The app hears of the ring by a broadcast, which
 # a starved emulator can hold for a while: the sound does not wait for it.
-await_ring() { # id [seconds past T]
+await_ring() { # id [seconds past T for the sound] [seconds from the sound for the app to take the ring up, 30]
+    local takeup=${3:-30}
     RING_WHY=""
     if ! await_sound "${2:-30}"; then
         RING_WHY="did not ring: no sound within ${2:-30}s past T"
         return 1
     fi
-    await_state "$1" firing 30 && return 0
+    await_state "$1" firing "$takeup" && return 0
     # It rang. What did not happen is the app taking the ring up (its own state, then its screen): the main process says why.
-    RING_WHY="rang (sound at +${SOUND_AT}s) but the app did not take the ring up in 30s: state=$(state "$1"), main process: $(main_process_state)"
+    RING_WHY="rang (sound at +${SOUND_AT}s) but the app did not take the ring up in ${takeup}s: state=$(state "$1"), main process: $(main_process_state)"
     return 1
 }
 RING_WHY=""

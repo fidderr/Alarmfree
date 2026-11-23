@@ -85,6 +85,8 @@ chrono-tz = "0.10"
 tokio = { version = "1", features = ["rt", "macros", "time"] }
 
 [patch.crates-io]
+# The SDK's Rust side of the ring-handoff branch (jni.rs): the Kotlin side comes from the checkout beside this folder. Until 0.7.1 is on crates.io.
+mobile-sentinel = { git = "https://github.com/fidderr/mobile-sentinel", rev = "4c6ddc98e403b3679c11f608a67a4d15a3261ef4" }
 accesskit = { git = "https://github.com/fidderr/accesskit", rev = "764f0513e287de757b9c6c5ef3b91474dafac64f" }
 accesskit_consumer = { git = "https://github.com/fidderr/accesskit", rev = "764f0513e287de757b9c6c5ef3b91474dafac64f" }
 accesskit_android = { git = "https://github.com/fidderr/accesskit", rev = "764f0513e287de757b9c6c5ef3b91474dafac64f" }
