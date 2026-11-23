@@ -843,7 +843,7 @@ type_field() { # n text
     await_settled 6 || return 1
     while [ "$try" -lt 3 ]; do
         said=$(ui "settext:$1:$2")
-        [ "$said" = OK ] || { echo "no field $1" >&2; return 1; }
+        [ "$said" = OK ] || { echo "no field $1 (the app said [$said]; fields: $(ui inputs | cut -c1-500); $(ui ready | cut -c1-300))" >&2; return 1; }
         await_settled 3
         # What the field says now, from the element channel: not what was sent.
         [ "$(field_value "$1")" = "$2" ] && return 0
