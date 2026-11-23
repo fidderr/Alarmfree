@@ -59,7 +59,12 @@ give_way() {
 # Nothing may hang a run: an unresponsive device fails instead of waiting forever.
 adb_() {
     still_ours || give_way
-    timeout 120 "$ADB" -s "$SERIAL" "$@"
+    # While a unit runs on a GitHub machine, what adb says about a lost connection is kept (link_stderr, baseline.sh).
+    if [ -n "${LINK_PID:-}" ]; then
+        timeout 120 "$ADB" -s "$SERIAL" "$@" 2> >(link_stderr)
+    else
+        timeout 120 "$ADB" -s "$SERIAL" "$@"
+    fi
 }
 device_ok() { [ "$(timeout 20 "$ADB" -s "$SERIAL" shell echo ok | tr -d '\r')" = ok ]; }
 # The app's files are device-encrypted (direct_boot in sentinel.toml), and run-as

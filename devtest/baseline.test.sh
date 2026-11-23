@@ -147,7 +147,11 @@ fake_command() {
 ask() { # pid in out command
     printf '%s\n' "${4%%$'\n'*}" >> "$CALLS"
     case "$4" in
-        "$BASELINE_SCRIPT" | "$WATCH_SCRIPT") fake_script "$4" ;;
+        "$BASELINE_SCRIPT" | "$WATCH_SCRIPT")
+            # No answer from the device (its connection is down): once, while the file is there.
+            if [ "$4" = "$WATCH_SCRIPT" ] && [ -e "$DIR/noanswer_once" ]; then rm -f "$DIR/noanswer_once"; return 0; fi
+            fake_script "$4"
+            ;;
         *) fake_command "$4" ;;
     esac
 }
@@ -161,6 +165,10 @@ adb_() {
 }
 shells_open() { return 0; }
 write_log() { :; }
+# The link to the device: adb's state is "offline" while $DIR/linkdown is there. link_wait ends the outage; it is how the
+# runner waits for the connection (no restart).
+link_state() { if [ -e "$DIR/linkdown" ]; then echo "error: device offline"; else echo device; fi; }
+link_wait() { echo w >> "$DIR/linkwaits"; rm -f "$DIR/linkdown"; return 0; }
 DEV_PID=$$
 reboot_and_wait() {
     echo r >> "$DIR/reboots"
@@ -202,6 +210,37 @@ sx() {
             else
                 pass "deleting a sound, 1 fix buttons"
             fi
+            ;;
+        link_fail | link_fail_always)
+            # Run 45191082131, afg15, s25@1600x2560: adb offline in the middle of the scenario, the device whole, a FAIL about the list.
+            if [ ! -e "$DIR/once" ] || [ "$SX" = link_fail_always ]; then
+                : > "$DIR/once"
+                : > "$DIR/linkdown"
+                sleep 0.5
+                rm -f "$DIR/linkdown"
+                fail "the alarm list did not come up in 30 s"
+            else
+                pass "fine"
+            fi
+            ;;
+        link_pass)
+            : > "$DIR/linkdown"
+            sleep 0.5
+            rm -f "$DIR/linkdown"
+            pass "fine"
+            ;;
+        link_meant)
+            # A restart the scenario means: the device is away for a while, and the scenario then fails for its own reason.
+            watchdog_announce_restart
+            : > "$DIR/linkdown"
+            sleep 0.5
+            rm -f "$DIR/linkdown"
+            fail "the app is wrong"
+            ;;
+        link_noanswer)
+            # Run 45191082131, afg15, s49@2208x1840: the scenario passed, the device did not answer afterwards (offline) and does a moment later.
+            : > "$DIR/noanswer_once"
+            pass "fine"
             ;;
         break_always)
             st_set ss $(($(st_get ss) + 1))
@@ -347,6 +386,11 @@ case "$MODE" in
     group)
         for GRP in sa sb sc; do run_unit "$GRP@big" at_big; done
         ;;
+    kfsize)
+        # A unit of a big screen has an @ and an x in its name (s49@2208x1840): the known-fault lookup must not choke on it.
+        known_fault "sx@2208x1840" > "$DIR/kf_out" 2> "$DIR/kf_err"
+        echo $? > "$DIR/kf_rc"
+        ;;
 esac
 E
 
@@ -354,7 +398,7 @@ run_case() { # name mode [VAR=value...]
     local name=$1 mode=$2
     shift 2
     mkdir -p "$tmp/$name"
-    env LIB="$here/lib.sh" SELFTEST="$here/selftest.sh" DIR="$tmp/$name" MODE="$mode" "$@" bash "$tmp/drive.sh" > "$tmp/$name/stdout" 2>&1
+    env LIB="$here/lib.sh" SELFTEST="$here/selftest.sh" DIR="$tmp/$name" MODE="$mode" LINK_WATCH=1 LINK_POLL=0.1 "$@" bash "$tmp/drive.sh" > "$tmp/$name/stdout" 2>&1
     echo $? > "$tmp/$name/exit"
 }
 verdict() { # name ok
@@ -633,6 +677,75 @@ if [ "$(lines "$rf")" = 4 ] && has "$rf" '^PASS  sa@big  ' && has "$rf" '^INFRA 
     verdict "a unit that runs another function (one scenario at a size): a restart is INFRA for that scenario only, the others keep their result" 1
 else
     verdict "a restart in one scenario of a group is INFRA for that one only ($(cat "$rf" 2> /dev/null))" 0
+fi
+# The connection to the device (adb offline for a while, the device whole) is not the app (run 45191082131, afg15).
+run_case r_link run SX=link_fail
+rf=$(res r_link)
+if [ "$(lines "$rf")" = 2 ] && has "$rf" '^NOTE  sx  the first run lost the connection to the device (adb: adb state: error: device offline.*; the first run said: FAIL the alarm list did not come up' && has "$rf" '^PASS  sx  ' && ! has "$rf" '^FAIL' && ! has "$rf" '^INFRA' && [ ! -e "$tmp/r_link/reboots" ] && [ "$(lines "$tmp/r_link/linkwaits")" = 1 ]; then
+    verdict "a FAIL while adb was offline is no FAIL: one NOTE, the connection is waited for (no restart), the rerun counts" 1
+else
+    verdict "a FAIL while adb was offline: one NOTE, a wait for the connection, the rerun counts ($(cat "$rf" 2> /dev/null))" 0
+fi
+(. "$here/baseline.sh"; run_exit_code "$rf"; echo $? > "$tmp/r_link/code")
+[ "$(first "$tmp/r_link/code")" = 0 ] && verdict "and the run exits 0" 1 || verdict "and the run exits 0" 0
+run_case r_link_twice run SX=link_fail_always
+rf=$(res r_link_twice)
+if has "$rf" '^NOTE  sx  the first run lost the connection' && has "$rf" '^INFRA  sx  .*the connection to the device dropped during the scenario' && ! has "$rf" 'rerun follows\]$' && ! has "$rf" '^FAIL' && [ ! -e "$tmp/r_link_twice/reboots" ]; then
+    verdict "the connection lost again on the rerun: INFRA stands (never a FAIL), one wait" 1
+else
+    verdict "the connection lost again on the rerun: INFRA stands ($(cat "$rf" 2> /dev/null))" 0
+fi
+(. "$here/baseline.sh"; run_exit_code "$rf"; echo $? > "$tmp/r_link_twice/code")
+[ "$(first "$tmp/r_link_twice/code")" = 4 ] && verdict "and the run exits 4" 1 || verdict "and the run exits 4" 0
+run_case r_link_pass run SX=link_pass
+rf=$(res r_link_pass)
+if [ "$(lines "$rf")" = 2 ] && has "$rf" '^PASS  sx  ' && has "$rf" '^NOTE  sx  the connection to the device dropped while the scenario ran and it passed' && ! has "$rf" '^INFRA' && [ ! -e "$tmp/r_link_pass/linkwaits" ]; then
+    verdict "a PASS while adb was offline stays a PASS, with one NOTE and no rerun" 1
+else
+    verdict "a PASS while adb was offline stays a PASS ($(cat "$rf" 2> /dev/null))" 0
+fi
+run_case r_link_meant run SX=link_meant
+rf=$(res r_link_meant)
+has "$rf" '^FAIL  sx  \[[0-9]*s\] the app is wrong' && ! has "$rf" '^NOTE' && ! has "$rf" '^INFRA' && verdict "an outage during a restart the scenario meant does not turn its FAIL into anything else" 1 || verdict "an outage during a restart the scenario meant ($(cat "$rf" 2> /dev/null))" 0
+run_case r_link_none run SX=fail
+rf=$(res r_link_none)
+has "$rf" '^FAIL  sx  \[[0-9]*s\] the app is wrong' && ! has "$rf" '^NOTE' && [ ! -e "$tmp/r_link_none/linkwaits" ] && verdict "a FAIL with the connection up all the time stays a FAIL, no wait" 1 || verdict "a FAIL with the connection up all the time stays a FAIL ($(cat "$rf" 2> /dev/null))" 0
+run_case r_link_noanswer run SX=link_noanswer
+rf=$(res r_link_noanswer)
+if [ "$(lines "$rf")" = 1 ] && has "$rf" '^PASS  sx  ' && ! has "$rf" '^INFRA' && [ "$(lines "$tmp/r_link_noanswer/linkwaits")" = 1 ] && [ ! -e "$tmp/r_link_noanswer/reboots" ]; then
+    verdict "no answer from the device after a passed scenario: the connection is waited for once, the device answers, no INFRA" 1
+else
+    verdict "no answer after a passed scenario, then the device answers ($(cat "$rf" 2> /dev/null))" 0
+fi
+run_case kf_size kfsize KNOWN_FAULT_sx="$KNOWN_SIG"
+if [ ! -s "$tmp/kf_size/kf_err" ] && [ "$(first "$tmp/kf_size/kf_rc")" = 1 ]; then
+    verdict "the known-fault lookup for a unit with @WxH in its name does not print an error (was: invalid variable name)" 1
+else
+    verdict "the known-fault lookup for a unit with @WxH in its name ($(cat "$tmp/kf_size/kf_err" 2> /dev/null))" 0
+fi
+# adb_ keeps what adb itself says about a lost connection while a unit runs (and nothing else), and passes every line on.
+mkdir -p "$tmp/hook"
+printf '#!/bin/bash\necho "adb: device offline" >&2\necho "adb: error: failed to stat remote object x" >&2\necho "- waiting for device -" >&2\necho out\n' > "$tmp/hook/fakeadb"
+chmod +x "$tmp/hook/fakeadb"
+(
+    export OUT="$tmp/hook/out" TMPDIR="$tmp/hook" ADB="$tmp/hook/fakeadb" SERIAL=emulator-5554 LOCK_AWAY_STEP=1
+    mkdir -p "$OUT"
+    . "$here/lib.sh"
+    LINK_PID=1 LINK_LOG="$OUT/u.link.txt"
+    : > "$LINK_LOG"
+    adb_ shell true > "$tmp/hook/stdout" 2> "$tmp/hook/stderr"
+    sleep 0.5
+    cp "$LINK_LOG" "$tmp/hook/log"
+    LINK_PID="" LINK_LOG="$OUT/v.link.txt"
+    : > "$LINK_LOG"
+    adb_ shell true > /dev/null 2> /dev/null
+    sleep 0.3
+    cp "$LINK_LOG" "$tmp/hook/log_off"
+)
+if [ "$(lines "$tmp/hook/log")" = 2 ] && has "$tmp/hook/log" 'adb said: adb: device offline' && has "$tmp/hook/log" 'adb said: - waiting for device -' && ! has "$tmp/hook/log" 'failed to stat' && has "$tmp/hook/stdout" '^out$' && [ "$(lines "$tmp/hook/stderr")" = 3 ] && [ "$(lines "$tmp/hook/log_off")" = 0 ]; then
+    verdict "adb_ writes adb's own lines about a lost connection into the link log, passes all lines on, and does nothing when no unit is watched" 1
+else
+    verdict "adb_ link log ($(cat "$tmp/hook/log" 2> /dev/null) / stderr lines $(lines "$tmp/hook/stderr"))" 0
 fi
 run_case r_vars run SX=vars
 has "$(res r_vars)" '^PASS  sx  .*second:unset:unset:unset::::$' && verdict "the second run starts without what the first one left in bash variables" 1 || verdict "the second run starts without what the first one left in bash variables ($(cat "$(res r_vars)"))" 0

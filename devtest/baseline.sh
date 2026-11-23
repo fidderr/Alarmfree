@@ -28,6 +28,7 @@ BL_PREV=""
 BL_INFRA=""
 WD_SS="" WD_AUDIO="" WD_BOOT="" WD_WHAT="" WD_AUDIO_ONLY="" BL_BOOTED=""
 RES_MARK=0
+LINK_PID="" LINK_LOG="" LINK_MEANT=""
 
 # Every line is `key=value`. The shell of the device is mksh or toybox sh: plain sh only. The dumps are read once into a
 # variable and cut there, so the output is small and the call is one.
@@ -398,7 +399,7 @@ baseline_watch_from_read() {
 # A restart that the scenario means (s11, s13 and the like): reboot_only calls the first when it starts, so that the new
 # boot is not a finding, and the second when the device is back, so that what breaks later in the same scenario is.
 # BL_BOOTED: a restart boots to the lock screen, which the next baseline reading may still find: no finding about the scenario.
-watchdog_announce_restart() { WD_SS="" WD_AUDIO="" WD_BOOT="" BL_BOOTED=1; }
+watchdog_announce_restart() { WD_SS="" WD_AUDIO="" WD_BOOT="" BL_BOOTED=1 LINK_MEANT=1; }
 watchdog_rebase() {
     local out line
     WD_SS="" WD_AUDIO="" WD_BOOT=""
@@ -417,12 +418,19 @@ watchdog_rebase() {
 watchdog_end() {
     local out line reason="" areason=""
     local -A W=()
+    local try
     WD_WHAT=""
     WD_AUDIO_ONLY=""
-    out=$(dev "$WATCH_SCRIPT" 2> /dev/null)
-    while IFS= read -r line; do
-        case "$line" in [a-z]*=*) W[${line%%=*}]=${line#*=} ;; esac
-    done <<< "$out"
+    for try in 1 2; do
+        out=$(dev "$WATCH_SCRIPT" 2> /dev/null)
+        while IFS= read -r line; do
+            case "$line" in [a-z]*=*) W[${line%%=*}]=${line#*=} ;; esac
+        done <<< "$out"
+        [ -z "${W[boot]+x}" ] || break
+        # No answer: the connection to the device may be down (adb offline for a while) and the device whole. Wait for the
+        # connection once and ask again; a device that is really gone gives no answer the second time either.
+        [ "$try" = 1 ] && on_emulator && link_restore || break
+    done
     if [ -z "${W[boot]+x}" ]; then
         reason="the device did not answer after the scenario"
     else
@@ -444,6 +452,61 @@ watchdog_end() {
     else
         baseline_note "${CURRENT:-?}" "the device changed during the scenario ($reason); a phone is not restarted"
     fi
+}
+
+# The connection to the device (adb's own state for it) while a unit runs. On a loaded GitHub machine the emulator can drop off
+# adb for half a minute and come back with the guest untouched (run 45191082131, afg15, s25@1600x2560 and s49@2208x1840:
+# "adb: device offline", "waiting for device", "device 'emulator-5554' not found"). What the scenario then says is about the
+# missing connection, not about the app. A poller writes every moment the state is not `device` into $LINK_LOG, and adb_
+# (lib.sh) adds the lines adb itself printed about it. Only on a GitHub machine (Linux) or with LINK_WATCH set.
+link_state() { timeout 5 "$ADB" -s "$SERIAL" get-state 2>&1 | tr -d '\r'; }
+link_watch_wanted() { [ -n "${LINK_WATCH:-}" ] || { on_emulator && [ "$(uname -s)" = Linux ]; }; }
+link_watch_start() { # unit
+    LINK_MEANT=""
+    link_watch_wanted || return 0
+    LINK_LOG="$OUT/$1.link.txt"
+    : > "$LINK_LOG"
+    (
+        local s
+        while :; do
+            s=$(link_state)
+            [ "$s" = device ] || printf '%s adb state: %s\n' "$SECONDS" "${s:0:100}" >> "$LINK_LOG"
+            sleep "${LINK_POLL:-1}"
+        done
+    ) > /dev/null 2>&1 &
+    LINK_PID=$!
+}
+link_watch_stop() {
+    [ -z "$LINK_PID" ] || { kill "$LINK_PID" 2> /dev/null; wait "$LINK_PID" 2> /dev/null; }
+    LINK_PID=""
+}
+# What adb printed on its own stderr, passed on: the lines about the connection also go into $LINK_LOG.
+link_stderr() {
+    local l
+    while IFS= read -r l; do
+        printf '%s\n' "$l" >&2
+        case "$l" in
+            *"device offline"* | *"waiting for device"* | *"device '"*"' not found"*)
+                [ -z "${LINK_LOG:-}" ] || printf '%s adb said: %s\n' "$SECONDS" "${l:0:100}" >> "$LINK_LOG"
+                ;;
+        esac
+    done
+}
+# True, with a short description on stdout, when the connection dropped while the unit ran and no restart was meant.
+link_dropped() {
+    local l n=0 first=""
+    [ -z "$LINK_MEANT" ] && [ -n "$LINK_LOG" ] && [ -s "$LINK_LOG" ] || return 1
+    while IFS= read -r l; do
+        [ -n "$first" ] || first=${l#* }
+        n=$((n + 1))
+    done < "$LINK_LOG"
+    printf '%s (%s lines in %s)\n' "${first:0:100}" "$n" "${LINK_LOG##*/}"
+}
+# Wait until the device is connected again, and open the shells that went with the old connection.
+link_wait() { timeout 150 "$ADB" -s "$SERIAL" wait-for-device > /dev/null 2>&1; }
+link_restore() {
+    link_wait || return 1
+    shells_open || open_shells
 }
 
 # INFRA instead of the result lines the scenario wrote since RES_MARK (its PASS, FAIL and SKIP lines; a NOTE stays).
@@ -501,7 +564,7 @@ KNOWN_FAULT_s53='Unable to find app for caller .* when binding service .*RoleCon
 # Prints the log line when the log of the device holds the signature of this unit's known fault (every buffer: the crash text of
 # the system process was not in the main, system and crash buffers that the watchdog reads, run 45169682262).
 known_fault() { # unit
-    local var="KNOWN_FAULT_$1" sig line
+    local var="KNOWN_FAULT_${1%%@*}" sig line
     sig=${!var-}
     [ -n "$sig" ] || return 1
     line=$(dev "logcat -d -b all 2> /dev/null | grep -m1 -E '$sig'" 2> /dev/null | tr -d '\r')
@@ -512,8 +575,9 @@ known_fault() { # unit
 }
 
 # The results the unit wrote since RES_MARK become one NOTE (what the scenario said stays in it); other lines stay.
-known_record() { # unit what
+known_record() { # unit what [lead]
     local s=$1 what=$2 i said="" line
+    local lead=${3:-"the first run met a known fault of this device image ($2); the device is restarted and the scenario runs again"}
     local -a all out
     mapfile -t all < "$RESULTS"
     out=("${all[@]:0:RES_MARK}")
@@ -525,7 +589,7 @@ known_record() { # unit what
             out+=("$line")
         fi
     done
-    out+=("NOTE  $s  the first run met a known fault of this device image ($what); the device is restarted and the scenario runs again; the first run said: ${said:-nothing}")
+    out+=("NOTE  $s  $lead; the first run said: ${said:-nothing}")
     printf '%s\n' "${out[@]}" > "$RESULTS"
     echo "${out[${#out[@]} - 1]}"
 }
@@ -533,7 +597,7 @@ known_record() { # unit what
 # One scenario of the runner: the baseline, the scenario, the watchdog, and the one rerun on a restarted device.
 # A unit that runs a function of another name (one scenario at one screen size) passes it as the second word.
 run_unit() { # name [function]
-    local s=$1 fn=${2:-$1} attempt=1 what t0 follow bl_ok known
+    local s=$1 fn=${2:-$1} attempt=1 what t0 follow bl_ok known link linkfault
     while :; do
         t0=$SECONDS
         what=""
@@ -541,8 +605,11 @@ run_unit() { # name [function]
         RES_MARK=${#RES_ALL[@]}
         baseline_unit "$s" && bl_ok=1 || bl_ok=""
         BL_RESTARTED="" BL_BOOTED=""
+        link="" linkfault=""
         if [ -n "$bl_ok" ]; then
+            link_watch_start "$s"
             "$fn"
+            link_watch_stop
             watchdog_end
             what=$WD_WHAT
             # An audio server that restarted while the scenario passed is the device's, not a verdict on the app.
@@ -552,6 +619,16 @@ run_unit() { # name [function]
             fi
         else
             what="the device is not at its baseline: $BL_INFRA"
+        fi
+        # The connection to the device dropped while the scenario ran (and the device is whole): what a failed scenario then says is
+        # about the missing connection. A passed one keeps its PASS.
+        if [ -z "$what" ] && link=$(link_dropped); then
+            if unit_wrote_fail; then
+                what="the connection to the device dropped during the scenario (adb: $link)"
+                linkfault=1
+            else
+                baseline_note "$s" "the connection to the device dropped while the scenario ran and it passed (adb: $link)"
+            fi
         fi
         if [ -z "$what" ]; then
             BL_PREV=$s
@@ -563,6 +640,8 @@ run_unit() { # name [function]
         evidence_snapshot infra "$s" "$what"
         if [ "$attempt" = 1 ] && [ -n "$bl_ok" ] && known=$(known_fault "$s"); then
             known_record "$s" "$known"
+        elif [ "$attempt" = 1 ] && [ -n "$linkfault" ]; then
+            known_record "$s" "$link" "the first run lost the connection to the device (adb: $link); the connection is waited for and the scenario runs again"
         else
             infra_record "$s" "$t0" "$what" "$follow"
             BL_PREV=$s
@@ -570,7 +649,9 @@ run_unit() { # name [function]
             echo "INFRA  $s  the device is restarted and the scenario runs once more"
         fi
         BL_PREV=$s
-        if ! reboot_and_wait; then
+        if [ -n "$linkfault" ] && link_restore; then
+            :
+        elif ! reboot_and_wait; then
             echo "STOP  $s  the device did not come back after the restart ($what)" | tee -a "$RESULTS"
             exit 2
         fi
