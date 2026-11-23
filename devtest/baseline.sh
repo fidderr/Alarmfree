@@ -315,6 +315,20 @@ baseline_drop_stale_ime() {
     BL_BAD=(${keep[@]+"${keep[@]}"})
 }
 
+# What the system says about the keyboard at the moment a reading finds it up, kept before it is put back: who asked for it
+# (explicit or implicit), which window has the focus, touch mode, and the log lines of the input method of the scenario before.
+baseline_ime_evidence() { # unit
+    on_emulator || return 0
+    {
+        echo "=== $1 $(date +%T)"
+        dev dumpsys input_method 2> /dev/null | grep -E 'mShowRequested|mShowExplicitlyRequested|mInputShown|mCurFocusedWindow|mCurId|mCurClient|mImeWindowVis' | cut -c1-260
+        dev dumpsys window 2> /dev/null | grep -E 'mCurrentFocus|mInTouchMode' | head -4
+        echo "--- log"
+        adb_ logcat -d -b all -v time 2> /dev/null | tr -d '
+' | grep -E 'ImeTracker|InputMethodManager|showSoftInput|hideSoftInput|IME_INSETS|InputMethodService|startInput|WINDOW_FOCUS_GAIN' | tail -40 | cut -c1-260
+    } >> "$OUT/ime_evidence.txt" 2> /dev/null
+}
+
 baseline_note() { # unit text
     echo "NOTE  $1  $2"
     echo "NOTE  $1  $2" >> "$RESULTS"
@@ -348,6 +362,7 @@ baseline_unit() {
         return 0
     fi
     first=("${BL_BAD[@]}")
+    case " ${first[*]} " in *" ime "*) baseline_ime_evidence "$s" ;; esac
     # The lock screen in front of the focus is one finding, not two.
     case " ${first[*]} " in *" keyguard "*) ! baseline_is_lock || lockfirst=1 ;; esac
     for k in "${first[@]}"; do why[$k]=${BL_WHY[$k]}; done
@@ -594,9 +609,92 @@ known_record() { # unit what [lead]
     echo "${out[${#out[@]} - 1]}"
 }
 
+# FLAKY: a scenario that FAILs runs once more on the same device (no restart: a second failure in the same state is the stronger
+# signal, and a restart would hide what the first one left). The first run's PASS, FAIL and SKIP lines are held back while it
+# runs; when the scenario is settled, a FAIL that the rerun passed is one FLAKY line with both results, and a FAIL that the rerun
+# failed again stays a FAIL (the first result in its text). What the first failure kept (<scenario>.* files: picture, tree, log,
+# story) is copied to first_<file> before the rerun can write over it. INFRA keeps its own path. FLAKY_RERUN=0 turns it off.
+flaky_wanted() { [ "${FLAKY_RERUN-1}" != 0 ] && on_emulator; }
+FLAKY_FIRST=()
+FLAKY_RE='^(PASS|FAIL|SKIP)\ \ ([^\ ]+)\ +(\[[0-9]+s\])\ (.*)$'
+flaky_stash() { # unit
+    local s=$1 line i name f said="" n=0
+    local -a all keep=()
+    mapfile -t all < "$RESULTS"
+    FLAKY_FIRST=()
+    for ((i = 0; i < ${#all[@]}; i++)); do
+        line=${all[i]}
+        if [ "$i" -ge "$RES_MARK" ] && [[ $line =~ $FLAKY_RE ]]; then
+            FLAKY_FIRST+=("$line")
+            if [ "${BASH_REMATCH[1]}" = FAIL ]; then
+                name=${BASH_REMATCH[2]}
+                for f in "$OUT/$name".*; do [ -e "$f" ] && cp -f "$f" "$OUT/first_${f##*/}" 2> /dev/null; done
+                said="${said:+$said; }$name: ${BASH_REMATCH[4]:0:100}"
+                n=$((n + 1))
+            fi
+        else
+            keep+=("$line")
+        fi
+    done
+    : > "$RESULTS"
+    [ ${#keep[@]} -eq 0 ] || printf '%s
+' "${keep[@]}" >> "$RESULTS"
+    FLAKY_MARK=${#keep[@]}
+    echo "RERUN  $s  failed ($said): runs once more on the same device (the first run's files are first_*)"
+}
+flaky_settle() { # unit
+    local line i name st
+    local -a all out=()
+    local -A first_st=() first_line=() seen=()
+    [ ${#FLAKY_FIRST[@]} -gt 0 ] || return 0
+    for line in "${FLAKY_FIRST[@]}"; do
+        [[ $line =~ $FLAKY_RE ]] || continue
+        first_st[${BASH_REMATCH[2]}]=${BASH_REMATCH[1]}
+        first_line[${BASH_REMATCH[2]}]="${BASH_REMATCH[1]} ${BASH_REMATCH[4]:0:140}"
+    done
+    mapfile -t all < "$RESULTS"
+    out=("${all[@]:0:FLAKY_MARK}")
+    for ((i = FLAKY_MARK; i < ${#all[@]}; i++)); do
+        line=${all[i]}
+        if [[ $line =~ $FLAKY_RE ]]; then
+            name=${BASH_REMATCH[2]} st=${BASH_REMATCH[1]}
+            seen[$name]=1
+            if [ "${first_st[$name]-}" = FAIL ]; then
+                if [ "$st" = PASS ]; then
+                    line="FLAKY  $name  ${BASH_REMATCH[3]} failed the first run (${first_line[$name]#FAIL }) and passed the second (${BASH_REMATCH[4]:0:100})"
+                elif [ "$st" = FAIL ]; then
+                    line="FAIL  $name  ${BASH_REMATCH[3]} ${BASH_REMATCH[4]} (failed twice; first run: ${first_line[$name]#FAIL })"
+                fi
+            fi
+        fi
+        out+=("$line")
+    done
+    # A scenario of the first run that the second one wrote nothing for (the rerun was INFRA, or ended early) keeps its first line.
+    for line in "${FLAKY_FIRST[@]}"; do
+        [[ $line =~ $FLAKY_RE ]] || continue
+        [ -n "${seen[${BASH_REMATCH[2]}]-}" ] || out+=("$line")
+    done
+    : > "$RESULTS"
+    printf '%s
+' "${out[@]}" >> "$RESULTS"
+    for line in "${out[@]:FLAKY_MARK}"; do
+        case "$line" in "FLAKY "* | "FAIL "*"(failed twice;"*) echo "$line" ;; esac
+    done
+    FLAKY_FIRST=()
+}
+
 # One scenario of the runner: the baseline, the scenario, the watchdog, and the one rerun on a restarted device.
 # A unit that runs a function of another name (one scenario at one screen size) passes it as the second word.
+# The seconds each unit took (with its baseline, its rerun and its restart): unit_times.txt of the results, one `name seconds` line per
+# call. devtest/ci/split.py --measure reads it to balance the two parts of a full run.
 run_unit() { # name [function]
+    local ut0=$SECONDS rc
+    run_unit_once "$@"
+    rc=$?
+    echo "$1 $((SECONDS - ut0))" >> "$OUT/unit_times.txt"
+    return $rc
+}
+run_unit_once() { # name [function]
     local s=$1 fn=${2:-$1} attempt=1 what t0 follow bl_ok known link linkfault
     while :; do
         t0=$SECONDS
@@ -631,6 +729,13 @@ run_unit() { # name [function]
             fi
         fi
         if [ -z "$what" ]; then
+            if [ "$attempt" = 1 ] && [ ${#FLAKY_FIRST[@]} -eq 0 ] && flaky_wanted && unit_wrote_fail; then
+                flaky_stash "$s"
+                BL_PREV=$s
+                unit_forget
+                continue
+            fi
+            flaky_settle "$s"
             BL_PREV=$s
             return 0
         fi
@@ -645,7 +750,7 @@ run_unit() { # name [function]
         else
             infra_record "$s" "$t0" "$what" "$follow"
             BL_PREV=$s
-            [ "$attempt" = 1 ] || return 0
+            [ "$attempt" = 1 ] || { flaky_settle "$s"; return 0; }
             echo "INFRA  $s  the device is restarted and the scenario runs once more"
         fi
         BL_PREV=$s

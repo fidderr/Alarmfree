@@ -7,6 +7,8 @@ name: Emulators
 # joined by +: `msd30+default` (AOSP image without Google APIs), `afg15+c2` (2 emulator cores). See devtest/CI.md.
 # A push to devtest-no-flake runs it the same way. Only some scenarios: the input `scenarios`, or `[only: s50 s53]` in the commit
 # message. Sabotage mode (touches dropped and steps delayed on purpose, devtest/chaos.sh): the input `chaos`, or `[chaos]`.
+# A full run is two parts per version (14 jobs for seven versions, each part on a fresh emulator; devtest/ci/split.py balances them by
+# the expected seconds); a run of only some scenarios is one part. The last job merges the parts into one table per version.
 on:
   workflow_dispatch:
     inputs:
@@ -43,6 +45,8 @@ jobs:
       avds: ${{ steps.pick.outputs.avds }}
       scenarios: ${{ steps.pick.outputs.scenarios }}
       chaos: ${{ steps.pick.outputs.chaos }}
+      parts: ${{ steps.pick.outputs.parts }}
+      nparts: ${{ steps.pick.outputs.nparts }}
     steps:
       - id: pick
         env:
@@ -75,6 +79,12 @@ jobs:
               case "$MSG" in *"[only:"*) echo "::error::the commit message has [only: ...] but no scenario name was read from it"; exit 1 ;; esac
           fi
           echo "scenarios=$only" >> "$GITHUB_OUTPUT"
+          # Two parts of the full list; the scenarios of an [only: ...] run are one part.
+          if [ -n "$only" ]; then
+              echo 'parts=["1"]' >> "$GITHUB_OUTPUT"; echo "nparts=1" >> "$GITHUB_OUTPUT"
+          else
+              echo 'parts=["1","2"]' >> "$GITHUB_OUTPUT"; echo "nparts=2" >> "$GITHUB_OUTPUT"
+          fi
           echo "chaos=$chaos" >> "$GITHUB_OUTPUT"
           echo "Scenarios: ${only:-all}   Sabotage: ${chaos:-off}"
 
@@ -161,7 +171,7 @@ jobs:
           retention-days: 3
 
   suite:
-    name: ${{ matrix.avd }}
+    name: ${{ matrix.avd }} ${{ matrix.part }}/${{ needs.plan.outputs.nparts }}
     needs: [plan, build]
     runs-on: ubuntu-latest
     timeout-minutes: 240
@@ -169,6 +179,7 @@ jobs:
       fail-fast: false
       matrix:
         avd: ${{ fromJSON(needs.plan.outputs.avds) }}
+        part: ${{ fromJSON(needs.plan.outputs.parts) }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/download-artifact@v5
@@ -193,6 +204,7 @@ jobs:
         env:
           SCENARIOS: ${{ needs.plan.outputs.scenarios }}
           CHAOS: ${{ needs.plan.outputs.chaos }}
+          PART: ${{ matrix.part }}/${{ needs.plan.outputs.nparts }}
         run: |
           # Host load every 15 s next to the suite: tells a starved machine from a failing app.
           (while :; do echo "$(date +%T) $(cut -d' ' -f1-3 /proc/loadavg) $(awk '/MemAvailable/{print $2/1024" MB free"}' /proc/meminfo)"; sleep 15; done > host_load.txt) &
@@ -201,12 +213,35 @@ jobs:
         if: always()
         run: |
           mkdir -p packed
-          tar czf "packed/${{ matrix.avd }}.tgz" host_load.txt devtest-out ~/.android/avd/${{ matrix.avd }}.avd/config.ini 2> /dev/null || true
+          tar czf "packed/${{ matrix.avd }}-${{ matrix.part }}.tgz" host_load.txt devtest-out ~/.android/avd/${{ matrix.avd }}.avd/config.ini 2> /dev/null || true
           ls -l packed
       - uses: actions/upload-artifact@v5
         if: always()
         with:
-          name: results-${{ matrix.avd }}
-          path: packed/${{ matrix.avd }}.tgz
+          name: results-${{ matrix.avd }}-${{ matrix.part }}
+          path: packed/${{ matrix.avd }}-${{ matrix.part }}.tgz
           retention-days: 3
           compression-level: 0
+
+  # One table per version from its parts, and the lists of FAIL, INFRA and FLAKY over all of them.
+  summary:
+    name: summary
+    needs: [plan, suite]
+    if: always()
+    runs-on: ubuntu-slim
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: results-*
+          path: parts
+      - name: Merge
+        run: |
+          mkdir -p merged
+          for t in parts/*/*.tgz; do
+              [ -e "$t" ] || continue
+              n=$(basename "$t" .tgz)
+              mkdir -p "merged/$n"
+              tar xzf "$t" -C "merged/$n" --wildcards '*/results.txt' '*/ci_*.summary.md' 2> /dev/null || true
+          done
+          bash devtest/ci/merge.sh merged ${{ needs.plan.outputs.nparts }} | tee -a "$GITHUB_STEP_SUMMARY"

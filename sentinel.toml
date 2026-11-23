@@ -49,6 +49,19 @@ direct_boot = true
 # made for that.
 screen_orientation = "portrait"
 
+# The activity is declared here (the SDK's standard one, with the same attributes) for one attribute: stateHidden.
+# Slint's input view is a text editor that holds the focus of the window all the time, so Android shows the keyboard by itself
+# whenever a new window of the app gets focus (the app starting, the ring screen coming up) when the focus is already on that view.
+# That is a race with the first frame; on a slow machine the keyboard then covers Home or the ring screen's Turn off.
+# stateHidden takes it down again for exactly those windows, and a field's own tap still shows it.
+[[android.declare.activity]]
+name = "android.app.NativeActivity"
+exported = true
+windowSoftInputMode = "stateHidden|adjustResize"
+configChanges = "mcc|mnc|locale|touchscreen|keyboard|keyboardHidden|navigation|screenLayout|fontScale|uiMode|orientation|density|screenSize|smallestScreenSize|layoutDirection|colorMode|fontWeightAdjustment"
+native_lib = "main"
+launcher = true
+
 # So the Report a problem screen can tell whether an email app exists (Android 11+ hides apps otherwise).
 [android.declare.queries]
 [[android.declare.queries.intent]]

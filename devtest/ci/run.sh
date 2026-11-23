@@ -3,7 +3,8 @@
 # for the job summary. Usage: devtest/ci/run.sh <avd>      Run from anywhere; needs the APK in build/ (APK=...).
 # Needs ANDROID_HOME, /dev/kvm, an AVD made by make_avd.sh. Results: devtest-out/ci_<avd>/ and devtest-out/ci_<avd>.log.
 # Switches from the environment, handed on to the suite: SCENARIOS="s50 s53" runs only those (tiers.sh), CHAOS=1 is sabotage
-# mode (chaos.sh; CHAOS_SEED, CHAOS_DROP and the others too).
+# mode (chaos.sh; CHAOS_SEED, CHAOS_DROP and the others too). PART="1/2" runs the first of two parts of the full list (split.py:
+# balanced by the expected seconds in durations.txt); PART is ignored when SCENARIOS names the scenarios.
 # Exit code: 1 for a FAIL (or an incomplete run), else 4 when the device broke and the rerun did not pass (INFRA), else 0.
 cd "$(dirname "$0")/../.." || exit 1
 # infra_standing: an INFRA line that no second run followed.
@@ -16,6 +17,13 @@ export SKIP_APK_CHECK=1 EVERYWHERE=1 LANES=1 PORT_BASE=5554 EMULATOR_GPU="${EMUL
 # +swangle in the version token: SwiftShader through ANGLE (the emulator's newer software renderer) instead of swiftshader_indirect.
 case "+$1+" in *+swangle+*) export EMULATOR_GPU=swangle_indirect ;; esac
 export AVDS=$avd
+# One part of the full list: its units become the scenarios to run (in their order), and are checked like named scenarios below.
+PART_NOTE=""
+if [ -z "${SCENARIOS:-}" ] && [ -n "${PART:-}" ] && [ "${PART#*/}" != 1 ]; then
+    SCENARIOS=$(python3 devtest/ci/split.py "${PART#*/}" "${PART%/*}") || { echo "STOP  devtest/ci/split.py gave no list for part $PART"; exit 2; }
+    [ -n "$SCENARIOS" ] || { echo "STOP  part $PART has no scenarios"; exit 2; }
+    PART_NOTE="Part ${PART%/*} of ${PART#*/}"
+fi
 [ -z "${SCENARIOS:-}" ] || export SCENARIOS
 # A name that is no scenario of the suite would be run as a command: stop before anything starts.
 for id in ${SCENARIOS:-}; do
@@ -28,11 +36,12 @@ bash devtest/all.sh ci
 rc=$?
 res="devtest-out/ci_$avd/results.txt" meta="devtest-out/ci_$avd.meta"
 p=$(grep -c '^PASS' "$res" 2> /dev/null); f=$(grep -c '^FAIL' "$res" 2> /dev/null); s=$(grep -c '^SKIP' "$res" 2> /dev/null)
+fl=$(grep -c '^FLAKY' "$res" 2> /dev/null)
 # A scenario that printed its header and no result was cut short (the run ended inside it): that is a failure, not a pass.
 incomplete=""
 for name in $(grep -ahE '^=== s[0-9a-z_]+$' "devtest-out/ci_$avd.log" | sed 's/^=== //' | sort -u); do
     # By the id (s07_ring has its results as s07a, s07b, s07c).
-    grep -aqE "^(PASS|FAIL|SKIP|INFRA)  ${name%%_*}[a-z0-9]*_" "$res" 2> /dev/null || incomplete="$incomplete $name"
+    grep -aqE "^(PASS|FAIL|FLAKY|SKIP|INFRA)  ${name%%_*}[a-z0-9]*_" "$res" 2> /dev/null || incomplete="$incomplete $name"
 done
 # The scenarios that run last (tiers.sh LEG_LAST) are the ones an early end loses without a header.
 # With SCENARIOS only the named ones were asked for, and each of them must have a result (s07 has s07a, s07b, s07c).
@@ -44,12 +53,12 @@ if [ -n "${SCENARIOS:-}" ]; then
             big_screens) re='[a-z0-9_]+@[0-9]+x[0-9]+' ;;
             *) re="${id}([a-z]*_|[[:space:]])" ;;
         esac
-        grep -aqE "^(PASS|FAIL|SKIP|INFRA)  $re" "$res" 2> /dev/null || incomplete="$incomplete $id(never ran)"
+        grep -aqE "^(PASS|FAIL|FLAKY|SKIP|INFRA)  $re" "$res" 2> /dev/null || incomplete="$incomplete $id(never ran)"
     done
 else
     # An INFRA line that stands for a scenario that did not run has the unit's own name, then a space (baseline.sh).
     for id in s13 s13b s13d; do
-        grep -aqE "^(PASS|FAIL|SKIP|INFRA)  ${id}(_|[[:space:]])" "$res" 2> /dev/null || incomplete="$incomplete $id(never ran)"
+        grep -aqE "^(PASS|FAIL|FLAKY|SKIP|INFRA)  ${id}(_|[[:space:]])" "$res" 2> /dev/null || incomplete="$incomplete $id(never ran)"
     done
 fi
 # The device broke and the second run did not pass: not an app failure, but the round is not green either.
@@ -61,10 +70,15 @@ stop=$(grep -h '^STOP' "devtest-out/ci_$avd.log" 2> /dev/null | head -1)
 {
     echo "### $1 (Android $(sed -n 's/.*android=\([^ ]*\).*/\1/p' "$meta" 2> /dev/null | head -1))"
     echo
-    echo "| passed | failed | skipped | minutes | suite rc |"
-    echo "|---|---|---|---|---|"
-    echo "| ${p:-0} | ${f:-0} | ${s:-0} | $(((SECONDS - start) / 60)) | $rc |"
-    [ -z "${SCENARIOS:-}" ] || { echo; echo "Only these scenarios: \`$SCENARIOS\`"; }
+    echo "| passed | flaky | failed | skipped | minutes | suite rc |"
+    echo "|---|---|---|---|---|---|"
+    echo "| ${p:-0} | ${fl:-0} | ${f:-0} | ${s:-0} | $(((SECONDS - start) / 60)) | $rc |"
+    if [ -n "$PART_NOTE" ]; then echo; echo "$PART_NOTE: \`$SCENARIOS\`"; elif [ -n "${SCENARIOS:-}" ]; then echo; echo "Only these scenarios: \`$SCENARIOS\`"; fi
+    # A scenario that failed and passed on the rerun on the same device: not a pass, kept apart. Its first failure's files are first_*.
+    if [ "${fl:-0}" -gt 0 ]; then
+        echo; echo "FLAKY (failed, then passed on the rerun; the first failure's files are first_<name>.*):"; echo
+        grep -ah '^FLAKY' "$res" | cut -c1-260 | sed 's/^/- `/; s/$/`/'
+    fi
     # Sabotage mode: the numbers are in the run's chaos.state (generator, sent, dropped, seed), the dropped ones in chaos.txt.
     if [ "${CHAOS:-}" = 1 ]; then
         echo

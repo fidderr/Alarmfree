@@ -14,6 +14,8 @@ bad=0
 cat > "$tmp/drive.sh" << 'E'
 # Env: LIB DIR MODE, and per case SX LEFT STUCK SERIAL RESTART_FAILS.
 export OUT="$DIR/out" TMPDIR="$DIR" ADB=/nonexistent/adb
+# The rerun of a FAIL (FLAKY) is off unless a case turns it on: the cases before it count single runs.
+export FLAKY_RERUN="${FLAKY_RERUN:-0}"
 # lock_away (system.sh) waits this many seconds per step: the stubbed device answers at once.
 export LOCK_AWAY_STEP=1
 export SERIAL="${SERIAL:-emulator-5554}"
@@ -187,7 +189,27 @@ count() { local n=0 l; [ -f "$1" ] && while IFS= read -r l; do n=$((n + 1)); don
 sx() {
     CURRENT=sx
     SCENARIO_START=$SECONDS
+    echo r >> "$DIR/runs_of_sx"
     case "${SX:-ok}" in
+        flaky_once)
+            if [ ! -e "$DIR/once" ]; then
+                : > "$DIR/once"
+                printf first > "$OUT/sx.mark.txt"
+                fail "the tap missed"
+            else
+                pass "fine"
+            fi
+            ;;
+        flaky_fail)
+            printf 'run%s' "$(count "$DIR/runs_of_sx")" > "$OUT/sx.mark.txt"
+            fail "the app is wrong"
+            ;;
+        flaky_multi)
+            CURRENT=sx_a; pass "a is fine"
+            CURRENT=sx_b
+            if [ ! -e "$DIR/once" ]; then : > "$DIR/once"; fail "b missed"; else pass "b is fine"; fi
+            CURRENT=sx_c; pass "c is fine"
+            ;;
         ok) pass "fine" ;;
         fail) fail "the app is wrong" ;;
         break_once)
@@ -584,6 +606,46 @@ run_case r_app run SX=app_dies
 [ "$(lines "$(res r_app)")" = 1 ] && has "$(res r_app)" '^FAIL  sx  ' && [ ! -e "$tmp/r_app/reboots" ] && verdict "an app that dies (crash lines of the app in the log) stays a FAIL and is no INFRA" 1 || verdict "an app that dies stays a FAIL ($(cat "$(res r_app)"))" 0
 run_case r_fail run SX=fail
 has "$(res r_fail)" '^FAIL  sx  ' && [ ! -e "$tmp/r_fail/reboots" ] && verdict "a failing scenario on a whole device stays a FAIL" 1 || verdict "a failing scenario on a whole device stays a FAIL" 0
+# FLAKY: a FAIL runs once more on the same device (no restart); the rerun decides.
+run_case r_flaky run SX=flaky_once FLAKY_RERUN=1
+rf=$(res r_flaky)
+if [ "$(lines "$rf")" = 1 ] && has "$rf" '^FLAKY  sx  \[[0-9]*s\] failed the first run (the tap missed) and passed the second (fine)$' && ! has "$rf" '^FAIL' && ! has "$rf" '^PASS' && [ "$(lines "$tmp/r_flaky/runs_of_sx")" = 2 ] && [ ! -e "$tmp/r_flaky/reboots" ]; then
+    verdict "a FAIL that passes on the rerun is one FLAKY line with both results, on the same device (no restart)" 1
+else
+    verdict "a FAIL that passes on the rerun is one FLAKY line ($(cat "$rf"); runs $(lines "$tmp/r_flaky/runs_of_sx"))" 0
+fi
+has "$tmp/r_flaky/stdout" '^RERUN  sx  failed (sx: the tap missed)' && [ "$(first "$tmp/r_flaky/out/first_sx.mark.txt")" = first ] && verdict "the first failure's files are kept as first_<file> and the run says it runs again" 1 || verdict "the first failure's files are kept as first_<file> ($(ls "$tmp/r_flaky/out" 2> /dev/null | tr '
+' ' '))" 0
+(. "$here/baseline.sh"; run_exit_code "$rf"; echo $? > "$tmp/r_flaky/code")
+[ "$(first "$tmp/r_flaky/code")" = 0 ] && verdict "and a FLAKY run exits 0 (the summary lists it, the gate in CI.md counts it)" 1 || verdict "and a FLAKY run exits 0" 0
+run_case r_flaky_fail run SX=flaky_fail FLAKY_RERUN=1
+rf=$(res r_flaky_fail)
+if [ "$(lines "$rf")" = 1 ] && has "$rf" '^FAIL  sx  \[[0-9]*s\] the app is wrong (failed twice; first run: the app is wrong)$' && ! has "$rf" 'FLAKY' && [ "$(lines "$tmp/r_flaky_fail/runs_of_sx")" = 2 ] && [ ! -e "$tmp/r_flaky_fail/reboots" ] && [ "$(first "$tmp/r_flaky_fail/out/first_sx.mark.txt")" = run1 ] && [ "$(first "$tmp/r_flaky_fail/out/sx.mark.txt")" = run2 ]; then
+    verdict "a FAIL that fails again stays one FAIL (both runs said, first files kept, no third run)" 1
+else
+    verdict "a FAIL that fails again stays one FAIL ($(cat "$rf"); runs $(lines "$tmp/r_flaky_fail/runs_of_sx"))" 0
+fi
+(. "$here/baseline.sh"; run_exit_code "$rf"; echo $? > "$tmp/r_flaky_fail/code")
+[ "$(first "$tmp/r_flaky_fail/code")" = 1 ] && verdict "and the run exits 1" 1 || verdict "and the run exits 1" 0
+run_case r_flaky_pass run SX=ok FLAKY_RERUN=1
+rf=$(res r_flaky_pass)
+[ "$(lines "$rf")" = 1 ] && has "$rf" '^PASS  sx  ' && [ "$(lines "$tmp/r_flaky_pass/runs_of_sx")" = 1 ] && verdict "a pass runs once and is a PASS" 1 || verdict "a pass runs once and is a PASS ($(cat "$rf"))" 0
+run_case r_flaky_infra run SX=break_once FLAKY_RERUN=1
+rf=$(res r_flaky_infra)
+if has "$rf" '^INFRA  sx  .*\[rerun follows\]$' && has "$rf" '^PASS  sx  ' && ! has "$rf" 'FLAKY' && [ "$(lines "$tmp/r_flaky_infra/reboots")" = 1 ] && [ "$(lines "$tmp/r_flaky_infra/runs_of_sx")" = 2 ]; then
+    verdict "a device that broke keeps its own INFRA path with FLAKY on (restart, one rerun, no FLAKY)" 1
+else
+    verdict "a device that broke keeps its own INFRA path with FLAKY on ($(cat "$rf"); runs $(lines "$tmp/r_flaky_infra/runs_of_sx"))" 0
+fi
+run_case r_flaky_multi run SX=flaky_multi FLAKY_RERUN=1
+rf=$(res r_flaky_multi)
+if [ "$(lines "$rf")" = 3 ] && has "$rf" '^PASS  sx_a  ' && has "$rf" '^FLAKY  sx_b  .*(b missed).*(b is fine)' && has "$rf" '^PASS  sx_c  ' && ! has "$rf" '^FAIL'; then
+    verdict "in a unit of several scenarios only the one that failed is FLAKY; the others have their rerun's line once" 1
+else
+    verdict "in a unit of several scenarios only the one that failed is FLAKY ($(cat "$rf"))" 0
+fi
+run_case r_flaky_off run SX=flaky_fail FLAKY_RERUN=0
+[ "$(lines "$tmp/r_flaky_off/runs_of_sx")" = 1 ] && verdict "FLAKY_RERUN=0 runs a FAIL once" 1 || verdict "FLAKY_RERUN=0 runs a FAIL once" 0
 run_case r_once run SX=break_once
 rf=$(res r_once)
 if has "$rf" '^INFRA  sx  \[[0-9]*s\] system_server restarted (pid 812, now 999); the scenario said: FAIL something odd \[rerun follows\]$' && has "$rf" '^PASS  sx  ' && ! has "$rf" '^FAIL' && [ "$(lines "$tmp/r_once/reboots")" = 1 ] && [ "$(lines "$rf")" = 2 ]; then

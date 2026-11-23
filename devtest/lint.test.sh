@@ -88,4 +88,31 @@ rc_report=$?
 [ "$rc_plain" = 1 ] && verdict "a dirty file gives exit 1" 1 || verdict "a dirty file gives exit 1" 0
 [ "$rc_report" = 0 ] && verdict "--report gives exit 0 on a dirty file" 1 || verdict "--report gives exit 0 on a dirty file" 0
 
+# The rule against a fixed sleep right before a read (sleep-check); its list only shrinks.
+fixture sc_next 'scenario s99' '    tap "Done"' '    sleep 1' '    on_screen_has "Saved" 2 || problems="$problems; not saved: $(texts_of)"'
+found sc_next sleep-check && verdict "a sleep right before a read of the screen is found (sleep-check)" 1 || verdict "a sleep right before a read of the screen is found (sleep-check)" 0
+fixture sc_same 'scenario s99' '    sleep 1; case "$(texts_of)" in *Saved*) ;; *) fail x ;; esac'
+found sc_same sleep-check && verdict "a sleep and a read on one line is found" 1 || verdict "a sleep and a read on one line is found" 0
+fixture sc_case 'scenario s99' '    sleep 0.5' '    case "$(sn ringing)" in true) ;; esac'
+found sc_case sleep-check && verdict "a sleep before a case on the app's state is found" 1 || verdict "a sleep before a case on the app's state is found" 0
+fixture sc_none 'scenario s99' '    sleep 1' '    tap "Done"' '    on_screen_has "Saved" 5'
+[ "$(count sc_none sleep-check)" = 0 ] && verdict "a sleep before a tap is not a sleep-check (the wait after it is a wait)" 1 || verdict "a sleep before a tap is not a sleep-check" 0
+fixture sc_verdict 'scenario s99' '    sleep 1' '    if [ -z "$problems" ]; then' '        pass ok' '    fi'
+[ "$(count sc_verdict sleep-check)" = 0 ] && verdict "a sleep before the verdict of the scenario is not a sleep-check" 1 || verdict "a sleep before the verdict of the scenario is not a sleep-check" 0
+fixture sc_ok 'scenario s99' '    sleep 1  # lint-ok: the clock needs this second' '    case "$(sn ringing)" in true) ;; esac'
+[ "$(count sc_ok sleep-check)" = 0 ] && verdict "a lint-ok sleep is not a sleep-check" 1 || verdict "a lint-ok sleep is not a sleep-check" 0
+out=$(bash "$lint" "$dir/sc_next.sh")
+rc=$?
+[ "$rc" = 1 ] && [[ $out == *"FAIL  1 sleep(s) right before a read that are not on the list"* ]] && verdict "a sleep-check that is not on the list fails the lint" 1 || verdict "a sleep-check that is not on the list fails the lint" 0
+printf '%s
+' 'sc_next.sh::on_screen_has "Saved" 2 || problems="$problems; not saved: $(texts_of)"' > "$dir/list.txt"
+out=$(LINT_LIST="$dir/list.txt" bash "$lint" "$dir/sc_next.sh")
+[[ $out == *"sleep-check   0 (listed 1)"* ]] && [[ $out != *"not on the list"* ]] && verdict "a hit that is on the list is listed, not new" 1 || verdict "a hit that is on the list is listed, not new" 0
+printf '%s
+' 'matrix.sh::this line is gone' > "$dir/stale.txt"
+out=$(LINT_LIST="$dir/stale.txt" bash "$lint" --report)
+[[ $out == *"STALE"*"this line is gone"* ]] && [[ $out == *"the list only shrinks"* ]] && verdict "an entry of the list that no longer hits is stale (the list only shrinks)" 1 || verdict "an entry of the list that no longer hits is stale" 0
+out=$(bash "$lint" --report)
+[[ $out != *STALE* ]] && [[ $out != *"not on the list"* ]] && verdict "the list of the repository matches the code (no new hit, no stale entry)" 1 || verdict "the list of the repository matches the code" 0
+
 exit "$bad"

@@ -1,0 +1,10 @@
+# Sleeps right before a read of the screen or the app that were there when the rule came (devtest/lint.sh, rule sleep-check).
+# One line per hit: <file>::<the line after the sleep>. The list only shrinks: remove a line when the code is fixed; a new hit or a stale line fails the lint.
+feedback.sh::if is_there "The Play Store could not be opened." || has_there "Play Store could not"; then
+matrix.sh::if [ "$(db_enabled a)" = true ] && [ "$(state a)" = scheduled ]; then
+matrix.sh::[ "$(main_pid)" = "$p0" ] && pass "same process" || fail "main process restarted ($p0 to $(main_pid))"
+matrix.sh::is_there "0 / 2" || problems="$problems; shaking counted: '$(texts_of)'"
+panels.sh::if ! focus_in_app; then
+panels.sh::is_there Instellingen || panel_problem "$1: Nederlands does not take"
+panels.sh::is_there Settings || panel_problem "$1: English does not come back"
+panels.sh::if any_sheet_up; then

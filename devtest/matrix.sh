@@ -3006,6 +3006,7 @@ s68() {
     arm a
     start_app
     on_card 10
+    keyboard_down || problems="$problems; the keyboard is up over the home screen at the start"
     locked_row() { ui snapshot | grep -q '"locked":true'; }
     is_enabled() { printf 'SELECT data FROM alarms;\n' | sql | grep -q '"enabled":true'; }
     locked_row && problems="$problems; locked 50 minutes before the ring"
@@ -3420,6 +3421,7 @@ s63() {
             esac
         done
         screenshot s63_ring
+        keyboard_down || problems="$problems; the keyboard is up over the alarm's screen"
         [ -z "$seen" ] || problems="$problems; its banner is over the alarm's screen at$seen after it came up"
         own_notifications | grep -q 'id=900[12]' || problems="$problems; no notification while it rings"
         press ring-turn-off
@@ -3465,6 +3467,7 @@ s63b() {
     elif ! on_screen "Turn off" 5; then
         problems="$problems; the app took the ring up, but its screen is not on top 5s later (on top: $(top_activity))"
     else
+        keyboard_down || problems="$problems; the keyboard is up over the alarm's screen"
         tap_turn_off || problems="$problems; $TURN_OFF_WHY"
     fi
     if [ -z "$problems" ]; then
@@ -3851,7 +3854,7 @@ dev am force-stop "$PKG"
 echo
 echo "===== SUMMARY ($SERIAL) ====="
 cat "$RESULTS"
-echo "passed: $(grep -c '^PASS' "$RESULTS")  failed: $(grep -c '^FAIL' "$RESULTS")  skipped: $(grep -c '^SKIP' "$RESULTS")  in $(((SECONDS - RUN_START) / 60)) min $(((SECONDS - RUN_START) % 60)) s"
+echo "passed: $(grep -c '^PASS' "$RESULTS")  flaky: $(grep -c '^FLAKY' "$RESULTS")  failed: $(grep -c '^FAIL' "$RESULTS")  skipped: $(grep -c '^SKIP' "$RESULTS")  in $(((SECONDS - RUN_START) / 60)) min $(((SECONDS - RUN_START) % 60)) s"
 slow=$(sed -nE 's/^[A-Z]+ +([^ ]+) +\[([0-9]+)s\].*/\2 \1/p' "$RESULTS" | awk '$1 > 60 { printf "%s (%ss) ", $2, $1 }')
 [ -z "$slow" ] || echo "over a minute: $slow"
 # A device that broke is not a failed app: its lines are apart (baseline.sh).
