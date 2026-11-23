@@ -316,6 +316,7 @@ locked_ring() {
         arm a
     fi
     dev locksettings set-pin 1234 > /dev/null
+    sys_wait "$SYS_DEADLINE" "the PIN being set" pin_is_set || { fail "$SYS_WHY"; return 1; }
     dead
     # Now and not during the restart's own wait: a clock change that wakes the app up meanwhile
     # would find it overdue and ring it, and the restart ends a ring as dismissed.
@@ -329,13 +330,20 @@ locked_ring() {
         return 1
     fi
     await_sound 60 || { fail "no sound in 60s, main=$(main_pid) $(dev dumpsys package "$PKG" | grep -m1 -oE 'stopped=[a-z]+')"; return 1; }
-    wait_for 15 top_is_unlock || { fail "rang, but the unlock screen is not on top: $(top_activity)"; return 1; }
+    sys_wait "$SYS_DEADLINE" "the unlock screen on top" top_is_unlock || { fail "rang, but $SYS_WHY"; return 1; }
 }
-# After a scenario that set the PIN, whatever became of it.
+# After a scenario that set the PIN, whatever became of it: the PIN is gone (read), and so is the lock screen that Android
+# 10 to 12 keep up after it (a note when it will not go: the next scenario's baseline puts it away).
 no_pin() {
     dev locksettings clear --old 1234 > /dev/null
     OVERLAY=
     SCREEN_WENT_OFF=1
+    sys_wait "$SYS_DEADLINE" "the PIN being cleared" pin_unset || note "$SYS_WHY"
+    lock_away || note "the PIN is cleared but the lock screen stays: $SYS_WHY"
+    # The keyboard of the PIN pad can come up a moment after the lock screen went: wait for it a little, then put it down.
+    sys_wait 3 "the keyboard coming up" ime_shown > /dev/null
+    sys_keyboard_down || note "$SYS_WHY"
+    ime_note "after the PIN was put away"
 }
 no_lock_here() {
     [ -n "${NO_LOCK:-}" ] || return 1
@@ -349,6 +357,8 @@ ui_given_up() { [ "$(dev "su 0 sh -c 'test -e $DATA/files/sentinel/ringing/ui_fa
 # Android's own unlock, and with the PIN in, the alarm's own screen is there to turn it off on.
 # On the way, what must not happen: the app's core dying while locked must not count as its
 # screen failing, and a ring that went quiet for the unlock must come back by itself.
+# Every step on a screen of Android (the unlock screen, Android's unlock and its PIN pad) waits for a state read from the
+# device, acts once and confirms (devtest/system.sh).
 s13() {
     no_lock_here s13 && return
     scenario s13_locked_restart_unlock
@@ -359,39 +369,35 @@ s13() {
     # A phone's cleaner can take a process with nothing on screen. The rounds in which that
     # could count against the app's screen pass while the quiet below runs out.
     kill_main
-    tap_text Unlock || problems="$problems; no Unlock button on the screen"
-    wait_for 4 sound_off || problems="$problems; still sounding after Unlock"
+    sdk_unlock_press || problems="$problems; $SYS_WHY"
     # Left alone, the phone stays locked: the quiet runs out.
-    wait_for 12 sound_on || problems="$problems; the sound did not come back when the quiet ran out"
+    sys_wait "$SYS_DEADLINE" "the sound coming back when the quiet ran out" sound_on || problems="$problems; $SYS_WHY"
     user_unlocked && problems="$problems; the phone unlocked by itself"
     # Android's unlock is still up from the first time: away with it, and ask again.
-    press_back
-    wait_for 5 top_is_unlock || problems="$problems; after cancelling the unlock: $(top_activity)"
-    # Back from Android's unlock, the screen is on top a moment before it has the focus, and a tap in
-    # that moment goes nowhere (then the PIN typed below is what presses Unlock).
-    wait_for 5 unlock_screen_has_focus || problems="$problems; the unlock screen did not get the focus back: $(focused_window)"
-    sleep 0.5
+    sdk_unlock_cancel || problems="$problems; $SYS_WHY"
+    sys_wait "$SYS_DEADLINE" "the unlock screen on top after cancelling the unlock" top_is_unlock || problems="$problems; $SYS_WHY"
     screenshot s13_unlock_screen
-    sound_on || problems="$problems; silent after cancelling the unlock"
-    tap_again
-    wait_for 4 sound_off || problems="$problems; still sounding after the second Unlock"
+    sys_wait "$SYS_DEADLINE" "the sound after cancelling the unlock" sound_on || problems="$problems; silent after cancelling the unlock: $SYS_WHY"
+    sdk_unlock_press || problems="$problems; the second Unlock: $SYS_WHY"
     ui_given_up && problems="$problems; the core dying while locked counted as a failing screen"
 
-    type_test_pin || problems="$problems; the PIN did not unlock the phone"
-    if ! on_screen "Turn off" 20; then
+    unlock_pin 0 || problems="$problems; the PIN did not unlock the phone: $SYS_WHY"
+    sys_wait "$SYS_DEADLINE" "the app's window answering after the unlock" page_is_up || note "$SYS_WHY"
+    if ! on_screen "Turn off" 30; then
         screenshot s13_after_unlock
         fail "the alarm's own screen did not come up after the unlock: $(top_activity)${problems}"
         no_pin
         return
     fi
+    # The keyboard of the PIN pad comes up again with the app's window (Android 14 and 16) and covers the buttons.
+    sys_keyboard_down || problems="$problems; $SYS_WHY"
     top_is_main || problems="$problems; the alarm's screen is not on top: $(top_activity)"
-    wait_for 5 sound_on || problems="$problems; silent on the alarm's own screen"
+    sys_wait "$SYS_DEADLINE" "the sound on the alarm's own screen" sound_on || problems="$problems; silent on the alarm's own screen"
     state_is a firing || problems="$problems; state $(state a) on the alarm's own screen"
     finished() { sound_off && state_is a scheduled && [ "$(outcomes solved)" = 1 ]; }
-    # The tap goes through the app after the window has stood still (tap_through), so there is no lost first tap to try again:
-    # the second try was never used in the full runs 45105395298 and 45114508112 (retries.txt, all seven versions).
+    # One tap through the app (it waits for the button and the window to stand still), then the system deadline.
     tap "Turn off" 0 0.5
-    wait_for 8 finished || problems="$problems; after turning it off: sound=$(sound_on && echo ON || echo off) state=$(state a) solved=$(outcomes solved)"
+    wait_for "$SYS_DEADLINE" finished || problems="$problems; after turning it off: sound=$(sound_on && echo ON || echo off) state=$(state a) solved=$(outcomes solved)"
     [ "$(outcomes backup)" = 0 ] || problems="$problems; history says backup screen"
     if [ -z "$problems" ]; then
         pass "rang ${rang}s after the boot behind the unlock screen, quiet for the unlock and back, own screen after the PIN, turned off there"
@@ -414,7 +420,7 @@ s13b() {
     await_silence 60 || limit_problems="$limit_problems; still ringing 60s after the boot with a limit of 8s"
     local stopped=$STOPPED_AT
     unlock_gone() { ! top_is_unlock; }
-    wait_for 6 unlock_gone || limit_problems="$limit_problems; the unlock screen stayed after the ring ended"
+    sys_wait "$SYS_DEADLINE" "the unlock screen going away after the ring ended" unlock_gone || limit_problems="$limit_problems; the unlock screen stayed after the ring ended"
     user_unlocked && limit_problems="$limit_problems; the phone unlocked by itself"
     local d_took
     d_took=$(took)
@@ -424,36 +430,32 @@ s13b() {
     T=$B_T
     set_clock $((B_T - 3))
     await_sound 30 || { fail "b did not ring in the locked phone after the clock moved: main=$(main_pid) os_alarm=$(os_has_alarm && echo yes || echo NO)"; no_pin; return; }
-    wait_for 15 top_is_unlock || { fail "rang, but the unlock screen is not on top: $(top_activity)"; no_pin; return; }
-    tap_text Unlock || problems="$problems; no Unlock button on the screen"
-    wait_for 4 sound_off || problems="$problems; still sounding after Unlock"
+    sys_wait "$SYS_DEADLINE" "the unlock screen on top" top_is_unlock || { fail "rang, but $SYS_WHY"; no_pin; return; }
+    sdk_unlock_press || problems="$problems; $SYS_WHY"
     kill_sentinel
-    wait_for 15 sound_on || problems="$problems; no sound within 15s of the ring service being killed in the quiet"
-    wait_for 10 top_is_unlock || problems="$problems; the unlock screen did not come back after that: $(top_activity)"
-    # Android's unlock can still be up from the button, and it takes Home for itself. The ring's own notification may
-    # bring its unlock screen back within milliseconds (Android 11 does, now and then: the full screen intent comes
-    # with the lock screen), so what shows that Home took the screen is the system pausing it as the user leaving.
-    unlock_left_count() { dev "logcat -d -b events | grep -c 'wm_pause_activity.*SentinelUnlockActivity.*userLeaving=true'"; }
-    local left_before
-    left_before=$(unlock_left_count)
-    press_back
-    go_home
-    left() { ! top_is_unlock || [ "$(unlock_left_count)" -gt "$left_before" ] 2> /dev/null; }
-    wait_for 3 left || problems="$problems; Home did not leave the unlock screen"
-    sound_on || problems="$problems; silent after Home"
-    dev wm dismiss-keyguard
-    type_test_pin || problems="$problems; the PIN did not unlock the phone"
-    if ! on_screen "Turn off" 20; then
+    sys_wait "$SYS_DEADLINE" "the sound within the time of the ring service being killed in the quiet" sound_on || problems="$problems; no sound after the ring service was killed in the quiet: $SYS_WHY"
+    sys_wait "$SYS_DEADLINE" "the unlock screen coming back after that" top_is_unlock || problems="$problems; $SYS_WHY"
+    # Android's unlock can still be up from the button, and it takes Home for itself: away with it first (only when a read
+    # shows its pad), then Home.
+    if pad_read && [ "$PAD_UP" = 1 ]; then
+        sdk_unlock_cancel || problems="$problems; $SYS_WHY"
+    fi
+    home_from_unlock || :
+    sys_wait "$SYS_DEADLINE" "the sound after Home" sound_on || problems="$problems; silent after Home"
+    unlock_pin 1 || problems="$problems; the PIN did not unlock the phone: $SYS_WHY"
+    sys_wait "$SYS_DEADLINE" "the app's window answering after the unlock" page_is_up || note "$SYS_WHY"
+    if ! on_screen "Turn off" 30; then
         screenshot s13b_after_unlock
         fail "the alarm's own screen did not come up after unlocking on the lock screen: $(top_activity)${problems}"
         no_pin
         return
     fi
-    sound_on || problems="$problems; silent on the alarm's own screen"
+    sys_keyboard_down || problems="$problems; $SYS_WHY"
+    sys_wait "$SYS_DEADLINE" "the sound on the alarm's own screen" sound_on || problems="$problems; silent on the alarm's own screen"
     finished() { sound_off && state_is b scheduled && [ "$(outcomes solved)" = 1 ]; }
-    # As in s13: one tap, the second try was never used.
+    # As in s13: one tap through the app, then the system deadline.
     tap "Turn off" 0 0.5
-    wait_for 8 finished || problems="$problems; after turning it off: sound=$(sound_on && echo ON || echo off) state=$(state b) solved=$(outcomes solved)"
+    wait_for "$SYS_DEADLINE" finished || problems="$problems; after turning it off: sound=$(sound_on && echo ON || echo off) state=$(state b) solved=$(outcomes solved)"
     if [ -z "$problems" ]; then
         pass "the ring came back after its service died in the quiet, and unlocking on the lock screen brought the alarm's own screen"
     else
@@ -463,7 +465,7 @@ s13b() {
     # Only now can the history be read.
     CURRENT=s13d_locked_restart_limit
     recorded() { [ "$(outcomes limit)" = 1 ] && state_is a scheduled; }
-    wait_for 15 recorded || limit_problems="$limit_problems; after the unlock: limit=$(outcomes limit) state=$(state a)"
+    wait_for 30 recorded || limit_problems="$limit_problems; after the unlock: limit=$(outcomes limit) state=$(state a)"
     if [ -z "$limit_problems" ]; then
         echo "PASS  $CURRENT  [$d_took] stopped at its limit ${stopped}s after the boot while locked (rang ${rang}s after it), and the history says so" | tee -a "$RESULTS"
     else
@@ -482,23 +484,22 @@ s13c() {
     scenario s13c_locked_restart_no_overlay
     OVERLAY=deny locked_ring 60 || { no_pin; return; }
     local problems="" how="own screen only once the app was opened, as Android allows without the overlay"
-    go_home
-    sleep 1
-    dev wm dismiss-keyguard
-    type_test_pin || problems="$problems; the PIN did not unlock the phone"
+    home_from_unlock || :
+    unlock_pin 1 || problems="$problems; the PIN did not unlock the phone: $SYS_WHY"
     wait_for 8 top_is_main && how="own screen up by itself"
-    sound_on || problems="$problems; silent after the unlock"
+    sys_wait "$SYS_DEADLINE" "the sound after the unlock" sound_on || problems="$problems; silent after the unlock"
     state_is a firing || problems="$problems; state $(state a) after the unlock"
     top_is_backup && problems="$problems; the backup screen came up"
     start_app
-    if ! on_screen "Turn off" 20; then
+    if ! on_screen "Turn off" 30; then
         fail "the alarm's own screen is not there when the app is opened: $(top_activity)${problems}"
         no_pin
         return
     fi
-    tap "Turn off" 0 0.5
+    sys_keyboard_down || problems="$problems; $SYS_WHY"
+    press ring-turn-off
     finished() { sound_off && state_is a scheduled && [ "$(outcomes solved)" = 1 ]; }
-    wait_for 8 finished || problems="$problems; after turning it off: sound=$(sound_on && echo ON || echo off) state=$(state a) solved=$(outcomes solved)"
+    wait_for "$SYS_DEADLINE" finished || problems="$problems; after turning it off: sound=$(sound_on && echo ON || echo off) state=$(state a) solved=$(outcomes solved)"
     if [ -z "$problems" ]; then
         pass "rang on after the unlock, $how, turned off there"
     else
@@ -518,12 +519,11 @@ s13d() {
     local problems=""
     await_silence 60 || problems="$problems; still ringing 60s after the boot with a limit of 8s"
     unlock_gone() { ! top_is_unlock; }
-    wait_for 6 unlock_gone || problems="$problems; the unlock screen stayed after the ring ended"
+    sys_wait "$SYS_DEADLINE" "the unlock screen going away after the ring ended" unlock_gone || problems="$problems; the unlock screen stayed after the ring ended"
     user_unlocked && problems="$problems; the phone unlocked by itself"
-    dev wm dismiss-keyguard
-    type_test_pin || problems="$problems; the PIN did not unlock the phone"
+    unlock_pin 1 || problems="$problems; the PIN did not unlock the phone: $SYS_WHY"
     recorded() { [ "$(outcomes limit)" = 1 ] && state_is a scheduled; }
-    wait_for 15 recorded || problems="$problems; after the unlock: limit=$(outcomes limit) state=$(state a)"
+    wait_for 30 recorded || problems="$problems; after the unlock: limit=$(outcomes limit) state=$(state a)"
     sound_off || problems="$problems; sounding after the unlock"
     if [ -z "$problems" ]; then
         pass "stopped at its limit ${STOPPED_AT}s after the boot while locked, and the history says so"
@@ -763,14 +763,13 @@ s22() {
     p0=$(main_pid)
     action hang_ui
     wait_for 30 new_main
-    if wait_for 15 top_is_backup; then
+    if sys_wait "$SYS_DEADLINE" "the backup screen on top" top_is_backup; then
         screenshot s22b_backup
-        solve_backup 1
         ended() { sound_off && state_is a scheduled && [ "$(outcomes backup)" = 1 ]; }
-        if wait_for 10 ended; then
+        if backup_hold ended; then
             pass "backup screen took over, solving it ended the alarm"
         else
-            fail "after solving: sound=$(sound_on && echo ON || echo off) state=$(state a) backup=$(outcomes backup)"
+            fail "after solving: sound=$(sound_on && echo ON || echo off) state=$(state a) backup=$(outcomes backup): $SYS_WHY"
         fi
     else
         fail "backup screen not on top: $(dev dumpsys activity activities | grep -m1 ResumedActivity)"
@@ -1534,54 +1533,29 @@ s40() {
     seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
     arm a
     on_home 10
-    ui_texts() {
-        dev uiautomator dump /sdcard/af_ui.xml > /dev/null 2>&1
-        dev cat /sdcard/af_ui.xml | tr '>' '\n' | grep -oE ' text="[^"]+"' | sed -E 's/ text="(.*)"/\1/'
-    }
-    go_tab Settings || { fail "no Settings tab: $(ui screen)"; return; }
-    await_ui 5 "screen=3" || { fail "no settings"; return; }
-    tap_has "Add widget" 0 0.5
+    press go 2
+    await_ui 30 "screen=3" || { fail "no settings"; return; }
+    # The row "Add widget" (row 3 of the settings), pressed through its own callback: nothing to scroll to or to touch.
+    press st-row 3
     # The launcher asks the user first.
-    local add x1 y1 x2 y2 problems="" minute texts
-    the_add_button() {
-        dev uiautomator dump /sdcard/af_ui.xml > /dev/null 2>&1
-        add=$(dev cat /sdcard/af_ui.xml | tr '>' '\n' | grep -iE ' text="(add|add to home screen|add automatically)"' | grep -m1 'clickable="true"' | sed -E 's/.*bounds="\[([0-9]+),([0-9]+)\]\[([0-9]+),([0-9]+)\].*/\1 \2 \3 \4/')
-        [ -n "$add" ]
-    }
-    if ! wait_for 8 the_add_button; then
-        fail "the launcher did not ask: $(ui_texts | tr '\n' '|')"
-        return
-    fi
-    read -r x1 y1 x2 y2 <<< "$add"
-    dev input tap $(((x1 + x2) / 2)) $(((y1 + y2) / 2))
-    sleep 1
-    dev dumpsys appwidget | grep -q 'SentinelHomeWidget' || problems="$problems; not registered"
-    go_home
-    sleep 1
+    local problems="" minute
+    launcher_add_widget || { fail "the widget was not added: $SYS_WHY; the launcher shows: $(launcher_texts | tr '\n' '|'); appwidget says: $(dev dumpsys appwidget | grep -m4 'provider=' | tr -s ' ' | tr '\n' ';')"; return; }
+    sys_home "the launcher in front" launcher_up || problems="$problems; $SYS_WHY"
     minute=$(printf ':%02d' "$T_M")
-    texts=$(ui_texts | tr '\n' '|')
-    case "$texts" in
-        *"$minute"*) ;;
-        *) problems="$problems; no time on it: $texts" ;;
-    esac
+    sys_wait 60 "the widget showing the time $minute" launcher_has "$minute" || problems="$problems; no time on it: $(launcher_texts | tr '\n' '|')"
     # Follows a change, without the widget being asked.
     start_app
     on_home 8
-    go_tab Alarms || { fail "no Alarms tab: $(ui screen)"; return; }
+    press go 0
     on_card 5
-    tap "On or off: a" 0 1
-    go_home
-    sleep 1
-    texts=$(ui_texts | tr '\n' '|')
-    case "$texts" in
-        *"No alarm set"*) ;;
-        *) problems="$problems; still old: $texts" ;;
-    esac
+    tap_in "On or off: a" 0 1
+    sys_home "the launcher in front" launcher_up || problems="$problems; $SYS_WHY"
+    sys_wait 60 "the widget saying No alarm set" launcher_has "No alarm set" || problems="$problems; still old: $(launcher_texts | tr '\n' '|')"
     remove_widgets
     if [ -z "$problems" ]; then
         pass "placed, shows the next ring, follows a change"
     else
-        fail "$problems"
+        fail "${problems#; }"
     fi
 }
 
@@ -1606,25 +1580,23 @@ s42() {
     scanner_on_top() { focused_window | grep -q SentinelScannerActivity; }
     scan_idle() { [ "$(sn scan_state)" = 0 ] && is_there SCAN; }
     local crashed
-    if wait_for 8 scanner_on_top; then
+    if wait_for 30 scanner_on_top; then
         crashed=$(adb_ logcat -d 2> /dev/null | grep -E 'FATAL EXCEPTION|ClassNotFoundException|NoClassDefFoundError|Resources\$NotFoundException|InflateException' | head -3)
         if [ -n "$crashed" ]; then
             fail "opened, but: $crashed"
             return
         fi
-        press_back
-        if ! wait_for 8 scan_idle; then
+        if ! sys_press KEYCODE_BACK "the scan button back after Back from the scanner" 30 scan_idle; then
             fail "did not come back from the scanner: $(focused_window)"
         else
             # Right away again: the first one must not end this one.
             tap SCAN 0 0.3
-            if ! wait_for 8 scanner_on_top; then
+            if ! wait_for 30 scanner_on_top; then
                 fail "the second time it does not open: scan_state=$(sn scan_state)"
             elif [ "$(sn scan_state)" = 0 ]; then
                 fail "the second scan ended while the camera is up"
             else
-                press_back
-                if wait_for 8 scan_idle; then
+                if sys_press KEYCODE_BACK "the scan button back after the second Back" 30 scan_idle; then
                     pass "opened the camera twice in a row and came back"
                 else
                     fail "did not come back the second time"
@@ -1806,63 +1778,6 @@ s47() {
     moved_to_cargo s47_use_for_new_alarms s47_use_for_new_alarms
 }
 
-# What goes through the phone's own file picker, in the build that R8 went over: a sound of
-# one's own in, and alarms out to a file and back. Emulator only: the picker differs per
-# phone, and this looks for its words.
-ui_tap() { # the middle of the first element with this in its description
-    local bounds x1 y1 x2 y2
-    # UI_WINDOWS=--windows looks in every window: Android can go on calling the home screen the
-    # active one with the shade open over it.
-    dev uiautomator dump ${UI_WINDOWS:-} /sdcard/af_ui.xml > /dev/null 2>&1
-    bounds=$(dev cat /sdcard/af_ui.xml | tr '>' '\n' | grep -m1 "$1" | sed -E 's/.*bounds="\[([0-9]+),([0-9]+)\]\[([0-9]+),([0-9]+)\].*/\1 \2 \3 \4/')
-    [ -n "$bounds" ] || return 1
-    read -r x1 y1 x2 y2 <<< "$bounds"
-    dev input tap $(((x1 + x2) / 2)) $(((y1 + y2) / 2))
-}
-# Android 11's file picker ignores a tap on a file, from `input tap` as from a finger-like swipe, and
-# answers the keys: move the focus onto the file, then Enter.
-picker_keys() { # what the file is called in the dump, as in ui_tap
-    local k bounds x1 y1 x2 y2 fx1 fy1 fx2 fy2
-    dev uiautomator dump /sdcard/af_ui.xml > /dev/null 2>&1
-    bounds=$(dev cat /sdcard/af_ui.xml | tr '>' '\n' | grep -m1 "$1" | sed -E 's/.*bounds="\[([0-9]+),([0-9]+)\]\[([0-9]+),([0-9]+)\].*/\1 \2 \3 \4/')
-    [ -n "$bounds" ] || return 1
-    read -r x1 y1 x2 y2 <<< "$bounds"
-    for k in 1 2 3 4 5 6 7 8; do
-        dev input keyevent KEYCODE_DPAD_DOWN
-        sleep 0.4
-        dev uiautomator dump /sdcard/af_ui.xml > /dev/null 2>&1
-        # The list itself takes the focus first: the item is the focused node no bigger than a row or a card.
-        bounds=$(dev cat /sdcard/af_ui.xml | tr '>' '\n' | grep 'focused="true"' |
-            sed -E 's/.*bounds="\[([0-9]+),([0-9]+)\]\[([0-9]+),([0-9]+)\].*/\1 \2 \3 \4/' |
-            awk '$4 - $2 < 700 { print; exit }')
-        [ -n "$bounds" ] || continue
-        read -r fx1 fy1 fx2 fy2 <<< "$bounds"
-        if [ "$fx1" -le "$x1" ] && [ "$fy1" -le "$y1" ] && [ "$fx2" -ge "$x2" ] && [ "$fy2" -ge "$y2" ]; then
-            dev input keyevent KEYCODE_ENTER
-            return 0
-        fi
-    done
-    return 1
-}
-picker_tap() { # file name
-    local i=0
-    while [ "$i" -lt 8 ]; do
-        if ui_tap "text=\"$1\""; then
-            sleep 1.5
-            # Still the picker: it did not take the tap.
-            focused_window | grep -q documentsui && picker_keys "text=\"$1\""
-            return 0
-        fi
-        # It opens on its recent files. Over to Downloads.
-        if ui_tap 'content-desc="Show roots"'; then
-            sleep 1
-            ui_tap 'text="Downloads"'
-        fi
-        sleep 1.5
-        i=$((i + 1))
-    done
-    return 1
-}
 s48() {
     if ! on_emulator; then
         note "s48 needs an emulator"
@@ -1881,11 +1796,11 @@ s48() {
     # A sound.
     press open a 0.8
     on_editor
-    tap_has Sound 0 0.6
+    on_screen_has Sound 30 || problems="$problems; no Sound row in the editor"
+    open_row Sound
     scroll_until "Add your own sound"
-    on_screen "Add your own sound" 4
-    tap "Add your own sound" 0 1
-    if picker_tap mytune.ogg; then
+    tap_scrolling "Add your own sound"
+    if picker_pick mytune.ogg; then
         own_sound_there() {
             names=$(texts_of)
             case "$names" in
@@ -1893,50 +1808,58 @@ s48() {
             esac
             return 1
         }
-        wait_for 20 own_sound_there || problems="$problems; own sound not listed: $names"
-        [ -n "$(as_app "ls files/sounds/custom")" ] || problems="$problems; not copied"
+        sound_copied() { [ -n "$(as_app "ls files/sounds/custom")" ]; }
+        wait_for 30 sound_copied || problems="$problems; not copied"
+        if ! wait_for 10 own_sound_there; then
+            # The app can come back from the picker as a new start (Android 13: the launcher had the keys): the sound is then in
+            # the list of a sheet that is opened again.
+            if [ "$(screen_no)" != 1 ]; then
+                on_home 10
+                press open a 0.8
+            fi
+            on_editor
+            open_row Sound
+            wait_for 30 own_sound_there || problems="$problems; own sound not listed: $names"
+        fi
     else
-        problems="$problems; the picker never showed the file ($(focused_window | grep -o '[A-Za-z.]*/[A-Za-z.]*' | head -1))"
-        dev uiautomator dump /sdcard/af_ui.xml > /dev/null 2>&1
-        note "picker shows: $(dev cat /sdcard/af_ui.xml | tr '>' '
-' | grep -oE '(text|content-desc)="[^"]+"' | cut -c1-40 | head -20 | tr '
-' ' ')"
-        press_back
+        problems="$problems; the picker never showed the file: $SYS_WHY"
+        sys_press KEYCODE_BACK "the app getting the keys back from the picker" "$SYS_DEADLINE" focus_in_app || note "$SYS_WHY"
     fi
     dev am force-stop "$PKG"
     start_app
     on_home 10
     # Alarms to a file: only the one alarm in it, under today's name.
-    go_tab Settings || { fail "no Settings tab: $(ui screen)"; return; }
-    await_ui 5 "screen=3"
-    tap_scrolling "Back up"
-    on_screen "Save to a file" 4
-    tap "Save to a file" 0 1
-    file=$(dev ls /sdcard/Download/ | grep -m1 '^alarmfree-')
-    [ -n "$file" ] || problems="$problems; no file in Downloads"
-    [ "$(dev cat "/sdcard/Download/$file" | grep -c '"time_hour"')" -ge 1 ] || problems="$problems; no alarm in the file"
+    press go 2
+    await_ui 30 "screen=3" || problems="$problems; the settings did not open"
+    press st-row 6
+    on_screen "Save to a file" 30 || problems="$problems; no Save to a file"
+    tap_has "Save to a file"
+    saved_file() {
+        file=$(dev ls /sdcard/Download/ | grep -m1 '^alarmfree-')
+        [ -n "$file" ] && [ "$(dev cat "/sdcard/Download/$file" | grep -c '"time_hour"')" -ge 1 ]
+    }
+    wait_for 30 saved_file || problems="$problems; no file with an alarm in Downloads (Downloads holds: $(dev ls /sdcard/Download/ | tr '\n' ' '))"
     # And back from it, as a second one.
     # The picker lists what the media index knows: the file just written is not in it yet.
     dev content call --uri content://media --method scan_volume --arg external_primary > /dev/null 2>&1
     # The toast that says where it went sits over the Back up row.
     saved_toast_gone() { ! has_there "Saved to"; }
-    wait_for 8 saved_toast_gone
-    await_ui 6 "screen=3"
-    tap_scrolling "Back up"
-    on_screen "Add alarms from a file" 4
-    tap "Add alarms from a file" 0 1
-    if picker_tap "$file"; then
-        on_screen Undo 20
+    wait_for 30 saved_toast_gone
+    await_ui 30 "screen=3" || problems="$problems; the settings are not up for the second picker"
+    press st-row 6
+    on_screen "Add alarms from a file" 30 || problems="$problems; no Add alarms from a file"
+    tap_has "Add alarms from a file"
+    if [ -n "$file" ] && picker_pick "$file"; then
+        on_screen Undo 30
         [ "$(alarm_count)" = 2 ] || problems="$problems; $(alarm_count) alarms after restoring"
-        tap Undo 0 0.5
+        tap_in Undo 0 0.5
         [ "$(alarm_count)" = 1 ] || problems="$problems; undo left $(alarm_count) alarms"
     else
-        problems="$problems; the picker never showed the backup"
-        screenshot s48_no_backup
-        press_back
+        problems="$problems; the picker never showed the backup: ${file:-no file name}: $SYS_WHY"
+        sys_press KEYCODE_BACK "the app getting the keys back from the picker" "$SYS_DEADLINE" focus_in_app || note "$SYS_WHY"
     fi
     dev rm -f /sdcard/Download/mytune.ogg
-    rm_download "$file"
+    [ -z "$file" ] || rm_download "$file"
     if [ -z "$problems" ]; then
         pass "own sound in, alarms out to $file and back"
     else
@@ -2368,28 +2291,21 @@ s53() {
     open_reliability || problems="$problems; no reliability screen"
     local i=0 n
     n=$(all_texts | grep -c -E '^Fix .')
-    # Another app has the keys. A system screen can take a while to start, and Back goes nowhere
-    # until it has.
+    # Another app has the keys. A screen of Android can take a while to start: sys_leave waits until its tree is drawn,
+    # presses Back once and waits for the keys to come back (a second Back only when a read after 15 s still shows it). A
+    # second Back in the middle of the change would close the screen the app comes back to.
     away() { focused_window | grep -v null | grep -qv "$PKG/"; }
-    # And a second Back in the middle of the change closes the screen it comes back to.
-    back_in_app() {
-        press_back
-        wait_for 4 focus_in_app
-    }
-    # A moment between two of the phone's screens: asked for the same one again at once, a slow
-    # device's Settings can freeze, and that is its own trouble.
     while [ "$i" -lt "${n:-0}" ] 2> /dev/null; do
         tap_has "Fix " "$i"
-        wait_for 15 away || problems="$problems; fix button $i stays in the app"
-        wait_for 12 back_in_app || problems="$problems; Back from fix button $i leaves the keys with:$(focused_window)"
-        await_ui 20 "screen=4" || problems="$problems; not back from fix button $i"
-        sleep 1
+        sys_wait "$SYS_DEADLINE" "fix button $i leaving the app" away || problems="$problems; fix button $i stays in the app: $SYS_WHY"
+        sys_leave "the screen of fix button $i" || problems="$problems; Back from fix button $i: $SYS_WHY"
+        await_ui 30 "screen=4" || problems="$problems; not back from fix button $i"
         i=$((i + 1))
     done
     scroll_to "This app in the phone's settings" || problems="$problems; no button for the app's settings"
-    tap "This app in the phone's settings"
-    wait_for 15 away || problems="$problems; the app's settings stay in the app"
-    wait_for 12 back_in_app || problems="$problems; Back from the app's settings leaves the keys with:$(focused_window)"
+    tap_in "This app in the phone's settings"
+    sys_wait "$SYS_DEADLINE" "the app's settings leaving the app" away || problems="$problems; the app's settings stay in the app: $SYS_WHY"
+    sys_leave "the app's settings" || problems="$problems; Back from the app's settings: $SYS_WHY"
     if [ -z "$problems" ]; then
         pass "deleting a sound, $n fix buttons"
     else
@@ -2411,49 +2327,52 @@ s54() {
     scenario s54_over_the_lock_screen
     fresh
     dev locksettings set-pin 1234 > /dev/null
+    sys_wait "$SYS_DEADLINE" "the PIN being set" pin_is_set || { fail "$SYS_WHY"; return; }
     next_minute 10
     seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null air 0 0 3 1 '[["challenge.scan","{}"]]')"
     arm a
     dead
-    screen_off
+    sys_sleep || note "$SYS_WHY"
     locked() { dev "dumpsys trust | grep -q 'deviceLocked=1'" > /dev/null; }
     local problems=""
-    wait_for 6 locked || problems="$problems; not locked before the ring"
+    sys_wait "$SYS_DEADLINE" "the phone being locked before the ring" locked || problems="$problems; not locked before the ring: $SYS_WHY"
     if ! await_ring a 30; then
         problems="$problems; no ring: state=$(state a)"
     else
-        wait_for 15 focus_in_app || problems="$problems; its screen is not on top: $(focused_window)"
-        on_screen "Turn off" 15 || problems="$problems; no alarm screen"
+        sys_wait "$SYS_DEADLINE" "its screen being on top" focus_in_app || problems="$problems; $SYS_WHY"
+        on_screen "Turn off" 30 || problems="$problems; no alarm screen"
         screenshot s54_over_the_lock_screen
         locked || problems="$problems; ringing unlocked the phone"
-        # A dropped touch leaves the alarm screen up: touch again until the challenge shows.
-        for _ in 1 2 3; do
-            tap "Turn off"
-            on_screen SCAN 8 && break
-        done
-        on_screen SCAN 1 || problems="$problems; no scan button"
+        # Over the lock screen the touch is not the subject (the keys are, below): the challenge comes through the button's
+        # own callback, once, and the screen says so.
+        press ring-turn-off
+        on_screen SCAN 30 || problems="$problems; no scan button"
         # The power button, by accident: what comes back is the challenge, not the PIN.
-        dev input keyevent KEYCODE_SLEEP
-        sleep 1
-        dev input keyevent KEYCODE_WAKEUP
+        # The SDK can wake the screen again within a moment (Android 13): then the screen was never seen asleep, and what has to hold
+        # is the same, the challenge and not the PIN.
+        sys_sleep 8 || note "the screen was not seen asleep: $SYS_WHY"
+        sys_wake || problems="$problems; $SYS_WHY"
         challenge_is_up() { focus_in_app && is_there SCAN; }
-        wait_for 8 challenge_is_up || problems="$problems; no challenge after the power button: $(focused_window)"
-        tap SCAN 0 0.3
+        sys_wait "$SYS_DEADLINE" "the challenge after the power button" challenge_is_up || problems="$problems; no challenge after the power button: $SYS_WHY"
+        tap SCAN
         camera_has_keys() { focused_window | grep -q SentinelScannerActivity; }
-        wait_for 8 camera_has_keys || problems="$problems; no camera over the lock screen: $(focused_window)"
-        sleep 1
-        camera_has_keys || problems="$problems; the camera lost the keys to: $(focused_window)"
+        if sys_wait "$SYS_DEADLINE" "the camera screen having the keys" camera_has_keys; then
+            sys_holds 2 "the camera keeping the keys" camera_has_keys || problems="$problems; the camera lost the keys: $SYS_WHY"
+        else
+            problems="$problems; no camera over the lock screen: $SYS_WHY"
+        fi
         screenshot s54_camera_over_the_lock_screen
         locked || problems="$problems; the camera unlocked the phone"
         as_app "echo a-code > /data/user/0/$PKG/files/sentinel_scan_result.txt"
-        wait_for 10 sound_off || problems="$problems; still ringing after the scan"
-        await_state a scheduled 5 || problems="$problems; state=$(state a) after the scan"
-        wait_for 3 camera_has_keys && press_back
-        sleep 1
-        locked || problems="$problems; ending the alarm unlocked the phone"
+        sys_wait "$SYS_DEADLINE" "the ring being quiet after the scan" sound_off || problems="$problems; still ringing after the scan"
+        await_state a scheduled 30 || problems="$problems; state=$(state a) after the scan"
+        camera_gone() { ! camera_has_keys; }
+        if ! sys_wait 10 "the camera screen closing after the scan" camera_gone; then
+            sys_press KEYCODE_BACK "the camera screen leaving after Back" "$SYS_DEADLINE" camera_gone || problems="$problems; $SYS_WHY"
+        fi
+        sys_holds 2 "the phone staying locked after the alarm ended" locked || problems="$problems; ending the alarm unlocked the phone"
     fi
-    dev locksettings clear --old 1234 > /dev/null
-    wake
+    no_pin
     if [ -z "$problems" ]; then
         pass "rang ${SOUND_AT}s after its time, on top of the lock screen, with the camera too, and the phone stayed locked"
     else
@@ -2862,34 +2781,6 @@ s59() {
     fi
 }
 
-# Each time again: Android 16 ignores opening the shade while it is still closing. Some
-# Androids write a button in capitals. A locked screen shows a notice without its buttons, and
-# an emulator can have gone to sleep after what ran before this. Waking closes the shade, so
-# only once.
-tap_in_shade() {
-    local i=0
-    wake
-    while [ "$i" -lt 8 ]; do
-        dev cmd statusbar expand-notifications
-        # Only once it has finished opening is the shade what counts as on screen.
-        sleep 0.7
-        UI_WINDOWS=--windows ui_tap "text=\"$1\"" && return 0
-        UI_WINDOWS=--windows ui_tap "text=\"${1^^}\"" && return 0
-        # Android 10 sometimes leaves the shade out of the all-windows dump although it is up (the
-        # picture shows it): the plain dump, then a shade closed and opened again.
-        ui_tap "text=\"$1\"" && return 0
-        ui_tap "text=\"${1^^}\"" && return 0
-        dev cmd statusbar collapse
-        sleep 1
-        i=$((i + 1))
-    done
-    adb_ exec-out screencap -p > "$OUT/shade_no_$1.png"
-    dev uiautomator dump --windows /sdcard/af_ui.xml > /dev/null 2>&1
-    dev cat /sdcard/af_ui.xml > "$OUT/shade_no_$1.xml"
-    own_notifications > "$OUT/shade_no_$1.notifications.txt"
-    return 1
-}
-
 # The notice before an alarm: from there the next ring can be skipped with the app dead, and that
 # can be taken back. The ring after that one stays.
 s60() {
@@ -2906,21 +2797,21 @@ s60() {
     arm a
     local problems="" armed
     armed=$(armed_at_ms a)
-    dev input keyevent KEYCODE_HOME
+    sys_home "the launcher in front" launcher_up || problems="$problems; $SYS_WHY"
     jump_to $((T - 303))
     wait_for 180 reminded || { fail "no notice with a Skip"; return; }
     kill_all
-    wait_for 3 no_process
-    tap_in_shade Skip || problems="$problems; no Skip to tap"
-    dev cmd statusbar collapse
+    wait_for 30 no_process
+    tap_in_shade Skip skipped || problems="$problems; no Skip to tap: $SYS_WHY"
+    shade_set closed || problems="$problems; $SYS_WHY"
     skipped() { printf "SELECT data FROM alarms WHERE id='a';\n" | sql | grep -q "\"skip_until_ms\":$((T * 1000))"; }
     wait_for 15 skipped || problems="$problems; not skipped: $(printf "SELECT data FROM alarms WHERE id='a';\n" | sql | grep -o '"skip_until_ms":[^,]*')"
     moved() { [ "$(armed_at_ms a)" = "$((armed + 86400000))" ]; }
     wait_for 8 moved || problems="$problems; armed for $(armed_at_ms a), was $armed"
     # Taken back.
     wait_for 8 done_notice || problems="$problems; nothing to take it back with"
-    tap_in_shade Undo || problems="$problems; no Undo to tap"
-    dev cmd statusbar collapse
+    tap_in_shade Undo not_skipped || problems="$problems; no Undo to tap: $SYS_WHY"
+    shade_set closed || problems="$problems; $SYS_WHY"
     not_skipped() { printf "SELECT data FROM alarms WHERE id='a';\n" | sql | grep -q '"skip_until_ms":null'; }
     wait_for 15 not_skipped || problems="$problems; undo did nothing"
     back_armed() { [ "$(armed_at_ms a)" = "$armed" ]; }
@@ -2929,8 +2820,8 @@ s60() {
     # Skipped for good this time, from a list that is open: the list says so.
     start_app
     on_card 10
-    tap_in_shade Skip || problems="$problems; no second Skip to tap"
-    dev cmd statusbar collapse
+    tap_in_shade Skip skipped || problems="$problems; no second Skip to tap: $SYS_WHY"
+    shade_set closed || problems="$problems; $SYS_WHY"
     wait_for 15 skipped || problems="$problems; not skipped the second time"
     says_it() { has_text=$(row_when); case "$has_text" in Skips*) return 0 ;; esac; return 1; }
     wait_for 8 says_it || problems="$problems; the list says '$has_text'"
@@ -2973,21 +2864,20 @@ s67() {
     seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
     ALARM_EXTRA=
     arm a
-    dev input keyevent KEYCODE_HOME
+    sys_home "the launcher in front" launcher_up || problems="$problems; $SYS_WHY"
     reminded && problems="$problems; a reminder 8 hours ahead is already up"
     jump_to $((T - 8 * 3600 - 60))
-    sleep 3
-    reminded && problems="$problems; the 8 hour reminder came a minute early"
+    not_reminded() { ! reminded; }
+    sys_holds 3 "no reminder a minute before its moment" not_reminded || problems="$problems; the 8 hour reminder came a minute early"
     wait_for 150 reminded || { fail "no 8 hour reminder with a Skip"; return; }
     [ "$(now_s)" -ge $((T - 8 * 3600)) ] || problems="$problems; the 8 hour reminder came before its moment"
     own_notifications | grep -q "Go to bed, your alarm goes off in 8 hours" || problems="$problems; the 8 hour reminder does not say the text"
     own_notifications | grep -q "channel=$quiet" || problems="$problems; the silent reminder is not on the quiet channel"
     own_notifications | grep -q "channel=$loud" && problems="$problems; the silent reminder is on the sound channel"
-    dev cmd statusbar expand-notifications
-    sleep 1
+    shade_set open || problems="$problems; $SYS_WHY"
     adb_ exec-out screencap -p > "$OUT/s67_reminder_shade.png"
-    tap_in_shade Skip || problems="$problems; no Skip to tap"
-    dev cmd statusbar collapse
+    tap_in_shade Skip skipped || problems="$problems; no Skip to tap: $SYS_WHY"
+    shade_set closed || problems="$problems; $SYS_WHY"
     wait_for 15 skipped || problems="$problems; Skip on the 8 hour reminder did not skip the ring"
     # A 15 minute reminder, with sound.
     fresh
@@ -2996,11 +2886,10 @@ s67() {
     seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
     ALARM_EXTRA=
     arm a
-    dev input keyevent KEYCODE_HOME
+    sys_home "the launcher in front" launcher_up || problems="$problems; $SYS_WHY"
     reminded && problems="$problems; a reminder 20 minutes ahead is already up"
     jump_to $((T - 15 * 60 - 45))
-    sleep 3
-    reminded && problems="$problems; the 15 minute reminder came early"
+    sys_holds 3 "no reminder 45 seconds before the 15 minute moment" not_reminded || problems="$problems; the 15 minute reminder came early"
     wait_for 120 reminded || { fail "no 15 minute reminder with a Skip"; return; }
     [ "$(now_s)" -ge $((T - 15 * 60)) ] || problems="$problems; the 15 minute reminder came before its moment"
     own_notifications | grep -q "Dentist in 15 minutes" || problems="$problems; the 15 minute reminder does not say the text"
@@ -3084,7 +2973,7 @@ s68b() {
         seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
         ALARM_EXTRA=
         arm a
-        dev input keyevent KEYCODE_HOME
+        sys_home "the launcher in front" launcher_up || problems="$problems; $SYS_WHY"
         jump_to $((T - 15 * 60 - 3))
         wait_for 60 noticed || { fail "no reminder with a lock of $lock minutes"; return; }
         if [ "$lock" = 30 ]; then
@@ -3389,33 +3278,15 @@ s62() {
     if on_emulator && [ -f "$OUT/s62_ring.png" ]; then
         # A ring can leave the screen off and locked, and a picker does not show over that.
         wake
+        sys_wait "$SYS_DEADLINE" "the lock screen gone" kg_gone || note "$SYS_WHY"
         dev rm -f /sdcard/Download/af_photo.png
         adb_ push "$OUT/s62_ring.png" /sdcard/Download/af_photo.png > /dev/null
         dev content call --uri content://media --method scan_volume --arg external_primary > /dev/null 2>&1
         # It still has that gone photo: another one, from the link.
-        tap "Choose another photo" 0 1
-        photo_tap() {
-            local i=0
-            while [ "$i" -lt 8 ]; do
-                if ui_tap 'content-desc="af_photo.png' || ui_tap 'text="af_photo.png"'; then
-                    sleep 1.5
-                    focused_window | grep -q documentsui && picker_keys 'af_photo.png'
-                    return 0
-                fi
-                if ui_tap 'content-desc="Show roots"'; then
-                    sleep 1
-                    ui_tap 'text="Downloads"'
-                fi
-                # Android 11's picker of images has no Downloads root: a Download folder inside Images.
-                ui_tap 'text="Download"'
-                sleep 1.5
-                i=$((i + 1))
-            done
-            return 1
-        }
-        if photo_tap; then
+        tap_in "Choose another photo" 0 1
+        if picker_pick af_photo.png; then
             chosen() { [ -n "$(as_app "ls files/ring_photos 2> /dev/null")" ]; }
-            wait_for 20 chosen || problems="$problems; the photo was not kept"
+            wait_for 40 chosen || problems="$problems; the photo was not kept"
             await_settled
             tap Preview L
             await_ui 5 'ed_preview=true'
@@ -3429,9 +3300,8 @@ s62() {
             screenshot s62_photo
             press_back
         else
-            problems="$problems; the picker did not offer the photo"
-            screenshot s62_picker
-            press_back
+            problems="$problems; the picker did not offer the photo: $SYS_WHY"
+            sys_press KEYCODE_BACK "the app getting the keys back from the picker" "$SYS_DEADLINE" focus_in_app || note "$SYS_WHY"
         fi
     fi
     if [ -z "$problems" ]; then
@@ -3450,26 +3320,24 @@ s63() {
     next_minute
     seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
     arm a
-    dev input keyevent KEYCODE_HOME
-    local problems="" seen="" t0
-    banner_up() {
-        dev uiautomator dump --windows /sdcard/af_ui.xml > /dev/null 2>&1
-        local found=1
-        dev cat /sdcard/af_ui.xml | grep -q 'text="Tap to open"' && found=0
-        dev rm -f /sdcard/af_ui.xml
-        return $found
-    }
+    sys_home "the launcher in front" launcher_up || note "$SYS_WHY"
+    local problems="" seen="" t0 at
+    # The banner is read from a tree that was really read: a dump that failed says nothing (it used to count as "no banner").
     if await_ring a 40 && on_screen "Turn off" 15; then
-        t0=$SECONDS
-        sleep 1
-        banner_up && seen="$seen $((SECONDS - t0))s"
-        sleep 1
-        banner_up && seen="$seen $((SECONDS - t0))s"
+        t0=$(now_ms)
+        for at in 1000 2000; do
+            sys_wait 10 "the moment ${at}ms after the screen came up" elapsed_since "$t0" "$at"
+            heads_up_banner_there
+            case $? in
+                0) seen="$seen $(($(now_ms) - t0))ms" ;;
+                2) problems="$problems; the screen could not be read at ${at}ms" ;;
+            esac
+        done
         screenshot s63_ring
         [ -z "$seen" ] || problems="$problems; its banner is over the alarm's screen at$seen after it came up"
         own_notifications | grep -q 'id=900[12]' || problems="$problems; no notification while it rings"
-        tap "Turn off" 0 0.3
-        wait_for 8 sound_off || problems="$problems; still ringing after turning it off"
+        press ring-turn-off
+        wait_for 30 sound_off || problems="$problems; still ringing after turning it off"
     else
         problems="$problems; did not ring: state=$(state a)"
     fi
@@ -3753,6 +3621,8 @@ s62p() {
 . "$(dirname "$0")/selftest.sh"
 # The probe of typed text in the text fields: by name only (probe_text.sh).
 . "$(dirname "$0")/probe_text.sh"
+# Probes of Android's own screens, by name only.
+. "$(dirname "$0")/probe.sh"
 
 ALL="s01 s03 s04 s05 s06 s07 s10 s11 s13 s13b s13d s14 s15 s16 s16b s17 s19 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s34 s36 s37 s38 s39 s40 s42 s43 s44 s45 s46 s47 s48 s49 s50 s51 s52 s53 s55 s56 s57 s58 s59 s60 s61 s62 s63 s65 s66 s67 s68 s68b s69a s69b s69c s69d big_screens s54"
 ON_A_PHONE="s01 s03 s04 s05 s06 s07 s10 s15 s16 s16b s17 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s36 s37 s38 s39 s42 s43 s45 s46 s47 s49 s50 s51 s52 s53 s55 s57 s58 s59 s61 s62"

@@ -24,6 +24,9 @@ _here=${BASH_SOURCE[0]%/*}
 # The state of the device before each scenario, and the watchdog around it (run_unit in the runner of matrix.sh).
 # shellcheck disable=SC1091
 . "$_here/baseline.sh"
+# Android's own screens: the reads of the device, and the rule for acting there (a wait on a named state, act once, confirm).
+# shellcheck disable=SC1091
+. "$_here/system.sh"
 # The snapshot of the screen and the device at the first FAIL of a scenario (and at an INFRA).
 # shellcheck disable=SC1091
 . "$_here/evidence.sh"
@@ -1088,64 +1091,7 @@ top_is_main() { dev "dumpsys activity activities | grep -E 'topResumedActivity|R
 top_activity() { dev "dumpsys activity activities | grep -E 'topResumedActivity|ResumedActivity:' | head -1 | sed -E 's/.* u0 ([^ ]+) .*/\\1/'"; }
 user_unlocked() { dev "dumpsys user | grep -q RUNNING_UNLOCKED" > /dev/null; }
 
-# Tap the plain Android view that shows this text. For a screen that is no page: nothing to ask
-# there, and no script runs in it.
-tap_text() {
-    local box
-    local try
-    for try in 1 2 3; do
-        box=$(dev "uiautomator dump /data/local/tmp/af_ui.xml > /dev/null 2>&1; tr '>' '\\n' < /data/local/tmp/af_ui.xml | grep 'text=\"$1\"' | sed -E 's/.*bounds=\"\\[([0-9]+),([0-9]+)\\]\\[([0-9]+),([0-9]+)\\]\".*/\\1 \\2 \\3 \\4/' | head -1")
-        [[ "$box" =~ ^[0-9]+\ [0-9]+\ [0-9]+\ [0-9]+$ ]] && break
-        retry_used "tap_text $1: the screen dump failed"
-        sleep 1
-    done
-    # A dump that failed leaves an error text (sh: can't open ...) where the numbers go; in $(( )) that ends the whole run.
-    [[ "$box" =~ ^[0-9]+\ [0-9]+\ [0-9]+\ [0-9]+$ ]] || return 1
-    # shellcheck disable=SC2086
-    set -- $box
-    TAPPED_AT="$((($1 + $3) / 2)) $((($2 + $4) / 2))"
-    # shellcheck disable=SC2086
-    dev input tap $TAPPED_AT
-}
-# Where tap_text last tapped, without looking the screen over again, which takes seconds.
-TAPPED_AT=""
-tap_again() {
-    [ -n "$TAPPED_AT" ] || return 1
-    # shellcheck disable=SC2086
-    dev input tap $TAPPED_AT
-}
-
-# The PIN a scenario set itself, typed into Android's own unlock. Only on an emulator: nothing
-# here knows, sets or asks for the PIN of somebody's phone.
-type_test_pin() {
-    on_emulator || return 1
-    # Keys typed before Android's unlock has the focus go nowhere, and it has the focus a
-    # moment before its keypad is there to take them.
-    wait_for 5 unlock_has_focus || note "Android's unlock does not have the focus: $(focused_window)"
-    sleep 1
-    dev input text 1234
-    dev input keyevent 66
-    if ! wait_for 5 user_unlocked; then
-        note "the PIN did not go in the first time, focus: $(focused_window)"
-        # The lock screen can be up without its keypad (s13b on Android 14 typed twice into a bare lock screen): ask for the
-        # keypad again before the second try.
-        dev wm dismiss-keyguard
-        wait_for 5 unlock_has_focus
-        sleep 1
-        dev input text 1234
-        dev input keyevent 66
-        if ! wait_for 8 user_unlocked; then
-            note "still locked. $(dev "dumpsys window | grep -i -m8 -E 'bouncer|keyguardshowing|occluded|mCurrentFocus'" | tr '\n' ' ')"
-            return 1
-        fi
-    fi
-    # Android 16 leaves its keyboard up over whatever comes next after the PIN.
-    hide_keyboard
-    # The shell as the app could not start while the phone was locked.
-    wait_for 10 app_shell_answers || return 1
-    # The alarm's own screen starts a moment after the PIN; a scenario that looks at it right away finds no window.
-    wait_for 20 page_is_up || true
-}
+# The SDK's unlock screen is pressed with sdk_unlock_press, the PIN is typed with unlock_pin (system.sh).
 # Android shows its unlock in the window of the notification shade.
 unlock_has_focus() { focused_window | grep -q -E 'NotificationShade|Bouncer'; }
 # The alarm's own unlock screen, once Android's unlock has given the focus back: a tap before that goes nowhere.
@@ -1156,18 +1102,7 @@ app_shell_answers() {
     kill -0 "$APP_PID" 2> /dev/null && [ "$(as_app 'echo ok' 2> /dev/null)" = ok ]
 }
 
-# Do the backup screen's challenge: `n` long presses where its button is.
-solve_backup() {
-    local n=$1 size w h i=0
-    size=$(dev wm size | tail -1 | sed 's/.*: //')
-    w=${size%x*}
-    h=${size#*x}
-    while [ "$i" -lt "$n" ]; do
-        dev input swipe $((w / 2)) $((h * 2 / 3)) $((w / 2)) $((h * 2 / 3)) 3300
-        sleep 0.2
-        i=$((i + 1))
-    done
-}
+# The backup screen's challenge (long presses) is done with backup_hold (system.sh).
 
 top_is_app() { dev "dumpsys activity activities | grep -E 'topResumedActivity|ResumedActivity:' | head -1 | grep -q $PKG" > /dev/null; }
 # The window that has the keys. `dumpsys window` opens with the report of the last ANR, which has

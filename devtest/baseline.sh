@@ -110,12 +110,22 @@ baseline_parse() { # text
     case "$fs" in null | 1 | 1.0 | 1.00) BL_VAL[font]=1.0 ;; esac
 }
 
+# The app's own word for the keyboard (`keyboard=up|down` of `ui ready`: what the window's insets say), asked only while the app
+# is in front. The input method service lags a change (run 45085128218: mInputShown=false and mImeWindowVis=0 right after the PIN,
+# true and 3 a little later; s49 started with the insets saying up and the baseline having read false), so the keyboard is up
+# when either of the two says so.
+baseline_app_keyboard() { UI_QUIET=1 ui ready 2> /dev/null | sed -n 's/.*keyboard=\([a-z]*\).*/\1/p' | head -1; }
+baseline_app_in_front() { case "${BL_VAL[focus]-}" in *"${PKG:-com.fidderr.alarmfree}/"*) return 0 ;; esac; return 1; }
+
 # One call to the device. Returns 1 when it did not answer.
 baseline_read() {
     local out
     out=$(dev "$BASELINE_SCRIPT" 2> /dev/null)
     BL_RAW=$out
     baseline_parse "$out"
+    if [ "${BL_VAL[ime]-}" = false ] && on_emulator && baseline_app_in_front && [ "$(baseline_app_keyboard)" = up ]; then
+        BL_VAL[ime]=true
+    fi
     [ -n "${BL_VAL[boot]+x}" ]
 }
 
@@ -213,8 +223,14 @@ baseline_unlock() { # round
     case "${BL_VAL[focus]-}" in
         *"$pk/"*) [ "${BL_VAL[keyguard]-}" != true ] || dev am force-stop "$pk" > /dev/null 2>&1 ;;
     esac
-    wake
     SCREEN_WENT_OFF=""
+    # The lock screen is put away by lock_away (system.sh): the dismiss, the old PIN on a pad that still asks for it (Android 10
+    # to 12 after `locksettings clear`), sleep and wake, the Menu key, a swipe; each step only while a read shows the lock screen.
+    if [ "$(kg_state)" = true ]; then
+        lock_away > /dev/null 2>&1
+        return 0
+    fi
+    wake
     [ "$1" -ge 2 ] || return 0
     dev input keyevent KEYCODE_MENU > /dev/null 2>&1
     size=${BL_VAL[osize]:-${BL_VAL[psize]-}}
@@ -223,6 +239,13 @@ baseline_unlock() { # round
     h=${size#*x}
     case "$w$h" in '' | *[!0-9]*) ;; *) dev input swipe $((w / 2)) $((h * 4 / 5)) $((w / 2)) $((h / 5)) 300 > /dev/null 2>&1 ;; esac
     wake
+}
+# The input method of the phone stopped: its state of "shown" goes with it.
+baseline_ime_stop() {
+    local ime
+    ime=$(dev settings get secure default_input_method 2> /dev/null)
+    ime=${ime%%/*}
+    case "$ime" in *.*) dev am force-stop "$ime" > /dev/null 2>&1 ;; esac
 }
 # Each with the command the suite already has for it. Emulator only.
 baseline_repair() { # round
@@ -235,7 +258,12 @@ baseline_repair() { # round
                 SCREEN_WENT_OFF=1
                 ;;
             wake | keyguard) [ -n "$woke" ] || { baseline_unlock "$1"; woke=1; } ;;
-            ime) dev input keyevent KEYCODE_BACK > /dev/null 2>&1 ;;
+            ime)
+                dev input keyevent KEYCODE_BACK > /dev/null 2>&1
+                # Android 14 to 16 keep the keyboard shown after the PIN and Back does not take it down: the input method is
+                # stopped from the second round (the system starts it again when a field wants it), which ends that state.
+                [ "$1" -lt 2 ] || baseline_ime_stop
+                ;;
             focus)
                 if baseline_is_lock && [ -z "$woke" ]; then
                     baseline_unlock "$1"
@@ -280,6 +308,8 @@ baseline_drop_stale_ime() {
     on_emulator || return 0
     shown=$(dev dumpsys input_method 2> /dev/null)
     case "$shown" in '' | *mInputShown=true*) return 0 ;; esac
+    # The app says it is up: it is.
+    baseline_app_in_front && [ "$(baseline_app_keyboard)" = up ] && return 0
     for k in "${BL_BAD[@]}"; do [ "$k" = ime ] || keep+=("$k"); done
     BL_BAD=(${keep[@]+"${keep[@]}"})
 }
