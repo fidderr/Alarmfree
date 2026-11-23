@@ -393,7 +393,7 @@ s13() {
     sys_wait "$SYS_DEADLINE" "the sound on the alarm's own screen" sound_on || problems="$problems; silent on the alarm's own screen"
     state_is a firing || problems="$problems; state $(state a) on the alarm's own screen"
     finished() { sound_off && state_is a scheduled && [ "$(outcomes solved)" = 1 ]; }
-    tap_in "Turn off"
+    press ring-turn-off
     wait_for "$SYS_DEADLINE" finished || problems="$problems; after turning it off: sound=$(sound_on && echo ON || echo off) state=$(state a) solved=$(outcomes solved)"
     [ "$(outcomes backup)" = 0 ] || problems="$problems; history says backup screen"
     if [ -z "$problems" ]; then
@@ -449,7 +449,7 @@ s13b() {
     fi
     sys_wait "$SYS_DEADLINE" "the sound on the alarm's own screen" sound_on || problems="$problems; silent on the alarm's own screen"
     finished() { sound_off && state_is b scheduled && [ "$(outcomes solved)" = 1 ]; }
-    tap_in "Turn off"
+    press ring-turn-off
     wait_for "$SYS_DEADLINE" finished || problems="$problems; after turning it off: sound=$(sound_on && echo ON || echo off) state=$(state b) solved=$(outcomes solved)"
     if [ -z "$problems" ]; then
         pass "the ring came back after its service died in the quiet, and unlocking on the lock screen brought the alarm's own screen"
@@ -491,7 +491,7 @@ s13c() {
         no_pin
         return
     fi
-    tap_in "Turn off"
+    press ring-turn-off
     finished() { sound_off && state_is a scheduled && [ "$(outcomes solved)" = 1 ]; }
     wait_for "$SYS_DEADLINE" finished || problems="$problems; after turning it off: sound=$(sound_on && echo ON || echo off) state=$(state a) solved=$(outcomes solved)"
     if [ -z "$problems" ]; then
@@ -757,14 +757,13 @@ s22() {
     p0=$(main_pid)
     action hang_ui
     wait_for 30 new_main
-    if wait_for 15 top_is_backup; then
+    if sys_wait "$SYS_DEADLINE" "the backup screen on top" top_is_backup; then
         screenshot s22b_backup
-        solve_backup 1
         ended() { sound_off && state_is a scheduled && [ "$(outcomes backup)" = 1 ]; }
-        if wait_for 10 ended; then
+        if backup_hold ended; then
             pass "backup screen took over, solving it ended the alarm"
         else
-            fail "after solving: sound=$(sound_on && echo ON || echo off) state=$(state a) backup=$(outcomes backup)"
+            fail "after solving: sound=$(sound_on && echo ON || echo off) state=$(state a) backup=$(outcomes backup): $SYS_WHY"
         fi
     else
         fail "backup screen not on top: $(dev dumpsys activity activities | grep -m1 ResumedActivity)"
@@ -1535,7 +1534,7 @@ s40() {
     tap_in "Add widget" 0 0.5
     # The launcher asks the user first.
     local problems="" minute
-    launcher_add_widget || { fail "the widget was not added: $SYS_WHY; the launcher shows: $(launcher_texts | tr '\n' '|')"; return; }
+    launcher_add_widget || { fail "the widget was not added: $SYS_WHY; the launcher shows: $(launcher_texts | tr '\n' '|'); appwidget says: $(dev dumpsys appwidget | grep -m4 'provider=' | tr -s ' ' | tr '\n' ';')"; return; }
     sys_home "the launcher in front" launcher_up || problems="$problems; $SYS_WHY"
     minute=$(printf ':%02d' "$T_M")
     sys_wait "$SYS_DEADLINE" "the widget showing the time $minute" launcher_has "$minute" || problems="$problems; no time on it: $(launcher_texts | tr '\n' '|')"
@@ -1794,10 +1793,10 @@ s48() {
     # A sound.
     press open a 0.8
     on_editor
-    tap_has Sound 0 0.6
+    on_screen_has Sound 30 || problems="$problems; no Sound row in the editor"
+    open_row Sound
     scroll_until "Add your own sound"
-    on_screen "Add your own sound" 30
-    tap_in "Add your own sound" 0 1
+    tap_scrolling "Add your own sound"
     if picker_pick mytune.ogg; then
         own_sound_there() {
             names=$(texts_of)
@@ -1806,8 +1805,16 @@ s48() {
             esac
             return 1
         }
-        wait_for 30 own_sound_there || problems="$problems; own sound not listed: $names"
         [ -n "$(as_app "ls files/sounds/custom")" ] || problems="$problems; not copied"
+        if ! wait_for 10 own_sound_there; then
+            # The app can come back from the picker as a new start (Android 13: the launcher had the keys): the sound is then in
+            # the list of a sheet that is opened again.
+            on_home 10
+            press open a 0.8
+            on_editor
+            open_row Sound
+            wait_for 30 own_sound_there || problems="$problems; own sound not listed: $names"
+        fi
     else
         problems="$problems; the picker never showed the file: $SYS_WHY"
         sys_press KEYCODE_BACK "the app getting the keys back from the picker" "$SYS_DEADLINE" focus_in_app || note "$SYS_WHY"
@@ -1818,9 +1825,10 @@ s48() {
     # Alarms to a file: only the one alarm in it, under today's name.
     press go 2
     await_ui 30 "screen=3" || problems="$problems; the settings did not open"
+    has_there "Back up" || { sheet_scroll_up; has_there "Back up" || sheet_scroll; }
     tap_scrolling "Back up"
     on_screen "Save to a file" 30 || problems="$problems; no Save to a file"
-    tap_in "Save to a file" 0 1
+    tap_has "Save to a file"
     saved_file() {
         file=$(dev ls /sdcard/Download/ | grep -m1 '^alarmfree-')
         [ -n "$file" ] && [ "$(dev cat "/sdcard/Download/$file" | grep -c '"time_hour"')" -ge 1 ]
@@ -1833,9 +1841,10 @@ s48() {
     saved_toast_gone() { ! has_there "Saved to"; }
     wait_for 30 saved_toast_gone
     await_ui 30 "screen=3" || problems="$problems; the settings are not up for the second picker"
+    has_there "Back up" || { sheet_scroll_up; has_there "Back up" || sheet_scroll; }
     tap_scrolling "Back up"
     on_screen "Add alarms from a file" 30 || problems="$problems; no Add alarms from a file"
-    tap_in "Add alarms from a file" 0 1
+    tap_has "Add alarms from a file"
     if [ -n "$file" ] && picker_pick "$file"; then
         on_screen Undo 30
         [ "$(alarm_count)" = 2 ] || problems="$problems; $(alarm_count) alarms after restoring"
@@ -2338,16 +2347,18 @@ s54() {
         on_screen "Turn off" 30 || problems="$problems; no alarm screen"
         screenshot s54_over_the_lock_screen
         locked || problems="$problems; ringing unlocked the phone"
-        # Over the lock screen the touch is not the subject (the keys are, below): the challenge comes by the window's own
-        # events, once, and the screen says so.
-        tap_in "Turn off"
+        # Over the lock screen the touch is not the subject (the keys are, below): the challenge comes through the button's
+        # own callback, once, and the screen says so.
+        press ring-turn-off
         on_screen SCAN 30 || problems="$problems; no scan button"
         # The power button, by accident: what comes back is the challenge, not the PIN.
-        sys_sleep || problems="$problems; $SYS_WHY"
+        # The SDK can wake the screen again within a moment (Android 13): then the screen was never seen asleep, and what has to hold
+        # is the same, the challenge and not the PIN.
+        sys_sleep 8 || note "the screen was not seen asleep: $SYS_WHY"
         sys_wake || problems="$problems; $SYS_WHY"
         challenge_is_up() { focus_in_app && is_there SCAN; }
         sys_wait "$SYS_DEADLINE" "the challenge after the power button" challenge_is_up || problems="$problems; no challenge after the power button: $SYS_WHY"
-        tap_in SCAN
+        press scan
         camera_has_keys() { focused_window | grep -q SentinelScannerActivity; }
         if sys_wait "$SYS_DEADLINE" "the camera screen having the keys" camera_has_keys; then
             sys_holds 2 "the camera keeping the keys" camera_has_keys || problems="$problems; the camera lost the keys: $SYS_WHY"
@@ -2960,7 +2971,7 @@ s68b() {
         seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
         ALARM_EXTRA=
         arm a
-        dev input keyevent KEYCODE_HOME
+        sys_home "the launcher in front" launcher_up || problems="$problems; $SYS_WHY"
         jump_to $((T - 15 * 60 - 3))
         wait_for 60 noticed || { fail "no reminder with a lock of $lock minutes"; return; }
         if [ "$lock" = 30 ]; then
@@ -3315,7 +3326,7 @@ s63() {
         screenshot s63_ring
         [ -z "$seen" ] || problems="$problems; its banner is over the alarm's screen at$seen after it came up"
         own_notifications | grep -q 'id=900[12]' || problems="$problems; no notification while it rings"
-        tap_in "Turn off"
+        press ring-turn-off
         wait_for 30 sound_off || problems="$problems; still ringing after turning it off"
     else
         problems="$problems; did not ring: state=$(state a)"

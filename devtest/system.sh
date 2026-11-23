@@ -168,10 +168,10 @@ sys_press() {
     sys_wait "$secs" "$what" "$@"
 }
 # The power button: asleep, then awake.
-sys_sleep() {
+sys_sleep() { # [seconds]
     [ -z "${NO_LOCK:-}" ] || return 0
     SCREEN_WENT_OFF=1
-    sys_press KEYCODE_SLEEP "the screen going to sleep" "$SYS_DEADLINE" screen_asleep
+    sys_press KEYCODE_SLEEP "the screen going to sleep" "${1:-$SYS_DEADLINE}" screen_asleep
 }
 sys_wake() { sys_press KEYCODE_WAKEUP "the screen waking up" "$SYS_DEADLINE" screen_awake; }
 # Home, and the state that says the screen it left is gone.
@@ -180,12 +180,16 @@ sys_home() { # what check...
     shift
     sys_press KEYCODE_HOME "$what" "$SYS_DEADLINE" "$@"
 }
-# The keyboard down, once: Back closes a keyboard that is up, and only when the read still says so after a moment (it hides
-# itself after the PIN on some versions) is it asked to.
+# The keyboard down: it hides itself after the PIN on some versions; when the read still says so after 8 s, Back is pressed once
+# (it closes a keyboard that is up); when after 8 more seconds it is still up (Android 14 to 16 after the PIN: Back does not
+# take it down, run 45085128218), the input method is stopped, which ends the state (the system starts it again when a field
+# wants it).
 sys_keyboard_down() {
     sys_wait 8 "the keyboard going down by itself" ime_hidden && return 0
     dev input keyevent KEYCODE_BACK > /dev/null
-    sys_wait "$SYS_DEADLINE" "the keyboard going down" ime_hidden
+    sys_wait 8 "the keyboard going down after Back" ime_hidden && return 0
+    baseline_ime_stop
+    sys_wait "$SYS_DEADLINE" "the keyboard going down after the input method was stopped" ime_hidden
 }
 
 # ---- A touch on one of Android's own screens ----
@@ -221,9 +225,16 @@ screen_of_android_drawn() {
     sys_dump || return 1
     [ "$(sys_nodes count "pkg!=$PKG" "pkg!=com.android.systemui")" -gt 2 ] 2> /dev/null
 }
+# A screen of Android that has closed by itself (the settings page of the app on Android 12, run 45085128218) leaves nothing to
+# press Back on: the app has the keys, and a NOTE says so.
+screen_drawn_or_app_back() { focus_in_app || screen_of_android_drawn; }
 sys_leave() { # what
     local what=${1:-a screen of Android}
-    sys_wait "$SYS_DEADLINE" "$what drawn" screen_of_android_drawn || return 1
+    sys_wait "$SYS_DEADLINE" "$what drawn" screen_drawn_or_app_back || return 1
+    if focus_in_app; then
+        echo "NOTE  ${CURRENT:-?}  $what closed by itself: the app already has the keys" | tee -a "$RESULTS"
+        return 0
+    fi
     dev input keyevent KEYCODE_BACK > /dev/null
     sys_wait 15 "the app getting the keys back from $what" focus_in_app && return 0
     focus_in_app && return 0
@@ -452,36 +463,24 @@ picker_summary() {
 # repeated only when the tree did not change in 10 s after it. Android 11 ignores a touch on a file: after that proof it is
 # chosen with the keys (the focus moved onto the row, then Enter).
 picker_keys_select() { # name
-    local name=$1 box fb i=0
+    local name=$1 box fb i=0 keys=(KEYCODE_DPAD_DOWN KEYCODE_DPAD_RIGHT)
     sys_dump || return 1
     box=$(sys_nodes box "label~$name") || return 1
-    while [ "$i" -lt 12 ]; do
-        dev input keyevent KEYCODE_DPAD_DOWN > /dev/null
-        sys_sig > /dev/null
-        sys_dump && fb=$(sys_nodes focusbox) || { i=$((i + 1)); continue; }
-        # shellcheck disable=SC2086
-        set -- $box $fb
-        if [ "$#" = 8 ] && [ "$5" -le "$1" ] && [ "$6" -le "$2" ] && [ "$7" -ge "$3" ] && [ "$8" -ge "$4" ]; then
-            dev input keyevent KEYCODE_ENTER > /dev/null
-            return 0
+    while [ "$i" -lt 14 ]; do
+        # Where the focus is, before the next key (a grid of two files in a row is reached by Right, a list by Down).
+        if sys_dump && fb=$(sys_nodes focusbox); then
+            # shellcheck disable=SC2086
+            set -- $box $fb
+            if [ "$#" = 8 ] && [ "$5" -le "$1" ] && [ "$6" -le "$2" ] && [ "$7" -ge "$3" ] && [ "$8" -ge "$4" ]; then
+                dev input keyevent KEYCODE_ENTER > /dev/null
+                return 0
+            fi
         fi
+        dev input keyevent "${keys[$((i % 2))]}" > /dev/null
+        sys_sig > /dev/null
         i=$((i + 1))
     done
     return 1
-}
-# What picker_pick did and saw, one line per step (picker_trace.txt in the results).
-picker_trace() { printf '%s %s %s
-' "$(date +%T.%N | cut -c1-12)" "${CURRENT:-?}" "$*" >> "$OUT/picker_trace.txt"; }
-# The state for half a second after a touch, for the record: who has the keys, and a picture.
-picker_watch() { # label rounds
-    local i=0
-    while [ "$i" -lt "$2" ]; do
-        picker_trace "$1 +$i: $(sys_focus | tr -d '
-')"
-        i=$((i + 1))
-        sleep 0.5
-    done
-    screen_may_be_taken && adb_ exec-out screencap -p > "$OUT/picker_$1.png" 2> /dev/null
 }
 # A screen of another app opened from the picker's task (the preview of an audio file or a photo): it is not the app and not
 # the picker.
@@ -646,24 +645,29 @@ launcher_up() { sys_focus | grep -q -i launcher; }
 # Every text on the launcher's screen, one per line (the widget's text included).
 launcher_texts() { sys_dump && sys_nodes list | cut -d'|' -f4 | grep -v '^$'; }
 launcher_has() { launcher_texts | grep -q -F -- "$1"; }
-widget_registered() { dev dumpsys appwidget | grep -q 'SentinelHomeWidget'; }
+# An instance of the widget is on the launcher (the provider is listed by `dumpsys appwidget` always; a placed widget is a
+# `provider=...` line under its host, the same lines remove_widgets reads).
+widget_registered() { dev dumpsys appwidget | grep -q "provider=.*$PKG/.*SentinelHomeWidget"; }
 # The button of the launcher's question "add this widget?" (what it is called differs per launcher and per version: "Add to Home
 # screen" on Android 12 to 16 with a capital H).
 the_add_button() {
     sys_dump || return 1
     ADD_XY=$(sys_nodes find 'label^^(add|add to home screen|add automatically)$' clickable=true)
 }
-# The widget added once the question is up: the button touched once, and the widget registered. When after 15 s a read still
-# shows the question and nothing is registered, the touch is proven lost and the button is touched once more.
+add_question_gone() { sys_dump && ! sys_nodes find 'label^^(add|add to home screen|add automatically)$' clickable=true > /dev/null; }
+widget_placed() { widget_registered && add_question_gone; }
+# The widget added once the question is up: the button touched once, and the widget placed (an instance under the launcher in
+# `dumpsys appwidget`, and the question gone). When after 15 s a read still shows the question, the touch is proven lost and the
+# button is touched once more.
 launcher_add_widget() {
     sys_wait "$SYS_DEADLINE" "the launcher asking to add the widget" the_add_button || return 1
     # shellcheck disable=SC2086
     dev input tap $ADD_XY > /dev/null
-    sys_wait 15 "the widget being registered" widget_registered && return 0
-    the_add_button || { sys_wait "$SYS_DEADLINE" "the widget being registered" widget_registered; return; }
+    sys_wait 15 "the widget being placed" widget_placed && return 0
+    the_add_button || { sys_wait "$SYS_DEADLINE" "the widget being placed" widget_placed; return; }
     # shellcheck disable=SC2086
     dev input tap $ADD_XY > /dev/null
-    sys_wait "$SYS_DEADLINE" "the widget being registered (second touch, the first did nothing)" widget_registered
+    sys_wait "$SYS_DEADLINE" "the widget being placed (second touch, the first did nothing)" widget_placed
 }
 
 # ---- Time, and a banner over the ring screen ----
@@ -681,4 +685,24 @@ sys_tree_read() { # [--windows]
 heads_up_banner_there() {
     sys_tree_read --windows || sys_tree_read || return 2
     [ "$(sys_nodes count text="Tap to open")" -gt 0 ]
+}
+
+# ---- The SDK's backup screen (a plain view): its challenge is one long press (the scenario sets `backup_holds` to 1) ----
+backup_screen_has_focus() { focused_window | grep -q SentinelBackupActivity; }
+backup_press_once() {
+    local size w h
+    size=$(dev wm size | tail -1 | sed 's/.*: //')
+    w=${size%x*}
+    h=${size#*x}
+    dev input swipe $((w / 2)) $((h * 2 / 3)) $((w / 2)) $((h * 2 / 3)) 3300 > /dev/null
+}
+# The hold once, with the screen's keys read first, and the state it must bring (`check...`) awaited. A second hold only when a
+# read after 10 s still shows the backup screen in front and the sound on: the first hold is then proven to have counted for nothing.
+backup_hold() { # check...
+    sys_wait "$SYS_DEADLINE" "the backup screen having the keys" backup_screen_has_focus || return 1
+    backup_press_once
+    sys_wait 10 "the state after the hold" "$@" && return 0
+    backup_screen_has_focus && sound_on || return 1
+    backup_press_once
+    sys_wait "$SYS_DEADLINE" "the state after the second hold (the first counted for nothing)" "$@"
 }

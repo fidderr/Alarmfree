@@ -987,18 +987,7 @@ app_shell_answers() {
     kill -0 "$APP_PID" 2> /dev/null && [ "$(as_app 'echo ok' 2> /dev/null)" = ok ]
 }
 
-# Do the backup screen's challenge: `n` long presses where its button is.
-solve_backup() {
-    local n=$1 size w h i=0
-    size=$(dev wm size | tail -1 | sed 's/.*: //')
-    w=${size%x*}
-    h=${size#*x}
-    while [ "$i" -lt "$n" ]; do
-        dev input swipe $((w / 2)) $((h * 2 / 3)) $((w / 2)) $((h * 2 / 3)) 3300
-        sleep 0.2
-        i=$((i + 1))
-    done
-}
+# The backup screen's challenge (long presses) is done with backup_hold (system.sh).
 
 top_is_app() { dev "dumpsys activity activities | grep -E 'topResumedActivity|ResumedActivity:' | head -1 | grep -q $PKG" > /dev/null; }
 # The window that has the keys. `dumpsys window` opens with the report of the last ANR, which has
