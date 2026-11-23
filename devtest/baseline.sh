@@ -493,8 +493,9 @@ unit_wrote_fail() {
 }
 
 # One scenario of the runner: the baseline, the scenario, the watchdog, and the one rerun on a restarted device.
-run_unit() { # name
-    local s=$1 attempt=1 what t0 follow bl_ok
+# A unit that runs a function of another name (one scenario at one screen size) passes it as the second word.
+run_unit() { # name [function]
+    local s=$1 fn=${2:-$1} attempt=1 what t0 follow bl_ok
     while :; do
         t0=$SECONDS
         what=""
@@ -503,7 +504,7 @@ run_unit() { # name
         baseline_unit "$s" && bl_ok=1 || bl_ok=""
         BL_RESTARTED="" BL_BOOTED=""
         if [ -n "$bl_ok" ]; then
-            "$s"
+            "$fn"
             watchdog_end
             what=$WD_WHAT
             # An audio server that restarted while the scenario passed is the device's, not a verdict on the app.

@@ -261,6 +261,23 @@ sx() {
     esac
 }
 
+# Quiet scenarios that follow sx, and one scenario of a group that runs at another size (with_screen of matrix.sh): the
+# first run of sb@big breaks the device once.
+sy() { CURRENT=sy; SCENARIO_START=$SECONDS; pass "fine"; }
+sz() { CURRENT=sz; SCENARIO_START=$SECONDS; pass "fine"; }
+sg() {
+    CURRENT=$1@big
+    SCENARIO_START=$SECONDS
+    if [ "$1" = sb ] && [ ! -e "$DIR/once" ]; then
+        : > "$DIR/once"
+        st_set ss 999
+        fail "something odd"
+    else
+        pass "fine"
+    fi
+}
+at_big() { sg "$GRP"; }
+
 eval "${PRE:-:}"
 case "$MODE" in
     clean)
@@ -308,6 +325,14 @@ case "$MODE" in
         run_unit sx
         SX=ok
         run_unit sx
+        ;;
+    three)
+        run_unit sx
+        run_unit sy
+        run_unit sz
+        ;;
+    group)
+        for GRP in sa sb sc; do run_unit "$GRP@big" at_big; done
         ;;
 esac
 E
@@ -557,6 +582,20 @@ run_case r_meant run SX=reboot_meant
 [ "$(lines "$(res r_meant)")" = 1 ] && has "$(res r_meant)" '^PASS  sx  ' && verdict "a restart the scenario announced is no INFRA" 1 || verdict "a restart the scenario announced is no INFRA ($(cat "$(res r_meant)"))" 0
 run_case r_rebase run SX=reboot_then_break
 has "$(res r_rebase)" '^INFRA  sx  .*system_server restarted (pid 4000, now 7777)' && verdict "after an announced restart the new processes are watched: a break later in the same scenario is INFRA" 1 || verdict "after an announced restart the new processes are watched ($(cat "$(res r_rebase)"))" 0
+run_case r_three three SX=break_once
+rf=$(res r_three)
+if [ "$(lines "$rf")" = 4 ] && has "$rf" '^INFRA  sx  .*\[rerun follows\]$' && has "$rf" '^PASS  sx  ' && has "$rf" '^PASS  sy  ' && has "$rf" '^PASS  sz  ' && ! has "$rf" '^INFRA  s[yz]' && [ "$(lines "$tmp/r_three/reboots")" = 1 ]; then
+    verdict "after a restart in one scenario the new pids are the reference: the next two scenarios on a quiet device are no INFRA" 1
+else
+    verdict "after a restart in one scenario the next two are no INFRA ($(cat "$rf"))" 0
+fi
+run_case r_group group
+rf=$(res r_group)
+if [ "$(lines "$rf")" = 4 ] && has "$rf" '^PASS  sa@big  ' && has "$rf" '^INFRA  sb@big  .*\[rerun follows\]$' && has "$rf" '^PASS  sb@big  ' && has "$rf" '^PASS  sc@big  ' && ! has "$rf" '^INFRA  s[ac]@big' && [ "$(lines "$tmp/r_group/reboots")" = 1 ]; then
+    verdict "a unit that runs another function (one scenario at a size): a restart is INFRA for that scenario only, the others keep their result" 1
+else
+    verdict "a restart in one scenario of a group is INFRA for that one only ($(cat "$rf" 2> /dev/null))" 0
+fi
 run_case r_vars run SX=vars
 has "$(res r_vars)" '^PASS  sx  .*second:unset:unset:unset::::$' && verdict "the second run starts without what the first one left in bash variables" 1 || verdict "the second run starts without what the first one left in bash variables ($(cat "$(res r_vars)"))" 0
 run_case r_base run SX=ok PRE="st_set font 1.3" STUCK=font
@@ -643,6 +682,7 @@ in_func() { # file function-head text-in-it
     done < "$1"
     [ "$found" = 1 ]
 }
+in_func "$here/matrix.sh" 'with_screen() { # size density scenarios...' 'run_unit "$s@$SCREEN_SIZE" at_screen_size' && verdict "with_screen runs every scenario at a size as a unit of its own" 1 || verdict "with_screen runs every scenario at a size as a unit of its own" 0
 in_func "$here/lib.sh" 'reboot_only() {' watchdog_rebase && verdict "reboot_only watches the new processes when the device is back (watchdog_rebase)" 1 || verdict "reboot_only calls watchdog_rebase" 0
 in_func "$here/lib.sh" 'scenario() {' 'logcat -c' && verdict "scenario() clears the log: the crash scan of the watchdog sees only what came after the scenario began" 1 || verdict "scenario() clears the log (the crash scan depends on it)" 0
 # At the start of a run the PIN of a killed run is cleared before the first reading, or the reading would adopt it.

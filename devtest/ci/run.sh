@@ -19,7 +19,7 @@ export AVDS=$avd
 [ -z "${SCENARIOS:-}" ] || export SCENARIOS
 # A name that is no scenario of the suite would be run as a command: stop before anything starts.
 for id in ${SCENARIOS:-}; do
-    grep -qE "^${id}\(\)" devtest/matrix.sh devtest/panels.sh devtest/selftest.sh devtest/probe_text.sh devtest/probe.sh devtest/ringprobe.sh || { echo "STOP  $id is no scenario of devtest/matrix.sh, panels.sh, selftest.sh, probe_text.sh, probe.sh or ringprobe.sh"; exit 2; }
+    grep -qE "^${id}\(\)" devtest/matrix.sh devtest/panels.sh devtest/selftest.sh devtest/probe_text.sh devtest/probe.sh devtest/ringprobe.sh devtest/a11y_audit.sh || { echo "STOP  $id is no scenario of devtest/matrix.sh, panels.sh, selftest.sh, probe_text.sh, probe.sh, ringprobe.sh or a11y_audit.sh"; exit 2; }
 done
 [ "${CHAOS:-}" != 1 ] || export CHAOS
 "$ADB" start-server > /dev/null 2>&1

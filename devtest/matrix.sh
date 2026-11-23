@@ -765,7 +765,9 @@ s19() {
     scenario s19_volume_keys
     action dismiss:a
     wait_for 5 sound_off
-    sleep 0.3
+    # The sound is off before the service shuts down and puts the volume back (run 45145328118, Android 13: 0.6 s later).
+    volume_is_back() { [ "$(alarm_volume)" = 1 ]; }
+    wait_for 5 volume_is_back
     v2=$(alarm_volume)
     set_alarm_volume "$before"
     if [ "${v0:-0}" -gt 1 ] && [ "${v1:-0}" -ge "$v0" ] && [ "$v2" = 1 ]; then
@@ -2620,7 +2622,9 @@ s55() {
     wait_for 10 scan_or_ring
     is_there "Turn off" && tap "Turn off" 0 0.3
     on_screen SCAN 8 || problems="$problems; no scan button after Home"
-    tap SCAN 0 0.3
+    # A try, like the taps in the loop below: SCAN can be gone again when the challenge screen went back to the ring (its idle
+    # time) between the look and the tap (run 45145328118, Android 10), and the loop says whether the camera opened.
+    TAP_MAY_FAIL=1 tap SCAN 0 0.3
     # The process lives through Home on Android 14 and later: a tap while the camera that Home closed is
     # still reporting back is ignored (it is still scanning for that long). A person taps again.
     # The challenge screen goes back to the ring after its idle time (8 s here): on a busy emulator that has happened
@@ -2655,15 +2659,23 @@ s55() {
 
 # What depends on the size. Another screen on this Android is all the app can tell of a tablet
 # or an open foldable, and it is what a new AVD would cost a minute to start for.
+# Each scenario at a size is a unit of its own (baseline before, watchdog after, the one rerun): a restart of the device is
+# then INFRA for the one scenario it happened in, not for every result line of the whole group.
 with_screen() { # size density scenarios...
-    local size=$1 density=$2 s
+    local s
+    SCREEN_SIZE=$1 SCREEN_DENSITY=$2
     shift 2
-    dev wm size "$size"
-    dev wm density "$density"
-    VARIANT="@$size"
     for s in "$@"; do
-        "$s"
+        SCREEN_SCENARIO=$s
+        ensure_booted "$s@$SCREEN_SIZE"
+        run_unit "$s@$SCREEN_SIZE" at_screen_size
     done
+}
+at_screen_size() {
+    dev wm size "$SCREEN_SIZE"
+    dev wm density "$SCREEN_DENSITY"
+    VARIANT="@$SCREEN_SIZE"
+    "$SCREEN_SCENARIO"
     VARIANT=""
     dev wm size reset
     dev wm density reset
@@ -3760,7 +3772,7 @@ s62p() {
 # The ring-screen probe (Home before a ring, what the main process does): by name only.
 . "$(dirname "$0")/ringprobe.sh"
 
-ALL="s01 s03 s04 s05 s06 s07 s07d s10 s11 s13 s13b s13d s14 s15 s16 s16b s17 s19 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s34 s36 s37 s38 s39 s40 s42 s43 s44 s45 s46 s47 s48 s49 s50 s51 s52 s53 s55 s56 s57 s58 s59 s60 s61 s62 s63 s63b s63c s65 s66 s67 s68 s68b s69a s69b s69c s69d big_screens s54"
+ALL="s01 s03 s04 s05 s06 s07 s07d s10 s11 s13 s13b s13d s14 s15 s16 s16b s17 s19 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s34 s36 s37 s38 s39 s40 s42 s43 s44 s45 s46 s47 s48 s49 s50 s51 s52 s53 s55 s56 s57 s58 s59 s60 s61 s62 s63 s63b s63c s65 s66 s67 s68 s68b s69a s69b s69c s69d s70 big_screens s54"
 ON_A_PHONE="s01 s03 s04 s05 s06 s07 s10 s15 s16 s16b s17 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s36 s37 s38 s39 s42 s43 s45 s46 s47 s49 s50 s51 s52 s53 s55 s57 s58 s59 s61 s62"
 
 : > "$RESULTS"
@@ -3810,13 +3822,17 @@ for s in ${LAST:-}; do
 done
 # A scenario whose restart failed must not leave the next one on a half-booted device.
 boot_done() { [ "$(adb_ shell getprop sys.boot_completed 2> /dev/null | tr -d '\r')" = 1 ] && device_ok; }
-for s in $RUN_LIST; do
+ensure_booted() { # unit
     if on_emulator && ! boot_done; then
-        note "the device is not booted before $s: waiting"
+        note "the device is not booted before $1: waiting"
         wait_for 180 boot_done
         open_shells
     fi
-    run_unit "$s"
+}
+for s in $RUN_LIST; do
+    ensure_booted "$s"
+    # big_screens is no unit: each of its scenarios is (with_screen).
+    if [ "$s" = big_screens ]; then big_screens; else run_unit "$s"; fi
 done
 selftest_cleanup
 chaos_hog_stop
