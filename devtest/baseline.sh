@@ -471,7 +471,7 @@ link_watch_start() { # unit
         while :; do
             s=$(link_state)
             [ "$s" = device ] || printf '%s adb state: %s\n' "$SECONDS" "${s:0:100}" >> "$LINK_LOG"
-            sleep "${LINK_POLL:-1}"
+            sleep "${LINK_POLL:-2}"
         done
     ) > /dev/null 2>&1 &
     LINK_PID=$!
