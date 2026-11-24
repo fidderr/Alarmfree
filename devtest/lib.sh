@@ -348,6 +348,24 @@ local_date_in() {
     case "$off" in [+-][0-9][0-9][0-9][0-9]) ;; *) off=+0000 ;; esac
     date -u -d "@$(($(now_s) + $1 * 86400 + ${off:0:1}(10#${off:1:2} * 3600 + 10#${off:3:2} * 60)))" +%Y-%m-%d
 }
+# Scenarios seed alarms at a fixed hour (7:00, 8:00, 9:00, 14:05). A clock just below one of them lets the alarm ring in the middle
+# of the scenario (run 45343422666, afg12: s38 began at 06:59:54, the 7:00 alarm rang and the suite's taps turned it off). From
+# 06:30 to 14:30 local time the clock goes to 20:00 the same day, which is hours from all of them. The new time (unix s) from the
+# time now and the zone's offset in seconds, or nothing when the clock is fine.
+clock_clear_of_fixed_alarms() { # now zone_s
+    local tod=$((($1 + $2) % 86400))
+    [ "$tod" -ge 23400 ] && [ "$tod" -lt 52200 ] || return 0
+    echo $(($1 - tod + 72000))
+}
+fresh_clock() {
+    local n off new
+    on_emulator || return 0
+    n=$(now_s)
+    off=$(dev date +%z | tr -d '\r')
+    case "$n:$off" in [0-9]*:[+-][0-9][0-9][0-9][0-9]) ;; *) return 0 ;; esac
+    new=$(clock_clear_of_fixed_alarms "$n" $((${off:0:1}(10#${off:1:2} * 3600 + 10#${off:3:2} * 60))))
+    [ -z "$new" ] || set_clock "$new"
+}
 # Hour and minute of a moment, on the device's clock. After next_minute.
 at_hm() { date -u -d "@$(($1 + ZONE_S))" "+%-H %-M"; }
 
@@ -488,6 +506,7 @@ fresh() {
     fi
     as_app 'cd files && for f in *; do [ "$f" = sounds ] || rm -rf "$f"; done; rm -rf sounds/custom ../shared_prefs; cp ../clean.db alarmfree.db'
     use_settings '"Dark"' '"English"' '"setup_done":true,"language_follows_phone":false'
+    fresh_clock
 }
 on_home_or_setup() { page_is_up; }
 
@@ -611,7 +630,17 @@ arm() {
         armed_for() { [ "$(armed_at_ms "$1")" = "$((ARM_AT * 1000))" ]; }
         wait_for 15 armed_for "$1" || note "still armed for $(armed_at_ms "$1")"
     fi
+    arm_trace "$1"
     ARM_AT=""
+}
+# What the device holds for the alarm right after it was armed (clock, armed file, the system's alarm entry): a ring that never comes
+# is then told apart from an alarm that was never set. Kept in ARM_TRACE for the story of a failed scenario.
+ARM_TRACE=""
+arm_trace() {
+    ARM_TRACE=$({
+        echo "device clock $(now_s) host clock $(date +%s) T=${ARM_AT:-?} armed file: $(as_app "cat files/sentinel/armed/$1.armed 2>/dev/null | head -c 300 | tr -s '[:space:]' ' '")"
+        dev "dumpsys alarm | grep -E -A4 'Alarm\{.*$PKG'" | head -30
+    } 2> /dev/null)
 }
 
 # Leave no app process running, the way the system leaves it overnight.
@@ -1215,7 +1244,7 @@ CURRENT=""
 SCENARIO_START=$SECONDS
 scenario() {
     PAGE_WAITED=""
-    ARM_AT=""
+    ARM_AT="" ARM_TRACE=""
     CURRENT=$1${VARIANT:-}
     RETRY_NOTE=$RETRY_CARRY RETRY_CARRY=""
     SCENARIO_START=$SECONDS
@@ -1288,6 +1317,12 @@ app_story() {
     {
         echo "--- files/sentinel/diag.log"
         as_app "cat files/sentinel/diag.1.log files/sentinel/diag.log 2>/dev/null | tail -n 60"
+        echo "--- right after arm"
+        echo "$ARM_TRACE"
+        echo "--- now: device clock $(now_s) host clock $(date +%s) T=${T:-?}; the system's alarms of the app"
+        dev "dumpsys alarm | grep -E -A4 'Alarm\{.*$PKG'" | head -40
+        echo "--- armed files"
+        as_app 'for f in files/sentinel/armed/*; do echo "$f: $(head -c 300 "$f" | tr -s "[:space:]" " ")"; done'
         echo "--- alarm_events (alarm_id fire dismiss outcome)"
         printf 'SELECT alarm_id, fire_timestamp, dismiss_timestamp, outcome FROM alarm_events ORDER BY fire_timestamp DESC LIMIT 10;
 ' | sql
