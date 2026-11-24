@@ -19,7 +19,7 @@ NEWEST_ONLY="s13 s13b s13d big_screens"
 # The AVD that counts as the newest in a FULL run.
 NEWEST_AVD=afg16
 
-# The emulators of the quick matrix: Android 16 down to 10 (min_sdk is 29, so Android 10 is the oldest).
+# The emulators of the quick matrix: Android 17 down to 10 (min_sdk is 29, so Android 10 is the oldest).
 MATRIX_AVDS="afg17 afg16 afg15 afg14 afg13 afg12 msd30 msd29"
 
 # The graphics of an emulator: Android 12's on the host's GPU crashed the emulator now and then in the middle of a

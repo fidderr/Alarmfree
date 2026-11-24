@@ -6,7 +6,7 @@ toothpaste. It keeps ringing whatever happens to the app or the phone until you 
 the limit you set.
 
 No accounts, no tracking, no ads. Everything ships in the APK. Needs Android 10 or newer, on a
-64-bit phone. Supported: Android 10 to 16.
+64-bit phone. Supported: Android 10 to 17.
 
 It is written in Rust on top of [mobile-sentinel](https://github.com/fidderr/mobile-sentinel),
 a separate generic SDK. The UI is [Slint](https://slint.dev), drawn natively on the GPU by Skia

@@ -16,6 +16,8 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ### Added
 
+- **Android 17 is supported.** The whole test suite runs on an Android 17 emulator next to Android 10 to 16, and passed
+  on a phone that runs Android 17.
 - **A backup can hold your own sounds.** When an alarm uses a sound of your own, Back up or restore offers Save alarms
   only (small, as before) and Save alarms with my sounds (the size is shown). Restoring such a file puts the sounds back
   under their names without replacing another sound or adding one that is already there. A file with sounds is not read
