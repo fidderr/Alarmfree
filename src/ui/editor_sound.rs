@@ -528,6 +528,9 @@ pub fn add_sound(ctx: &Rc<Ctx>) {
     stop_preview(ctx);
     std::thread::spawn(|| {
         let picked = custom_sounds::pick_audio_file_native();
+        if let Ok(Some(imported)) = &picked {
+            crate::persistence::remember_sound_name(&imported.file, &imported.name);
+        }
         let _ = slint::invoke_from_event_loop(move || {
             super::with_ctx(|ctx| match picked {
                 Ok(Some(imported)) => {

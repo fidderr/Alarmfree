@@ -7,6 +7,16 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-11-24
+
+versionCode 12601. Needs mobile-sentinel 0.7.1.
+
+### Fixed
+
+- **A sound added from the file picker keeps its name.** When Android closed the app's window while the picker was in
+  front, the sound was added but listed under a file name of digits and letters; the name it had where it came from is
+  now stored before the window is back.
+
 ## [0.7.0] - 2026-11-24
 
 versionCode 12600. Needs mobile-sentinel 0.7.1.

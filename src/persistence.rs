@@ -236,6 +236,19 @@ pub fn load_settings() -> AppSettings {
     }
 }
 
+/// The name a sound was called where it came from, kept without the window: the picker can outlive it
+/// (Android destroys the activity while the picker is in front), and the sound would be listed under a
+/// file name made of digits. Settings that cannot be read are left alone.
+pub fn remember_sound_name(file: &str, name: &str) {
+    if let Ok(Some(mut settings)) = opened().db.load_settings() {
+        settings
+            .prefs
+            .sound_names
+            .insert(file.to_owned(), name.to_owned());
+        save_settings(&settings);
+    }
+}
+
 /// How many saved alarms cannot be read.
 pub fn unreadable_alarms() -> usize {
     opened().db.list_alarms_reporting().map_or(0, |(_, n)| n)
@@ -307,6 +320,42 @@ mod tests {
 
         assert_eq!(removed, ["gone"]);
         assert_eq!(changed, [&edited, &added]);
+    }
+
+    #[test]
+    fn a_sound_name_is_kept_without_a_window_and_nothing_else_changes() {
+        let mut settings = AppSettings {
+            min_volume_percent: 75,
+            ..AppSettings::default()
+        };
+        settings
+            .prefs
+            .sound_names
+            .insert("old.ogg".into(), "Old".into());
+        save_settings(&settings);
+
+        remember_sound_name("996253dd.oga", "mytune");
+
+        let saved = load_settings();
+        assert_eq!(
+            saved
+                .prefs
+                .sound_names
+                .get("996253dd.oga")
+                .map(String::as_str),
+            Some("mytune")
+        );
+        assert_eq!(
+            saved.prefs.sound_names.get("old.ogg").map(String::as_str),
+            Some("Old")
+        );
+        assert_eq!(saved.min_volume_percent, 75);
+    }
+
+    #[test]
+    fn a_sound_name_is_not_written_over_settings_that_were_never_saved() {
+        remember_sound_name("a.oga", "A");
+        assert!(!load_settings().prefs.sound_names.contains_key("a.oga"));
     }
 
     #[test]
