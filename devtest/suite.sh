@@ -118,6 +118,7 @@ run_leg() {
                 exit 1
                 ;;
         esac
+        settle_device
         # Without a working window nearly everything fails, and slowly: stop the run at once.
         fresh
         export CLEAN_COPY

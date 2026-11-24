@@ -51,4 +51,11 @@ run_case phone 6 59 54 +0000 R5CT123
 verdict "a phone's clock is never touched" "$([ -z "$(set_to phone)" ] && echo 1)"
 run_case no_zone 6 59 54 ""
 verdict "a device that gives no zone is left alone" "$([ -z "$(set_to no_zone)" ] && echo 1)"
+
+# cpu_idle_pct (lib.sh), used by settle_device: the idle share between two readings of /proc/stat.
+idle_of() { (export OUT="$tmp/idle" TMPDIR="$tmp"; mkdir -p "$OUT"; . "$here/lib.sh"; cpu_idle_pct "$1" "$2"); }
+verdict "a busy guest (10 of 100 jiffies idle) reads 10" "$([ "$(idle_of "cpu  100 0 100 800 0 0 0 0 0 0" "cpu  145 0 145 810 0 0 0 0 0 0")" = 10 ] && echo 1)"
+verdict "a quiet guest (95 of 100 idle, iowait counts as idle) reads 95" "$([ "$(idle_of "cpu  100 0 100 800 50 0 0 0 0 0" "cpu  102 0 103 890 55 0 0 0 0 0")" = 95 ] && echo 1)"
+verdict "a line that is not /proc/stat gives nothing" "$([ -z "$(idle_of "garbage" "cpu  1 2 3 4 5 6 7 8 9 10")" ] && echo 1)"
+verdict "two equal readings give nothing" "$([ -z "$(idle_of "cpu  1 2 3 4 5 6 7 8 9 10" "cpu  1 2 3 4 5 6 7 8 9 10")" ] && echo 1)"
 exit $bad

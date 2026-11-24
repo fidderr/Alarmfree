@@ -366,6 +366,40 @@ fresh_clock() {
     new=$(clock_clear_of_fixed_alarms "$n" $((${off:0:1}(10#${off:1:2} * 3600 + 10#${off:3:2} * 60))))
     [ -z "$new" ] || set_clock "$new"
 }
+# Percent of the time two readings of /proc/stat's first line (all cores) were idle (idle and iowait). Empty when a line is not one.
+cpu_idle_pct() { # line_before line_after
+    local -a x y
+    read -ra x <<< "$1"
+    read -ra y <<< "$2"
+    [ "${x[0]}" = cpu ] && [ "${y[0]}" = cpu ] && [ "${#x[@]}" -ge 9 ] && [ "${#y[@]}" -ge 9 ] || return 0
+    local i tx=0 ty=0
+    for i in 1 2 3 4 5 6 7 8; do
+        tx=$((tx + x[i]))
+        ty=$((ty + y[i]))
+    done
+    [ "$ty" -gt "$tx" ] || return 0
+    echo $((100 * ((y[4] + y[5]) - (x[4] + x[5])) / (ty - tx)))
+}
+# For a minute or two after a boot Android keeps the cores busy (the first scenarios of a leg on a GitHub machine met a load of 5.5 on
+# 4 cores, and s21 and s03 each failed once there: asleep screen, an alarm that never came). Waits until three readings of two
+# seconds in a row are 85% idle, at most 120 s; a NOTE says what it found.
+settle_device() {
+    on_emulator || return 0
+    local start=$SECONDS quiet=0 a b idle=""
+    while [ $((SECONDS - start)) -lt 120 ]; do
+        a=$(dev cat /proc/stat | head -1)
+        sleep 2 # lint-ok: the window of one reading of the CPU
+        b=$(dev cat /proc/stat | head -1)
+        idle=$(cpu_idle_pct "$a" "$b")
+        if [ -n "$idle" ] && [ "$idle" -ge 85 ]; then
+            quiet=$((quiet + 1))
+            [ "$quiet" -lt 3 ] || break
+        else
+            quiet=0
+        fi
+    done
+    note "settled after $((SECONDS - start)) s (last reading ${idle:-none}% idle, $quiet of 3 quiet)"
+}
 # Hour and minute of a moment, on the device's clock. After next_minute.
 at_hm() { date -u -d "@$(($1 + ZONE_S))" "+%-H %-M"; }
 
