@@ -147,17 +147,23 @@ fn record_outcome(
         AlarmOutcome::Backup => ("ring", "ended by the backup screen"),
         AlarmOutcome::Reboot => ("ring", "ended by a restart of the phone"),
         AlarmOutcome::Solved => ("ring", "solved"),
+        AlarmOutcome::WakeCheckPassed => ("ring", "wake-up check answered"),
+        AlarmOutcome::WakeCheckUnanswered => ("ring", "wake-up check not answered"),
+        AlarmOutcome::WakeCheckMissed => ("missed", "wake-up check did not ring"),
     };
     crate::diag_log::event(
         tag,
         &format!("{what} id={} at={due}", crate::diag_log::short_id(alarm_id)),
     );
-    // A wake-up check or a test alarm is not one of the user's alarms.
-    if alarm.is_some_and(|a| a.hidden) {
-        return;
-    }
     let label = alarm.map(display_name).unwrap_or_default();
-    crate::history_persistence::record_outcome(alarm_id, &label, outcome, at);
+    // A test alarm is not one of the user's alarms; a wake-up check is listed apart from them.
+    match alarm {
+        Some(a) if a.hidden && a.test => {}
+        Some(a) if a.hidden => {
+            crate::history_persistence::record_wake_check(alarm_id, &label, outcome, at);
+        }
+        _ => crate::history_persistence::record_outcome(alarm_id, &label, outcome, at),
+    }
 }
 
 /// Whether the first setup of this process came from a wake-up and not from the screen.
@@ -805,6 +811,53 @@ pub fn alarm_data_to_spec(alarm: &AlarmData) -> AlarmSpec {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn history_outcomes() -> Vec<(String, AlarmOutcome)> {
+        let filter = crate::models::HistoryFilter::LastDays(1);
+        let mut found: Vec<_> = crate::history_persistence::query_history(&filter)
+            .into_iter()
+            .map(|e| (e.alarm_label, e.outcome))
+            .collect();
+        found.sort_by_key(|(label, outcome)| (label.clone(), outcome.as_str()));
+        found
+    }
+
+    #[test]
+    fn a_wake_up_check_that_ends_unanswered_is_in_history_and_a_test_alarm_is_not() {
+        let mut check = crate::alarm_ops::factory_alarm();
+        check.id = "check".into();
+        check.label = "Are you up?".into();
+        check.hidden = true;
+        let mut test = check.clone();
+        test.id = "test".into();
+        test.label = "Test".into();
+        test.test = true;
+        let mut plain = crate::alarm_ops::factory_alarm();
+        plain.id = "plain".into();
+        plain.label = "Work".into();
+        let list = [check, test, plain];
+        let at = crate::clock::utc_now();
+
+        record_outcome(&list, "check", AlarmOutcome::Limit, at);
+        record_outcome(&list, "check", AlarmOutcome::Missed, at);
+        record_outcome(&list, "test", AlarmOutcome::Limit, at);
+        record_outcome(&list, "plain", AlarmOutcome::Limit, at);
+
+        assert_eq!(
+            history_outcomes(),
+            [
+                ("Are you up?".to_owned(), AlarmOutcome::WakeCheckMissed),
+                ("Are you up?".to_owned(), AlarmOutcome::WakeCheckUnanswered),
+                ("Work".to_owned(), AlarmOutcome::Limit),
+            ]
+        );
+        let told = crate::history_persistence::take_unseen_outcomes();
+        assert_eq!(
+            told,
+            [(AlarmOutcome::Limit, "Work".to_owned())],
+            "only the user's own alarm is announced"
+        );
+    }
 
     #[test]
     fn a_reminder_says_the_users_text_or_else_the_label() {

@@ -513,6 +513,22 @@ mod tests {
     }
 
     #[test]
+    fn a_wake_up_check_is_kept_but_adds_nothing_to_the_averages() {
+        let db = Database::open_in_memory().unwrap();
+        db.insert_event(&ended("1", AlarmOutcome::Solved)).unwrap();
+        for outcome in [
+            AlarmOutcome::WakeCheckPassed,
+            AlarmOutcome::WakeCheckUnanswered,
+            AlarmOutcome::WakeCheckMissed,
+        ] {
+            db.insert_event(&ended(outcome.as_str(), outcome)).unwrap();
+        }
+        let filter = HistoryFilter::LastDays(1);
+        assert_eq!(db.query_events(&filter).unwrap().len(), 4);
+        assert_eq!(db.aggregate_metrics(&filter).unwrap().total_events, 1);
+    }
+
+    #[test]
     fn one_unreadable_alarm_does_not_lose_the_others() {
         let db = Database::open_in_memory().unwrap();
         {

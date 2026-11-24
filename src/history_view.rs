@@ -43,11 +43,12 @@ pub fn period_filter(key: &str, custom_days: u16, week_start: WeekStart) -> Hist
 }
 
 /// How many days in a row every alarm was dealt with: at least one solved, nothing missed
-/// or left ringing. A day without alarms is no break, and does not count either.
+/// or left ringing. A day without alarms is no break, and does not count either, and a
+/// wake-up check is not an alarm of the user's.
 pub fn streak(events: &[AlarmEvent], today: NaiveDate) -> u32 {
     use std::collections::BTreeMap;
     let mut days: BTreeMap<NaiveDate, bool> = BTreeMap::new();
-    for event in events {
+    for event in events.iter().filter(|e| !e.outcome.is_wake_check()) {
         let day = event
             .fire_timestamp
             .with_timezone(&chrono::Local)
@@ -255,7 +256,7 @@ pub struct EventText {
     /// "12 Nov 07:00 Label"
     pub title: String,
     pub sub: String,
-    /// 0 normal, 1 danger (missed), 2 warn (limit, reboot).
+    /// 0 normal, 1 danger (missed, a wake-up check nobody answered), 2 warn (limit, reboot, a wake-up check that did not ring).
     pub flag: i32,
     pub value: String,
     pub details: Vec<(String, String)>,
@@ -269,9 +270,9 @@ pub fn event_text(translations: &Translations, event: &AlarmEvent, twenty_four: 
         crate::text::clock(local.hour() as u8, local.minute() as u8, twenty_four),
     );
     let flag = match event.outcome {
-        AlarmOutcome::Solved | AlarmOutcome::Backup => 0,
-        AlarmOutcome::Missed => 1,
-        AlarmOutcome::Limit | AlarmOutcome::Reboot => 2,
+        AlarmOutcome::Solved | AlarmOutcome::Backup | AlarmOutcome::WakeCheckPassed => 0,
+        AlarmOutcome::Missed | AlarmOutcome::WakeCheckUnanswered => 1,
+        AlarmOutcome::Limit | AlarmOutcome::Reboot | AlarmOutcome::WakeCheckMissed => 2,
     };
     let outcome_key = match event.outcome {
         AlarmOutcome::Solved => None,
@@ -279,6 +280,9 @@ pub fn event_text(translations: &Translations, event: &AlarmEvent, twenty_four: 
         AlarmOutcome::Limit => Some("history.outcome.limit"),
         AlarmOutcome::Reboot => Some("history.outcome.reboot"),
         AlarmOutcome::Backup => Some("history.outcome.backup"),
+        AlarmOutcome::WakeCheckPassed => Some("history.outcome.wake_passed"),
+        AlarmOutcome::WakeCheckUnanswered => Some("history.outcome.wake_unanswered"),
+        AlarmOutcome::WakeCheckMissed => Some("history.outcome.wake_missed"),
     };
     let measured = matches!(event.outcome, AlarmOutcome::Solved);
 
@@ -384,6 +388,40 @@ mod tests {
             0,
             "one alarm left ringing spoils the day"
         );
+    }
+
+    #[test]
+    fn a_wake_up_check_is_in_the_list_but_not_in_the_streak_or_the_chart() {
+        let en = crate::i18n::load_translations(crate::models::Locale::English);
+        let today = NaiveDate::from_ymd_opt(2026, 11, 10).unwrap();
+        let day = |back: i64| today - Duration::days(back);
+        let events = vec![
+            event_on(day(0), AlarmOutcome::Solved),
+            event_on(day(0), AlarmOutcome::WakeCheckPassed),
+            event_on(day(1), AlarmOutcome::Solved),
+            event_on(day(1), AlarmOutcome::WakeCheckUnanswered),
+            event_on(day(2), AlarmOutcome::WakeCheckMissed),
+            event_on(day(3), AlarmOutcome::Solved),
+        ];
+        assert_eq!(
+            streak(&events, today),
+            3,
+            "an unanswered check breaks nothing, and a day with only a check is a day without alarms"
+        );
+        let filter = HistoryFilter::ThisWeek(WeekStart::Monday);
+        let bars = chart(&en, &filter, &events[..2], WeekStart::Monday, today).unwrap();
+        let alone = chart(&en, &filter, &events[..1], WeekStart::Monday, today).unwrap();
+        assert_eq!(bars, alone, "the chart times alarms only");
+        for (outcome, flag, sub) in [
+            (AlarmOutcome::WakeCheckPassed, 0, "Answered"),
+            (AlarmOutcome::WakeCheckUnanswered, 1, "Not answered"),
+            (AlarmOutcome::WakeCheckMissed, 2, "Did not ring"),
+        ] {
+            let text = event_text(&en, &event_on(today, outcome), true);
+            assert_eq!((text.flag, text.sub.as_str()), (flag, sub));
+            assert_eq!(text.value, "");
+            assert!(text.details.is_empty());
+        }
     }
 
     #[test]

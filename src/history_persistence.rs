@@ -15,15 +15,14 @@ pub fn record_alarm_event(event: &AlarmEvent) {
     }
 }
 
-/// Record an alarm that ended without the user. The user has not seen this yet;
-/// see [`take_unseen_outcomes`].
-pub fn record_outcome(
+/// An alarm that ended without the user, at the moment it was due or ended.
+fn ended_event(
     alarm_id: &str,
     label: &str,
     outcome: AlarmOutcome,
     at: chrono::DateTime<Utc>,
-) {
-    let event = AlarmEvent {
+) -> AlarmEvent {
+    AlarmEvent {
         id: uuid::Uuid::new_v4().to_string(),
         alarm_id: AlarmId(alarm_id.to_owned()),
         alarm_label: label.to_owned(),
@@ -35,10 +34,46 @@ pub fn record_outcome(
         challenge_solves: Vec::new(),
         total_dismissal_time: std::time::Duration::ZERO,
         outcome,
-    };
+    }
+}
+
+/// Record an alarm that ended without the user. The user has not seen this yet;
+/// see [`take_unseen_outcomes`].
+pub fn record_outcome(
+    alarm_id: &str,
+    label: &str,
+    outcome: AlarmOutcome,
+    at: chrono::DateTime<Utc>,
+) {
+    let event = ended_event(alarm_id, label, outcome, at);
     if let Err(e) = persistence::database().insert_unseen_event(&event) {
         log::error!("[AlarmFree] Failed to record that alarm {alarm_id} ended: {e}");
     }
+}
+
+/// The outcome a wake-up check gets in history when the alarm kit says its ring ended some other
+/// way than the user answering it.
+pub fn wake_check_outcome(outcome: AlarmOutcome) -> AlarmOutcome {
+    match outcome {
+        AlarmOutcome::Missed => AlarmOutcome::WakeCheckMissed,
+        _ => AlarmOutcome::WakeCheckUnanswered,
+    }
+}
+
+/// Record a wake-up check that ended without an answer. Only in the list: nobody is told, as the
+/// check is a reminder of the alarm's own, not an alarm.
+pub fn record_wake_check(
+    alarm_id: &str,
+    label: &str,
+    outcome: AlarmOutcome,
+    at: chrono::DateTime<Utc>,
+) {
+    record_alarm_event(&ended_event(
+        alarm_id,
+        label,
+        wake_check_outcome(outcome),
+        at,
+    ));
 }
 
 /// How and which alarms ended without the user since the last call, by name.

@@ -1105,11 +1105,11 @@ s29() {
     screenshot s29_check
     label=$(sn ring_label)
     tap "Turn off" 0 0.5
-    finished() { sound_off && [ "$(db_count '"hidden":true')" = 0 ] && [ "$(outcomes solved)" = 1 ]; }
+    finished() { sound_off && [ "$(db_count '"hidden":true')" = 0 ] && [ "$(outcomes solved)" = 1 ] && [ "$(outcomes wake_check_passed)" = 1 ]; }
     if wait_for 8 finished && [ "$label" = "Are you up?" ]; then
-        pass "rang again after ${SOUND_AT}s, and is gone after confirming"
+        pass "rang again after ${SOUND_AT}s, is gone after confirming, and history lists the answered check apart from the alarm"
     else
-        fail "sound=$(sound_on && echo ON || echo off) hidden=$(db_count '"hidden":true') solved=$(outcomes solved) label='$label'"
+        fail "sound=$(sound_on && echo ON || echo off) hidden=$(db_count '"hidden":true') solved=$(outcomes solved) wake_check_passed=$(outcomes wake_check_passed) label='$label'"
     fi
 }
 
@@ -1271,12 +1271,14 @@ s32() {
     has_record() { [ "$(dev cat /sdcard/Download/alarmfree-rings.txt 2> /dev/null | grep -c ' sound ')" -ge 1 ]; }
     wait_for 10 has_record && record=yes
     rm_download alarmfree-rings.txt
-    if ! sound_on && [ "$(db_count '"hidden":true')" = 0 ] && [ "$(outcomes solved)" = 0 ] && [ "$record" = yes ]; then
+    events() { printf 'SELECT count(*) FROM alarm_events;
+' | sql; }
+    if ! sound_on && [ "$(db_count '"hidden":true')" = 0 ] && [ "$(events)" = 0 ] && [ "$record" = yes ]; then
         pass "rang ${SOUND_AT}s after its time, nothing left, nothing in history, its record saved"
     elif [ "$record" != yes ]; then
         fail "no record of the ring in Downloads (test alarms now: $(db_count '"hidden":true'))"
     else
-        fail "sound=$(sound_on && echo ON || echo off) hidden=$(db_count '"hidden":true') solved=$(outcomes solved)"
+        fail "sound=$(sound_on && echo ON || echo off) hidden=$(db_count '"hidden":true') history rows=$(events)"
     fi
 }
 

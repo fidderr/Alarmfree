@@ -77,6 +77,8 @@ pub struct RingState {
     id: String,
     label: String,
     hidden: bool,
+    /// A test alarm: hidden like a wake-up check, but it leaves nothing in history.
+    test: bool,
     bright: bool,
     snooze_minutes: u8,
     snoozes_left: u8,
@@ -181,6 +183,7 @@ fn start(ctx: &Rc<Ctx>, id: &str) {
         id: id.to_owned(),
         label: label.clone(),
         hidden: alarm.as_ref().is_some_and(|a| a.hidden),
+        test: alarm.as_ref().is_some_and(|a| a.test),
         bright: alarm.as_ref().is_some_and(|a| a.max_brightness),
         snooze_minutes: alarm.as_ref().map_or(1u8, |a| a.snooze_interval),
         snoozes_left: max_snoozes.saturating_sub(times.snoozed),
@@ -404,14 +407,18 @@ pub fn solved(ctx: &Rc<Ctx>, id: &str, solves: Vec<ChallengeSolve>) {
 fn finished(ctx: &Rc<Ctx>, id: &str, solves: Vec<ChallengeSolve>) {
     let hidden = ctx.ring.borrow().as_ref().is_some_and(|ring| ring.hidden);
     if let Some(ring) = ctx.ring.borrow().as_ref() {
-        if !ring.hidden {
-            crate::history_persistence::record_alarm_event(&ring.times.solved_event(
+        if !ring.hidden || !ring.test {
+            let mut event = ring.times.solved_event(
                 id,
                 &ring.label,
                 ring.first_interaction,
                 ring.snooze_minutes,
                 solves,
-            ));
+            );
+            if ring.hidden {
+                event.outcome = AlarmOutcome::WakeCheckPassed;
+            }
+            crate::history_persistence::record_alarm_event(&event);
         }
     }
     crate::diag_log::event(

@@ -32,6 +32,12 @@ pub enum AlarmOutcome {
     Reboot,
     /// The user solved the backup screen's challenge.
     Backup,
+    /// The user confirmed the wake-up check ("Are you up?").
+    WakeCheckPassed,
+    /// The wake-up check rang and nobody answered it.
+    WakeCheckUnanswered,
+    /// The wake-up check's time passed without it ringing.
+    WakeCheckMissed,
 }
 
 impl AlarmOutcome {
@@ -43,7 +49,19 @@ impl AlarmOutcome {
             Self::Limit => "limit",
             Self::Reboot => "reboot",
             Self::Backup => "backup",
+            Self::WakeCheckPassed => "wake_check_passed",
+            Self::WakeCheckUnanswered => "wake_check_unanswered",
+            Self::WakeCheckMissed => "wake_check_missed",
         }
+    }
+
+    /// A wake-up check is listed in history but is not one of the user's alarms: it is no part of
+    /// the streak, the chart or the averages.
+    pub fn is_wake_check(self) -> bool {
+        matches!(
+            self,
+            Self::WakeCheckPassed | Self::WakeCheckUnanswered | Self::WakeCheckMissed
+        )
     }
 
     pub fn parse(s: &str) -> Self {
@@ -52,6 +70,9 @@ impl AlarmOutcome {
             "limit" => Self::Limit,
             "reboot" => Self::Reboot,
             "backup" => Self::Backup,
+            "wake_check_passed" => Self::WakeCheckPassed,
+            "wake_check_unanswered" => Self::WakeCheckUnanswered,
+            "wake_check_missed" => Self::WakeCheckMissed,
             _ => Self::Solved,
         }
     }
@@ -135,6 +156,31 @@ impl Default for AggregateMetrics {
             avg_total_challenge_time: Duration::ZERO,
             avg_total_dismissal_time: Duration::ZERO,
             avg_solve_per_challenge: BTreeMap::new(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_outcome_is_stored_and_read_back_and_only_the_wake_checks_are_apart() {
+        for outcome in [
+            AlarmOutcome::Solved,
+            AlarmOutcome::Missed,
+            AlarmOutcome::Limit,
+            AlarmOutcome::Reboot,
+            AlarmOutcome::Backup,
+            AlarmOutcome::WakeCheckPassed,
+            AlarmOutcome::WakeCheckUnanswered,
+            AlarmOutcome::WakeCheckMissed,
+        ] {
+            assert_eq!(AlarmOutcome::parse(outcome.as_str()), outcome);
+            assert_eq!(
+                outcome.is_wake_check(),
+                outcome.as_str().starts_with("wake_check")
+            );
         }
     }
 }
