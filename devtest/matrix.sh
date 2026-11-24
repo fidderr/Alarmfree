@@ -1932,10 +1932,17 @@ s48() {
     on_screen "Add alarms from a file" 30 || problems="$problems; no Add alarms from a file"
     tap_has "Add alarms from a file"
     if [ -n "$file" ] && picker_pick "$file"; then
-        on_screen Undo 30
-        [ "$(alarm_count)" = 2 ] || problems="$problems; $(alarm_count) alarms after restoring"
-        tap_in Undo 0 0.5
-        [ "$(alarm_count)" = 1 ] || problems="$problems; undo left $(alarm_count) alarms"
+        two_alarms() { [ "$(alarm_count)" = 2 ]; }
+        if on_screen Undo 30; then
+            two_alarms || problems="$problems; $(alarm_count) alarms after restoring"
+            tap_in Undo 0 0.5
+            [ "$(alarm_count)" = 1 ] || problems="$problems; undo left $(alarm_count) alarms"
+        else
+            # Android 13 does not always bring the app back when the picker is done (run 45388385272: the window stayed
+            # stopped for 35 s): the alarms are added without it, and there was nobody to show the Undo to.
+            wait_for 20 two_alarms || problems="$problems; $(alarm_count) alarms after restoring, and no Undo on screen"
+            echo "NOTE  $CURRENT  no Undo to tap: the app was not in front when the picker returned; the alarms were added anyway" | tee -a "$RESULTS"
+        fi
     else
         problems="$problems; the picker never showed the backup: ${file:-no file name}: $SYS_WHY"
         sys_press KEYCODE_BACK "the app getting the keys back from the picker" "$SYS_DEADLINE" focus_in_app || note "$SYS_WHY"
