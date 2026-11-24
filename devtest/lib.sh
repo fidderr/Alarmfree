@@ -161,7 +161,7 @@ guard_allows() {
     local f=$1
     shift
     echo "$f" | grep -Eq 'com\.fidderr\.alarmfree|nputMethod|inputmethod|permissioncontroller|packageinstaller|RequestIgnoreBatteryOptimizations' && return 0
-    [ "$*" = "input keyevent KEYCODE_BACK" ] && echo "$f" | grep -Eq 'u0 com\.android\.settings/' && return 0
+    [ "$*" = "input keyevent KEYCODE_BACK" ] && echo "$f" | grep -Eq 'u0 com\.android\.settings/' && return 0 # lint-ok: the text of the command compared with, not an input
     return 1
 }
 dev() {
