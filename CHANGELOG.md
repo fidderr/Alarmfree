@@ -7,6 +7,11 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+### Fixed
+
+- **Alarms added from a file are kept when Android closed the app's window while the file picker was in front.** They
+  were read and then dropped; they are now saved and set before the window is back, and the list shows them when it is.
+
 ## [0.7.1] - 2026-11-24
 
 versionCode 12601. Needs mobile-sentinel 0.7.1.

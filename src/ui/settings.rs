@@ -6,9 +6,9 @@ use slint::ComponentHandle;
 
 use super::panel::{self, Act, Panel};
 use super::{Ctx, SettingsView, SCREEN_SETTINGS};
+use crate::alarm_ops;
 use crate::i18n::{self, t, Translations};
 use crate::models::{AlarmData, AppSettings, Locale, TimeFormat, WeekStart};
-use crate::{alarm_ops, ordering};
 
 /// The percentages for the minimum volume.
 const VOLUMES: [u8; 5] = [0, 25, 50, 75, 100];
@@ -373,29 +373,19 @@ fn read_backup() -> Result<Vec<AlarmData>, String> {
 
 pub fn restore_backup(_ctx: &Rc<Ctx>) {
     std::thread::spawn(move || {
-        let result = read_backup();
+        // Stored and armed here: the window may be gone when the picker returns.
+        let result = read_backup().map(crate::persistence::add_restored_alarms);
         let _ = slint::invoke_from_event_loop(move || {
             super::with_ctx(|ctx| restored(ctx, result));
         });
     });
 }
 
-/// The picker is done: add what it found, as far as there is room.
-fn restored(ctx: &Rc<Ctx>, result: Result<Vec<AlarmData>, String>) {
+/// The picker is done and the alarms are saved: show them.
+fn restored(ctx: &Rc<Ctx>, result: Result<(Vec<AlarmData>, usize), String>) {
     match result {
-        Ok(found) => {
-            let before = ctx.alarms.borrow().clone();
-            let room = alarm_ops::MAX_ALARMS.saturating_sub(before.len());
-            let added = found.len().min(room);
-            {
-                let mut list = ctx.alarms.borrow_mut();
-                let first = ordering::order_for_new(&list);
-                for (position, mut alarm) in found.into_iter().take(room).enumerate() {
-                    alarm.order = first + position as i64;
-                    list.push(alarm);
-                }
-            }
-            crate::persistence::save_alarms(&ctx.alarms.borrow());
+        Ok((before, added)) => {
+            *ctx.alarms.borrow_mut() = crate::persistence::load_alarms();
             let tr = ctx.tr.borrow();
             let message = crate::text::counted(&tr, "settings.backup_restored", added as u32);
             drop(tr);

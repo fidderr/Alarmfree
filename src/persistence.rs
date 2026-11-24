@@ -249,6 +249,26 @@ pub fn remember_sound_name(file: &str, name: &str) {
     }
 }
 
+/// The alarms a backup file held, added to what is saved and armed, as far as there is room. Done
+/// where the picker returned, not in the window: Android can destroy the activity while the picker is
+/// in front, and the alarms would be read and then lost. Returns the alarms as they were before, and
+/// how many were added.
+pub fn add_restored_alarms(found: Vec<AlarmData>) -> (Vec<AlarmData>, usize) {
+    let before = load_alarms();
+    let room = crate::alarm_ops::MAX_ALARMS.saturating_sub(before.len());
+    let added = found.len().min(room);
+    let mut list = before.clone();
+    let first = crate::ordering::order_for_new(&list);
+    for (position, mut alarm) in found.into_iter().take(room).enumerate() {
+        alarm.order = first + position as i64;
+        list.push(alarm);
+    }
+    if added > 0 {
+        save_alarms(&list);
+    }
+    (before, added)
+}
+
 /// How many saved alarms cannot be read.
 pub fn unreadable_alarms() -> usize {
     opened().db.list_alarms_reporting().map_or(0, |(_, n)| n)
@@ -320,6 +340,36 @@ mod tests {
 
         assert_eq!(removed, ["gone"]);
         assert_eq!(changed, [&edited, &added]);
+    }
+
+    #[test]
+    fn restored_alarms_are_stored_and_numbered_after_the_saved_ones_without_a_window() {
+        let mut kept = alarm("kept");
+        kept.order = 4;
+        save_alarms(&[kept.clone()]);
+
+        let (before, added) = add_restored_alarms(vec![alarm("a"), alarm("b")]);
+
+        assert_eq!(before, [kept.clone()]);
+        assert_eq!(added, 2);
+        let saved = crate::ordering::sorted_for_display(&load_alarms());
+        let ids: Vec<&str> = saved.iter().map(|a| a.id.as_str()).collect();
+        assert_eq!(ids, ["kept", "a", "b"]);
+        assert_eq!(saved[1].order, 5);
+        assert_eq!(saved[2].order, 6);
+    }
+
+    #[test]
+    fn restored_alarms_stop_at_the_room_there_is() {
+        let full: Vec<AlarmData> = (0..crate::alarm_ops::MAX_ALARMS - 1)
+            .map(|i| alarm(&format!("old{i}")))
+            .collect();
+        save_alarms(&full);
+
+        let (_, added) = add_restored_alarms(vec![alarm("a"), alarm("b")]);
+
+        assert_eq!(added, 1);
+        assert_eq!(load_alarms().len(), crate::alarm_ops::MAX_ALARMS);
     }
 
     #[test]
