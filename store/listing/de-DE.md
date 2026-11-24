@@ -2,7 +2,7 @@
 
 ## Titel (max. 30)
 
-AlarmFree: Wecker mit Aufgaben
+AlarmFree: Challenge Alarm
 
 ## Kurzbeschreibung (max. 80)
 

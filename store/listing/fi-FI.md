@@ -2,7 +2,7 @@
 
 ## Otsikko (enintään 30)
 
-AlarmFree: Tehtäväherätys
+AlarmFree: Challenge Alarm
 
 ## Lyhyt kuvaus (enintään 80)
 

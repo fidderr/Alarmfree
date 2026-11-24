@@ -2,7 +2,7 @@
 
 ## Titel (max 30)
 
-AlarmFree: Alarm med utmaning
+AlarmFree: Challenge Alarm
 
 ## Kort beskrivning (max 80)
 

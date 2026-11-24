@@ -2,7 +2,7 @@
 
 ## Título (máx. 30)
 
-AlarmFree: alarma con retos
+AlarmFree: Challenge Alarm
 
 ## Descripción breve (máx. 80)
 

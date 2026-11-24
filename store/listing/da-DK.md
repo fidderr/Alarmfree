@@ -2,7 +2,7 @@
 
 ## Titel (max. 30)
 
-AlarmFree: Udfordringsalarm
+AlarmFree: Challenge Alarm
 
 ## Kort beskrivelse (max. 80)
 

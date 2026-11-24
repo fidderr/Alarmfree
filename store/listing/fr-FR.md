@@ -2,7 +2,7 @@
 
 ## Titre (max. 30)
 
-AlarmFree : réveil à défis
+AlarmFree: Challenge Alarm
 
 ## Description courte (max. 80)
 

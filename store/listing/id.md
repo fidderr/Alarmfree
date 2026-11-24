@@ -2,7 +2,7 @@
 
 ## Judul (maks. 30)
 
-AlarmFree: Alarm Tantangan
+AlarmFree: Challenge Alarm
 
 ## Deskripsi singkat (maks. 80)
 

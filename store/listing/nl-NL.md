@@ -2,7 +2,7 @@
 
 ## Titel (max 30)
 
-AlarmFree: uitdagingswekker
+AlarmFree: Challenge Alarm
 
 ## Korte beschrijving (max 80)
 

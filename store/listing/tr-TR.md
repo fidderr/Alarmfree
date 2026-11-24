@@ -2,7 +2,7 @@
 
 ## Başlık (en fazla 30)
 
-AlarmFree: Görevli Alarm
+AlarmFree: Challenge Alarm
 
 ## Kısa açıklama (en fazla 80)
 
