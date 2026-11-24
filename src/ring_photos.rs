@@ -61,7 +61,7 @@ pub fn data_url(name: &str) -> Option<String> {
     }
     let url = format!(
         "data:image/jpeg;base64,{}",
-        base64(&std::fs::read(path).ok()?)
+        crate::base64::encode(&std::fs::read(path).ok()?)
     );
     *shown = Some((name.to_owned(), url.clone()));
     Some(url)
@@ -99,42 +99,9 @@ pub fn prune(alarms: &[AlarmData], defaults: Option<&AlarmData>) {
     }
 }
 
-fn base64(bytes: &[u8]) -> String {
-    const LETTERS: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let letter = |index: u32| char::from(LETTERS[(index & 63) as usize]);
-    let mut text = String::with_capacity(bytes.len().div_ceil(3) * 4);
-    for chunk in bytes.chunks(3) {
-        let [a, b, c] = [
-            u32::from(chunk[0]),
-            u32::from(*chunk.get(1).unwrap_or(&0)),
-            u32::from(*chunk.get(2).unwrap_or(&0)),
-        ];
-        let all = (a << 16) | (b << 8) | c;
-        text.push(letter(all >> 18));
-        text.push(letter(all >> 12));
-        text.push(if chunk.len() > 1 {
-            letter(all >> 6)
-        } else {
-            '='
-        });
-        text.push(if chunk.len() > 2 { letter(all) } else { '=' });
-    }
-    text
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn base64_as_everyone_writes_it() {
-        assert_eq!(base64(b""), "");
-        assert_eq!(base64(b"f"), "Zg==");
-        assert_eq!(base64(b"fo"), "Zm8=");
-        assert_eq!(base64(b"foo"), "Zm9v");
-        assert_eq!(base64(b"foob"), "Zm9vYg==");
-        assert_eq!(base64(&[0xfb, 0xff, 0xfe]), "+//+");
-    }
 
     #[test]
     fn a_name_from_a_backup_cannot_point_anywhere_else() {

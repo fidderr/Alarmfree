@@ -6,7 +6,6 @@ use slint::ComponentHandle;
 
 use super::panel::{self, Act, Panel};
 use super::{Ctx, SettingsView, SCREEN_SETTINGS};
-use crate::alarm_ops;
 use crate::i18n::{self, t, Translations};
 use crate::models::{AlarmData, AppSettings, Locale, TimeFormat, WeekStart};
 
@@ -282,29 +281,56 @@ pub fn open_volume(ctx: &Ctx) {
 
 fn open_backup(ctx: &Ctx) {
     let tr = ctx.tr.borrow();
+    let mut rows = Vec::new();
+    // Own sounds in use give a second choice: the file with them in it is bigger, and the size is told.
+    if crate::backup::sounds_used(&ctx.alarms.borrow()).is_empty() {
+        rows.push((
+            t(&tr, "settings.backup_save"),
+            false,
+            false,
+            Act::BackupSave,
+        ));
+    } else {
+        let size = crate::backup::size_with_sounds(
+            &ctx.alarms.borrow(),
+            &ctx.settings.borrow().prefs.sound_names,
+            &crate::custom_sounds::custom_sounds_dir(),
+        );
+        rows.push((
+            t(&tr, "settings.backup_save_alarms"),
+            false,
+            false,
+            Act::BackupSave,
+        ));
+        rows.push((
+            t(&tr, "settings.backup_save_sounds").replace("{size}", &megabytes(&tr, size)),
+            false,
+            false,
+            Act::BackupSaveWithSounds,
+        ));
+    }
+    rows.push((
+        t(&tr, "settings.backup_restore"),
+        false,
+        false,
+        Act::BackupRestore,
+    ));
     panel::show(
         ctx,
         Panel {
             title: t(&tr, "settings.backup"),
             help: t(&tr, "settings.backup_note"),
-            rows: vec![
-                (
-                    t(&tr, "settings.backup_save"),
-                    false,
-                    false,
-                    Act::BackupSave,
-                ),
-                (
-                    t(&tr, "settings.backup_restore"),
-                    false,
-                    false,
-                    Act::BackupRestore,
-                ),
-            ],
+            rows,
             chip_selected: -1,
             ..Panel::default()
         },
     );
+}
+
+/// "3.4 MB", at least "0.1 MB".
+fn megabytes(tr: &Translations, bytes: u64) -> String {
+    let megabytes = (bytes as f64 / 1_000_000.0).max(0.1);
+    format!("{} MB", crate::text::one_decimal(tr, megabytes))
 }
 
 fn open_about(ctx: &Ctx) {
@@ -323,17 +349,38 @@ fn open_about(ctx: &Ctx) {
     );
 }
 
-/// Write the alarms to a file in Downloads. Returns where it went.
-fn write_backup(alarms: &[AlarmData]) -> Result<String, String> {
+/// Write the alarms to a file in Downloads, with the own sounds they use if asked. Returns where it went.
+fn write_backup(
+    alarms: &[AlarmData],
+    names: &std::collections::BTreeMap<String, String>,
+    with_sounds: bool,
+) -> Result<String, String> {
     let name = format!(
         "alarmfree-{}.json",
         crate::clock::local_now().format("%Y-%m-%d")
     );
-    crate::platform::save_to_downloads(&alarm_ops::export_json(alarms), &name, "application/json")
+    let json = crate::backup::export(
+        alarms,
+        names,
+        &crate::custom_sounds::custom_sounds_dir(),
+        with_sounds,
+    );
+    crate::platform::save_to_downloads(&json, &name, "application/json")
 }
 
-pub fn save_backup(ctx: &Rc<Ctx>) {
-    let result = write_backup(&ctx.alarms.borrow());
+/// The file with the sounds in it is read and written off the UI thread: it can be a few megabytes.
+pub fn save_backup(ctx: &Rc<Ctx>, with_sounds: bool) {
+    let alarms = ctx.alarms.borrow().clone();
+    let names = ctx.settings.borrow().prefs.sound_names.clone();
+    std::thread::spawn(move || {
+        let result = write_backup(&alarms, &names, with_sounds);
+        let _ = slint::invoke_from_event_loop(move || {
+            super::with_ctx(|ctx| backup_saved(ctx, result));
+        });
+    });
+}
+
+fn backup_saved(ctx: &Rc<Ctx>, result: Result<String, String>) {
     let tr = ctx.tr.borrow();
     match result {
         Ok(place) => {
@@ -350,9 +397,18 @@ pub fn save_backup(ctx: &Rc<Ctx>) {
     }
 }
 
-/// Let the user pick a backup and read the alarms from it. Blocks, so off the UI
-/// thread. An empty error is the user changing their mind.
-fn read_backup() -> Result<Vec<AlarmData>, String> {
+/// What a restore stored: the alarms as they were before, how many were added, and what could not be
+/// brought along.
+struct Restore {
+    before: Vec<AlarmData>,
+    added: usize,
+    missing: Vec<String>,
+    missing_unnamed: usize,
+}
+
+/// Let the user pick a backup and put what is in it on this phone: its sounds, then its alarms. Blocks,
+/// so off the UI thread. An empty error is the user changing their mind.
+fn read_backup() -> Result<Restore, String> {
     let picked = mobile_sentinel::media_picker::pick_files(
         &["application/json", "text/plain", "application/octet-stream"],
         false,
@@ -363,18 +419,29 @@ fn read_backup() -> Result<Vec<AlarmData>, String> {
     };
     let json = std::fs::read_to_string(&picked.path).map_err(|e| e.to_string());
     let _ = std::fs::remove_file(&picked.path);
-    alarm_ops::import_json(
+    let restored = crate::backup::import(
         &json?,
+        &crate::custom_sounds::custom_sounds_dir(),
         crate::custom_sounds::sound_exists,
         crate::clock::local_now().naive_local(),
     )
-    .ok_or_else(|| "not a backup".to_owned())
+    .ok_or_else(|| "not a backup".to_owned())?;
+    for (file, name) in &restored.names {
+        crate::persistence::remember_sound_name(file, name);
+    }
+    let (before, added) = crate::persistence::add_restored_alarms(restored.alarms);
+    Ok(Restore {
+        before,
+        added,
+        missing: restored.missing,
+        missing_unnamed: restored.missing_unnamed,
+    })
 }
 
 pub fn restore_backup(_ctx: &Rc<Ctx>) {
     std::thread::spawn(move || {
         // Stored and armed here: the window may be gone when the picker returns.
-        let result = read_backup().map(crate::persistence::add_restored_alarms);
+        let result = read_backup();
         let _ = slint::invoke_from_event_loop(move || {
             super::with_ctx(|ctx| restored(ctx, result));
         });
@@ -382,15 +449,24 @@ pub fn restore_backup(_ctx: &Rc<Ctx>) {
 }
 
 /// The picker is done and the alarms are saved: show them.
-fn restored(ctx: &Rc<Ctx>, result: Result<(Vec<AlarmData>, usize), String>) {
+fn restored(ctx: &Rc<Ctx>, result: Result<Restore, String>) {
     match result {
-        Ok((before, added)) => {
+        Ok(restore) => {
             *ctx.alarms.borrow_mut() = crate::persistence::load_alarms();
+            // The names of the sounds that came along.
+            ctx.settings.borrow_mut().prefs.sound_names =
+                crate::persistence::load_settings().prefs.sound_names;
             let tr = ctx.tr.borrow();
-            let message = crate::text::counted(&tr, "settings.backup_restored", added as u32);
+            let mut message =
+                crate::text::counted(&tr, "settings.backup_restored", restore.added as u32);
+            if let Some(missing) =
+                crate::backup::missing_sounds_text(&tr, &restore.missing, restore.missing_unnamed)
+            {
+                message = format!("{message}. {missing}");
+            }
             drop(tr);
             super::home::refresh(ctx);
-            super::toast::show(ctx, message, Some(before));
+            super::toast::show(ctx, message, Some(restore.before));
         }
         Err(e) if e.is_empty() => {}
         Err(e) => {

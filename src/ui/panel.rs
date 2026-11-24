@@ -15,6 +15,7 @@ pub enum Act {
     WeekStart(WeekStart),
     Volume(u8),
     BackupSave,
+    BackupSaveWithSounds,
     BackupRestore,
     /// Ask once more before this much history goes: older than so many days, or all of it.
     AskDelete(Option<u32>),
@@ -130,7 +131,11 @@ fn run(ctx: &Rc<Ctx>, act: Act) {
             super::settings::open_volume(ctx);
         }
         Act::BackupSave => {
-            super::settings::save_backup(ctx);
+            super::settings::save_backup(ctx, false);
+            close(ctx);
+        }
+        Act::BackupSaveWithSounds => {
+            super::settings::save_backup(ctx, true);
             close(ctx);
         }
         // The panel stays up until the picker is done.

@@ -1956,6 +1956,91 @@ s48() {
     fi
 }
 
+# A backup with the own sounds in it: the settings offer both files, the size is told, the sound comes back on a phone
+# that has none (here: after it was deleted), and a file without the sounds says which ones are missing.
+s48b() {
+    if ! on_emulator; then
+        note "s48b needs an emulator"
+        return
+    fi
+    scenario s48b_backup_with_sounds
+    fresh
+    rm_download 'alarmfree-*'
+    as_app "mkdir -p files/sounds/custom && cp files/sounds/default/air.ogg files/sounds/custom/mytune.ogg"
+    seed a "$(alarm_json a 7 0 "$EVERY_DAY" null mytune.ogg)"
+    start_app
+    on_card 20
+    local problems="" file
+    save_with() { # the row to tap
+        [ "$(screen_no)" = 3 ] || press go 2
+        await_ui 30 "screen=3" || { problems="$problems; the settings did not open"; return 1; }
+        press st-row 6
+        on_screen "Save alarms only" 30 || { problems="$problems; no choice of files: $(texts_of)"; return 1; }
+        has_there "MB)" || problems="$problems; the size of the larger file is not told: $(texts_of)"
+        tap_has "$1"
+        saved_file() { file=$(dev ls /sdcard/Download/ | grep -m1 '^alarmfree-'); [ -n "$file" ] && [ "$(dev cat "/sdcard/Download/$file" | grep -c '"file"')" -ge 1 ]; }
+        wait_for 30 saved_file || { problems="$problems; no file with the sound's name in Downloads (holds: $(dev ls /sdcard/Download/ | tr '
+' ' '))"; return 1; }
+    }
+    # A phone that has neither the alarm nor the sound.
+    wipe() {
+        dev am force-stop "$PKG"
+        as_app "rm -f files/sounds/custom/*"
+        printf 'DELETE FROM alarms;
+' | sql > /dev/null
+        start_app
+        on_home 10
+    }
+    restore_from() {
+        dev content call --uri content://media --method scan_volume --arg external_primary > /dev/null 2>&1
+        saved_toast_gone() { ! has_there "Saved to"; }
+        wait_for 30 saved_toast_gone
+        [ "$(screen_no)" = 3 ] || press go 2
+        await_ui 30 "screen=3" || { problems="$problems; the settings are not up for the picker"; return 1; }
+        press st-row 6
+        on_screen "Add alarms from a file" 30 || { problems="$problems; no Add alarms from a file"; return 1; }
+        tap_has "Add alarms from a file"
+        picker_pick "$file" || { problems="$problems; the picker never showed the backup: $SYS_WHY"; sys_press KEYCODE_BACK "the app getting the keys back from the picker" "$SYS_DEADLINE" focus_in_app || note "$SYS_WHY"; return 1; }
+        one_alarm() { [ "$(alarm_count)" = 1 ]; }
+        wait_for 30 one_alarm || { problems="$problems; $(alarm_count) alarms after restoring"; return 1; }
+    }
+    # With the sounds: the file holds the sound, and it is on the phone again, under the same name, with the alarm on it.
+    if save_with "Save alarms with my sounds"; then
+        [ "$(dev cat "/sdcard/Download/$file" | grep -c '"data"')" -ge 1 ] || problems="$problems; no sound data in the larger file"
+        wipe
+        [ -z "$(as_app "ls files/sounds/custom")" ] || problems="$problems; the sound was not gone before the restore"
+        if restore_from; then
+            [ "$(as_app "ls files/sounds/custom")" = mytune.ogg ] || problems="$problems; the sound is not back: $(as_app "ls files/sounds/custom" | tr '
+' ' ')"
+            [ "$(db_count mytune.ogg)" = 1 ] || problems="$problems; the alarm does not use the sound"
+            as_app "cmp files/sounds/custom/mytune.ogg files/sounds/default/air.ogg" > /dev/null 2>&1 || problems="$problems; the sound is not the one that went in"
+        fi
+        rm_download "$file"
+    fi
+    # Without them: the alarm comes back on the standard sound, and the message names the missing one.
+    if [ -z "$problems" ]; then
+        if save_with "Save alarms only"; then
+            [ "$(dev cat "/sdcard/Download/$file" | grep -c '"data"')" = 0 ] || problems="$problems; the small file holds sound data"
+            wipe
+            if restore_from; then
+                [ -z "$(as_app "ls files/sounds/custom")" ] || problems="$problems; a sound came from a file without sounds"
+                [ "$(db_count mytune.ogg)" = 0 ] || problems="$problems; the alarm still points to a sound that is not there"
+                if on_screen_has "standard sound" 10; then
+                    has_there mytune || problems="$problems; the message does not name the sound: $(texts_of)"
+                else
+                    echo "NOTE  $CURRENT  no message to read: the app was not in front when the picker returned" | tee -a "$RESULTS"
+                fi
+            fi
+            rm_download "$file"
+        fi
+    fi
+    if [ -z "$problems" ]; then
+        pass "backup with and without own sounds, the sound back, the missing one named"
+    else
+        fail "${problems#; }"
+    fi
+}
+
 # The part of the window the keyboard and the bars leave, in device pixels from the top.
 free_px() {
     local size
@@ -3806,7 +3891,7 @@ s62p() {
 # The ring-screen probe (Home before a ring, what the main process does): by name only.
 . "$(dirname "$0")/ringprobe.sh"
 
-ALL="s01 s03 s04 s05 s06 s07 s07d s10 s11 s13 s13b s13d s14 s15 s16 s16b s17 s19 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s34 s36 s37 s38 s39 s40 s42 s43 s44 s45 s46 s47 s48 s49 s50 s51 s52 s53 s55 s56 s57 s58 s59 s60 s61 s62 s63 s63b s63c s65 s66 s67 s68 s68b s69a s69b s69c s69d s70 big_screens s54"
+ALL="s01 s03 s04 s05 s06 s07 s07d s10 s11 s13 s13b s13d s14 s15 s16 s16b s17 s19 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s34 s36 s37 s38 s39 s40 s42 s43 s44 s45 s46 s47 s48 s48b s49 s50 s51 s52 s53 s55 s56 s57 s58 s59 s60 s61 s62 s63 s63b s63c s65 s66 s67 s68 s68b s69a s69b s69c s69d s70 big_screens s54"
 ON_A_PHONE="s01 s03 s04 s05 s06 s07 s10 s15 s16 s16b s17 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s36 s37 s38 s39 s42 s43 s45 s46 s47 s49 s50 s51 s52 s53 s55 s57 s58 s59 s61 s62"
 
 : > "$RESULTS"

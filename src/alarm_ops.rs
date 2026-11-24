@@ -204,24 +204,27 @@ pub fn all_paused_until(alarms: &[AlarmData], now_ms: i64) -> Option<i64> {
 
 /// The alarms to put in a backup file: what the user has made and keeps, so no wake-up
 /// checks, test alarms or naps.
-pub fn export_json(alarms: &[AlarmData]) -> String {
-    let kept: Vec<&AlarmData> = alarms
+pub fn backup_alarms(alarms: &[AlarmData]) -> Vec<&AlarmData> {
+    alarms
         .iter()
         .filter(|a| !a.hidden && !a.delete_after_ring)
-        .collect();
-    serde_json::to_string_pretty(&kept).unwrap_or_else(|_| "[]".to_owned())
+        .collect()
+}
+
+/// The backup file without the sounds: a list of the alarms.
+pub fn export_json(alarms: &[AlarmData]) -> String {
+    serde_json::to_string_pretty(&backup_alarms(alarms)).unwrap_or_else(|_| "[]".to_owned())
 }
 
 /// Alarms from a backup file, each with a fresh id so it never collides with an alarm
 /// already there. A skip or a pause was about then, not now, and an alarm whose one date
 /// has passed comes back switched off. Sounds that are not on this phone fall back to the
 /// first bundled one.
-pub fn import_json(
-    json: &str,
+pub fn restore_alarms(
+    mut alarms: Vec<AlarmData>,
     known_sound: impl Fn(&str) -> bool,
     now: NaiveDateTime,
-) -> Option<Vec<AlarmData>> {
-    let mut alarms: Vec<AlarmData> = serde_json::from_str(json).ok()?;
+) -> Vec<AlarmData> {
     alarms.retain(|a| !a.delete_after_ring);
     for alarm in &mut alarms {
         alarm.migrate();
@@ -238,7 +241,17 @@ pub fn import_json(
             alarm.sound = factory_alarm().sound;
         }
     }
-    Some(alarms)
+    alarms
+}
+
+/// [`restore_alarms`] for a file that is a plain list of alarms.
+pub fn import_json(
+    json: &str,
+    known_sound: impl Fn(&str) -> bool,
+    now: NaiveDateTime,
+) -> Option<Vec<AlarmData>> {
+    let alarms: Vec<AlarmData> = serde_json::from_str(json).ok()?;
+    Some(restore_alarms(alarms, known_sound, now))
 }
 
 #[cfg(test)]

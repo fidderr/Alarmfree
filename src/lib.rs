@@ -3,6 +3,8 @@
 #![recursion_limit = "256"]
 
 pub mod alarm_ops;
+pub mod backup;
+pub mod base64;
 pub mod calendar;
 pub mod challenges;
 pub mod clock;

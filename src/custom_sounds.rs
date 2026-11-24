@@ -229,6 +229,33 @@ pub fn unique_file_name(dir: &Path, name: &str) -> String {
         .unwrap_or_else(|| name.to_owned())
 }
 
+/// Put a sound that came in a backup file in `dir`. A file with the same content that is already
+/// there (under this name first) is used as it is; a name that is taken by another sound gets a
+/// number. Returns the file name, and whether a file was written. `None` for a name that is no
+/// own sound's or content that is no sound.
+pub fn place_sound(dir: &Path, name: &str, bytes: &[u8]) -> Option<(String, bool)> {
+    let name = crate::sanitize::sanitize_filename(name).ok()?;
+    if !is_custom_sound(&name) || !is_audio_header(bytes) {
+        return None;
+    }
+    let same = |file: &Path| fs::read(file).is_ok_and(|held| held == bytes);
+    if same(&dir.join(&name)) {
+        return Some((name, false));
+    }
+    let twin = fs::read_dir(dir).ok()?.flatten().find(|entry| {
+        entry
+            .metadata()
+            .is_ok_and(|m| m.is_file() && m.len() == bytes.len() as u64)
+            && same(&entry.path())
+    });
+    if let Some(twin) = twin {
+        return Some((twin.file_name().into_string().ok()?, false));
+    }
+    let name = unique_file_name(dir, &name);
+    fs::write(dir.join(&name), bytes).ok()?;
+    Some((name, true))
+}
+
 /// Why [`pick_audio_file_native`] refused a file that is no sound.
 pub const NOT_A_SOUND: &str = "not a sound";
 

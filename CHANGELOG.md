@@ -11,6 +11,17 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 - **Alarms added from a file are kept when Android closed the app's window while the file picker was in front.** They
   were read and then dropped; they are now saved and set before the window is back, and the list shows them when it is.
+- **Restoring alarms that use sounds the phone does not have now says which sounds are missing.** The alarm used to
+  fall back to the standard sound without a word.
+
+### Added
+
+- **A backup can hold your own sounds.** When an alarm uses a sound of your own, Back up or restore offers Save alarms
+  only (small, as before) and Save alarms with my sounds (the size is shown). Restoring such a file puts the sounds back
+  under their names without replacing another sound or adding one that is already there. A file with sounds is not read
+  by AlarmFree 0.7.1 and older, which say it is not a backup. Photos for the ring screen are still not in a backup.
+- **A sound that is added under a name that is already taken gets a number** (`tune-2.ogg`) instead of replacing the
+  other one.
 
 ## [0.7.1] - 2026-11-24
 
