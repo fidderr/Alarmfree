@@ -1897,6 +1897,10 @@ s48() {
             fi
             on_editor
             open_row Sound
+            # A sheet that is opened again starts at the top: the own sound is below the bundled ones, off the window (run 45282045399,
+            # afg13: the list read Funk to Samba and the footer, no sound below it).
+            has_there mytune || note "s48: the sheet that was opened again did not show the own sound before it was scrolled"
+            scroll_until mytune
             wait_for 30 own_sound_there || problems="$problems; own sound not listed: $names (files/sounds/custom: $(as_app "ls files/sounds/custom 2> /dev/null" | tr '\n' ' '); imports: $(as_app "ls files/sentinel_imports 2> /dev/null" | tr '\n' ' '); picker log: $(adb_ logcat -d -s MobileSentinel.FilePicker:I 2> /dev/null | tr -d '\r' | tail -3 | cut -c1-120 | tr '\n' '|'))"
         fi
     else
