@@ -303,4 +303,5 @@ Swedish, Danish, Norwegian (Bokmal), Finnish, Turkish and Indonesian.
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE). The ten bundled alarm sounds are licence free, as the
+owner states (2026-11-24): see [assets/sounds/LICENSE.md](assets/sounds/LICENSE.md).
