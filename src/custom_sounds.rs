@@ -8,7 +8,8 @@
 //! Sound references stored in AlarmData:
 //!
 //! - Default sounds: bare filename stem (e.g. "alarm", "funk", "lofi")
-//! - Custom sounds: full filename with extension (e.g. "a1b2c3d4.mp3")
+//! - Custom sounds: full filename with extension (e.g. "a1b2c3d4.mp3"); a name that is taken
+//!   gets a number before the extension ("tune-2.mp3")
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -185,14 +186,7 @@ pub fn pick_audio_file_native() -> Result<Option<ImportedSound>, String> {
         let _ = fs::remove_file(&imported_path);
         return Err(NOT_A_SOUND.to_owned());
     }
-    let dest = custom_sounds_dir().join(&filename);
-
-    // Try rename (fast, same filesystem), fall back to copy+delete
-    if fs::rename(&imported_path, &dest).is_err() {
-        fs::copy(&imported_path, &dest)
-            .map_err(|e| format!("Failed to copy imported file: {}", e))?;
-        let _ = fs::remove_file(&imported_path);
-    }
+    let filename = move_into(&custom_sounds_dir(), &imported_path, &filename)?;
     let name = Path::new(&picked.name)
         .file_stem()
         .and_then(|stem| stem.to_str())
@@ -202,6 +196,37 @@ pub fn pick_audio_file_native() -> Result<Option<ImportedSound>, String> {
         file: filename,
         name,
     }))
+}
+
+/// Move an imported file into `dir` under `name`, or the next free name. Returns the name it got.
+fn move_into(dir: &Path, from: &Path, name: &str) -> Result<String, String> {
+    let name = unique_file_name(dir, name);
+    let dest = dir.join(&name);
+    // Try rename (fast, same filesystem), fall back to copy+delete
+    if fs::rename(from, &dest).is_err() {
+        fs::copy(from, &dest).map_err(|e| format!("Failed to copy imported file: {}", e))?;
+        let _ = fs::remove_file(from);
+    }
+    Ok(name)
+}
+
+/// `name` when no file of that name is in `dir`, else the name with a number before the extension
+/// ("tune.mp3", "tune-2.mp3", "tune-3.mp3"), so that a sound that comes in never replaces another.
+pub fn unique_file_name(dir: &Path, name: &str) -> String {
+    if !dir.join(name).exists() {
+        return name.to_owned();
+    }
+    let path = Path::new(name);
+    let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or(name);
+    let extension = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| format!(".{e}"))
+        .unwrap_or_default();
+    (2..)
+        .map(|n| format!("{stem}-{n}{extension}"))
+        .find(|candidate| !dir.join(candidate).exists())
+        .unwrap_or_else(|| name.to_owned())
 }
 
 /// Why [`pick_audio_file_native`] refused a file that is no sound.
@@ -341,6 +366,36 @@ mod tests {
         assert_eq!(display_name("my tune.mp3", &names), "my tune");
         names.insert("my tune.mp3".to_owned(), "Morning".to_owned());
         assert_eq!(display_name("my tune.mp3", &names), "Morning");
+    }
+
+    #[test]
+    fn a_name_that_is_taken_gets_a_number_and_nothing_is_overwritten() {
+        let dir = TempDir::new().unwrap();
+        assert_eq!(unique_file_name(dir.path(), "tune.mp3"), "tune.mp3");
+        fs::write(dir.path().join("tune.mp3"), b"first").unwrap();
+        assert_eq!(unique_file_name(dir.path(), "tune.mp3"), "tune-2.mp3");
+        fs::write(dir.path().join("tune-2.mp3"), b"second").unwrap();
+        assert_eq!(unique_file_name(dir.path(), "tune.mp3"), "tune-3.mp3");
+        assert_eq!(unique_file_name(dir.path(), "other.mp3"), "other.mp3");
+        fs::write(dir.path().join("noext"), b"x").unwrap();
+        assert_eq!(unique_file_name(dir.path(), "noext"), "noext-2");
+    }
+
+    #[test]
+    fn two_imports_with_the_same_file_name_are_both_kept() {
+        let dir = TempDir::new().unwrap();
+        let inbox = TempDir::new().unwrap();
+        let sounds = dir.path();
+        let first = inbox.path().join("first");
+        fs::write(&first, b"OggS first").unwrap();
+        let a = move_into(sounds, &first, "tune.ogg").unwrap();
+        let second = inbox.path().join("second");
+        fs::write(&second, b"OggS second").unwrap();
+        let b = move_into(sounds, &second, "tune.ogg").unwrap();
+        assert_ne!(a, b);
+        assert_eq!(fs::read(sounds.join(&a)).unwrap(), b"OggS first");
+        assert_eq!(fs::read(sounds.join(&b)).unwrap(), b"OggS second");
+        assert!(!first.exists() && !second.exists());
     }
 
     #[test]
