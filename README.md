@@ -173,11 +173,20 @@ the app keeps no `android/` folder. `sentinel.toml` gives the build the Play app
 
 ### Patched Slint
 
-`[patch.crates-io]` in `Cargo.toml` points three Slint 1.18.1 crates at `vendor/`: without the
-ICU line-break dictionaries (Thai, Lao, Khmer, Burmese, Chinese, Japanese) and the SVG stack,
-which AlarmFree does not use, `libmain.so` is about 5.6 MB smaller. A change to Slint that makes both
-optional is upstream as [slint-ui/slint#14947](https://github.com/slint-ui/slint/pull/14947);
-the patches go away when it is in a release. Details in [vendor/README.md](vendor/README.md).
+The UI does not run on a released Slint. `Cargo.toml` takes `slint`, `slint-build` and the test crates
+(`i-slint-core`, `i-slint-backend-testing`) from the fork [fidderr/slint](https://github.com/fidderr/slint), pinned
+with one `rev` (the branch `alarmfree-release`, upstream Slint 1.20.0 plus the fixes below), and
+`[patch.crates-io]` takes `accesskit`, `accesskit_consumer` and `accesskit_android` from
+[fidderr/accesskit](https://github.com/fidderr/accesskit) at its own `rev`. Nothing of Slint is copied into this
+repository: the `vendor/` folder of the three patched 1.18.1 crates is gone (0.5.2), its changes are in the fork.
+
+What the forks add: the Android accessibility tree for TalkBack (roles, names, modal sheets and popups, announced
+state changes, hidden nodes left out of the focus); the keyboard staying down when a new window comes up
+(`STATE_HIDDEN`); input method fixes (stale selection reports, the Backspace key); and a Flickable that keeps its
+content within its limits when a spring ends past them. `devtest/CI.md` has the details of the keyboard one.
+
+To move to a newer fork commit, change every `rev` in `Cargo.toml` (the Slint ones and the AccessKit ones are two
+different commits) and run `cargo update -p slint`.
 
 ## Tests
 
