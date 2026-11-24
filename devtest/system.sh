@@ -255,6 +255,9 @@ pad_read() {
     PAD_LEN=$(sys_nodes len rid~/pinEntry)
     [ "$PAD_LEN" != -1 ] && PAD_UP=1
     [ "$(sys_nodes count rid~/pinEntry focused=true)" -gt 0 ] 2> /dev/null && PAD_FOCUS=1
+    # Android 17's field is not a view that can have the focus (focusable=false, never focused): its keys still go in, through
+    # the bouncer window.
+    [ "$PAD_UP" = 1 ] && [ "$(sys_nodes count rid~/pinEntry focusable=true)" = 0 ] 2> /dev/null && PAD_FOCUS=1
     PAD_MSG=$(sys_nodes text rid~message_area)
     return 0
 }
@@ -501,6 +504,9 @@ picker_watch() { # label rounds
     while [ "$i" -lt "$2" ]; do
         picker_trace "$1 +$i: $(sys_focus | tr -d '
 ')"
+        # Nothing more to record once the app's own window has the keys again, and the toast with Undo that the picker's
+        # result brings lives 6 s: 8 rounds of 0.5 s ate most of it (s48 on Android 17).
+        focused_window | grep -q "$PKG/android.app.NativeActivity" && break
         i=$((i + 1))
         sleep 0.5
     done
@@ -688,12 +694,13 @@ launcher_has() { launcher_texts | grep -q -F -- "$1"; }
 # `provider=...` line under its host, the same lines remove_widgets reads).
 widget_registered() { dev dumpsys appwidget | grep -q "provider=.*$PKG/.*SentinelHomeWidget"; }
 # The button of the launcher's question "add this widget?" (what it is called differs per launcher and per version: "Add to Home
-# screen" on Android 12 to 16 with a capital H).
+# screen" on Android 12 to 16 with a capital H, "Add to home screen" on 17, where the dump has the button as a TextView that is not
+# clickable: the match is by the label, and `find` takes a clickable node first when there is one).
 the_add_button() {
     sys_dump || return 1
-    ADD_XY=$(sys_nodes find 'label^^(add|add to home screen|add automatically)$' clickable=true)
+    ADD_XY=$(sys_nodes find 'label^^(add|add to home screen|add automatically)$')
 }
-add_question_gone() { sys_dump && ! sys_nodes find 'label^^(add|add to home screen|add automatically)$' clickable=true > /dev/null; }
+add_question_gone() { sys_dump && ! sys_nodes find 'label^^(add|add to home screen|add automatically)$' > /dev/null; }
 widget_placed() { widget_registered && add_question_gone; }
 # The widget added once the question is up: the button touched once, and the widget placed (an instance under the launcher in
 # `dumpsys appwidget`, and the question gone). When after 15 s a read still shows the question, the touch is proven lost and the

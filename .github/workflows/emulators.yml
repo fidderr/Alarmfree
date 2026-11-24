@@ -7,7 +7,7 @@ name: Emulators
 # joined by +: `msd30+default` (AOSP image without Google APIs), `afg15+c2` (2 emulator cores). See devtest/CI.md.
 # A push to devtest-no-flake runs it the same way. Only some scenarios: the input `scenarios`, or `[only: s50 s53]` in the commit
 # message. Sabotage mode (touches dropped and steps delayed on purpose, devtest/chaos.sh): the input `chaos`, or `[chaos]`.
-# A full run is two parts per version (14 jobs for seven versions, each part on a fresh emulator; devtest/ci/split.py balances them by
+# A full run is two parts per version (16 jobs for eight versions, each part on a fresh emulator; devtest/ci/split.py balances them by
 # the expected seconds); a run of only some scenarios is one part. The last job merges the parts into one table per version.
 on:
   workflow_dispatch:
@@ -16,7 +16,7 @@ on:
         description: One Android version (AVD name) or all
         type: choice
         default: all
-        options: [all, afg16, afg15, afg14, afg13, afg12, msd30, msd29]
+        options: [all, afg17, afg16, afg15, afg14, afg13, afg12, msd30, msd29]
       scenarios:
         description: Only these scenarios, names with spaces between (empty means all)
         type: string
@@ -55,7 +55,7 @@ jobs:
           INPUT_CHAOS: ${{ inputs.chaos }}
           MSG: ${{ github.event.head_commit.message }}
         run: |
-          all="afg16 afg15 afg14 afg13 afg12 msd30 msd29"
+          all="afg17 afg16 afg15 afg14 afg13 afg12 msd30 msd29"
           if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then want=$INPUT
           else want=$(printf '%s' "$MSG" | sed -n 's/.*\[avds: *\([^]]*\)\].*/\1/p' | head -1); fi
           [ -n "$want" ] || want=afg15

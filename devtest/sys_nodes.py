@@ -15,7 +15,7 @@ MODE
   focused           the bounds line of the focused nodes
   ok                exit 0 when the input holds a hierarchy with at least one node
 
-FILTER  key=value (equal), key~value (contains) or key^regex (a regular expression, case ignored), key is one of: pkg cls rid text desc label clickable focused
+FILTER  key=value (equal), key~value (contains) or key^regex (a regular expression, case ignored), key is one of: pkg cls rid text desc label clickable focused focusable
         enabled checked password. `label` is the text, or the description when the text is empty. A value that
         starts with ! is negated: text!~Wrong.
 """
@@ -52,6 +52,7 @@ def parse(xml):
                 "label": text or desc,
                 "clickable": el.get("clickable", ""),
                 "focused": el.get("focused", ""),
+                "focusable": el.get("focusable", ""),
                 "enabled": el.get("enabled", ""),
                 "checked": el.get("checked", ""),
                 "password": el.get("password", ""),

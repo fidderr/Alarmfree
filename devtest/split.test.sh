@@ -103,4 +103,31 @@ rm -rf "$tmp/m/msd30-1"; mkdir -p "$tmp/m/msd30-1/devtest-out/ci_msd30" "$tmp/m/
 printf 'PASS  a_x  [1s] ok\n' > "$tmp/m/msd30-1/devtest-out/ci_msd30/results.txt"; printf 'PASS  b_x  [1s] ok\n' > "$tmp/m/msd30-2/devtest-out/ci_msd30/results.txt"
 rm -rf "$tmp/m/afg16-2"; mkdir -p "$tmp/m/afg16-2/devtest-out/ci_afg16"; printf 'PASS  c_x  [1s] ok\n' > "$tmp/m/afg16-2/devtest-out/ci_afg16/results.txt"
 bash "$here/ci/merge.sh" "$tmp/m" 2 | grep -q '^GATE: green. 0 FAIL, 0 INFRA, 0 FLAKY, every part present.$' && verdict "all parts clean: the gate is green" 1 || verdict "all parts clean: the gate is green" 0
+
+# 6. The same eight versions everywhere: the workflow's list and its menu, the local matrix (tiers.sh) and the AVD recipe
+# (make_avd.sh); a full run (versions x 2 parts) stays within the 20 jobs that may run at once.
+wf_all=$(sed -n 's/^ *all="\(.*\)"$/\1/p' "$here/../.github/workflows/emulators.yml" | head -1 | tr -d '\r')
+wf_menu=$(sed -n 's/^ *options: \[all, \(.*\)\]$/\1/p' "$here/../.github/workflows/emulators.yml" | head -1 | tr -d '\r' | tr -d ',')
+tiers_all=$(sed -n 's/^MATRIX_AVDS="\(.*\)"/\1/p' "$here/tiers.sh" | head -1 | tr -d '\r')
+make_all=$(sed -n 's/^    \(afg[0-9]*) api=.*\)$/\1/p' "$here/ci/make_avd.sh" | tr -d '\r' | grep -o '\(afg\|msd\)[0-9]*)' | tr -d ')' | tr '\n' ' ')
+norm() { printf '%s\n' $1 | sort | tr '\n' ' '; }
+[ -n "$wf_all" ] && [ "$(norm "$wf_all")" = "$(norm "$wf_menu")" ] && [ "$(norm "$wf_all")" = "$(norm "$tiers_all")" ] && [ "$(norm "$wf_all")" = "$(norm "$make_all")" ] &&
+    verdict "workflow list, workflow menu, tiers.sh and make_avd.sh name the same versions ($wf_all)" 1 ||
+    verdict "the version lists differ: workflow [$wf_all] menu [$wf_menu] tiers [$tiers_all] make_avd [$make_all]" 0
+[ "$(printf '%s\n' $wf_all | wc -l)" -ge 1 ] && [ $(($(printf '%s\n' $wf_all | wc -l) * 2)) -le 20 ] &&
+    verdict "a full run is $(($(printf '%s\n' $wf_all | wc -l) * 2)) jobs, within the 20 that may run at once" 1 ||
+    verdict "a full run is $(($(printf '%s\n' $wf_all | wc -l) * 2)) jobs: more than the 20 that may run at once" 0
+
+# 7. avdmanager of cmdline-tools 12.0 writes target=android-0 for Android 17: make_avd.sh puts the real target in (avd_target.sh).
+. "$here/ci/avd_target.sh"
+printf 'avd.ini.encoding=UTF-8\npath=/x/afg17.avd\ntarget=android-0\n' > "$tmp/t_lf.ini"
+printf 'avd.ini.encoding=UTF-8\r\npath=/x/afg17.avd\r\ntarget=android-0\r\n' > "$tmp/t_crlf.ini"
+printf 'avd.ini.encoding=UTF-8\npath=/x/afg17.avd\ntarget=android-37.2\n' > "$tmp/t_ok.ini"
+printf 'avd.ini.encoding=UTF-8\npath=/x/afg17.avd\n' > "$tmp/t_none.ini"
+avd_fix_target "$tmp/t_lf.ini" 37.2 && grep -q '^target=android-37.2$' "$tmp/t_lf.ini" && ! grep -q 'android-0' "$tmp/t_lf.ini" &&
+    verdict "target=android-0 becomes target=android-37.2" 1 || verdict "target=android-0 did not become target=android-37.2: $(cat "$tmp/t_lf.ini")" 0
+avd_fix_target "$tmp/t_crlf.ini" 37.2 && ! grep -q 'android-0' "$tmp/t_crlf.ini" && verdict "the same with Windows line ends" 1 || verdict "a .ini with Windows line ends was not fixed" 0
+avd_fix_target "$tmp/t_ok.ini" 37.2 && [ "$(grep -c '^target=' "$tmp/t_ok.ini")" = 1 ] && verdict "a right target stays as it is" 1 || verdict "a right target was changed" 0
+avd_fix_target "$tmp/t_none.ini" 37.2 && verdict "an .ini with no target at all passes" 0 || verdict "an .ini with no target at all fails (make_avd.sh stops)" 1
+
 exit $bad

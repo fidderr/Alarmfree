@@ -20,13 +20,13 @@ NEWEST_ONLY="s13 s13b s13d big_screens"
 NEWEST_AVD=afg16
 
 # The emulators of the quick matrix: Android 16 down to 10 (min_sdk is 29, so Android 10 is the oldest).
-MATRIX_AVDS="afg16 afg15 afg14 afg13 afg12 msd30 msd29"
+MATRIX_AVDS="afg17 afg16 afg15 afg14 afg13 afg12 msd30 msd29"
 
 # The graphics of an emulator: Android 12's on the host's GPU crashed the emulator now and then in the middle of a
 # run, and the older images are not made for it.
 gpu_for() {
     case "$1" in
-        afg16 | afg15 | afg14 | afg13) echo "${GPU_NEW:-host}" ;;
+        afg17 | afg16 | afg15 | afg14 | afg13) echo "${GPU_NEW:-host}" ;;
         *) echo swiftshader_indirect ;;
     esac
 }
