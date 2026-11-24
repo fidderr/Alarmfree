@@ -59,7 +59,6 @@ Vaatii Android-version 10 tai uudemman 64-bittisessä puhelimessa.
 
 ## Uutta (enintään 500)
 
-• Uusi tehtävä: kyykyt
-• Voimakas värinä, kun suoritat tehtävän, pehmeä jokaisesta kyykystä
-• Muistutukset ennen herätystä omalla tekstillä ja valinnaisella äänellä
-• Toimii nyt myös Android 10:llä ja 11:llä
+• 8 kieltä lisää, nyt 13
+• Muokkauslukko: herätystä ei voi enää sammuttaa tai muuttaa vähän ennen soimista
+• Soittoraja jo 1 minuutista; herätysnäyttö ilmestyy nyt luotettavasti Android 14:ssä ja 15:ssä

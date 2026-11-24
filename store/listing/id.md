@@ -59,7 +59,6 @@ Perlu Android 10 atau lebih baru di ponsel 64-bit.
 
 ## Yang baru (maks. 500)
 
-• Tantangan baru: squat
-• Getaran kuat saat tantangan berhasil, getaran lembut untuk tiap squat
-• Pengingat sebelum alarm, dengan teksmu sendiri dan suara opsional
-• Sekarang juga berjalan di Android 10 dan 11
+• 8 bahasa lagi, kini 13
+• Kunci edit: alarm tidak bisa lagi dimatikan atau diubah sesaat sebelum berdering
+• Batas dering mulai 1 menit; layar alarm kini muncul andal di Android 14 dan 15

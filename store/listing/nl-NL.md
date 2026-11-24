@@ -59,7 +59,6 @@ Vereist Android 10 of nieuwer op een 64-bit telefoon.
 
 ## Wat is er nieuw (max 500)
 
-• Nieuwe uitdaging: squats
-• Een stevige trilling als je een uitdaging haalt, een zachte per squat
-• Herinneringen vóór een wekker, met je eigen tekst en desgewenst geluid
-• Werkt nu ook op Android 10 en 11
+• 8 talen erbij, nu 13
+• Bewerkslot: een wekker kan kort voor het afgaan niet meer uit of anders worden gezet
+• Beltijdlimiet vanaf 1 minuut; het belscherm verschijnt nu betrouwbaar op Android 14 en 15

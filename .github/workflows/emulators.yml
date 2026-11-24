@@ -99,7 +99,7 @@ jobs:
       - uses: actions/checkout@v5
         with:
           repository: fidderr/mobile-sentinel
-          ref: ring-handoff
+          ref: v0.7.1
           path: mobile-sentinel
       - uses: dtolnay/rust-toolchain@stable
         with:

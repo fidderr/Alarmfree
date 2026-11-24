@@ -59,7 +59,6 @@ Requiere Android 10 o posterior en un teléfono de 64 bits.
 
 ## Novedades (máx. 500)
 
-• Nuevo reto: sentadillas
-• Una vibración fuerte al superar un reto, y una suave por sentadilla
-• Recordatorios antes de una alarma, con tu propio texto y sonido opcional
-• Ahora también funciona en Android 10 y 11
+• 8 idiomas más, 13 en total
+• Bloqueo de edición: una alarma ya no se puede apagar ni cambiar poco antes de sonar
+• Límite de sonido desde 1 minuto; la pantalla de la alarma aparece ahora de forma fiable en Android 14 y 15

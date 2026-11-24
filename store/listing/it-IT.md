@@ -59,7 +59,6 @@ Richiede Android 10 o successivo su un telefono a 64 bit.
 
 ## Novità (max 500)
 
-• Nuova sfida: squat
-• Una forte vibrazione quando superi una sfida, una leggera per ogni squat
-• Promemoria prima di una sveglia, con il tuo testo e un suono facoltativo
-• Ora funziona anche su Android 10 e 11
+• 8 lingue in più, 13 in tutto
+• Blocco modifiche: una sveglia non si può più spegnere o cambiare poco prima che suoni
+• Limite di suoneria da 1 minuto; la schermata della sveglia ora compare in modo affidabile su Android 14 e 15

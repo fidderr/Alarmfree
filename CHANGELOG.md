@@ -7,6 +7,10 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-24
+
+versionCode 12600. Needs mobile-sentinel 0.7.1.
+
 ### Added
 
 - **Eight more languages:** Italian, Portuguese (Brazil), Swedish, Danish, Norwegian (Bokmal), Finnish, Turkish and
@@ -23,6 +27,18 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 ### Changed
 
 - **Shorter ring limits.** An alarm can stop by itself after 1, 3, 5, 10, 15 or 30 minutes too (the shortest was 30).
+
+### Fixed
+
+- **The ring screen came up late or not at all on Android 14 and 15** when the app was cached in the background at the alarm
+  (sound and banner came, the screen only when you opened the app). The SDK's guardian now declares its heads-up receiver in the
+  manifest, checks that it was taken up, and starts the screen itself when not (mobile-sentinel 0.7.1).
+- A ring resumed by the watchdog is never without a next watchdog, also when the alarm process is killed in its first second
+  (mobile-sentinel 0.7.1).
+- A new window no longer opens the keyboard by itself (the soft input mode starts hidden), and the keyboard going down no longer
+  loses a tap on Done in a sheet.
+- A scroll area ends inside its limits when a spring ends past them, and when its content or size changes.
+- The three raw text fields have names for a screen reader, and chips fit their text in all thirteen languages.
 
 ## [0.6.0] - 2026-11-20
 

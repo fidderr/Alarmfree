@@ -59,7 +59,6 @@ Benötigt Android 10 oder neuer auf einem 64-Bit-Telefon.
 
 ## Neuigkeiten (max. 500)
 
-• Neue Aufgabe: Kniebeugen
-• Kräftiges Vibrieren, wenn du eine Aufgabe schaffst, ein sanftes pro Kniebeuge
-• Erinnerungen vor einem Wecker, mit eigenem Text und auf Wunsch mit Ton
-• Läuft jetzt auch auf Android 10 und 11
+• 8 weitere Sprachen, jetzt 13
+• Bearbeitungssperre: Ein Wecker lässt sich kurz vor dem Klingeln nicht mehr ausschalten oder ändern
+• Klingelzeit-Limit ab 1 Minute; der Klingelbildschirm erscheint jetzt zuverlässig auf Android 14 und 15

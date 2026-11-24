@@ -165,7 +165,7 @@ dependencies = [
 
 [[package]]
 name = "alarmfree"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "accesskit",
  "chrono",
@@ -2936,8 +2936,9 @@ dependencies = [
 
 [[package]]
 name = "mobile-sentinel"
-version = "0.7.0"
-source = "git+https://github.com/fidderr/mobile-sentinel?rev=6ba5849fb9c20f79c25fd65eab8b1142831832a7#6ba5849fb9c20f79c25fd65eab8b1142831832a7"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "25238a4bc2cb8583850a28fc896a53d68b005b005ec66495ac8b5b77db02def3"
 dependencies = [
  "android_logger",
  "chrono",

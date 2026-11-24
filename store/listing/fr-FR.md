@@ -59,7 +59,6 @@ Nécessite Android 10 ou plus récent sur un téléphone 64 bits.
 
 ## Nouveautés (max. 500)
 
-• Nouveau défi : les squats
-• Une forte vibration quand vous réussissez un défi, une douce par squat
-• Des rappels avant une alarme, avec votre propre texte et un son au choix
-• Fonctionne maintenant aussi sur Android 10 et 11
+• 8 langues de plus, 13 au total
+• Verrou de modification : une alarme ne peut plus être éteinte ni modifiée peu avant de sonner
+• Limite de sonnerie dès 1 minute ; l'écran de l'alarme s'affiche maintenant de façon fiable sous Android 14 et 15

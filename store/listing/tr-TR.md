@@ -59,7 +59,6 @@ VE DAHASI
 
 ## Yenilikler (en fazla 500)
 
-• Yeni görev: squat
-• Bir görevi geçince güçlü bir titreşim, her squat için hafif bir titreşim
-• Alarmdan önce hatırlatıcılar, kendi metninle ve isteğe bağlı sesle
-• Artık Android 10 ve 11'de de çalışıyor
+• 8 dil daha, toplam 13
+• Düzenleme kilidi: bir alarm çalmadan kısa süre önce artık kapatılamaz veya değiştirilemez
+• Çalma sınırı 1 dakikaya kadar iniyor; alarm ekranı artık Android 14 ve 15'te güvenilir şekilde açılıyor

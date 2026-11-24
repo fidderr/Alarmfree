@@ -59,7 +59,6 @@ Needs Android 10 or newer on a 64-bit phone.
 
 ## What's new (max 500)
 
-• New challenge: squats
-• A strong buzz when you beat a challenge, a soft one per squat
-• Reminders before an alarm, with your own text and an optional sound
-• Now runs on Android 10 and 11 too
+• 8 more languages, 13 in all
+• Edit lock: an alarm can no longer be switched off or changed shortly before it rings
+• Ring limit down to 1 minute; the ring screen now appears reliably on Android 14 and 15

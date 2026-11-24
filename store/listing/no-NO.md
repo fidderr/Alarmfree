@@ -59,7 +59,6 @@ Krever Android 10 eller nyere på en 64-biters telefon.
 
 ## Nyheter (maks. 500)
 
-• Ny utfordring: knebøy
-• Et kraftig summ når du klarer en utfordring, et mykt ett per knebøy
-• Påminnelser før en alarm, med din egen tekst og valgfri lyd
-• Kjører nå også på Android 10 og 11
+• 8 språk til, nå 13
+• Redigeringslås: en alarm kan ikke lenger slås av eller endres rett før den ringer
+• Ringegrense helt ned til 1 minutt; alarmskjermen vises nå pålitelig på Android 14 og 15

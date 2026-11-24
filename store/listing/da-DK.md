@@ -59,7 +59,6 @@ Kræver Android 10 eller nyere på en 64-bit telefon.
 
 ## Nyheder (max. 500)
 
-• Ny udfordring: squats
-• Et kraftigt buzz, når du klarer en udfordring, et blødt for hver squat
-• Påmindelser før en alarm, med din egen tekst og efter ønske lyd
-• Kører nu også på Android 10 og 11
+• 8 sprog mere, nu 13
+• Redigeringslås: en alarm kan ikke længere slås fra eller ændres kort før den ringer
+• Ringegrænse helt ned til 1 minut; alarmskærmen vises nu pålideligt på Android 14 og 15

@@ -59,7 +59,6 @@ Requer Android 10 ou mais recente em um celular de 64 bits.
 
 ## Novidades (máx. 500)
 
-• Novo desafio: agachamento
-• Uma vibração forte ao vencer um desafio, e uma leve a cada agachamento
-• Lembretes antes de um alarme, com seu próprio texto e som opcional
-• Agora funciona também no Android 10 e 11
+• Mais 8 idiomas, 13 no total
+• Bloqueio de edição: um alarme não pode mais ser desligado nem alterado pouco antes de tocar
+• Limite de toque a partir de 1 minuto; a tela do alarme agora aparece com confiabilidade no Android 14 e 15

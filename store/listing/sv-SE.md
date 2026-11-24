@@ -59,7 +59,6 @@ Kräver Android 10 eller senare på en 64-bitarstelefon.
 
 ## Nyheter (max 500)
 
-• Ny utmaning: knäböj
-• Ett kraftigt surr när du klarar en utmaning, ett mjukt för varje knäböj
-• Påminnelser före ett alarm, med egen text och valfritt ljud
-• Fungerar nu även på Android 10 och 11
+• 8 språk till, nu 13
+• Redigeringslås: ett alarm kan inte längre stängas av eller ändras strax innan det ringer
+• Ringgräns ner till 1 minut; alarmskärmen visas nu pålitligt på Android 14 och 15
