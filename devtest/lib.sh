@@ -150,8 +150,18 @@ guard_input() {
         [ -n "$f" ] || sleep 0.2
         k=$((k + 1))
     done
-    if echo "$f" | grep -Eq 'com\.fidderr\.alarmfree|nputMethod|inputmethod|permissioncontroller|packageinstaller|RequestIgnoreBatteryOptimizations'; then return 0; fi
+    guard_allows "$f" "$@" && return 0
     echo "$(date +%T) REFUSED [$f] $*" >> "$GUARD_LOG"
+    return 1
+}
+# The decision: $1 is the focus line, the rest the command. Only a Back key goes to a page of Settings that the app opened
+# (App info of the app, a permission page): it cannot move anything on the owner's screens, and without it the app's
+# window never gets the keys back (s53 on the OnePlus, Android 17).
+guard_allows() {
+    local f=$1
+    shift
+    echo "$f" | grep -Eq 'com\.fidderr\.alarmfree|nputMethod|inputmethod|permissioncontroller|packageinstaller|RequestIgnoreBatteryOptimizations' && return 0
+    [ "$*" = "input keyevent KEYCODE_BACK" ] && echo "$f" | grep -Eq 'u0 com\.android\.settings/' && return 0
     return 1
 }
 dev() {
