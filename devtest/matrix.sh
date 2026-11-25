@@ -2000,6 +2000,9 @@ s48b() {
     save_with() { # the row to tap
         # The app is on top again after the picker of the restore before this one: on a slow machine (Android 9 on a runner) a moment late.
         sys_wait "$SYS_DEADLINE" "the app in front" focus_in_app || { problems="$problems; $SYS_WHY"; return 1; }
+        # In front is not yet a window of its own to run commands in: Android 9 brings the window back a moment after the activity
+        # has the keys (run 45665161766, msd28: "press go: ERR the app has no window in front" in 5 of 10 runs).
+        wait_for 30 page_is_up || { problems="$problems; the app was in front but got no window in 30 s"; return 1; }
         [ "$(screen_no)" = 3 ] || press go 2
         await_ui 30 "screen=3" || { problems="$problems; the settings did not open"; return 1; }
         press st-row 6
