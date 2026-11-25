@@ -1102,8 +1102,13 @@ type_field() { # n text
     await_settled 3
     place=${said#OK }
     held=$(ui "heldat:${place// /:}")
+    # What the app answered, for a scenario that wants to record it (this runs in the scenario's shell, not in $( )).
+    TYPE_SAID=$said TYPE_HELD=$held
     case "$held" in
-        "TEXT:$2" | GONE) return 0 ;;
+        "TEXT:$2") return 0 ;;
+        # The field is gone: only the one text whose last key takes its field away says so (FIELD_MAY_GO=1 in front of the call).
+        # Anywhere else it means the typing went nowhere (a touch that hit no field), which passed as typed until 2026-11-26.
+        GONE) [ -z "${FIELD_MAY_GO:-}" ] || return 0 ;;
     esac
     echo "field $1 does not take [$2]: it holds [$held]; fields: $(ui inputs | cut -c1-500)" >&2
     return 1

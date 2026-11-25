@@ -1558,22 +1558,52 @@ s38() {
         *mytune*) ;;
         *) problems="$problems; own sound not listed: $names" ;;
     esac
+    # What the screen and the app say at each step, kept before anything else touches the sheet (a swipe on its scrim closes it): in the
+    # results as $CURRENT.rename.txt and, when the scenario fails, as lines of the log. The pictures carry the scenario's name, so the
+    # first run's are kept as first_* when a rerun follows.
+    rename_record() { # step
+        {
+            echo "== $1 (+$((SECONDS - SCENARIO_START))s)"
+            echo "ready: $(ui ready | cut -c1-260)"
+            echo "inputs: $(ui inputs | cut -c1-260)"
+            echo "cursor: $(ui cursor | cut -c1-160)"
+            echo "settext said: [${TYPE_SAID:-}] heldat said: [${TYPE_HELD:-}]"
+            echo "prefs: $(printf 'SELECT prefs FROM settings;\n' | sql | grep -o '"sound_names":{[^}]*}')"
+            echo "trace: $(ui trace | tail -c 400)"
+        } >> "$OUT/$CURRENT.rename.txt"
+    }
+    : > "$OUT/$CURRENT.rename.txt"
     press sound-rename "$(sound_row mytune)" 0.6
-    screenshot s38_rename_before
-    set_field 0 Morning || problems="$problems; no field to rename in"
-    screenshot s38_rename_typed
+    rename_record before_typing
+    screenshot "$CURRENT.rename_before"
+    TYPE_SAID="" TYPE_HELD=""
+    set_field 0 Morning || problems="$problems; no field to rename in (settext said [$TYPE_SAID], heldat [$TYPE_HELD])"
+    rename_record after_typing
+    screenshot "$CURRENT.rename_typed"
     press sound-rename-done "" 0.6
-    screenshot s38_rename_done
+    rename_record after_done
+    screenshot "$CURRENT.rename_done"
     # The sheet is short while the keyboard goes down and has its height back when Android has given the inset back (run 45191082131,
     # Android 10: the list was read 0.6 s after Done, with the rows below Thriller not laid out yet): wait for the keyboard, then for the row.
     await_ui 10 'keyboard=down' || problems="$problems; the keyboard is still up after the rename: $(ui ready | grep -oE 'keyboard=[a-z]+')"
-    wait_for 10 has_there Morning || scroll_until Morning
+    rename_record keyboard_down
+    if ! wait_for 10 has_there Morning; then
+        # A swipe is only made on an open sheet: on a closed one it scrolls the editor, and on a sheet that is not under the finger
+        # its scrim takes the release for a click.
+        if ui ready | grep -q 'editor_sheet=None'; then
+            problems="$problems; the sound sheet is closed, Morning cannot show"
+        else
+            scroll_until Morning
+        fi
+    fi
     names=$(texts_of)
     case "$names" in
         *Morning*) ;;
-        *) problems="$problems; name not shown: $names; the app: $(ui ready | cut -c1-330); trace: $(ui trace | tail -c 700); focus: $(focused_window | cut -c1-110)" ;;
+        *) problems="$problems; name not shown: $names" ;;
     esac
     printf "SELECT prefs FROM settings;\n" | sql | grep -q '"mytune.ogg":"Morning"' || problems="$problems; name not saved"
+    rename_record end
+    [ -z "$problems" ] || sed "s/^/NOTE  $CURRENT  S38: /" "$OUT/$CURRENT.rename.txt" | tee -a "$RESULTS"
     if [ -z "$problems" ]; then
         pass "accent purple kept, sound renamed"
     else
@@ -2169,6 +2199,89 @@ s48c() {
     fi
 }
 
+# After "never ask again" (the permission is fixed by the user, which the shell sets with the permission flags) the system shows no
+# dialog, so "Allow storage access" could not be followed. The first save asks (nothing comes up) and says so; the second finds
+# that no dialog can come, takes the person to the app's settings page and says where to turn the access on; with the access given
+# there, the same save puts the file in Downloads. Android 9 and below only (from Android 10 nothing is asked).
+s48d() {
+    if ! on_emulator; then
+        note "s48d needs an emulator"
+        return
+    fi
+    scenario s48d_storage_access_blocked
+    if [ "$(sdk_level)" -ge 29 ]; then
+        skip "saving to Downloads needs no permission from Android 10 (this is Android $(sdk_level))"
+        return
+    fi
+    fresh
+    local problems="" w=android.permission.WRITE_EXTERNAL_STORAGE r=android.permission.READ_EXTERNAL_STORAGE
+    # What the SDK remembers of an earlier ask (s48c asked) is in the app's preferences, which `fresh` does not clear.
+    dev am force-stop "$PKG"
+    dev run-as "$PKG" rm -f shared_prefs/mobilesentinel_share.xml
+    as_app "mkdir -p files/sentinel/ringing && printf \"1700000000000 sound a\\n1700000000400 ui a\\n\" > files/sentinel/ringing/timing.log"
+    rm_download alarmfree-rings.txt
+    # Android 9 has no `pm set-permission-flags`: a small program (devtest/af_permflags, run by app_process) sets what "Deny, and don't
+    # ask again" leaves on a permission, or takes it off again.
+    adb_ push devtest/af_permflags/af_permflags.dex /data/local/tmp/af_permflags.dex > /dev/null
+    perm_flags() { # permission fixed|clear
+        dev "app_process -Djava.class.path=/data/local/tmp/af_permflags.dex /system/bin PermFlags $PKG $1 $2" > /dev/null 2>&1
+    }
+    dev am force-stop "$PKG"
+    PERMISSIONS_TOUCHED=1
+    dev pm revoke "$PKG" "$w" > /dev/null 2>&1
+    dev pm revoke "$PKG" "$r" > /dev/null 2>&1
+    perm_flags "$w" fixed
+    perm_flags "$r" fixed
+    dialog_up() { dev dumpsys activity activities | grep -E 'mResumedActivity|ResumedActivity:' | grep -q GrantPermissionsActivity; }
+    settings_up() { focused_window | grep -q 'com.android.settings'; }
+    save_it() {
+        on_screen "Test alarm" 10 || { problems="$problems; no test button: $(texts_of | cut -c1-200)"; return 1; }
+        tap_above_bar "Save the record of how fast alarms rang" "Test alarm" "Cancel the test alarm"
+    }
+    start_app
+    on_home 30
+    open_reliability || problems="$problems; no reliability screen"
+    # First save: it asks, nothing can come up, the person is told to allow it.
+    save_it
+    if wait_for 6 dialog_up; then problems="$problems; a dialog came for a permission that is fixed"; dev am force-stop com.google.android.packageinstaller; fi
+    on_screen_has "Allow storage access" 8 || problems="$problems; no hint to allow the access after the first save: $(texts_of | cut -c1-200)"
+    settings_up && problems="$problems; the settings opened already at the first save"
+    # Second save: no dialog can come any more, so the settings page opens, and the text names it.
+    # The toast of the first save sits over the row until its time is up (a tap on it only takes it away).
+    await_ui 15 'toast=false' || problems="$problems; the toast of the first save did not go in 15 s"
+    save_it
+    if wait_for 15 settings_up; then
+        dev input keyevent KEYCODE_BACK
+        sys_wait "$SYS_DEADLINE" "the app in front again" focus_in_app || problems="$problems; $SYS_WHY"
+        wait_for 30 page_is_up || problems="$problems; the app got no window back"
+        on_screen_has "Storage access is off" 8 || problems="$problems; the text of the blocked case is not on screen: $(texts_of | cut -c1-200)"
+    else
+        problems="$problems; the app's settings did not open at the second save (focus: $(focused_window | cut -c1-120))"
+    fi
+    [ -z "$(dev ls /sdcard/Download/ | grep -m1 '^alarmfree-rings')" ] || problems="$problems; a file was saved without the permission"
+    # Allowed in the settings (here: from outside, the app stopped): the same save works.
+    dev am force-stop "$PKG"
+    perm_flags "$w" fixed
+    perm_flags "$r" fixed
+    dev pm grant "$PKG" "$w" > /dev/null 2>&1
+    dev pm grant "$PKG" "$r" > /dev/null 2>&1
+    start_app
+    on_home 30
+    open_reliability || problems="$problems; no reliability screen after the access was given"
+    save_it
+    has_record() { [ "$(dev cat /sdcard/Download/alarmfree-rings.txt 2> /dev/null | grep -c ' sound ')" -ge 1 ]; }
+    wait_for 15 has_record || problems="$problems; no record in Downloads after the access was given"
+    rm_download alarmfree-rings.txt
+    # The flags are not left on the app for the scenarios after this one (s48c wants a dialog).
+    perm_flags "$w" clear
+    perm_flags "$r" clear
+    if [ -z "$problems" ]; then
+        pass "after never ask again: no dialog, the second save opened the settings and said so, with the access the file is in Downloads"
+    else
+        fail "${problems#; }"
+    fi
+}
+
 # The part of the window the keyboard and the bars leave, in device pixels from the top.
 free_px() {
     local size
@@ -2235,7 +2348,8 @@ s49() {
     # The keyboard shows the first word of it arriving (a phone's own typing drops what comes after
     # a space on this emulator), the rest goes in as keys of the window.
     type_real 0 "$(sn type_passage | cut -d' ' -f1)" || problems="$problems; the first word did not arrive: $(ui inputs)"
-    type_field 0 "$(sn type_passage)"
+    # The last key of the text takes its field away: here, and only here, a field that is gone counts as typed.
+    FIELD_MAY_GO=1 type_field 0 "$(sn type_passage)"
     finished() { [ "$(ui inputs)" = "[]" ]; }
     wait_for 10 finished || problems="$problems; typing it all did not finish: '$(ui inputs)'"
     # Not left up for the scenario after this one.
@@ -4021,7 +4135,7 @@ s62p() {
 # The ring-screen probe (Home before a ring, what the main process does): by name only.
 . "$(dirname "$0")/ringprobe.sh"
 
-ALL="s01 s03 s04 s05 s06 s07 s07d s10 s11 s13 s13b s13d s14 s15 s16 s16b s17 s19 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s34 s36 s37 s38 s39 s40 s42 s43 s44 s45 s46 s47 s48 s48b s48c s49 s50 s51 s52 s53 s55 s56 s57 s58 s59 s60 s61 s62 s63 s63b s63c s65 s66 s67 s68 s68b s69a s69b s69c s69d s70 big_screens s54"
+ALL="s01 s03 s04 s05 s06 s07 s07d s10 s11 s13 s13b s13d s14 s15 s16 s16b s17 s19 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s34 s36 s37 s38 s39 s40 s42 s43 s44 s45 s46 s47 s48 s48b s48c s48d s49 s50 s51 s52 s53 s55 s56 s57 s58 s59 s60 s61 s62 s63 s63b s63c s65 s66 s67 s68 s68b s69a s69b s69c s69d s70 big_screens s54"
 ON_A_PHONE="s01 s03 s04 s05 s06 s07 s10 s15 s16 s16b s17 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s36 s37 s38 s39 s42 s43 s45 s46 s47 s49 s50 s51 s52 s53 s55 s57 s58 s59 s61 s62"
 
 : > "$RESULTS"

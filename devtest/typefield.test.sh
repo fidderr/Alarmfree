@@ -24,7 +24,7 @@ D
 
 run_case() { # name heldat-answer [settext-answer]
     mkdir -p "$tmp/$1"
-    env LIB="$here/lib.sh" DIR="$tmp/$1" ANSWER="$2" SETTEXT="${3-OK 540 600}" bash "$tmp/drive.sh" > "$tmp/$1/stdout" 2> "$tmp/$1/stderr"
+    env LIB="$here/lib.sh" DIR="$tmp/$1" ANSWER="$2" SETTEXT="${3-OK 540 600}" FIELD_MAY_GO="${MAYGO-}" bash "$tmp/drive.sh" > "$tmp/$1/stdout" 2> "$tmp/$1/stderr"
 }
 verdict() { # name ok
     if [ "$2" = 1 ]; then echo "PASS  $1"; else echo "FAIL  $1"; bad=1; fi
@@ -33,8 +33,11 @@ settext_calls() { grep -c '^settext:' "$tmp/$1/calls"; }
 
 run_case same 'TEXT:Take pills'
 verdict "the field holds the text: done after one typing, asked where it was typed" "$([ "$(cat "$tmp/same/rc")" = rc=0 ] && [ "$(settext_calls same)" = 1 ] && grep -q '^heldat:540:600$' "$tmp/same/calls" && echo 1)"
-run_case gone 'GONE'
-verdict "the field left the screen with the last key: done after one typing" "$([ "$(cat "$tmp/gone/rc")" = rc=0 ] && [ "$(settext_calls gone)" = 1 ] && echo 1)"
+MAYGO=1 run_case gone 'GONE'
+verdict "the field left the screen with the last key, and the caller said it may: done after one typing" "$([ "$(cat "$tmp/gone/rc")" = rc=0 ] && [ "$(settext_calls gone)" = 1 ] && echo 1)"
+run_case lost 'GONE'
+verdict "no field and nothing typed (a touch that hit no field), the caller did not say it may go: fails, once" "$([ "$(cat "$tmp/lost/rc")" = rc=1 ] && [ "$(settext_calls lost)" = 1 ] && echo 1)"
+verdict "the failure of a lost field says what the field holds" "$(grep -q 'it holds \[GONE\]' "$tmp/lost/stderr" && echo 1)"
 run_case short 'TEXT:Take pill'
 verdict "the field holds less: fails after one typing, no second typing" "$([ "$(cat "$tmp/short/rc")" = rc=1 ] && [ "$(settext_calls short)" = 1 ] && echo 1)"
 verdict "the failure says what the field holds" "$(grep -q 'it holds \[TEXT:Take pill\]' "$tmp/short/stderr" && echo 1)"
