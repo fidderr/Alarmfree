@@ -108,6 +108,16 @@ stop=$(grep -h '^STOP' "devtest-out/ci_$avd.log" 2> /dev/null | head -1)
         echo; echo "Taps that waited over a second for their element:"; echo
         grep -a '^NOTE .* waited .* for its element' "$res" | cut -c1-200 | sed 's/^/- `/; s/$/`/'
     fi
+    # What the scenarios measured (NOTE lines that say so), and the result lines of a run of only some scenarios: the files of a
+    # run cannot always be downloaded, so what a run was asked to show is in its log.
+    if grep -aq -E '^NOTE .*(SURFACE|reliability rows seen)' "$res" 2> /dev/null; then
+        echo; echo "Measured:"; echo
+        grep -a -E '^NOTE .*(SURFACE|reliability rows seen)' "$res" | cut -c1-300 | sed 's/^/- `/; s/$/`/'
+    fi
+    if [ -n "${SCENARIOS:-}" ] && [ -z "$PART_NOTE" ]; then
+        echo; echo "Results:"; echo
+        grep -a -E '^(PASS|FAIL|FLAKY|SKIP|INFRA)  ' "$res" | cut -c1-260 | sed 's/^/- `/; s/$/`/'
+    fi
     [ -z "$incomplete" ] || { echo; echo "INCOMPLETE (no result): \`${incomplete# }\`"; }
     [ -z "$stop" ] || { echo; echo "STOPPED: \`$stop\`"; }
     if [ "${f:-0}" -gt 0 ]; then
