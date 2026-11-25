@@ -77,7 +77,7 @@ stop=$(grep -h '^STOP' "devtest-out/ci_$avd.log" 2> /dev/null | head -1)
     # A scenario that failed and passed on the rerun on the same device: not a pass, kept apart. Its first failure's files are first_*.
     if [ "${fl:-0}" -gt 0 ]; then
         echo; echo "FLAKY (failed, then passed on the rerun; the first failure's files are first_<name>.*):"; echo
-        grep -ah '^FLAKY' "$res" | cut -c1-260 | sed 's/^/- `/; s/$/`/'
+        grep -ah '^FLAKY' "$res" | cut -c1-900 | sed 's/^/- `/; s/$/`/'
     fi
     # Sabotage mode: the numbers are in the run's chaos.state (generator, sent, dropped, seed), the dropped ones in chaos.txt.
     if [ "${CHAOS:-}" = 1 ]; then
@@ -122,7 +122,7 @@ stop=$(grep -h '^STOP' "devtest-out/ci_$avd.log" 2> /dev/null | head -1)
     [ -z "$stop" ] || { echo; echo "STOPPED: \`$stop\`"; }
     if [ "${f:-0}" -gt 0 ]; then
         echo; echo "Failed:"; echo
-        grep -h '^FAIL' "$res" | cut -c1-160 | sed 's/^/- `/; s/$/`/'
+        grep -h '^FAIL' "$res" | cut -c1-900 | sed 's/^/- `/; s/$/`/'
     fi
     # The device itself broke (the system process or the audio server was replaced, a new boot): not the app. A line that ends
     # in "rerun follows" was run again on a restarted device; the others stand.

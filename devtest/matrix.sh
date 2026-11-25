@@ -1571,7 +1571,7 @@ s38() {
     names=$(texts_of)
     case "$names" in
         *Morning*) ;;
-        *) problems="$problems; name not shown: $names" ;;
+        *) problems="$problems; name not shown: $names; the app: $(ui ready | cut -c1-330); trace: $(ui trace | tail -c 700); focus: $(focused_window | cut -c1-110)" ;;
     esac
     printf "SELECT prefs FROM settings;\n" | sql | grep -q '"mytune.ogg":"Morning"' || problems="$problems; name not saved"
     if [ -z "$problems" ]; then
