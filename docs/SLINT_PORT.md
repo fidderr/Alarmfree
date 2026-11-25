@@ -1,6 +1,6 @@
 # AlarmFree: Dioxus to Slint port inventory
 
-> Current state (after the port): the app runs on Android 10 and up (Android 10, 12 to 16 are tested). The challenges
+> Current state (after the port): the app runs on Android 9 and up (Android 9 to 17 are tested). The challenges
 > include Squat (counted by the motion sensor). The old fixed "notice" sheet and its Off / 5 / 10 / 30 / 60 chips are
 > replaced by the per-alarm reminder (a silent notification before the ring, `reminder.*` keys); wherever this file
 > says "Notice", read "Reminder". The rest is the history of the port.

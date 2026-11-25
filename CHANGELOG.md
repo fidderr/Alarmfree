@@ -12,7 +12,9 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 - **On Android 9 the ring screen could come up late or not at all when the app had been in the background for a few seconds.**
   Android 9 takes the window's surface away from a stopped activity without telling the app; the app drew on it when the ring
   brought it back, the drawing failed, and the screen's loop ended (the process died and the guardian had to start a new one).
-  The UI toolkit (Slint, our fork) now waits a failed frame out and draws again on the new window.
+  The UI toolkit (Slint, our fork) now waits a failed frame out, tries again four times a second, and draws on the new window.
+  A release build also starts when the screen reader support cannot be set up (a failure there ended the process in a release
+  build, which does not catch panics).
 - **Alarms added from a file are kept when Android closed the app's window while the file picker was in front.** They
   were read and then dropped; they are now saved and set before the window is back, and the list shows them when it is.
 - **Restoring alarms that use sounds the phone does not have now says which sounds are missing.** The alarm used to
@@ -23,7 +25,9 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 - **Android 9 is supported** (it needed Android 10). The app starts and runs the same there: alarms ring on time with the app
   closed and after a restart, challenges, snooze, wake-up check, backup and restore, widget, history and settings. Saving a
   backup or the ring record to Downloads asks for the storage permission once (Android 9 only; the permission is declared
-  up to Android 9). Screen readers (TalkBack) are not tested on Android 9. The whole test suite runs on an Android 9 emulator
+  up to Android 9): the save says "Allow storage access, then save again" (13 languages) and the app stays usable while the
+  dialog is up; the next save works. The Reliability screen has no "Stay allowed when unused" row there (the setting is from
+  Android 11). Screen readers (TalkBack) are not tested on Android 9. The whole test suite runs on an Android 9 emulator
   (`msd28`) next to Android 10 to 17, except the restarts before the first unlock (s13, s13b, s13d): the Android 9 emulator image has
   no file-based encryption, so there is no locked boot to test.
 - **Android 17 is supported.** The whole test suite runs on an Android 17 emulator next to Android 10 to 16, and passed
