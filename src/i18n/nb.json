@@ -385,6 +385,7 @@
   "settings.backup_saved": "Lagret i {place}",
   "settings.backup_failed": "Det kunne ikke lagres.",
   "settings.storage_needed": "Gi tilgang til lagring, og lagre på nytt.",
+  "settings.storage_blocked": "Tilgang til lagring er slått av. Slå den på i appens innstillinger, og lagre på nytt.",
   "settings.backup_restore": "Legg til alarmer fra en fil",
   "settings.backup_restored": "{count} alarmer lagt til",
   "settings.backup_bad": "Det er ikke en sikkerhetskopi av alarmer.",

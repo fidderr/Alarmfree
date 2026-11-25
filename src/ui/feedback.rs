@@ -383,7 +383,10 @@ pub fn send(ctx: &Rc<Ctx>) {
                 Ok(place) => t(&ctx.tr.borrow(), "report.saved")
                     .replace("{place}", &place)
                     .replace("{address}", report::CONTACT_EMAIL),
-                Err(e) => t(&ctx.tr.borrow(), e.text_key("report.failed")),
+                Err(e) => {
+                    e.open_settings();
+                    t(&ctx.tr.borrow(), e.text_key("report.failed"))
+                }
             };
             ui.global::<Fb>().set_note(note.into());
         }

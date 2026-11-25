@@ -577,15 +577,25 @@ pub enum SaveError {
     /// Android 9 and below: the storage permission is not given yet. The system dialog was asked for, and the person can
     /// save again once they allowed it.
     StorageAccess,
+    /// The same, and Android will no longer show the dialog (the person chose "never ask again"): the app's own settings page is
+    /// the way ([`SaveError::open_settings`]).
+    StorageBlocked,
     Failed(String),
 }
 
 impl SaveError {
-    fn of(error: String, permission_missing: bool) -> Self {
-        if permission_missing {
-            Self::StorageAccess
-        } else {
-            Self::Failed(error)
+    fn of(error: String, permission_missing: bool, blocked: bool) -> Self {
+        match (permission_missing, blocked) {
+            (true, true) => Self::StorageBlocked,
+            (true, false) => Self::StorageAccess,
+            _ => Self::Failed(error),
+        }
+    }
+
+    /// Takes the person to the app's settings page when no dialog can come: that is where the storage access is turned on.
+    pub fn open_settings(&self) {
+        if *self == Self::StorageBlocked {
+            mobile_sentinel::permissions::open_app_settings();
         }
     }
 
@@ -593,6 +603,7 @@ impl SaveError {
     pub fn text_key(&self, general: &'static str) -> &'static str {
         match self {
             Self::StorageAccess => "settings.storage_needed",
+            Self::StorageBlocked => "settings.storage_blocked",
             Self::Failed(_) => general,
         }
     }
@@ -602,6 +613,7 @@ impl std::fmt::Display for SaveError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::StorageAccess => f.write_str("storage permission missing"),
+            Self::StorageBlocked => f.write_str("storage permission missing, no dialog can come"),
             Self::Failed(reason) => f.write_str(reason),
         }
     }
@@ -617,6 +629,7 @@ pub fn save_to_downloads(text: &str, name: &str, mime_type: &str) -> Result<Stri
                 SaveError::of(
                     e.to_string(),
                     mobile_sentinel::share::downloads_permission_missing(),
+                    mobile_sentinel::share::downloads_permission_blocked(),
                 )
             });
     let _ = std::fs::remove_file(&path);
@@ -855,10 +868,26 @@ mod tests {
 
     #[test]
     fn a_save_that_failed_for_the_storage_permission_says_so() {
-        let missing = SaveError::of("unavailable".into(), true);
+        let missing = SaveError::of("unavailable".into(), true, false);
         assert_eq!(missing, SaveError::StorageAccess);
         assert_eq!(missing.text_key("report.failed"), "settings.storage_needed");
-        let other = SaveError::of("unavailable".into(), false);
+        // No dialog can come any more: the person is told where to turn it on, whatever screen asked.
+        let blocked = SaveError::of("unavailable".into(), true, true);
+        assert_eq!(blocked, SaveError::StorageBlocked);
+        assert_eq!(
+            blocked.text_key("report.failed"),
+            "settings.storage_blocked"
+        );
+        assert_eq!(
+            blocked.text_key("settings.backup_failed"),
+            "settings.storage_blocked"
+        );
+        // A blocked answer without a missing permission says nothing about storage.
+        assert_eq!(
+            SaveError::of("unavailable".into(), false, true),
+            SaveError::Failed("unavailable".into())
+        );
+        let other = SaveError::of("unavailable".into(), false, false);
         assert_eq!(other, SaveError::Failed("unavailable".into()));
         assert_eq!(other.text_key("report.failed"), "report.failed");
     }

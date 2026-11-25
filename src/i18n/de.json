@@ -385,6 +385,7 @@
   "settings.backup_saved": "Gespeichert in {place}",
   "settings.backup_failed": "Das konnte nicht gespeichert werden.",
   "settings.storage_needed": "Speicherzugriff erlauben, dann erneut speichern.",
+  "settings.storage_blocked": "Der Speicherzugriff ist aus. Schalte ihn in den App-Einstellungen ein und speichere erneut.",
   "settings.backup_restore": "Wecker aus Datei hinzufügen",
   "settings.backup_restored": "{count} Wecker hinzugefügt",
   "settings.backup_bad": "Das ist keine Wecker-Sicherung.",

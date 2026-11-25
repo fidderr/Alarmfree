@@ -385,6 +385,7 @@
   "settings.backup_saved": "Guardado en {place}",
   "settings.backup_failed": "No se pudo guardar.",
   "settings.storage_needed": "Permite el acceso al almacenamiento y guarda de nuevo.",
+  "settings.storage_blocked": "El acceso al almacenamiento está desactivado. Actívalo en los ajustes de la app y guarda de nuevo.",
   "settings.backup_restore": "Añadir alarmas desde un archivo",
   "settings.backup_restored": "{count} alarmas añadidas",
   "settings.backup_bad": "Eso no es una copia de alarmas.",

@@ -99,7 +99,7 @@ jobs:
       - uses: actions/checkout@v5
         with:
           repository: fidderr/mobile-sentinel
-          ref: 5f2bc6307c04036de0b4dfdf21673599d2d19eae # branch android9 (Android 9 fallbacks), until the SDK is published
+          ref: c4426e1b9c4ea9fc9a655dde2526562abb87e510 # branch android9 (Android 9 fallbacks), until the SDK is published
           path: mobile-sentinel
       - uses: dtolnay/rust-toolchain@stable
         with:

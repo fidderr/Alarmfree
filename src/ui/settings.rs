@@ -390,6 +390,7 @@ fn backup_saved(ctx: &Rc<Ctx>, result: Result<String, crate::platform::SaveError
         }
         Err(e) => {
             log::warn!("[AlarmFree] Backup failed: {e}");
+            e.open_settings();
             let message = t(&tr, e.text_key("settings.backup_failed"));
             drop(tr);
             super::toast::show(ctx, message, None);

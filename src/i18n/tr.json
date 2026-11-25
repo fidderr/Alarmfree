@@ -385,6 +385,7 @@
   "settings.backup_saved": "Şuraya kaydedildi: {place}",
   "settings.backup_failed": "Kaydedilemedi.",
   "settings.storage_needed": "Depolama erişimine izin verin, sonra tekrar kaydedin.",
+  "settings.storage_blocked": "Depolama erişimi kapalı. Uygulamanın ayarlarından açın, sonra tekrar kaydedin.",
   "settings.backup_restore": "Alarmları dosyadan ekle",
   "settings.backup_restored": "{count} alarm eklendi",
   "settings.backup_bad": "Bu bir alarm yedeği değil.",

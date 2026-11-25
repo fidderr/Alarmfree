@@ -212,6 +212,7 @@ pub fn save_record(ctx: &Rc<Ctx>) {
         }
         Err(e) => {
             log::warn!("[AlarmFree] The ring record was not saved: {e}");
+            e.open_settings();
             let message = t(&ctx.tr.borrow(), e.text_key("settings.backup_failed"));
             super::toast::error(ctx, message);
         }

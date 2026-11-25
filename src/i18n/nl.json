@@ -385,6 +385,7 @@
   "settings.backup_saved": "Opgeslagen in {place}",
   "settings.backup_failed": "Dat kon niet worden opgeslagen.",
   "settings.storage_needed": "Sta toegang tot opslag toe en sla daarna opnieuw op.",
+  "settings.storage_blocked": "Toegang tot opslag staat uit. Zet hem aan in de instellingen van de app en sla daarna opnieuw op.",
   "settings.backup_restore": "Wekkers uit een bestand toevoegen",
   "settings.backup_restored": "{count} wekkers toegevoegd",
   "settings.backup_bad": "Dat is geen back-up van wekkers.",

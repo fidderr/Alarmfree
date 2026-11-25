@@ -385,6 +385,7 @@
   "settings.backup_saved": "Salvato in {place}",
   "settings.backup_failed": "Impossibile salvare.",
   "settings.storage_needed": "Consenti l'accesso all'archiviazione, poi salva di nuovo.",
+  "settings.storage_blocked": "L'accesso all'archiviazione è disattivato. Attivalo nelle impostazioni dell'app, poi salva di nuovo.",
   "settings.backup_restore": "Aggiungi sveglie da un file",
   "settings.backup_restored": "{count} sveglie aggiunte",
   "settings.backup_bad": "Questo non è un backup di sveglie.",

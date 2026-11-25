@@ -9,12 +9,14 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ### Fixed
 
-- **On Android 9 the ring screen could come up late or not at all when the app had been in the background for a few seconds.**
-  Android 9 takes the window's surface away from a stopped activity without telling the app; the app drew on it when the ring
-  brought it back, the drawing failed, and the screen's loop ended (the process died and the guardian had to start a new one).
-  The UI toolkit (Slint, our fork) now waits a failed frame out, tries again four times a second, and draws on the new window.
-  A release build also starts when the screen reader support cannot be set up (a failure there ended the process in a release
-  build, which does not catch panics).
+- **The ring screen could come up late or not at all when the app had been in the background for a few seconds.**
+  Android takes the window's surface away from a stopped activity without telling the app (seen on Android 9, and on an Android 16
+  emulator on a loaded machine, where the new window came 2.5 and 4 s later); the app drew on it when the ring brought it back,
+  the drawing failed, and the screen's loop ended (the process died and the guardian had to start a new one). The UI toolkit
+  (Slint, our fork) now waits a failed frame out, tries again four times a second, and draws on the new window. A failed draw that
+  is not a lost surface (the graphics context is lost, memory is out) used to end the loop at once and now holds the picture for up
+  to 10 s first, then ends it as before. A release build also starts when the screen reader support cannot be set up (a failure
+  there ended the process in a release build, which does not catch panics).
 - **Alarms added from a file are kept when Android closed the app's window while the file picker was in front.** They
   were read and then dropped; they are now saved and set before the window is back, and the list shows them when it is.
 - **Restoring alarms that use sounds the phone does not have now says which sounds are missing.** The alarm used to
@@ -26,7 +28,8 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
   closed and after a restart, challenges, snooze, wake-up check, backup and restore, widget, history and settings. Saving a
   backup or the ring record to Downloads asks for the storage permission once (Android 9 only; the permission is declared
   up to Android 9): the save says "Allow storage access, then save again" (13 languages) and the app stays usable while the
-  dialog is up; the next save works. The Reliability screen has no "Stay allowed when unused" row there (the setting is from
+  dialog is up; the next save works. After "never ask again" no dialog can come: the second save takes you to the app's settings and
+  says "Storage access is off. Turn it on in the app's settings, then save again." The Reliability screen has no "Stay allowed when unused" row there (the setting is from
   Android 11). Screen readers (TalkBack) are not tested on Android 9. The whole test suite runs on an Android 9 emulator
   (`msd28`) next to Android 10 to 17, except the restarts before the first unlock (s13, s13b, s13d): the Android 9 emulator image has
   no file-based encryption, so there is no locked boot to test.
