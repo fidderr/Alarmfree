@@ -2001,6 +2001,8 @@ s48b() {
     on_card 20
     local problems="" file
     save_with() { # the row to tap
+        # The app is on top again after the picker of the restore before this one: on a slow machine (Android 9 on a runner) a moment late.
+        sys_wait "$SYS_DEADLINE" "the app in front" focus_in_app || { problems="$problems; $SYS_WHY"; return 1; }
         [ "$(screen_no)" = 3 ] || press go 2
         await_ui 30 "screen=3" || { problems="$problems; the settings did not open"; return 1; }
         press st-row 6
