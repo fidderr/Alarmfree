@@ -9,6 +9,10 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ### Fixed
 
+- **On Android 9 the ring screen could come up late or not at all when the app had been in the background for a few seconds.**
+  Android 9 takes the window's surface away from a stopped activity without telling the app; the app drew on it when the ring
+  brought it back, the drawing failed, and the screen's loop ended (the process died and the guardian had to start a new one).
+  The UI toolkit (Slint, our fork) now waits a failed frame out and draws again on the new window.
 - **Alarms added from a file are kept when Android closed the app's window while the file picker was in front.** They
   were read and then dropped; they are now saved and set before the window is back, and the list shows them when it is.
 - **Restoring alarms that use sounds the phone does not have now says which sounds are missing.** The alarm used to

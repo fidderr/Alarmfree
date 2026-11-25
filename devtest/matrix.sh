@@ -471,7 +471,8 @@ s13() {
 # at the end, when the unlock has made the history readable). Two rings, one restart instead of two.
 s13b() {
     no_lock_here s13b && return
-    if no_locked_boot_here s13d_locked_restart_limit; then S13D_DONE=1; return; fi
+    # Both of its results, the way the full run counts them (ci/run.sh wants one for s13b and one for s13d).
+    if no_locked_boot_here s13b_locked_restart_lock_screen; then no_locked_boot_here s13d_locked_restart_limit; S13D_DONE=1; return; fi
     scenario s13d_locked_restart_limit
     SECOND_ALARM=1 locked_ring 60 8 || { no_pin; return; }
     local problems="" limit_problems="" rang=$SOUND_AT

@@ -622,6 +622,18 @@ force_idle() {
             dev dumpsys deviceidle unforce > /dev/null
             said=$(dev dumpsys deviceidle force-idle) ;;
     esac
+    # Android 9 steps through SENSING and LOCATING, which wait for the motion sensor and a location fix and answer a moment later:
+    # "stopped at INACTIVE" is the state it was in, and the same command goes on from there once that state has changed (seen on
+    # a GitHub machine, msd28; locally it never stops). It is stepped on while the state moves, a few times at most.
+    local was="" steps=0
+    deep_state_moved() { [ "$(dev dumpsys deviceidle get deep | tr -d '\r')" != "$was" ]; }
+    while [ "$steps" -lt 6 ]; do
+        case "$said" in *"stopped at"*) ;; *) break ;; esac
+        was=$(dev dumpsys deviceidle get deep | tr -d '\r')
+        wait_for 10 deep_state_moved
+        said=$(dev dumpsys deviceidle force-idle)
+        steps=$((steps + 1))
+    done
     case "$said" in
         *"Now forced"*) ;;
         *) fail "the device does not go into Doze: $said" ;;
