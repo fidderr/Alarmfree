@@ -1390,13 +1390,10 @@ hold_and_drag() { # x y pixels
     esac
     # Android 9 has no `input motionevent`; its draganddrop holds where it starts and then moves.
     if [ "$(sdk_level)" -lt 29 ]; then
-        # Its hold is the system's long-press time (500 ms), as long as the app's own: a longer one for this touch (0.6 s is what the
-        # motionevent version below holds), put back after it.
-        local held
-        held=$(dev settings get secure long_press_timeout)
-        dev settings put secure long_press_timeout 900
-        dev input draganddrop "$1" "$2" "$1" $(($2 + $3)) 400 # lint-ok: Android 9 has no input motionevent, this is its hold and drag
-        case "$held" in '' | null) dev settings delete secure long_press_timeout ;; *) dev settings put secure long_press_timeout "$held" ;; esac
+        # Its hold is a fixed 500 ms (the long-press time of a process that is no app), against the card's own 450 ms timer: on a slow
+        # machine the first move came before that timer had run and the card was scrolled instead of lifted (GitHub, msd28). The move is
+        # slow, so that the finger stays inside the touch slop for a good while after the hold.
+        dev input draganddrop "$1" "$2" "$1" $(($2 + $3)) 3000 # lint-ok: Android 9 has no input motionevent, this is its hold and drag
         sleep 0.5 # lint-ok: the drop settles before the list is read
         return
     fi
