@@ -2118,6 +2118,20 @@ s48c() {
     dev pm revoke "$PKG" android.permission.WRITE_EXTERNAL_STORAGE > /dev/null 2>&1
     dev pm revoke "$PKG" android.permission.READ_EXTERNAL_STORAGE > /dev/null 2>&1
     dev dumpsys package "$PKG" | grep -q 'android.permission.WRITE_EXTERNAL_STORAGE: granted=true' && problems="$problems; the storage permission is still granted after the revoke"
+    evidence() {
+        # What the app was doing when it did not answer: its log, and the stacks of its threads (SIGQUIT), into the results.
+        local pid
+        pid=$(main_pid)
+        {
+            echo "S48C EVIDENCE the app's pid [$pid], on top: $(top_activity)"
+            adb_ logcat -d 2> /dev/null | grep -a -E "RustStdoutStderr|MobileSentinel|Sentinel|AlarmFree|GrantPermissions|ActivityTaskManager|ActivityManager.*(fidderr|ANR)|ANR in|am_anr|AndroidRuntime" | tail -n 40 | cut -c1-220
+            if [ -n "$pid" ]; then
+                dev "su 0 kill -3 $pid" > /dev/null 2>&1
+                wait_for 6 false
+                adb_ logcat -d 2> /dev/null | awk '/"(main|android_main)" prio=/ { on = 1; n = 0 } /^$/ { on = 0 } on && n < 26 { n++; print }' | cut -c1-200 | tail -n 60
+            fi
+        } | sed "s/^/NOTE  $CURRENT  S48C: /" | tee -a "$RESULTS"
+    }
     # Without the permission: the tap is answered, the window answers, the dialog is asked for, and the person is told.
     t0=$SECONDS
     save_the_record || true
@@ -2126,6 +2140,7 @@ s48c() {
         "no answer from the app"*) problems="$problems; the window does not answer after the save, $((SECONDS - t0))s after the tap: $answer" ;;
     esac
     [ $((SECONDS - t0)) -le 25 ] || problems="$problems; the save held the app for $((SECONDS - t0))s"
+    [ -z "$problems" ] || evidence
     echo "NOTE  $CURRENT  save without the permission: tap answered and window said '${answer:0:40}' $((SECONDS - t0))s after the start of the step" | tee -a "$RESULTS"
     wait_for 20 dialog_up || problems="$problems; the permission dialog was not asked for (resumed: $(dev dumpsys activity activities | grep -m1 -E 'mResumedActivity|ResumedActivity:' | cut -c1-150))"
     pkg_of_dialog=$(dev dumpsys activity activities | grep -E 'mResumedActivity|ResumedActivity:' | grep -m1 GrantPermissionsActivity | sed -nE 's#.* ([A-Za-z0-9_.]+)/[A-Za-z0-9_.]*GrantPermissionsActivity.*#\1#p')
