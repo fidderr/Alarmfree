@@ -297,8 +297,18 @@ fn key(ui: &MainWindow, text: slint::SharedString) {
 
 /// Put `value` in a text field the way a person does: touch it, clear it, type it key by key, so the
 /// field's own `edited` handler runs.
-fn type_into(ui: &MainWindow, x: f32, y: f32, value: &str) {
-    tap_at(ui, x, y);
+/// Types `value` into the field at this place, in place of what it holds. A touch on it comes first, to give it the focus; not when
+/// it has the focus already (a field that is shown for typing takes it by itself): a touch that misses the field (the sheet moved
+/// since the place was read) lands on the sheet's scrim, which closes the sheet, and nothing is typed (s38 on Android 9).
+/// A place a finger cannot reach (under the keyboard, say) is no touch either: the answer says so (`ERR ...`) and nothing is typed.
+fn type_into(ui: &MainWindow, x: f32, y: f32, value: &str) -> Option<String> {
+    let focused = caret(ui).is_some_and(|c| (c.x - x).abs() < 1.5 && (c.y - y).abs() < 1.5);
+    if !focused {
+        if let Some(why) = out_of_reach(ui, x, y) {
+            return Some(why);
+        }
+        tap_at(ui, x, y);
+    }
     key(ui, Key::End.into());
     for _ in 0..80 {
         key(ui, Key::Backspace.into());
@@ -306,6 +316,7 @@ fn type_into(ui: &MainWindow, x: f32, y: f32, value: &str) {
     for c in value.chars() {
         key(ui, c.to_string().into());
     }
+    None
 }
 
 thread_local! {
@@ -499,10 +510,9 @@ pub fn run(ui: &MainWindow, command: &str) -> Option<String> {
                 .ok()
                 .and_then(|n| inputs(ui).into_iter().nth(n))
             {
-                Some((_, seen)) => {
-                    type_into(ui, seen.x, seen.y, value);
+                Some((_, seen)) => type_into(ui, seen.x, seen.y, value).unwrap_or_else(|| {
                     format!("OK {} {}", seen.x.round() as i32, seen.y.round() as i32)
-                }
+                }),
                 None => "none".to_owned(),
             },
             None => "ERR settext: <n>:<text>".to_owned(),

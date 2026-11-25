@@ -511,6 +511,45 @@ impl Flow {
     }
 }
 
+/// The field of a sound being renamed has the focus by itself. Typing into it makes no touch: a touch that misses the field (the
+/// sheet moved since the field was looked up, on a slow phone) lands on the sheet's scrim and closes the sheet, and then nothing is
+/// typed (s38 on Android 9, 2026-11-25).
+#[test]
+fn typing_into_a_field_that_has_the_focus_makes_no_touch() {
+    let touches = |f: &Flow| f.cmd("trace").matches("tap_at").count();
+    let dir = crate::custom_sounds::custom_sounds_dir();
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("mytune.ogg"), b"OggS").unwrap();
+    let f = Flow::new(Vec::new());
+    f.expect(f.tap("Create new alarm"), "no create button");
+    f.open_row("Sound");
+    let own = super::editor_sound::sound_ids().len() - 1;
+    f.press("sound-rename", &own.to_string());
+    f.settle();
+    let focused = f.cmd("cursor");
+    f.expect(
+        focused != "none",
+        format!("the rename field has no focus: {focused}"),
+    );
+    let before = touches(&f);
+    f.set_field(0, "Morning");
+    f.expect(
+        touches(&f) == before,
+        format!(
+            "typing into the focused field made a touch: {}",
+            f.cmd("trace")
+        ),
+    );
+    f.expect(
+        f.editor_sheet_open(),
+        "the sheet closed while a name was typed",
+    );
+    // A field that has no focus is still touched first, to take it.
+    f.press("sound-rename-done", "");
+    f.settle();
+    f.finish();
+}
+
 /// s50 (the settings that need no scroll, slider or bundled sound): a new alarm made through the screens, what is
 /// saved, what the editor says when it is opened again, and deleting it after asking.
 #[test]
