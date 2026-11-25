@@ -11,7 +11,7 @@ use slint::{ComponentHandle, SharedString};
 use super::{CheckRow, Ctx, Rel, SCREEN_RELIABILITY, SCREEN_SETTINGS};
 use crate::i18n::t;
 use crate::reliability::{
-    can_hide, check_name, check_text, first_problem, last_ring, report, CHECKS,
+    can_hide, check_name, check_text, first_problem, last_ring, listed, report,
 };
 
 /// A test alarm rings about this long from now.
@@ -129,7 +129,7 @@ fn sync(ctx: &Ctx) {
     let tr = ctx.tr.borrow();
     let health = report();
     // What needs doing first.
-    let mut checks = CHECKS.to_vec();
+    let mut checks = listed(&health);
     checks.sort_by_key(|check| health.is_ok(*check));
     let kit = crate::platform::alarm_kit_optional();
     let log = kit.map(|kit| kit.timing_log()).unwrap_or_default();
@@ -212,7 +212,7 @@ pub fn save_record(ctx: &Rc<Ctx>) {
         }
         Err(e) => {
             log::warn!("[AlarmFree] The ring record was not saved: {e}");
-            let message = t(&ctx.tr.borrow(), "settings.backup_failed");
+            let message = t(&ctx.tr.borrow(), e.text_key("settings.backup_failed"));
             super::toast::error(ctx, message);
         }
     }

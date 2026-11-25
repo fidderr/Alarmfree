@@ -384,6 +384,7 @@
   "settings.backup_save": "Save to a file",
   "settings.backup_saved": "Saved to {place}",
   "settings.backup_failed": "That could not be saved.",
+  "settings.storage_needed": "Allow storage access, then save again.",
   "settings.backup_restore": "Add alarms from a file",
   "settings.backup_restored": "{count} alarms added",
   "settings.backup_bad": "That is not a backup of alarms.",

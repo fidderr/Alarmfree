@@ -384,6 +384,7 @@
   "settings.backup_save": "Simpan ke file",
   "settings.backup_saved": "Disimpan di {place}",
   "settings.backup_failed": "Tidak bisa disimpan.",
+  "settings.storage_needed": "Izinkan akses penyimpanan, lalu simpan lagi.",
   "settings.backup_restore": "Tambah alarm dari file",
   "settings.backup_restored": "{count} alarm ditambahkan",
   "settings.backup_bad": "Itu bukan cadangan alarm.",

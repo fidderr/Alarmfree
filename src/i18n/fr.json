@@ -384,6 +384,7 @@
   "settings.backup_save": "Enregistrer dans un fichier",
   "settings.backup_saved": "Enregistré dans {place}",
   "settings.backup_failed": "Impossible d'enregistrer.",
+  "settings.storage_needed": "Autorisez l'accès au stockage, puis enregistrez à nouveau.",
   "settings.backup_restore": "Ajouter des alarmes depuis un fichier",
   "settings.backup_restored": "{count} alarmes ajoutées",
   "settings.backup_bad": "Ce n'est pas une sauvegarde d'alarmes.",

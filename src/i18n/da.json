@@ -384,6 +384,7 @@
   "settings.backup_save": "Gem i en fil",
   "settings.backup_saved": "Gemt i {place}",
   "settings.backup_failed": "Det kunne ikke gemmes.",
+  "settings.storage_needed": "Giv adgang til lager, og gem igen.",
   "settings.backup_restore": "Tilføj alarmer fra en fil",
   "settings.backup_restored": "{count} alarmer tilføjet",
   "settings.backup_bad": "Det er ikke en sikkerhedskopi af alarmer.",

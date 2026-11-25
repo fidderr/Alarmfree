@@ -19,6 +19,15 @@ pub const CHECKS: [Check; 10] = [
     Check::BootSignal,
 ];
 
+/// The checks the screen lists on this phone: not one for a setting the phone does not have (the unused-apps setting is from
+/// Android 11), which would show an "OK" for nothing.
+pub fn listed(health: &HealthReport) -> Vec<Check> {
+    CHECKS
+        .into_iter()
+        .filter(|check| health.applies(*check))
+        .collect()
+}
+
 pub fn report() -> HealthReport {
     health::report(crate::platform::FOREGROUND_CHANNEL_ID)
 }
@@ -111,6 +120,28 @@ mod tests {
             last_ring("1000 delivered a\n1400 sound a\n2000 delivered b\n"),
             Some((1000, 400))
         );
+    }
+
+    #[test]
+    fn the_unused_apps_row_is_only_listed_from_android_11() {
+        for (api_level, listed_there) in
+            [(28, false), (29, false), (30, true), (36, true), (0, true)]
+        {
+            let rows = listed(&HealthReport::for_api_level(api_level));
+            assert_eq!(
+                rows.contains(&Check::KeptWhenUnused),
+                listed_there,
+                "API {api_level}"
+            );
+            let others: Vec<_> = CHECKS
+                .into_iter()
+                .filter(|check| *check != Check::KeptWhenUnused)
+                .collect();
+            assert!(
+                others.iter().all(|check| rows.contains(check)),
+                "API {api_level}"
+            );
+        }
     }
 
     #[test]

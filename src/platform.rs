@@ -571,13 +571,54 @@ fn apply_reminder_taps(kit: &AlarmKit, list: &mut [AlarmData]) -> bool {
     changed
 }
 
+/// Why a save to Downloads did not happen.
+#[derive(Debug, PartialEq, Eq)]
+pub enum SaveError {
+    /// Android 9 and below: the storage permission is not given yet. The system dialog was asked for, and the person can
+    /// save again once they allowed it.
+    StorageAccess,
+    Failed(String),
+}
+
+impl SaveError {
+    fn of(error: String, permission_missing: bool) -> Self {
+        if permission_missing {
+            Self::StorageAccess
+        } else {
+            Self::Failed(error)
+        }
+    }
+
+    /// The text to tell the person: to allow the access, or `general`, what the screen says when a save failed.
+    pub fn text_key(&self, general: &'static str) -> &'static str {
+        match self {
+            Self::StorageAccess => "settings.storage_needed",
+            Self::Failed(_) => general,
+        }
+    }
+}
+
+impl std::fmt::Display for SaveError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::StorageAccess => f.write_str("storage permission missing"),
+            Self::Failed(reason) => f.write_str(reason),
+        }
+    }
+}
+
 /// Write `text` to a file in the phone's Downloads. Returns where it went.
-pub fn save_to_downloads(text: &str, name: &str, mime_type: &str) -> Result<String, String> {
+pub fn save_to_downloads(text: &str, name: &str, mime_type: &str) -> Result<String, SaveError> {
     let path = mobile_sentinel::app_files_dir().join(name);
-    std::fs::write(&path, text).map_err(|e| e.to_string())?;
+    std::fs::write(&path, text).map_err(|e| SaveError::Failed(e.to_string()))?;
     let result =
         mobile_sentinel::share::save_to_downloads(&path.to_string_lossy(), name, mime_type)
-            .map_err(|e| e.to_string());
+            .map_err(|e| {
+                SaveError::of(
+                    e.to_string(),
+                    mobile_sentinel::share::downloads_permission_missing(),
+                )
+            });
     let _ = std::fs::remove_file(&path);
     result
 }
@@ -811,6 +852,16 @@ pub fn alarm_data_to_spec(alarm: &AlarmData) -> AlarmSpec {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_save_that_failed_for_the_storage_permission_says_so() {
+        let missing = SaveError::of("unavailable".into(), true);
+        assert_eq!(missing, SaveError::StorageAccess);
+        assert_eq!(missing.text_key("report.failed"), "settings.storage_needed");
+        let other = SaveError::of("unavailable".into(), false);
+        assert_eq!(other, SaveError::Failed("unavailable".into()));
+        assert_eq!(other.text_key("report.failed"), "report.failed");
+    }
 
     fn history_outcomes() -> Vec<(String, AlarmOutcome)> {
         let filter = crate::models::HistoryFilter::LastDays(1);

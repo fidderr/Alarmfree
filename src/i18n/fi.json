@@ -384,6 +384,7 @@
   "settings.backup_save": "Tallenna tiedostoon",
   "settings.backup_saved": "Tallennettu: {place}",
   "settings.backup_failed": "Tallennus epäonnistui.",
+  "settings.storage_needed": "Salli tallennustilan käyttö ja tallenna uudelleen.",
   "settings.backup_restore": "Lisää herätykset tiedostosta",
   "settings.backup_restored": "{count} herätystä lisätty",
   "settings.backup_bad": "Tämä ei ole herätysten varmuuskopio.",

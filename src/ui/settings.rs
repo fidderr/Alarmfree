@@ -354,7 +354,7 @@ fn write_backup(
     alarms: &[AlarmData],
     names: &std::collections::BTreeMap<String, String>,
     with_sounds: bool,
-) -> Result<String, String> {
+) -> Result<String, crate::platform::SaveError> {
     let name = format!(
         "alarmfree-{}.json",
         crate::clock::local_now().format("%Y-%m-%d")
@@ -380,7 +380,7 @@ pub fn save_backup(ctx: &Rc<Ctx>, with_sounds: bool) {
     });
 }
 
-fn backup_saved(ctx: &Rc<Ctx>, result: Result<String, String>) {
+fn backup_saved(ctx: &Rc<Ctx>, result: Result<String, crate::platform::SaveError>) {
     let tr = ctx.tr.borrow();
     match result {
         Ok(place) => {
@@ -390,7 +390,7 @@ fn backup_saved(ctx: &Rc<Ctx>, result: Result<String, String>) {
         }
         Err(e) => {
             log::warn!("[AlarmFree] Backup failed: {e}");
-            let message = t(&tr, "settings.backup_failed");
+            let message = t(&tr, e.text_key("settings.backup_failed"));
             drop(tr);
             super::toast::show(ctx, message, None);
         }

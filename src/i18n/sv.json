@@ -384,6 +384,7 @@
   "settings.backup_save": "Spara till en fil",
   "settings.backup_saved": "Sparad i {place}",
   "settings.backup_failed": "Det gick inte att spara.",
+  "settings.storage_needed": "Tillåt åtkomst till lagring och spara igen.",
   "settings.backup_restore": "Lägg till alarm från en fil",
   "settings.backup_restored": "{count} alarm tillagda",
   "settings.backup_bad": "Det där är ingen säkerhetskopia av alarm.",
