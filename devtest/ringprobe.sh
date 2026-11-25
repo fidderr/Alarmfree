@@ -152,6 +152,8 @@ probe_round() { # kind moment n
     [ -s "$OUT/ringprobe.txt" ] || echo "$PROBE_HEADER" > "$OUT/ringprobe.txt"
     echo "$PROBE_LINE" >> "$OUT/ringprobe.txt"
     echo "main pid at Home: $pid_main, device time at Home: $home_at" >> "$log"
+    # Android 9: the gap between a frame that failed on the abandoned surface and the new window, when the round had one.
+    surface_note
     case "$kind" in
         app | deep | deep4) dev am force-stop com.android.settings ;;
     esac
