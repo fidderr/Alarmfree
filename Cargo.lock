@@ -303,7 +303,7 @@ dependencies = [
  "objc2-foundation 0.3.2",
  "parking_lot",
  "percent-encoding",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
  "x11rb",
 ]
 
@@ -958,7 +958,7 @@ dependencies = [
 [[package]]
 name = "const-field-offset"
 version = "0.2.1"
-source = "git+https://github.com/fidderr/slint?rev=77e9b8b752557a006de2f57cf1d8ee21dafb6b25#77e9b8b752557a006de2f57cf1d8ee21dafb6b25"
+source = "git+https://github.com/fidderr/slint?rev=1d9bedc8ed4a6f007d9e6bf4a9b12776e5a5f353#1d9bedc8ed4a6f007d9e6bf4a9b12776e5a5f353"
 dependencies = [
  "const-field-offset-macro",
  "field-offset",
@@ -967,7 +967,7 @@ dependencies = [
 [[package]]
 name = "const-field-offset-macro"
 version = "0.2.1"
-source = "git+https://github.com/fidderr/slint?rev=77e9b8b752557a006de2f57cf1d8ee21dafb6b25#77e9b8b752557a006de2f57cf1d8ee21dafb6b25"
+source = "git+https://github.com/fidderr/slint?rev=1d9bedc8ed4a6f007d9e6bf4a9b12776e5a5f353#1d9bedc8ed4a6f007d9e6bf4a9b12776e5a5f353"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1170,7 +1170,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1334,7 +1334,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1946,7 +1946,7 @@ checksum = "48ce8546b993eaf241d69ded33b1be6d205dd9857ec879d9d18bd05d3676e144"
 [[package]]
 name = "i-slint-backend-android-activity"
 version = "1.20.0"
-source = "git+https://github.com/fidderr/slint?rev=77e9b8b752557a006de2f57cf1d8ee21dafb6b25#77e9b8b752557a006de2f57cf1d8ee21dafb6b25"
+source = "git+https://github.com/fidderr/slint?rev=1d9bedc8ed4a6f007d9e6bf4a9b12776e5a5f353#1d9bedc8ed4a6f007d9e6bf4a9b12776e5a5f353"
 dependencies = [
  "accesskit",
  "accesskit_android",
@@ -1965,7 +1965,7 @@ dependencies = [
 [[package]]
 name = "i-slint-backend-linuxkms"
 version = "1.20.0"
-source = "git+https://github.com/fidderr/slint?rev=77e9b8b752557a006de2f57cf1d8ee21dafb6b25#77e9b8b752557a006de2f57cf1d8ee21dafb6b25"
+source = "git+https://github.com/fidderr/slint?rev=1d9bedc8ed4a6f007d9e6bf4a9b12776e5a5f353#1d9bedc8ed4a6f007d9e6bf4a9b12776e5a5f353"
 dependencies = [
  "bytemuck",
  "calloop 0.14.5",
@@ -1992,7 +1992,7 @@ dependencies = [
 [[package]]
 name = "i-slint-backend-selector"
 version = "1.20.0"
-source = "git+https://github.com/fidderr/slint?rev=77e9b8b752557a006de2f57cf1d8ee21dafb6b25#77e9b8b752557a006de2f57cf1d8ee21dafb6b25"
+source = "git+https://github.com/fidderr/slint?rev=1d9bedc8ed4a6f007d9e6bf4a9b12776e5a5f353#1d9bedc8ed4a6f007d9e6bf4a9b12776e5a5f353"
 dependencies = [
  "cfg_aliases",
  "i-slint-backend-android-activity",
@@ -2009,7 +2009,7 @@ dependencies = [
 [[package]]
 name = "i-slint-backend-testing"
 version = "1.20.0"
-source = "git+https://github.com/fidderr/slint?rev=77e9b8b752557a006de2f57cf1d8ee21dafb6b25#77e9b8b752557a006de2f57cf1d8ee21dafb6b25"
+source = "git+https://github.com/fidderr/slint?rev=1d9bedc8ed4a6f007d9e6bf4a9b12776e5a5f353#1d9bedc8ed4a6f007d9e6bf4a9b12776e5a5f353"
 dependencies = [
  "cfg_aliases",
  "i-slint-common",
@@ -2022,7 +2022,7 @@ dependencies = [
 [[package]]
 name = "i-slint-backend-winit"
 version = "1.20.0"
-source = "git+https://github.com/fidderr/slint?rev=77e9b8b752557a006de2f57cf1d8ee21dafb6b25#77e9b8b752557a006de2f57cf1d8ee21dafb6b25"
+source = "git+https://github.com/fidderr/slint?rev=1d9bedc8ed4a6f007d9e6bf4a9b12776e5a5f353#1d9bedc8ed4a6f007d9e6bf4a9b12776e5a5f353"
 dependencies = [
  "accesskit",
  "accesskit_winit",
@@ -2068,7 +2068,7 @@ dependencies = [
 [[package]]
 name = "i-slint-common"
 version = "1.20.0"
-source = "git+https://github.com/fidderr/slint?rev=77e9b8b752557a006de2f57cf1d8ee21dafb6b25#77e9b8b752557a006de2f57cf1d8ee21dafb6b25"
+source = "git+https://github.com/fidderr/slint?rev=1d9bedc8ed4a6f007d9e6bf4a9b12776e5a5f353#1d9bedc8ed4a6f007d9e6bf4a9b12776e5a5f353"
 dependencies = [
  "derive_more",
  "euclid",
@@ -2087,7 +2087,7 @@ dependencies = [
 [[package]]
 name = "i-slint-compiler"
 version = "1.20.0"
-source = "git+https://github.com/fidderr/slint?rev=77e9b8b752557a006de2f57cf1d8ee21dafb6b25#77e9b8b752557a006de2f57cf1d8ee21dafb6b25"
+source = "git+https://github.com/fidderr/slint?rev=1d9bedc8ed4a6f007d9e6bf4a9b12776e5a5f353#1d9bedc8ed4a6f007d9e6bf4a9b12776e5a5f353"
 dependencies = [
  "annotate-snippets",
  "by_address",
@@ -2125,7 +2125,7 @@ dependencies = [
 [[package]]
 name = "i-slint-core"
 version = "1.20.0"
-source = "git+https://github.com/fidderr/slint?rev=77e9b8b752557a006de2f57cf1d8ee21dafb6b25#77e9b8b752557a006de2f57cf1d8ee21dafb6b25"
+source = "git+https://github.com/fidderr/slint?rev=1d9bedc8ed4a6f007d9e6bf4a9b12776e5a5f353#1d9bedc8ed4a6f007d9e6bf4a9b12776e5a5f353"
 dependencies = [
  "accesskit",
  "async-channel",
@@ -2179,7 +2179,7 @@ dependencies = [
 [[package]]
 name = "i-slint-core-macros"
 version = "1.20.0"
-source = "git+https://github.com/fidderr/slint?rev=77e9b8b752557a006de2f57cf1d8ee21dafb6b25#77e9b8b752557a006de2f57cf1d8ee21dafb6b25"
+source = "git+https://github.com/fidderr/slint?rev=1d9bedc8ed4a6f007d9e6bf4a9b12776e5a5f353#1d9bedc8ed4a6f007d9e6bf4a9b12776e5a5f353"
 dependencies = [
  "quote",
  "serde_json",
@@ -2189,7 +2189,7 @@ dependencies = [
 [[package]]
 name = "i-slint-renderer-femtovg"
 version = "1.20.0"
-source = "git+https://github.com/fidderr/slint?rev=77e9b8b752557a006de2f57cf1d8ee21dafb6b25#77e9b8b752557a006de2f57cf1d8ee21dafb6b25"
+source = "git+https://github.com/fidderr/slint?rev=1d9bedc8ed4a6f007d9e6bf4a9b12776e5a5f353#1d9bedc8ed4a6f007d9e6bf4a9b12776e5a5f353"
 dependencies = [
  "const-field-offset",
  "femtovg",
@@ -2208,7 +2208,7 @@ dependencies = [
 [[package]]
 name = "i-slint-renderer-skia"
 version = "1.20.0"
-source = "git+https://github.com/fidderr/slint?rev=77e9b8b752557a006de2f57cf1d8ee21dafb6b25#77e9b8b752557a006de2f57cf1d8ee21dafb6b25"
+source = "git+https://github.com/fidderr/slint?rev=1d9bedc8ed4a6f007d9e6bf4a9b12776e5a5f353#1d9bedc8ed4a6f007d9e6bf4a9b12776e5a5f353"
 dependencies = [
  "bytemuck",
  "cfg_aliases",
@@ -2245,7 +2245,7 @@ dependencies = [
 [[package]]
 name = "i-slint-renderer-software"
 version = "1.20.0"
-source = "git+https://github.com/fidderr/slint?rev=77e9b8b752557a006de2f57cf1d8ee21dafb6b25#77e9b8b752557a006de2f57cf1d8ee21dafb6b25"
+source = "git+https://github.com/fidderr/slint?rev=1d9bedc8ed4a6f007d9e6bf4a9b12776e5a5f353#1d9bedc8ed4a6f007d9e6bf4a9b12776e5a5f353"
 dependencies = [
  "bytemuck",
  "clru",
@@ -4316,7 +4316,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.12.1",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4546,7 +4546,7 @@ checksum = "0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5"
 [[package]]
 name = "slint"
 version = "1.20.0"
-source = "git+https://github.com/fidderr/slint?rev=77e9b8b752557a006de2f57cf1d8ee21dafb6b25#77e9b8b752557a006de2f57cf1d8ee21dafb6b25"
+source = "git+https://github.com/fidderr/slint?rev=1d9bedc8ed4a6f007d9e6bf4a9b12776e5a5f353#1d9bedc8ed4a6f007d9e6bf4a9b12776e5a5f353"
 dependencies = [
  "const-field-offset",
  "i-slint-backend-android-activity",
@@ -4567,7 +4567,7 @@ dependencies = [
 [[package]]
 name = "slint-build"
 version = "1.20.0"
-source = "git+https://github.com/fidderr/slint?rev=77e9b8b752557a006de2f57cf1d8ee21dafb6b25#77e9b8b752557a006de2f57cf1d8ee21dafb6b25"
+source = "git+https://github.com/fidderr/slint?rev=1d9bedc8ed4a6f007d9e6bf4a9b12776e5a5f353#1d9bedc8ed4a6f007d9e6bf4a9b12776e5a5f353"
 dependencies = [
  "derive_more",
  "fontique",
@@ -4579,7 +4579,7 @@ dependencies = [
 [[package]]
 name = "slint-macros"
 version = "1.20.0"
-source = "git+https://github.com/fidderr/slint?rev=77e9b8b752557a006de2f57cf1d8ee21dafb6b25#77e9b8b752557a006de2f57cf1d8ee21dafb6b25"
+source = "git+https://github.com/fidderr/slint?rev=1d9bedc8ed4a6f007d9e6bf4a9b12776e5a5f353#1d9bedc8ed4a6f007d9e6bf4a9b12776e5a5f353"
 dependencies = [
  "i-slint-compiler",
  "proc-macro2",
@@ -4900,10 +4900,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.3.4",
+ "getrandom 0.4.3",
  "once_cell",
  "rustix 1.1.6",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -5332,7 +5332,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 [[package]]
 name = "vtable"
 version = "0.5.1"
-source = "git+https://github.com/fidderr/slint?rev=77e9b8b752557a006de2f57cf1d8ee21dafb6b25#77e9b8b752557a006de2f57cf1d8ee21dafb6b25"
+source = "git+https://github.com/fidderr/slint?rev=1d9bedc8ed4a6f007d9e6bf4a9b12776e5a5f353#1d9bedc8ed4a6f007d9e6bf4a9b12776e5a5f353"
 dependencies = [
  "const-field-offset",
  "portable-atomic",
@@ -5343,7 +5343,7 @@ dependencies = [
 [[package]]
 name = "vtable-macro"
 version = "0.5.1"
-source = "git+https://github.com/fidderr/slint?rev=77e9b8b752557a006de2f57cf1d8ee21dafb6b25#77e9b8b752557a006de2f57cf1d8ee21dafb6b25"
+source = "git+https://github.com/fidderr/slint?rev=1d9bedc8ed4a6f007d9e6bf4a9b12776e5a5f353#1d9bedc8ed4a6f007d9e6bf4a9b12776e5a5f353"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -5768,7 +5768,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.48.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
