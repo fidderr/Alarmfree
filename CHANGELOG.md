@@ -16,6 +16,12 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ### Added
 
+- **Android 9 is supported** (it needed Android 10). The app starts and runs the same there: alarms ring on time with the app
+  closed and after a restart, challenges, snooze, wake-up check, backup and restore, widget, history and settings. Saving a
+  backup or the ring record to Downloads asks for the storage permission once (Android 9 only; the permission is declared
+  up to Android 9). Screen readers (TalkBack) are not tested on Android 9. The whole test suite runs on an Android 9 emulator
+  (`msd28`) next to Android 10 to 17, except the restarts before the first unlock (s13, s13b, s13d): the Android 9 emulator image has
+  no file-based encryption, so there is no locked boot to test.
 - **Android 17 is supported.** The whole test suite runs on an Android 17 emulator next to Android 10 to 16, and passed
   on a phone that runs Android 17.
 - **A backup can hold your own sounds.** When an alarm uses a sound of your own, Back up or restore offers Save alarms

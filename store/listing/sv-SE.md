@@ -55,7 +55,7 @@ OCH
 • Fungerar på surfplattor och vikbara telefoner
 • Öppen källkod (MIT)
 
-Kräver Android 10 eller senare på en 64-bitarstelefon.
+Kräver Android 9 eller senare på en 64-bitarstelefon.
 
 ## Nyheter (max 500)
 

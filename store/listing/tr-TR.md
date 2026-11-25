@@ -55,7 +55,7 @@ VE DAHASI
 • Tabletlerde ve katlanabilir telefonlarda çalışır
 • Açık kaynak (MIT)
 
-64 bit bir telefonda Android 10 veya daha yenisi gerekir.
+64 bit bir telefonda Android 9 veya daha yenisi gerekir.
 
 ## Yenilikler (en fazla 500)
 

@@ -55,7 +55,7 @@ ET AUSSI
 • Fonctionne sur tablettes et pliables
 • Open source (MIT)
 
-Nécessite Android 10 ou plus récent sur un téléphone 64 bits.
+Nécessite Android 9 ou plus récent sur un téléphone 64 bits.
 
 ## Nouveautés (max. 500)
 

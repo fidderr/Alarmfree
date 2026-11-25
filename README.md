@@ -5,8 +5,8 @@ off by doing something awake: solve a sum, walk some steps, scan the barcode on 
 toothpaste. It keeps ringing whatever happens to the app or the phone until you did, or until
 the limit you set.
 
-No accounts, no tracking, no ads. Everything ships in the APK. Needs Android 10 or newer, on a
-64-bit phone. Supported: Android 10 to 17.
+No accounts, no tracking, no ads. Everything ships in the APK. Needs Android 9 or newer, on a
+64-bit phone. Supported: Android 9 to 17.
 
 It is written in Rust on top of [mobile-sentinel](https://github.com/fidderr/mobile-sentinel),
 a separate generic SDK. The UI is [Slint](https://slint.dev), drawn natively on the GPU by Skia
@@ -215,8 +215,8 @@ SERIAL=emulator-5558 bash devtest/dump.sh 'tap Settings'  # what the window show
 SERIAL=emulator-5558 bash devtest/slint_smoke.sh       # the short check: make, ring, snooze, turn off
 ```
 
-`all.sh` runs AVDs `afg16` (Android 16), `afg12` (Android 12) on port 5558 and `msd29` (Android 10, the oldest the app
-runs on) on port 5590, one after the other; `AVD_NEW`/`PORT_NEW`, `AVD_OLD`/`PORT_OLD` and `AVD_TEN`/`PORT_TEN` pick other ones, `LEG=afg16`, `LEG=afg12` or `LEG=msd29` runs one. The scenarios keep their numbers from the Dioxus suite (s01 to s63,
+`all.sh` runs AVDs `afg16` (Android 16), `afg12` (Android 12) on port 5558 and `msd29` (Android 10) and `msd28` (Android 9, the oldest the
+app runs on) on port 5590, one after the other; `AVD_NEW`/`PORT_NEW`, `AVD_OLD`/`PORT_OLD` and `AVD_TEN`/`PORT_TEN` pick other ones, `LEG=afg16`, `LEG=afg12` or `LEG=msd29` runs one. The scenarios keep their numbers from the Dioxus suite (s01 to s63,
 `big_screens`, and the phone-only `s60p_*` and `s62p`); only how they press and read the screen changed.
 
 All of it takes about 15 to 20 minutes on two emulators, and no scenario over a minute apart from

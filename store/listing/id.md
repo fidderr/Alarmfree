@@ -55,7 +55,7 @@ DAN JUGA
 • Bisa dipakai di tablet dan ponsel lipat
 • Open source (MIT)
 
-Perlu Android 10 atau lebih baru di ponsel 64-bit.
+Perlu Android 9 atau lebih baru di ponsel 64-bit.
 
 ## Yang baru (maks. 500)
 

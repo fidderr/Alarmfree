@@ -55,7 +55,7 @@ LISÄKSI
 • Toimii tableteilla ja taittuvilla puhelimilla
 • Avoin lähdekoodi (MIT)
 
-Vaatii Android-version 10 tai uudemman 64-bittisessä puhelimessa.
+Vaatii Android-version 9 tai uudemman 64-bittisessä puhelimessa.
 
 ## Uutta (enintään 500)
 

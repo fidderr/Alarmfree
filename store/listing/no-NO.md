@@ -55,7 +55,7 @@ OG
 • Fungerer på nettbrett og foldbare telefoner
 • Åpen kildekode (MIT)
 
-Krever Android 10 eller nyere på en 64-biters telefon.
+Krever Android 9 eller nyere på en 64-biters telefon.
 
 ## Nyheter (maks. 500)
 

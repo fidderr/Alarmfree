@@ -55,7 +55,7 @@ E INOLTRE
 • Funziona su tablet e pieghevoli
 • Open source (MIT)
 
-Richiede Android 10 o successivo su un telefono a 64 bit.
+Richiede Android 9 o successivo su un telefono a 64 bit.
 
 ## Novità (max 500)
 

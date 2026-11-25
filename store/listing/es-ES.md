@@ -55,7 +55,7 @@ Y ADEMÁS
 • Funciona en tablets y plegables
 • Código abierto (MIT)
 
-Requiere Android 10 o posterior en un teléfono de 64 bits.
+Requiere Android 9 o posterior en un teléfono de 64 bits.
 
 ## Novedades (máx. 500)
 

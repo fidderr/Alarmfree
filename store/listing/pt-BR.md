@@ -55,7 +55,7 @@ E MAIS
 • Funciona em tablets e dobráveis
 • Código aberto (MIT)
 
-Requer Android 10 ou mais recente em um celular de 64 bits.
+Requer Android 9 ou mais recente em um celular de 64 bits.
 
 ## Novidades (máx. 500)
 

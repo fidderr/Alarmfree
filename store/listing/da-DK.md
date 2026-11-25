@@ -55,7 +55,7 @@ OG
 • Virker på tablets og foldbare telefoner
 • Open source (MIT)
 
-Kræver Android 10 eller nyere på en 64-bit telefon.
+Kræver Android 9 eller nyere på en 64-bit telefon.
 
 ## Nyheder (max. 500)
 
