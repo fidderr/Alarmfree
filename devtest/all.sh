@@ -1,6 +1,6 @@
 #!/bin/bash
 # The whole suite (every scenario) on the release pair, Android 16 and 12, two emulators at the same time, with the APK that is
-# already built (APK says which, for a release). min_sdk is 29, so Android 10 is the oldest the app runs on.
+# already built (APK says which, for a release). min_sdk is 28, so Android 9 is the oldest the app runs on.
 #
 # Usage: bash devtest/all.sh [name]    results in devtest-out/<name>_<avd>/ and <name>_<avd>.log, a table at the end
 #   AVDS="afg16 afg14 afg12" bash devtest/all.sh    other emulators (the matrix is in tiers.sh); LEG=afg12 runs one; LANES=1 one at a time
