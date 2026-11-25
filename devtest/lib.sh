@@ -827,6 +827,24 @@ after_input() {
 # Type into text field n and check what the field holds, again (up to 3 times) when it does not
 # hold the text: the keys go through the window's own events (settext), and the check is the
 # element channel's reading of the field, not a hope.
+# The middle of the n-th text field, in device pixels from the top ("" when there is none), and whether it is above the keyboard.
+field_y() { ui inputs | python -I -c '
+import json, sys
+rows = json.loads(sys.stdin.read())
+n = int(sys.argv[1])
+print(rows[n]["y"] if n < len(rows) else "")
+' "$1" 2> /dev/null; }
+field_above_keyboard() { # n
+    local y kb h
+    y=$(field_y "$1")
+    # No such field: the typing says so. No reading of the keyboard: no reason to wait.
+    [ -n "$y" ] || return 0
+    kb=$(sn insets_bottom_px | cut -d. -f1)
+    case "$kb" in '' | *[!0-9]*) return 0 ;; esac
+    h=$(window_size | cut -d' ' -f2)
+    case "$h" in '' | *[!0-9]*) return 0 ;; esac
+    [ "$y" -lt $((h - kb)) ]
+}
 field_value() { ui inputs | python -I -c '
 import json, sys
 rows = json.loads(sys.stdin.read())
@@ -1088,6 +1106,12 @@ type_field() { # n text
     # The keyboard moves the sheet: tap a field only once the layout stands still, or the tap
     # lands where the field was (the second text went into the first field).
     await_settled 6 || return 1
+    # A field below the top of the keyboard cannot be touched: the sheet has not scrolled it up yet (the keyboard rises a moment after
+    # the field gets the focus, and the touch then lands on the sheet's scrim, which closes the sheet: s50 and s38, 2026-11-26).
+    wait_for 8 field_above_keyboard "$1" || {
+        echo "field $1 stays under the keyboard (its middle at $(field_y "$1"), the keyboard from $(($(window_size | cut -d' ' -f2) - $(sn insets_bottom_px | cut -d. -f1))))" >&2
+        return 1
+    }
     # One typing. The app tells where the field was; the read-back asks for the field that has the focus, or else the
     # one at that place, and not for a number in the list of fields: the keyboard pushes the sheet up and the
     # number moves (GONE: the last key of a challenge's text takes the field away, the scenario checks the result).

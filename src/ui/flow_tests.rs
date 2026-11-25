@@ -519,7 +519,15 @@ fn typing_into_a_field_that_has_the_focus_makes_no_touch() {
     let touches = |f: &Flow| f.cmd("trace").matches("tap_at").count();
     let dir = crate::custom_sounds::custom_sounds_dir();
     std::fs::create_dir_all(&dir).unwrap();
-    std::fs::write(dir.join("mytune.ogg"), b"OggS").unwrap();
+    // The file is taken away again, also when an expectation below fails.
+    struct Sound(std::path::PathBuf);
+    impl Drop for Sound {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_file(&self.0);
+        }
+    }
+    let _sound = Sound(dir.join("mytune.ogg"));
+    std::fs::write(&_sound.0, b"OggS").unwrap();
     let f = Flow::new(Vec::new());
     f.expect(f.tap("Create new alarm"), "no create button");
     f.open_row("Sound");
