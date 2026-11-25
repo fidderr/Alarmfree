@@ -2142,6 +2142,10 @@ s48c() {
         fi
         tap_above_bar "Save the record of how fast alarms rang" "Test alarm" "Cancel the test alarm"
     }
+    # What the SDK remembers of an earlier ask (s48d, an earlier run) is in the app's preferences, which `fresh` does not clear: with it
+    # the first save finds "asked before, no dialog can come" and opens the settings instead of asking.
+    dev am force-stop "$PKG"
+    dev run-as "$PKG" rm -f shared_prefs/mobilesentinel_share.xml
     rm_download alarmfree-rings.txt
     dev am force-stop "$PKG"
     PERMISSIONS_TOUCHED=1
