@@ -398,6 +398,13 @@ no_lock_here() {
     [ -n "${NO_LOCK:-}" ] || return 1
     note "$1 sets a PIN: not here"
 }
+# A restart before the first unlock needs file-based encryption. The Android 9 emulator image has block encryption (ro.crypto.type
+# block): there the user is unlocked as soon as the phone is up, so no ring can come first and the scenario cannot apply.
+no_locked_boot_here() { # the scenario's name
+    [ "$(dev getprop ro.crypto.type | tr -d '\r')" != file ] || return 1
+    scenario "$1"
+    skip "no locked boot on this device: its storage has block encryption (ro.crypto.type=$(dev getprop ro.crypto.type | tr -d '\r')), the user is unlocked right after the restart"
+}
 # Whether the SDK gave up on the app's screen for this ring. As root: the app's own shell does
 # not start while the phone is locked.
 ui_given_up() { [ "$(dev "su 0 sh -c 'test -e $DATA/files/sentinel/ringing/ui_failed && echo y'")" = y ]; }
@@ -410,6 +417,7 @@ ui_given_up() { [ "$(dev "su 0 sh -c 'test -e $DATA/files/sentinel/ringing/ui_fa
 # device, acts once and confirms (devtest/system.sh).
 s13() {
     no_lock_here s13 && return
+    no_locked_boot_here s13_locked_restart_unlock && return
     scenario s13_locked_restart_unlock
     # Without the permission to start a screen from the background: the way through the button
     # must not need it.
@@ -463,6 +471,7 @@ s13() {
 # at the end, when the unlock has made the history readable). Two rings, one restart instead of two.
 s13b() {
     no_lock_here s13b && return
+    if no_locked_boot_here s13d_locked_restart_limit; then S13D_DONE=1; return; fi
     scenario s13d_locked_restart_limit
     SECOND_ALARM=1 locked_ring 60 8 || { no_pin; return; }
     local problems="" limit_problems="" rang=$SOUND_AT
@@ -563,6 +572,7 @@ s13d() {
     no_lock_here s13d && return
     # s13b did it in its restart; by name alone it runs on its own.
     [ -z "${S13D_DONE:-}" ] || return 0
+    no_locked_boot_here s13d_locked_restart_limit && return
     scenario s13d_locked_restart_limit
     locked_ring 60 8 || { no_pin; return; }
     local problems=""
@@ -1378,6 +1388,18 @@ hold_and_drag() { # x y pixels
             return 1
             ;;
     esac
+    # Android 9 has no `input motionevent`; its draganddrop holds where it starts and then moves.
+    if [ "$(sdk_level)" -lt 29 ]; then
+        # Its hold is the system's long-press time (500 ms), as long as the app's own: a longer one for this touch (0.6 s is what the
+        # motionevent version below holds), put back after it.
+        local held
+        held=$(dev settings get secure long_press_timeout)
+        dev settings put secure long_press_timeout 900
+        dev input draganddrop "$1" "$2" "$1" $(($2 + $3)) 400 # lint-ok: Android 9 has no input motionevent, this is its hold and drag
+        case "$held" in '' | null) dev settings delete secure long_press_timeout ;; *) dev settings put secure long_press_timeout "$held" ;; esac
+        sleep 0.5 # lint-ok: the drop settles before the list is read
+        return
+    fi
     dev input motionevent DOWN "$1" "$2"
     sleep 0.6
     for step in 1 2 3 4; do
@@ -1641,7 +1663,7 @@ s42() {
     on_screen Try 5 || { fail "no challenge list: $(texts_of)"; return; }
     tap Try 0 0.5
     wait_for 5 run_up || { fail "no challenge screen"; return; }
-    adb_ logcat -c
+    log_clear
     tap SCAN 0 0.3
     # It has the keys, or Back goes nowhere. And the window behind it stays what it was, so what
     # says it came back is the button being one again, ready for the next scan.
@@ -1649,7 +1671,14 @@ s42() {
     scan_idle() { [ "$(sn scan_state)" = 0 ] && is_there SCAN; }
     local crashed
     if wait_for 30 scanner_on_top; then
-        crashed=$(adb_ logcat -d 2> /dev/null | grep -E 'FATAL EXCEPTION|ClassNotFoundException|NoClassDefFoundError|Resources\$NotFoundException|InflateException' | head -3)
+        crashed=$(adb_ logcat -d 2> /dev/null | grep -E 'FATAL EXCEPTION|ClassNotFoundException|NoClassDefFoundError|Resources\$NotFoundException|InflateException' |
+            { if [ "$(sdk_level)" -lt 29 ]; then
+                # Android 9's runtime logs (info, no crash, the app runs on) that the helper's anonymous class for the Android 11 inset
+                # animation cannot be resolved (also as a "Caused by" line), every time it checks that class; the helper only uses it from Android 11.
+                # The Messages app on the Android 9 image logs the same kind of line about its own classes when it starts in the
+                # background: only the lines of this app's processes count there.
+                grep -v -E 'SlintAndroidJavaHelper|WindowInsetsAnimation' | awk -v p="$(main_pid) $(dev pidof "$PKG:sentinel")" 'BEGIN { n = split(p, a, " "); for (i = 1; i <= n; i++) ok[a[i]] = 1 } ok[$3]'
+            else cat; fi; } | head -3)
         if [ -n "$crashed" ]; then
             fail "opened, but: $crashed"
             return
@@ -1722,7 +1751,7 @@ s44() {
     # signature is a warning there at every launch (the accelerometer one was, until SDK 0.7.1).
     local badjni
     badjni=$(adb_ logcat -d -b all 2> /dev/null | tr -d '\r' | grep -m1 'Failed to register native method com.mobilesentinel')
-    adb_ logcat -c
+    log_clear
     tap "Turn off" 0 0.5
     wait_for 5 run_up
     local rounds=0 starts deadline=$((SECONDS + 90))
@@ -1787,7 +1816,7 @@ s66() {
         sleep 1.2
     }
     on_screen "Turn off" 10
-    adb_ logcat -c
+    log_clear
     tap "Turn off" 0 0.5
     wait_for 5 run_up
     local problems=""
@@ -3550,7 +3579,7 @@ s63b() {
     seed a "$(alarm_json a "$T_H" "$T_M" "$EVERY_DAY" null)"
     arm a
     until_past $((T - 12))
-    adb_ logcat -c -b all
+    log_clear -b all
     go_home
     probe_other_apps deep4
     until_past $((T - 1))
@@ -3712,7 +3741,7 @@ shade_tap() { # Skip or Undo
     return 1
 }
 sql_alarm() { printf "SELECT data FROM alarms WHERE id='a';\n" | sql; }
-own_notifications() { dev dumpsys notification --noredact | awk '/NotificationRecord\(/ { ours = /pkg=com\.fidderr\.alarmfree/ } ours'; }
+own_notifications() { dev dumpsys notification --noredact | awk '/NotificationRecord\(/ { ours = /pkg=com\.fidderr\.alarmfree/ } /^  [^ ]/ { ours = 0 } ours'; }
 reminded() { own_notifications | grep -q '"Skip"'; }
 done_notice() { own_notifications | grep -q '"Undo"'; }
 skipped() { sql_alarm | grep -q "\"skip_until_ms\":$((T * 1000))"; }

@@ -108,7 +108,7 @@ probe_round() { # kind moment n
         # Home at T - moment: wait for that second.
         until_past $((T - moment))
     fi
-    adb_ logcat -c -b all
+    log_clear -b all
     go_home
     home_at=$(now_s)
     pid_main=$(main_pid)

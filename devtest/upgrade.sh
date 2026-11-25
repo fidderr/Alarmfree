@@ -15,7 +15,7 @@ claim_device
 rm -f "$RESULTS"
 [ -n "${NO_BOOT:-}" ] || reboot_and_wait || { echo "FAIL $avd did not start"; exit 1; }
 RUN_START=$SECONDS
-adb_ logcat -c
+log_clear
 
 SLINT_ACTIVITY=$ACTIVITY
 on_home() { wait_for "${1:-6}" on_screen_no 0; }

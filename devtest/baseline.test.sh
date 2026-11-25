@@ -897,7 +897,7 @@ in_func() { # file function-head text-in-it
 }
 in_func "$here/matrix.sh" 'with_screen() { # size density scenarios...' 'run_unit "$s@$SCREEN_SIZE" at_screen_size' && verdict "with_screen runs every scenario at a size as a unit of its own" 1 || verdict "with_screen runs every scenario at a size as a unit of its own" 0
 in_func "$here/lib.sh" 'reboot_only() {' watchdog_rebase && verdict "reboot_only watches the new processes when the device is back (watchdog_rebase)" 1 || verdict "reboot_only calls watchdog_rebase" 0
-in_func "$here/lib.sh" 'scenario() {' 'logcat -c' && verdict "scenario() clears the log: the crash scan of the watchdog sees only what came after the scenario began" 1 || verdict "scenario() clears the log (the crash scan depends on it)" 0
+in_func "$here/lib.sh" 'scenario() {' 'log_clear' && verdict "scenario() clears the log: the crash scan of the watchdog sees only what came after the scenario began" 1 || verdict "scenario() clears the log (the crash scan depends on it)" 0
 # At the start of a run the PIN of a killed run is cleared before the first reading, or the reading would adopt it.
 pin_line=0 first_unit=0 n=0 started=0
 while IFS= read -r l || [ -n "$l" ]; do

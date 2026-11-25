@@ -32,7 +32,7 @@ now_ms() {
 
 # The line of the window that has the keys. `2> /dev/null`: dumpsys writes "Failed to write while dumping service" to its
 # stderr when grep ends the pipe early, and the device shell here joins stderr into the answer.
-sys_focus() { dev "dumpsys window displays 2> /dev/null | grep -m1 mCurrentFocus" | sed -E 's/.*mCurrentFocus=//; s/^Window\{[0-9a-f]+ u0 //; s/\}$//'; }
+sys_focus() { focused_window | sed -E 's/.*mCurrentFocus=//; s/^Window\{[0-9a-f]+ u0 //; s/\}$//'; }
 
 # One line that says what the device shows, for the message of a wait that ran out.
 sys_top() { dev "dumpsys activity activities 2> /dev/null | grep -E 'topResumedActivity|ResumedActivity:' | head -1 | sed -E 's/.* u0 ([^ ]+) .*/\\1/'" | tr -d '\n'; }
@@ -117,6 +117,12 @@ screen_asleep() { [ "$(wakefulness)" != Awake ]; }
 # A lock credential is set: true, false or ? (Android 10 prints no `secure=`).
 pin_state() {
     local x
+    # Android 9 prints secure= in that dump but never updates it (false with a PIN set, checked with `locksettings set-pin`). A
+    # credential there is the file that names the synthetic password in use, which the emulator's root can see.
+    if [ "$(sdk_level)" = 28 ]; then
+        if [ -n "$(dev "su 0 ls /data/system_de/0/spblob/0000000000000000.handle 2> /dev/null")" ]; then echo true; else echo false; fi
+        return
+    fi
     x=$(dev "dumpsys window policy 2> /dev/null | grep -m1 -o 'secure=[a-z]*'")
     echo "${x#*=}"
 }
@@ -450,6 +456,14 @@ tap_in_shade() { # label [check...]
         fi
         # No button: it was folded away, or the touch did its work and the effect is only late.
         if [ $# -gt 0 ] && "$@"; then return 0; fi
+        # Android 9 opens the shade with its notifications folded after the first time (only the top one is open the first time):
+        # the Expand button of a notification shows its buttons. The dump above is the one that is read.
+        if SHADE_XY=$(sys_nodes find pkg=com.android.systemui rid~expand_button desc=Expand); then
+            # shellcheck disable=SC2086
+            dev input tap $SHADE_XY > /dev/null
+            sleep 0.5
+            continue
+        fi
         now=$(now_ms)
         if [ $((now - opened)) -ge 12000 ]; then
             shade_set closed || return 1

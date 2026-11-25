@@ -307,6 +307,11 @@ screenshot() {
 }
 
 # ---- The clock ----
+# The device's API level, read once.
+sdk_level() {
+    [ -n "${SDK_LEVEL:-}" ] || SDK_LEVEL=$(dev getprop ro.build.version.sdk | tr -d '\r')
+    echo "$SDK_LEVEL"
+}
 on_emulator() { case "$SERIAL" in emulator-*) return 0 ;; *) return 1 ;; esac; }
 set_clock() { dev cmd alarm set-time $(($1 * 1000)) > /dev/null; }
 
@@ -532,6 +537,9 @@ fresh() {
     # covers the lower half of the next one.
     on_emulator && hide_keyboard
     [ -z "$SCREEN_WENT_OFF" ] || { wake; SCREEN_WENT_OFF=""; }
+    # The Android 9 image has deep idle switched off. It is switched on here, with the screen on: switched on with the screen off
+    # (what force_idle used to do) it moves the state machine on by itself and force-idle then stops at INACTIVE.
+    if on_emulator && [ "$(sdk_level)" = 28 ]; then dev "dumpsys deviceidle | grep -q 'mDeepEnabled=false' && dumpsys deviceidle enable deep" > /dev/null; fi
     [ -z "$PERMISSIONS_TOUCHED" ] || grant_all
     if [ -z "$CLEAN_COPY" ]; then
         # ColorOS does not let the shell clear an app: then only what the app itself owns.
@@ -561,9 +569,13 @@ use_settings() {
     printf "INSERT OR REPLACE INTO settings (id, theme, locale, min_volume_percent, prefs) VALUES (1, '%s', '%s', ${MIN_VOLUME:-50}, '{%s}');\n" "$1" "$2" "$3" | sql
 }
 
-# In one go: each of these starts a program on the device.
+# In one go: each of these starts a program on the device. The storage permission is the one of Android 9 and below (the app
+# declares it up to API 28, for saving to Downloads); `pm clear` takes it away, and the system dialog that asks again is not
+# something a scenario can answer on the Android 9 emulator image (it draws empty). Both of the group are granted: the system adds
+# READ_EXTERNAL_STORAGE to an app that asks for WRITE, `pm clear` takes it away too, and with only WRITE granted the app is
+# mounted without storage (/proc/PID/mountinfo says /runtime/default) and its write to Download fails with EACCES.
 grant_all() {
-    adb_ shell "pm grant $PKG android.permission.POST_NOTIFICATIONS; pm grant $PKG android.permission.ACTIVITY_RECOGNITION; pm grant $PKG android.permission.CAMERA; appops set $PKG SYSTEM_ALERT_WINDOW allow; appops set $PKG POST_NOTIFICATION allow; appops set $PKG RUN_ANY_IN_BACKGROUND allow" > /dev/null 2>&1
+    adb_ shell "pm grant $PKG android.permission.POST_NOTIFICATIONS; pm grant $PKG android.permission.ACTIVITY_RECOGNITION; pm grant $PKG android.permission.CAMERA; pm grant $PKG android.permission.WRITE_EXTERNAL_STORAGE; pm grant $PKG android.permission.READ_EXTERNAL_STORAGE; appops set $PKG SYSTEM_ALERT_WINDOW allow; appops set $PKG POST_NOTIFICATION allow; appops set $PKG RUN_ANY_IN_BACKGROUND allow" > /dev/null 2>&1
     PERMISSIONS_TOUCHED=""
 }
 # A widget of ours on the launcher can bring the app up right after a force-stop. A clock change
@@ -603,6 +615,13 @@ deny_notifications() {
 force_idle() {
     local said
     said=$(dev dumpsys deviceidle force-idle)
+    # The Android 9 image has deep idle switched off (mDeepEnabled=false) and says "not enabled"; the later images have it on.
+    case "$said" in
+        *"not enabled"*)
+            dev dumpsys deviceidle enable deep > /dev/null
+            dev dumpsys deviceidle unforce > /dev/null
+            said=$(dev dumpsys deviceidle force-idle) ;;
+    esac
     case "$said" in
         *"Now forced"*) ;;
         *) fail "the device does not go into Doze: $said" ;;
@@ -1243,7 +1262,13 @@ app_shell_answers() {
 top_is_app() { dev "dumpsys activity activities | grep -E 'topResumedActivity|ResumedActivity:' | head -1 | grep -q $PKG" > /dev/null; }
 # The window that has the keys. `dumpsys window` opens with the report of the last ANR, which has
 # a line like it from back then: only the displays part says what is so now.
-focused_window() { dev "dumpsys window displays | grep -m1 mCurrentFocus"; }
+focused_window() {
+    local f
+    f=$(dev "dumpsys window displays | grep -m1 mCurrentFocus")
+    # Android 9 has no mCurrentFocus in the displays part: the one of the whole dump (the last, the ANR report has older ones).
+    [ -n "$f" ] || f=$(dev "dumpsys window | grep mCurrentFocus | tail -n 1")
+    echo "$f"
+}
 focus_in_app() { focused_window | grep -q "$PKG/"; }
 armed_at_ms() { as_app "head -n 1 files/sentinel/armed/$1.armed 2>/dev/null"; }
 os_has_alarm() { dev "dumpsys alarm | grep -qE '$PKG.*ALARM_DISPATCH|ALARM_DISPATCH.*$PKG|walarm\\*:com.mobilesentinel.ALARM_DISPATCH'" > /dev/null; }
@@ -1282,6 +1307,14 @@ rm_download() {
 
 set_zone() { dev cmd alarm set-timezone "$1" > /dev/null 2>&1; }
 
+# The log is cleared as root as well on an emulator: the logd of Android 9 lets the shell clear only its own entries, so a plain
+# `logcat -c` left every earlier scenario's lines in the log (msd28, 2026-11-25: s26 run 2 read the sound of run 1 and passed).
+log_clear() {
+    adb_ logcat -c "$@"
+    if on_emulator; then adb_ shell "su 0 logcat -c $*" > /dev/null 2>&1; fi
+    true
+}
+
 # ---- results ----
 RESULTS="$OUT/results.txt"
 CURRENT=""
@@ -1313,7 +1346,7 @@ scenario() {
         dev am force-stop com.android.settings
         dev input keyevent KEYCODE_BACK
     fi
-    adb_ logcat -c
+    log_clear
 }
 took() { echo "$((SECONDS - SCENARIO_START))s"; }
 # No PASS after a step of the scenario failed (a tap that found no element, a touch that never arrived): the scenario goes on

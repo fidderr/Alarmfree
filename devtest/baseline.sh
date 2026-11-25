@@ -48,9 +48,15 @@ x=$(dumpsys power 2> /dev/null | grep -m1 -o 'mWakefulness=[A-Za-z]*'); echo "wa
 x=$(printf '%s\n' "$w" | grep -m1 -o 'isKeyguardShowing=[a-z]*'); echo "keyguard=${x#*=}"
 p=$(dumpsys window policy 2> /dev/null)
 x=$(printf '%s\n' "$p" | grep -m1 -o '[ ]showing=[a-z]*'); echo "kgpol=${x#*=}"
-x=$(printf '%s\n' "$p" | grep -m1 -o 'secure=[a-z]*'); echo "pin=${x#*=}"
+x=$(printf '%s\n' "$p" | grep -m1 -o 'secure=[a-z]*'); x=${x#*=}
+# Android 9 never updates that line (false with a PIN set): the file of the synthetic password in use says it, for the emulator's root.
+if [ "$(getprop ro.build.version.sdk)" = 28 ]; then if [ -n "$(su 0 ls /data/system_de/0/spblob/0000000000000000.handle 2> /dev/null)" ]; then x=true; else x=false; fi; fi
+echo "pin=$x"
 x=$(dumpsys input_method | grep -o 'mInputShown=[a-z]*'); case "$x" in *true*) echo "ime=true" ;; *false*) echo "ime=false" ;; *) echo "ime=" ;; esac
-echo "focus=$(printf '%s\n' "$w" | grep -m1 mCurrentFocus)"
+f=$(printf '%s\n' "$w" | grep -m1 mCurrentFocus)
+# Android 9 has no mCurrentFocus in the displays part: the last one of the whole dump.
+[ -n "$f" ] || f=$(dumpsys window | grep mCurrentFocus | tail -n 1)
+echo "focus=$f"
 x=$(cmd window size 2> /dev/null); echo "psize=$(printf '%s\n' "$x" | grep -m1 'Physical size')"; echo "osize=$(printf '%s\n' "$x" | grep -m1 'Override size')"
 x=$(cmd window density 2> /dev/null); echo "pdens=$(printf '%s\n' "$x" | grep -m1 'Physical density')"; echo "odens=$(printf '%s\n' "$x" | grep -m1 'Override density')"
 echo "font=$(settings get system font_scale)"
