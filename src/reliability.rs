@@ -21,11 +21,12 @@ pub const CHECKS: [Check; 10] = [
 
 /// The checks the screen lists on this phone: not one for a setting the phone does not have (the unused-apps setting is from
 /// Android 11), which would show an "OK" for nothing.
-pub fn listed(health: &HealthReport) -> Vec<Check> {
-    CHECKS
-        .into_iter()
-        .filter(|check| health.applies(*check))
-        .collect()
+pub fn listed() -> Vec<Check> {
+    listed_where(health::applies)
+}
+
+fn listed_where(applies: impl Fn(Check) -> bool) -> Vec<Check> {
+    CHECKS.into_iter().filter(|check| applies(*check)).collect()
 }
 
 pub fn report() -> HealthReport {
@@ -122,26 +123,16 @@ mod tests {
         );
     }
 
+    /// Below Android 11 the SDK says the unused-apps check does not apply, and the screen has no row for it.
     #[test]
-    fn the_unused_apps_row_is_only_listed_from_android_11() {
-        for (api_level, listed_there) in
-            [(28, false), (29, false), (30, true), (36, true), (0, true)]
-        {
-            let rows = listed(&HealthReport::for_api_level(api_level));
-            assert_eq!(
-                rows.contains(&Check::KeptWhenUnused),
-                listed_there,
-                "API {api_level}"
-            );
-            let others: Vec<_> = CHECKS
-                .into_iter()
-                .filter(|check| *check != Check::KeptWhenUnused)
-                .collect();
-            assert!(
-                others.iter().all(|check| rows.contains(check)),
-                "API {api_level}"
-            );
-        }
+    fn a_check_the_phone_does_not_have_is_not_listed() {
+        let without = listed_where(|check| check != Check::KeptWhenUnused);
+        assert!(!without.contains(&Check::KeptWhenUnused));
+        assert_eq!(without.len(), CHECKS.len() - 1);
+        let all = listed_where(|_| true);
+        assert_eq!(all, CHECKS.to_vec());
+        // Off Android, as in these tests, every check applies.
+        assert_eq!(listed(), CHECKS.to_vec());
     }
 
     #[test]

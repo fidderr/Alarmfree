@@ -129,7 +129,7 @@ fn sync(ctx: &Ctx) {
     let tr = ctx.tr.borrow();
     let health = report();
     // What needs doing first.
-    let mut checks = listed(&health);
+    let mut checks = listed();
     checks.sort_by_key(|check| health.is_ok(*check));
     let kit = crate::platform::alarm_kit_optional();
     let log = kit.map(|kit| kit.timing_log()).unwrap_or_default();

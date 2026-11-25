@@ -2086,7 +2086,7 @@ s48c() {
         return
     fi
     fresh
-    local problems="" t0 answer pkg_of_dialog
+    local problems="" t0 answer pkg_of_dialog rows_read="" seen_rows=""
     dialog_up() { dev dumpsys activity activities | grep -E 'mResumedActivity|ResumedActivity:' | grep -q GrantPermissionsActivity; }
     save_the_record() { # the row on the reliability screen, with a ring in the record
         as_app "mkdir -p files/sentinel/ringing && printf \"1700000000000 sound a\\n1700000000400 ui a\\n\" > files/sentinel/ringing/timing.log"
@@ -2094,6 +2094,19 @@ s48c() {
         on_home 30
         open_reliability || { problems="$problems; no reliability screen"; return 1; }
         on_screen "Test alarm" 10 || { problems="$problems; no test button: $(texts_of | cut -c1-200)"; return 1; }
+        if [ -z "$rows_read" ]; then
+            # The rows of the screen, read over a few scrolls (the tree lists what is in the window): the unused-apps setting is
+            # Android 11's, so there is no row for it here, and the row that follows it in the list is there.
+            rows_read=1 seen_rows=""
+            local round
+            for round in 1 2 3 4 5 6; do
+                seen_rows="$seen_rows|$(texts_of)"
+                sheet_scroll
+            done
+            case "$seen_rows" in *"Stay allowed when unused"*) problems="$problems; a row for the unused-apps setting, which Android 9 does not have" ;; esac
+            case "$seen_rows" in *"Alarm notifications"*) ;; *) problems="$problems; the rows were not read (no Alarm notifications row in $seen_rows)" ;; esac
+            echo "NOTE  $CURRENT  reliability rows seen on Android $(sdk_level): $(printf '%s' "$seen_rows" | tr '|' '\n' | grep -E '^(Exact alarms|Notifications|Full-screen alarm|Show over other apps|Battery saver|Running in the background|Stay allowed when unused|Alarm notifications|Total silence|After a restart)$' | sort -u | tr '\n' ',')" | tee -a "$RESULTS"
+        fi
         tap_above_bar "Save the record of how fast alarms rang" "Test alarm" "Cancel the test alarm"
     }
     rm_download alarmfree-rings.txt
