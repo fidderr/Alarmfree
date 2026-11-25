@@ -11,7 +11,7 @@ application_id = "com.fidderr.alarmfree"
 label = "AlarmFree"
 version_code = 12601
 version_name = "0.7.1"
-min_sdk = 29
+min_sdk = 28
 native_lib = "main"
 # build.sh stages libalarmfree.so here as <abi>/libmain.so (the SDK's Kotlin loads it by that name).
 jni_libs = "build/jniLibs"

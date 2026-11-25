@@ -7,13 +7,13 @@ fn read(path: &str) -> String {
 }
 
 #[test]
-fn min_sdk_is_android_10() {
+fn min_sdk_is_android_9() {
     let toml = read("sentinel.toml");
     let min = toml
         .lines()
         .find_map(|l| l.strip_prefix("min_sdk = "))
         .expect("sentinel.toml sets min_sdk");
-    assert_eq!(min.trim(), "29");
+    assert_eq!(min.trim(), "28");
 }
 
 #[test]

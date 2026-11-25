@@ -92,9 +92,9 @@ chrono-tz = "0.10"
 tokio = { version = "1", features = ["rt", "macros", "time"] }
 
 [patch.crates-io]
-accesskit = { git = "https://github.com/fidderr/accesskit", rev = "764f0513e287de757b9c6c5ef3b91474dafac64f" }
-accesskit_consumer = { git = "https://github.com/fidderr/accesskit", rev = "764f0513e287de757b9c6c5ef3b91474dafac64f" }
-accesskit_android = { git = "https://github.com/fidderr/accesskit", rev = "764f0513e287de757b9c6c5ef3b91474dafac64f" }
+accesskit = { git = "https://github.com/fidderr/accesskit", rev = "bac6d79e2ea218635177dfc8bd5314234e9601f2" }
+accesskit_consumer = { git = "https://github.com/fidderr/accesskit", rev = "bac6d79e2ea218635177dfc8bd5314234e9601f2" }
+accesskit_android = { git = "https://github.com/fidderr/accesskit", rev = "bac6d79e2ea218635177dfc8bd5314234e9601f2" }
 
 # The headless UI tests (src/ui/panel_tests.rs) read the element tree thousands of times: optimized
 # Slint internals make that about 5x quicker, and they are only built once.
