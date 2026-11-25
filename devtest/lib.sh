@@ -307,7 +307,7 @@ screenshot() {
 }
 
 # ---- The clock ----
-# The device's API level, read once.
+# The device's API level, read once: `sdk_level > /dev/null` in the main shell (the runner does) keeps it; inside `$( )` it is asked again.
 sdk_level() {
     [ -n "${SDK_LEVEL:-}" ] || SDK_LEVEL=$(dev getprop ro.build.version.sdk | tr -d '\r')
     echo "$SDK_LEVEL"
@@ -575,7 +575,10 @@ use_settings() {
 # READ_EXTERNAL_STORAGE to an app that asks for WRITE, `pm clear` takes it away too, and with only WRITE granted the app is
 # mounted without storage (/proc/PID/mountinfo says /runtime/default) and its write to Download fails with EACCES.
 grant_all() {
-    adb_ shell "pm grant $PKG android.permission.POST_NOTIFICATIONS; pm grant $PKG android.permission.ACTIVITY_RECOGNITION; pm grant $PKG android.permission.CAMERA; pm grant $PKG android.permission.WRITE_EXTERNAL_STORAGE; pm grant $PKG android.permission.READ_EXTERNAL_STORAGE; appops set $PKG SYSTEM_ALERT_WINDOW allow; appops set $PKG POST_NOTIFICATION allow; appops set $PKG RUN_ANY_IN_BACKGROUND allow" > /dev/null 2>&1
+    local storage=""
+    # Only where the app can ask for it (it declares both up to API 28): from Android 10 the grant is an error that nobody reads.
+    if [ "$(sdk_level)" -lt 29 ]; then storage="pm grant $PKG android.permission.WRITE_EXTERNAL_STORAGE; pm grant $PKG android.permission.READ_EXTERNAL_STORAGE;"; fi
+    adb_ shell "pm grant $PKG android.permission.POST_NOTIFICATIONS; pm grant $PKG android.permission.ACTIVITY_RECOGNITION; pm grant $PKG android.permission.CAMERA; $storage appops set $PKG SYSTEM_ALERT_WINDOW allow; appops set $PKG POST_NOTIFICATION allow; appops set $PKG RUN_ANY_IN_BACKGROUND allow" > /dev/null 2>&1
     PERMISSIONS_TOUCHED=""
 }
 # A widget of ours on the launcher can bring the app up right after a force-stop. A clock change
@@ -615,25 +618,28 @@ deny_notifications() {
 force_idle() {
     local said
     said=$(dev dumpsys deviceidle force-idle)
-    # The Android 9 image has deep idle switched off (mDeepEnabled=false) and says "not enabled"; the later images have it on.
-    case "$said" in
-        *"not enabled"*)
-            dev dumpsys deviceidle enable deep > /dev/null
-            dev dumpsys deviceidle unforce > /dev/null
-            said=$(dev dumpsys deviceidle force-idle) ;;
-    esac
-    # Android 9 steps through SENSING and LOCATING, which wait for the motion sensor and a location fix and answer a moment later:
-    # "stopped at INACTIVE" is the state it was in, and the same command goes on from there once that state has changed (seen on
-    # a GitHub machine, msd28; locally it never stops). It is stepped on while the state moves, a few times at most.
-    local was="" steps=0
-    deep_state_moved() { [ "$(dev dumpsys deviceidle get deep | tr -d '\r')" != "$was" ]; }
-    while [ "$steps" -lt 6 ]; do
-        case "$said" in *"stopped at"*) ;; *) break ;; esac
-        was=$(dev dumpsys deviceidle get deep | tr -d '\r')
-        wait_for 10 deep_state_moved
-        said=$(dev dumpsys deviceidle force-idle)
-        steps=$((steps + 1))
-    done
+    # Android 9 only: no other version asks again here, a Doze that does not come is a FAIL there.
+    if [ "$(sdk_level)" -lt 29 ]; then
+        # The Android 9 image has deep idle switched off (mDeepEnabled=false) and says "not enabled"; the later images have it on.
+        case "$said" in
+            *"not enabled"*)
+                dev dumpsys deviceidle enable deep > /dev/null
+                dev dumpsys deviceidle unforce > /dev/null
+                said=$(dev dumpsys deviceidle force-idle) ;;
+        esac
+        # Android 9 steps through SENSING and LOCATING, which wait for the motion sensor and a location fix and answer a moment later:
+        # "stopped at INACTIVE" is the state it was in, and the same command goes on from there once that state has changed (seen on
+        # a GitHub machine, msd28; locally it never stops). It is stepped on while the state moves, a few times at most.
+        local was="" steps=0
+        deep_state_moved() { [ "$(dev dumpsys deviceidle get deep | tr -d '\r')" != "$was" ]; }
+        while [ "$steps" -lt 6 ]; do
+            case "$said" in *"stopped at"*) ;; *) break ;; esac
+            was=$(dev dumpsys deviceidle get deep | tr -d '\r')
+            wait_for 10 deep_state_moved
+            said=$(dev dumpsys deviceidle force-idle)
+            steps=$((steps + 1))
+        done
+    fi
     case "$said" in
         *"Now forced"*) ;;
         *) fail "the device does not go into Doze: $said" ;;
@@ -1276,10 +1282,39 @@ top_is_app() { dev "dumpsys activity activities | grep -E 'topResumedActivity|Re
 # a line like it from back then: only the displays part says what is so now.
 focused_window() {
     local f
-    f=$(dev "dumpsys window displays | grep -m1 mCurrentFocus")
+    # `2> /dev/null` on the device: dumpsys writes "Failed to write while dumping service" to its stderr when grep ends the pipe
+    # early, and the device shell here joins stderr into the answer.
+    f=$(dev "dumpsys window displays 2> /dev/null | grep -m1 mCurrentFocus")
     # Android 9 has no mCurrentFocus in the displays part: the one of the whole dump (the last, the ANR report has older ones).
-    [ -n "$f" ] || f=$(dev "dumpsys window | grep mCurrentFocus | tail -n 1")
+    [ -n "$f" ] || f=$(dev "dumpsys window 2> /dev/null | grep mCurrentFocus | tail -n 1")
     echo "$f"
+}
+# The lines of a log (stdin) that say the app broke: a crash, or a class that cannot be found. On Android 9 three lines that the
+# runtime and an app of the image write at info level every time are left out, and nothing else: the Slint helper's anonymous
+# class for the Android 11 inset animation is resolved by name and not found (the pair of lines that ends in
+# WindowInsetsAnimation$Callback; the helper only uses it from Android 11), and the image's Messages app, started in the
+# background, does not find its own AppCompatViewInflater. A ClassNotFoundException for the helper itself, a crash, or the same
+# lines on any other version stay.
+BROKE_LINES='FATAL EXCEPTION|ClassNotFoundException|NoClassDefFoundError|Resources\$NotFoundException|InflateException'
+BENIGN_ON_ANDROID_9='Rejecting re-init on previously-failed class java\.lang\.Class<dev\.slint\.android\.SlintAndroidJavaHelper\$1>: java\.lang\.NoClassDefFoundError: Failed resolution of: Landroid/view/WindowInsetsAnimation\$Callback;|Caused by: java\.lang\.ClassNotFoundException: Didn.t find class "android\.view\.WindowInsetsAnimation\$Callback" on path|I AppCompatDelegate: java\.lang\.ClassNotFoundException: androidx\.appcompat\.app\.AppCompatViewInflater'
+broke_lines() {
+    if [ "$(sdk_level)" -lt 29 ]; then
+        grep -E "$BROKE_LINES" | grep -v -E "$BENIGN_ON_ANDROID_9"
+    else
+        grep -E "$BROKE_LINES"
+    fi
+}
+# What the window toolkit says about a frame that failed (Android 9 takes the surface of a stopped activity away without telling the app, and the
+# toolkit waits for the new window): one line in the results when the scenario saw it, with the time until the new window came, to read the gap
+# off a run without its files.
+surface_note() {
+    local log failed came swaps
+    log=$(adb_ logcat -d -s RustStdoutStderr:I 2> /dev/null | tr -d '\r')
+    failed=$(printf '%s\n' "$log" | grep -c 'Drawing failed, waiting')
+    [ "$failed" -gt 0 ] || return 0
+    came=$(printf '%s\n' "$log" | grep -o 'A new window came [0-9]* ms after' | grep -o '[0-9][0-9]*' | tr '\n' ' ')
+    swaps=$(adb_ logcat -d 2> /dev/null | grep -c 'Error swapping buffers')
+    echo "NOTE  $CURRENT  SURFACE GAP failed frames: $failed, new window after (ms): [${came}], swap error lines in the log: $swaps" | tee -a "$RESULTS"
 }
 focus_in_app() { focused_window | grep -q "$PKG/"; }
 armed_at_ms() { as_app "head -n 1 files/sentinel/armed/$1.armed 2>/dev/null"; }

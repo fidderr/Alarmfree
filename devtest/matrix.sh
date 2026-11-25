@@ -401,9 +401,13 @@ no_lock_here() {
 # A restart before the first unlock needs file-based encryption. The Android 9 emulator image has block encryption (ro.crypto.type
 # block): there the user is unlocked as soon as the phone is up, so no ring can come first and the scenario cannot apply.
 no_locked_boot_here() { # the scenario's name
-    [ "$(dev getprop ro.crypto.type | tr -d '\r')" != file ] || return 1
+    local crypto
+    crypto=$(dev getprop ro.crypto.type | tr -d '\r')
+    [ "$crypto" != file ] || return 1
     scenario "$1"
-    skip "no locked boot on this device: its storage has block encryption (ro.crypto.type=$(dev getprop ro.crypto.type | tr -d '\r')), the user is unlocked right after the restart"
+    # No answer is no reason to skip: a device that does not say is a failure, not a pass of the scenarios that need the restart.
+    [ -n "$crypto" ] || { fail "the storage encryption of the device could not be read (ro.crypto.type is empty), so it is not known whether a locked restart applies"; return 0; }
+    skip "no locked boot on this device: its storage has block encryption (ro.crypto.type=$crypto), the user is unlocked right after the restart"
 }
 # Whether the SDK gave up on the app's screen for this ring. As root: the app's own shell does
 # not start while the phone is locked.
@@ -1669,14 +1673,7 @@ s42() {
     scan_idle() { [ "$(sn scan_state)" = 0 ] && is_there SCAN; }
     local crashed
     if wait_for 30 scanner_on_top; then
-        crashed=$(adb_ logcat -d 2> /dev/null | grep -E 'FATAL EXCEPTION|ClassNotFoundException|NoClassDefFoundError|Resources\$NotFoundException|InflateException' |
-            { if [ "$(sdk_level)" -lt 29 ]; then
-                # Android 9's runtime logs (info, no crash, the app runs on) that the helper's anonymous class for the Android 11 inset
-                # animation cannot be resolved (also as a "Caused by" line), every time it checks that class; the helper only uses it from Android 11.
-                # The Messages app on the Android 9 image logs the same kind of line about its own classes when it starts in the
-                # background: only the lines of this app's processes count there.
-                grep -v -E 'SlintAndroidJavaHelper|WindowInsetsAnimation' | awk -v p="$(main_pid) $(dev pidof "$PKG:sentinel")" 'BEGIN { n = split(p, a, " "); for (i = 1; i <= n; i++) ok[a[i]] = 1 } ok[$3]'
-            else cat; fi; } | head -3)
+        crashed=$(adb_ logcat -d 2> /dev/null | broke_lines | head -3)
         if [ -n "$crashed" ]; then
             fail "opened, but: $crashed"
             return
@@ -2067,6 +2064,75 @@ s48b() {
     fi
     if [ -z "$problems" ]; then
         pass "backup with and without own sounds, the sound back, the missing one named"
+    else
+        fail "${problems#; }"
+    fi
+}
+
+# Saving to Downloads below Android 10 needs the storage permission, a dialog. The save is called on the thread that draws the
+# window (the reliability screen's record): it must ask for the permission and say so at once, never wait for the answer (it
+# held the app's whole window for up to two minutes: a tap got no answer). Revoked with the app stopped (a process started
+# after `pm clear` has to have both permissions granted before it starts, or it is mounted without storage), the dialog of this
+# emulator image is drawn empty and cannot be tapped: it is closed by stopping the permission controller, and the permission is
+# then granted from outside, the app stopped and started again, and the same save puts the file in Downloads.
+s48c() {
+    if ! on_emulator; then
+        note "s48c needs an emulator"
+        return
+    fi
+    scenario s48c_save_needs_storage_access
+    if [ "$(sdk_level)" -ge 29 ]; then
+        skip "saving to Downloads needs no permission from Android 10 (this is Android $(sdk_level))"
+        return
+    fi
+    fresh
+    local problems="" t0 answer pkg_of_dialog
+    dialog_up() { dev dumpsys activity activities | grep -E 'mResumedActivity|ResumedActivity:' | grep -q GrantPermissionsActivity; }
+    save_the_record() { # the row on the reliability screen, with a ring in the record
+        as_app "mkdir -p files/sentinel/ringing && printf \"1700000000000 sound a\\n1700000000400 ui a\\n\" > files/sentinel/ringing/timing.log"
+        start_app
+        on_home 30
+        open_reliability || { problems="$problems; no reliability screen"; return 1; }
+        on_screen "Test alarm" 10 || { problems="$problems; no test button: $(texts_of | cut -c1-200)"; return 1; }
+        tap_above_bar "Save the record of how fast alarms rang" "Test alarm" "Cancel the test alarm"
+    }
+    rm_download alarmfree-rings.txt
+    dev am force-stop "$PKG"
+    PERMISSIONS_TOUCHED=1
+    dev pm revoke "$PKG" android.permission.WRITE_EXTERNAL_STORAGE > /dev/null 2>&1
+    dev pm revoke "$PKG" android.permission.READ_EXTERNAL_STORAGE > /dev/null 2>&1
+    dev dumpsys package "$PKG" | grep -q 'android.permission.WRITE_EXTERNAL_STORAGE: granted=true' && problems="$problems; the storage permission is still granted after the revoke"
+    # Without the permission: the tap is answered, the window answers, the dialog is asked for, and the person is told.
+    t0=$SECONDS
+    save_the_record || true
+    answer=$(ui window)
+    case "$answer" in
+        "no answer from the app"*) problems="$problems; the window does not answer after the save, $((SECONDS - t0))s after the tap: $answer" ;;
+    esac
+    [ $((SECONDS - t0)) -le 25 ] || problems="$problems; the save held the app for $((SECONDS - t0))s"
+    echo "NOTE  $CURRENT  save without the permission: tap answered and window said '${answer:0:40}' $((SECONDS - t0))s after the start of the step" | tee -a "$RESULTS"
+    wait_for 20 dialog_up || problems="$problems; the permission dialog was not asked for (resumed: $(dev dumpsys activity activities | grep -m1 -E 'mResumedActivity|ResumedActivity:' | cut -c1-150))"
+    pkg_of_dialog=$(dev dumpsys activity activities | grep -E 'mResumedActivity|ResumedActivity:' | grep -m1 GrantPermissionsActivity | sed -nE 's#.* ([A-Za-z0-9_.]+)/[A-Za-z0-9_.]*GrantPermissionsActivity.*#\1#p')
+    if [ -n "$pkg_of_dialog" ]; then
+        # The dialog of this image is empty and takes no touch: its package is stopped.
+        dev am force-stop "$pkg_of_dialog"
+        sys_wait "$SYS_DEADLINE" "the app in front again" focus_in_app || problems="$problems; $SYS_WHY"
+        if ! on_screen_has "Allow storage access" 10; then
+            problems="$problems; the person is not told to allow the storage access: $(texts_of | cut -c1-300)"
+        fi
+    fi
+    has_file() { [ -n "$(dev ls /sdcard/Download/ | grep -m1 '^alarmfree-rings')" ]; }
+    ! has_file || problems="$problems; a file was saved without the permission"
+    # Allowed, with the app stopped: the next start has both permissions from the beginning, and the same save works.
+    dev am force-stop "$PKG"
+    grant_all
+    save_the_record || true
+    has_record() { [ "$(dev cat /sdcard/Download/alarmfree-rings.txt 2> /dev/null | grep -c ' sound ')" -ge 1 ]; }
+    wait_for 15 has_record || problems="$problems; no record in Downloads after the permission was given (Downloads holds: $(dev ls /sdcard/Download/ | tr '
+' ' '))"
+    rm_download alarmfree-rings.txt
+    if [ -z "$problems" ]; then
+        pass "without the permission the save asked for it and told the person, the window kept answering; with it the file is in Downloads"
     else
         fail "${problems#; }"
     fi
@@ -3561,6 +3627,7 @@ s63() {
         press ring-turn-off
         wait_for 30 sound_off || problems="$problems; still ringing after turning it off"
     fi
+    surface_note
     if [ -z "$problems" ]; then
         pass "no banner over the alarm's screen, the notification stays in the list"
     else
@@ -3635,6 +3702,7 @@ s63c() {
     said=$(as_app "grep -c 'not taken up' files/sentinel/diag.log 2> /dev/null")
     [ "${said:-0}" -ge 1 ] 2> /dev/null || problems="$problems; the guardian did not say it started the screen itself"
     as_app "rm -f files/sentinel/debug_hold_heads_up"
+    surface_note
     if [ -z "$problems" ]; then
         pass "the heads-up was held back, the guardian brought the ring screen up itself (state=$(state a))"
     else
@@ -3922,7 +3990,7 @@ s62p() {
 # The ring-screen probe (Home before a ring, what the main process does): by name only.
 . "$(dirname "$0")/ringprobe.sh"
 
-ALL="s01 s03 s04 s05 s06 s07 s07d s10 s11 s13 s13b s13d s14 s15 s16 s16b s17 s19 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s34 s36 s37 s38 s39 s40 s42 s43 s44 s45 s46 s47 s48 s48b s49 s50 s51 s52 s53 s55 s56 s57 s58 s59 s60 s61 s62 s63 s63b s63c s65 s66 s67 s68 s68b s69a s69b s69c s69d s70 big_screens s54"
+ALL="s01 s03 s04 s05 s06 s07 s07d s10 s11 s13 s13b s13d s14 s15 s16 s16b s17 s19 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s34 s36 s37 s38 s39 s40 s42 s43 s44 s45 s46 s47 s48 s48b s48c s49 s50 s51 s52 s53 s55 s56 s57 s58 s59 s60 s61 s62 s63 s63b s63c s65 s66 s67 s68 s68b s69a s69b s69c s69d s70 big_screens s54"
 ON_A_PHONE="s01 s03 s04 s05 s06 s07 s10 s15 s16 s16b s17 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s36 s37 s38 s39 s42 s43 s45 s46 s47 s49 s50 s51 s52 s53 s55 s57 s58 s59 s61 s62"
 
 : > "$RESULTS"
@@ -3930,6 +3998,8 @@ RUN_START=$SECONDS
 # Started by itself, and not from a run that claimed the device already.
 [ -n "${RUN_ID:-}" ] || claim_device
 open_shells
+# The API level is read once, here in the main shell (inside $( ) the value would not be kept).
+sdk_level > /dev/null
 chaos_hog_start
 if on_emulator; then
     dev settings put global auto_time 0
