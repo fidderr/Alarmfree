@@ -93,7 +93,7 @@ tokio = { version = "1", features = ["rt", "macros", "time"] }
 
 [patch.crates-io]
 # The SDK's Rust side of the android9 branch (share::downloads_permission_missing, health::applies): the Kotlin side comes from the checkout beside this folder. Until the next SDK release is on crates.io.
-mobile-sentinel = { git = "https://github.com/fidderr/mobile-sentinel", rev = "d9a4fc5ae35ce99e4d91a967653f49fe3c807473" }
+mobile-sentinel = { git = "https://github.com/fidderr/mobile-sentinel", rev = "5f2bc6307c04036de0b4dfdf21673599d2d19eae" }
 accesskit = { git = "https://github.com/fidderr/accesskit", rev = "f835f773c9259d3f71c8018810a96317465b5770" }
 accesskit_consumer = { git = "https://github.com/fidderr/accesskit", rev = "f835f773c9259d3f71c8018810a96317465b5770" }
 accesskit_android = { git = "https://github.com/fidderr/accesskit", rev = "f835f773c9259d3f71c8018810a96317465b5770" }
