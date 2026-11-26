@@ -1,5 +1,6 @@
 # Expected seconds per unit of the full list (devtest/ci/split.py makes it: split.py --measure <unit_times.txt of full runs>).
 # Source: run 45274621625 (14 parts), mean over the seven versions of the seconds run_unit measured for the unit (baseline, rerun and restart included).
+# s48 and s62 are the mean of run 45778337214 (s48 81 to 102 s, s62 75 to 102 s): the picker waits for a still list before it is dumped (devtest/system.sh).
 big_screens 177
 s01 16
 s03 23
@@ -40,7 +41,7 @@ s44 20
 s45 12
 s46 1
 s47 1
-s48 64
+s48 91
 s48b 50
 s48c 70
 s48d 80
@@ -56,7 +57,7 @@ s58 44
 s59 22
 s60 52
 s61 44
-s62 86
+s62 91
 s63 21
 s63b 34
 s63c 16
