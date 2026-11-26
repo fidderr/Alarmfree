@@ -2727,8 +2727,15 @@ s53() {
         i=$((i + 1))
     done
     scroll_to "This app in the phone's settings" || problems="$problems; no button for the app's settings"
+    # The settings page of the app can finish by itself a few seconds after it opened (Android 14, afg14: it opened and was gone again
+    # before the next look at the focus, run 45730456654 and x13): what counts is that Android started it after the tap, which the system
+    # log says whatever the focus did meanwhile.
+    settings_starts() { adb_ logcat -d 2> /dev/null | grep -a -c -E 'START u0 .*(APPLICATION_DETAILS_SETTINGS|cmp=com\.android\.settings/)'; }
+    local starts_before
+    starts_before=$(settings_starts)
     tap_in "This app in the phone's settings"
-    sys_wait "$SYS_DEADLINE" "the app's settings leaving the app" away || problems="$problems; the app's settings stay in the app: $SYS_WHY"
+    settings_left_the_app() { away || [ "$(settings_starts)" -gt "$starts_before" ]; }
+    sys_wait "$SYS_DEADLINE" "the app's settings leaving the app" settings_left_the_app || problems="$problems; the app's settings stay in the app: $SYS_WHY"
     sys_leave "the app's settings" || problems="$problems; Back from the app's settings: $SYS_WHY"
     if [ -z "$problems" ]; then
         pass "deleting a sound, $n fix buttons"
