@@ -483,20 +483,46 @@ picker_up() { sys_focus | grep -q documentsui; }
 # its preview in another app (a sound, a picture: YouTube Music, Photos; runs 45079574283 and 45082824603), and the key Enter on the
 # focused file chooses it. The picker of Android 10 and 11 takes the touch.
 picker_is_google() { sys_focus | grep -q 'com.google.android.documentsui'; }
+# The picker's list as the view tree shows it (`dumpsys activity top` walks the views, it asks the list's adapter nothing), without
+# an accessibility dump: whether the list is there, its rows and the progress bar. A uiautomator dump walks the list through the
+# accessibility interface and asks the adapter for every row, and DocumentsUI crashes when its loader has closed the cursor that
+# moment (StaleDataException, Android 11, run 45743443306). So the picker is dumped only once its list has stood still.
+picker_list_state() {
+    dev "dumpsys activity top 2> /dev/null | grep -E 'app:id/(item_root|progressbar|dir_list)' | sed -E 's/[{][0-9a-f]+ /{/'" | tr -d '\r'
+}
+picker_list_settled() {
+    local a b
+    a=$(picker_list_state)
+    case "$a" in *app:id/dir_list*) ;; *) return 1 ;; esac
+    # A visible progress bar has V as the first of its flags.
+    printf '%s
+' "$a" | grep 'app:id/progressbar' | grep -q '[{]V' && return 1
+    sleep 1
+    b=$(picker_list_state)
+    [ "$a" = "$b" ]
+}
+# Waits (12 s at most, and then goes on: an empty folder or another picker has no such list) for the list to stand still.
+picker_wait_list() {
+    picker_up || return 0
+    sys_wait 12 "the picker's list standing still" picker_list_settled || echo "NOTE  ${CURRENT:-?}  the picker's list did not stand still for a second within 12 s: dumped anyway" | tee -a "$RESULTS"
+}
+# A dump of the picker's screen, and the signature of it, once its list has stood still.
+picker_dump() { picker_wait_list; sys_dump; }
+picker_sig() { picker_wait_list; sys_sig; }
 # What the picker shows, for the message of a failure.
 picker_summary() {
-    sys_dump && sys_nodes list | grep -E 'documentsui' | grep -E '\|(title|header_title)\||Show roots|dir_list|message' | cut -d'|' -f3-5 | head -12 | tr '\n' ';'
+    picker_dump && sys_nodes list | grep -E 'documentsui' | grep -E '\|(title|header_title)\||Show roots|dir_list|message' | cut -d'|' -f3-5 | head -12 | tr '\n' ';'
 }
 # Choose the file whose label has `name` in it. One action per read; the next action comes from the next read. A touch is
 # repeated only when the tree did not change in 10 s after it. Android 11 ignores a touch on a file: after that proof it is
 # chosen with the keys (the focus moved onto the row, then Enter).
 picker_keys_select() { # name
     local name=$1 box fb i=0 keys=(KEYCODE_DPAD_DOWN KEYCODE_DPAD_RIGHT)
-    sys_dump || return 1
+    picker_dump || return 1
     box=$(sys_nodes box "label~$name") || return 1
     while [ "$i" -lt 14 ]; do
         # Where the focus is, before the next key (a grid of two files in a row is reached by Right, a list by Down).
-        if sys_dump && fb=$(sys_nodes focusbox); then
+        if picker_dump && fb=$(sys_nodes focusbox); then
             # shellcheck disable=SC2086
             set -- $box $fb
             if [ "$#" = 8 ] && [ "$5" -le "$1" ] && [ "$6" -le "$2" ] && [ "$7" -ge "$3" ] && [ "$8" -ge "$4" ]; then
@@ -592,7 +618,7 @@ picker_pick() { # name
             SYS_WHY="the picker did not deliver $name within ${PICKER_DEADLINE:-150}s (step $step; shows: $(picker_summary); $(sys_show))"
             return 1
         fi
-        sys_dump || { sleep 0.5; continue; }
+        picker_dump || { sleep 0.5; continue; }
         sig=$(sys_nodes list | cksum | cut -d' ' -f1)
         if xy=$(sys_nodes find "label~$name" pkg~documentsui); then
             local way
@@ -632,7 +658,7 @@ picker_pick() { # name
 }
 picker_changed() { # signature before
     local now
-    now=$(sys_sig) && [ "$now" != "$1" ]
+    now=$(picker_sig) && [ "$now" != "$1" ]
 }
 
 # ---- What the SDK's unlock screen does (a plain view of the SDK, in the app's package) ----
