@@ -15,7 +15,9 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
   Android takes the window's surface away from a stopped activity without telling the app (seen on Android 9, and on an Android 16
   emulator on a loaded machine, where the new window came 2.5 and 4 s later); the app drew on it when the ring brought it back,
   the drawing failed, and the screen's loop ended (the process died and the guardian had to start a new one). The UI toolkit
-  (Slint, our fork) now waits a failed frame out, tries again four times a second, and draws on the new window. A failed draw that
+  (Slint, our fork) now does not draw at all while the app is stopped, so a screen that changes in the background (the list's
+  countdown, a ring screen) no longer runs into the lost surface. A draw that still fails at the moment the app comes back is
+  waited out, tried again four times a second, until the new window comes, and then drawn there. A failed draw that
   is not a lost surface (the graphics context is lost, memory is out) used to end the loop at once and now holds the picture for up
   to 10 s first, then ends it as before. A release build also starts when the screen reader support cannot be set up (a failure
   there ended the process in a release build, which does not catch panics).

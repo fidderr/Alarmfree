@@ -3884,6 +3884,48 @@ s63c() {
     fi
 }
 
+# The app in the background with an alarm in its list, then reopened from the launcher. Android 9 takes the drawing surface of a stopped
+# activity away without a word. The toolkit must not draw while the activity is stopped, and must wait out a draw that fails at the
+# moment of return until the new window comes. The list changes on screen while the app is away (6 s after Home the clock moves two
+# minutes, and the 15 s refresh of the list draws it), and the app stays away 33 s: past that refresh and the 10 s the toolkit waited
+# for a window after a failed draw, when the activity ended itself. Passes on every version; only Android 9 shows the fault.
+s63d() {
+    scenario s63d_back_from_the_background
+    fresh
+    seed a "$(alarm_json a 7 0 "$EVERY_DAY" null)"
+    arm a
+    local why="" p0 p1 t0
+    start_app
+    on_home 60 || why="$why; no list after the start"
+    p0=$(main_pid)
+    log_clear -b all
+    go_home
+    t0=$(now_ms)
+    sys_wait 20 "6 s in the background" elapsed_since "$t0" 6000 || why="$why; $SYS_WHY"
+    jump_to $(($(now_s) + 120))
+    sys_wait 60 "33 s in the background" elapsed_since "$t0" 33000 || why="$why; $SYS_WHY"
+    dev monkey -p "$PKG" -c android.intent.category.LAUNCHER 1 > /dev/null 2>&1
+    wait_for 20 top_is_main || why="$why; not on top after the return (top: $(top_activity))"
+    p1=$(main_pid)
+    [ -n "$p1" ] && [ "$p0" = "$p1" ] || why="$why; process $p0 became ${p1:-none}"
+    if [ -z "$why" ]; then
+        tap "Settings" 0 0.3
+        await_screen 3 6 || why="$why; a tap on Settings was not answered"
+        press back
+        await_screen 0 6 || why="$why; Back from Settings was not answered"
+    fi
+    # The activity that ends itself when its drawing fails: the toolkit's loop returns, and the system logs the finish it asked for.
+    if adb_ logcat -d -b all 2> /dev/null | tr -d '\r' | grep -qE 'run\(\) returned|am_finish_activity.*app-request|the UI stopped'; then
+        why="$why; the activity ended itself (its drawing failed and no window came)"
+    fi
+    surface_note
+    if [ -z "$why" ]; then
+        pass "back from 33 s in the background with the same process, on top, taps answered"
+    else
+        fail "${why#; }"
+    fi
+}
+
 # A large display size and a large text, as a tester had it: the card of an alarm, the quick row,
 # the days and the list of settings in the editor all stay inside the window and inside their card.
 s65() {
@@ -4164,7 +4206,7 @@ s62p() {
 # The ring-screen probe (Home before a ring, what the main process does): by name only.
 . "$(dirname "$0")/ringprobe.sh"
 
-ALL="s01 s03 s04 s05 s06 s07 s07d s10 s11 s13 s13b s13d s14 s15 s16 s16b s17 s19 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s34 s36 s37 s38 s39 s40 s42 s43 s44 s45 s46 s47 s48 s48b s48c s48d s49 s50 s51 s52 s53 s55 s56 s57 s58 s59 s60 s61 s62 s63 s63b s63c s65 s66 s67 s68 s68b s69a s69b s69c s69d s70 big_screens s54"
+ALL="s01 s03 s04 s05 s06 s07 s07d s10 s11 s13 s13b s13d s14 s15 s16 s16b s17 s19 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s34 s36 s37 s38 s39 s40 s42 s43 s44 s45 s46 s47 s48 s48b s48c s48d s49 s50 s51 s52 s53 s55 s56 s57 s58 s59 s60 s61 s62 s63 s63b s63c s63d s65 s66 s67 s68 s68b s69a s69b s69c s69d s70 big_screens s54"
 ON_A_PHONE="s01 s03 s04 s05 s06 s07 s10 s15 s16 s16b s17 s22 s23a s23b s23c s25 s26x2 s28 s29 s30 s31 s32 s33 s36 s37 s38 s39 s42 s43 s45 s46 s47 s49 s50 s51 s52 s53 s55 s57 s58 s59 s61 s62"
 
 : > "$RESULTS"
