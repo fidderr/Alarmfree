@@ -16,10 +16,9 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
   emulator on a loaded machine, where the new window came 2.5 and 4 s later); the app drew on it when the ring brought it back,
   the drawing failed, and the screen's loop ended (the process died and the guardian had to start a new one). The UI toolkit
   (Slint, our fork) now does not draw at all while the app is stopped, so a screen that changes in the background (the list's
-  countdown, a ring screen) no longer runs into the lost surface. A draw that still fails at the moment the app comes back is
-  waited out, tried again four times a second, until the new window comes, and then drawn there. A failed draw that
-  is not a lost surface (the graphics context is lost, memory is out) used to end the loop at once and now holds the picture for up
-  to 10 s first, then ends it as before. A release build also starts when the screen reader support cannot be set up (a failure
+  countdown, a ring screen) no longer runs into the lost surface. A draw that still fails on the lost surface at the moment the
+  app comes back is a skipped frame, and the new window draws again. Any other failed draw ends the loop at once, as before.
+  A release build also starts when the screen reader support cannot be set up (a failure
   there ended the process in a release build, which does not catch panics).
 - **Alarms added from a file are kept when Android closed the app's window while the file picker was in front.** They
   were read and then dropped; they are now saved and set before the window is back, and the list shows them when it is.
