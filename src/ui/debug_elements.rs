@@ -508,6 +508,21 @@ pub fn run(ui: &MainWindow, command: &str) -> Option<String> {
             }
             None => "none".to_owned(),
         },
+        // `settext:next:<text>`: the focus moves to the next field with the Tab key, and the text is typed into that one: no touch either.
+        // `none` when no field has the focus, or when Tab did not move it.
+        "settext" if arg.starts_with("next:") => match caret(ui) {
+            Some(before) => {
+                key(ui, Key::Tab.into());
+                match caret(ui) {
+                    Some(c) if (c.x - before.x).abs() > 1.5 || (c.y - before.y).abs() > 1.5 => {
+                        type_keys(ui, &arg["next:".len()..]);
+                        format!("OK {} {}", c.x.round() as i32, c.y.round() as i32)
+                    }
+                    _ => "none".to_owned(),
+                }
+            }
+            None => "none".to_owned(),
+        },
         "settext" => match arg.split_once(':') {
             Some((n, value)) => match n
                 .parse::<usize>()

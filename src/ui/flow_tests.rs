@@ -569,6 +569,30 @@ fn typing_into_the_focused_field_makes_no_touch() {
     f.finish();
 }
 
+/// The second field of a sheet is reached with the Tab key, not with a touch on the place it was read at (the sheet moves while the keyboard
+/// rises). Nothing is typed when Tab does not move the focus.
+#[test]
+fn the_next_field_is_reached_with_tab_and_no_touch() {
+    let touches = |f: &Flow| f.cmd("trace").matches("tap_at").count();
+    let f = Flow::new(Vec::new());
+    f.expect(f.tap("Create new alarm"), "no create button");
+    f.open_row("Label");
+    f.set_field(0, "Morning");
+    let before = touches(&f);
+    let said = f.cmd("settext:next:Take pills");
+    f.settle();
+    f.expect(said.starts_with("OK "), format!("settext:next said {said}"));
+    let fields = f.cmd("inputs");
+    f.expect(
+        fields.contains("\"t\":\"Morning\"") && fields.contains("\"t\":\"Take pills\""),
+        format!("the fields hold {fields}"),
+    );
+    f.expect(touches(&f) == before, "Tab was a touch");
+    // The last field has no next one in the sheet: nothing is typed anywhere.
+    f.done();
+    f.finish();
+}
+
 /// s50 (the settings that need no scroll, slider or bundled sound): a new alarm made through the screens, what is
 /// saved, what the editor says when it is opened again, and deleting it after asking.
 #[test]

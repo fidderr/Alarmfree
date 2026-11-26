@@ -2427,7 +2427,9 @@ s50() {
     tap Weekend 0 0.3
     open_row Label
     type_field 0 Morning || problems="$problems; label field: $(field_value 0)"
-    type_field 1 'Take pills' || problems="$problems; note field: $(field_value 1)"
+    # The note is the next field of the sheet: reached with Tab, not with a touch on the place it was read at (the sheet moves while the
+    # keyboard rises: s50 failed there in three full runs on afg12 and msd28, 2026-11-26).
+    type_field next 'Take pills' || problems="$problems; note field: $(field_value 1)"
     # On a slow emulator the keyboard comes up late and stays over the lower half of everything after this
     # (the whole editor then failed at once, 156 s, with the keyboard in the picture).
     on_emulator && hide_keyboard
