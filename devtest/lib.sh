@@ -1123,6 +1123,10 @@ type_field() { # n text
             return 1
             ;;
     esac
+    # The keyboard rises a moment after the field took the focus, and the first time after an emulator started (the keyboard app starts
+    # then) it takes seconds: the sheet moves up when it is there, and what the scenario does next must find it where it ends (s50 and
+    # s38 failed at the first typing of a part, on four versions, 2026-11-26; the same scenarios after another typing never did).
+    UI_QUIET=1 await_ui 10 'keyboard=up' || true
     await_settled 3
     place=${said#OK }
     held=$(ui "heldat:${place// /:}")

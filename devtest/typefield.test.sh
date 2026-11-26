@@ -50,6 +50,8 @@ verdict "the field holds less: fails after one typing, no second typing" "$([ "$
 verdict "the failure says what the field holds" "$(grep -q 'it holds \[TEXT:Take pill\]' "$tmp/short/stderr" && echo 1)"
 run_case nofield 'TEXT:Take pills' 'none'
 verdict "no such field: fails after one try, without a read-back" "$([ "$(cat "$tmp/nofield/rc")" = rc=1 ] && [ "$(settext_calls nofield)" = 1 ] && ! grep -q '^heldat' "$tmp/nofield/calls" && echo 1)"
+verdict "after a typing the keyboard is waited for (a named state), before the read-back" "$(grep -n -E '^await:10000:keyboard=up$|^heldat:' "$tmp/same/calls" | head -2 | cut -d: -f2- | tr '
+' ' ' | grep -q '^await:10000:keyboard=up heldat:' && echo 1)"
 # The keyboard is up (900 of 1920 px, from 1020): a field at 1500 is under it until the sheet scrolls.
 KB=900 Y=1500 run_case under 'TEXT:Take pills'
 verdict "a field that stays under the keyboard: fails without a touch, says where it is" "$([ "$(cat "$tmp/under/rc")" = rc=1 ] && [ "$(settext_calls under)" = 0 ] && grep -q 'stays under the keyboard (its middle at 1500, the keyboard from 1020)' "$tmp/under/stderr" && echo 1)"
