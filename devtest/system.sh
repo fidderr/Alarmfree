@@ -506,9 +506,10 @@ picker_wait_list() {
     picker_up || return 0
     sys_wait 12 "the picker's list standing still" picker_list_settled || echo "NOTE  ${CURRENT:-?}  the picker's list did not stand still for a second within 12 s: dumped anyway" | tee -a "$RESULTS"
 }
-# A dump of the picker's screen, and the signature of it, once its list has stood still.
-picker_dump() { picker_wait_list; sys_dump; }
-picker_sig() { picker_wait_list; sys_sig; }
+# A dump of the picker's screen. The wait for a still list is made once for each opening of the picker (PICKER_STILL, set here, cleared by picker_pick when it
+# starts and after a touch that loads another listing): it was made at every dump, and s48 took 40 s longer (run 45768125951).
+picker_dump() { [ -n "${PICKER_STILL:-}" ] || { picker_wait_list; PICKER_STILL=1; }; sys_dump; }
+picker_sig() { [ -n "${PICKER_STILL:-}" ] || picker_wait_list; sys_sig; }
 # What the picker shows, for the message of a failure.
 picker_summary() {
     picker_dump && sys_nodes list | grep -E 'documentsui' | grep -E '\|(title|header_title)\||Show roots|dir_list|message' | cut -d'|' -f3-5 | head -12 | tr '\n' ';'
@@ -601,6 +602,7 @@ picker_keys_file() { # name
 # file in the list.
 picker_pick() { # name
     local name=$1 end xy step=0 sig crash
+    PICKER_STILL=""
     sys_wait "$SYS_DEADLINE" "the file picker being up" picker_up || return 1
     picker_trace "== pick $name: $(sys_show)"
     end=$(($(now_ms) + ${PICKER_DEADLINE:-150} * 1000))
@@ -640,16 +642,19 @@ picker_pick() { # name
             picker_trace "touch on Downloads at $xy"
             # shellcheck disable=SC2086
             dev input tap $xy > /dev/null
+            PICKER_STILL=""
             sys_wait 10 "the picker showing another listing after Downloads" picker_changed "$sig"
         elif xy=$(sys_nodes find label=Download pkg~documentsui); then
             picker_trace "touch on the Download folder at $xy"
             # shellcheck disable=SC2086
             dev input tap $xy > /dev/null
+            PICKER_STILL=""
             sys_wait 10 "the picker showing another listing after the Download folder" picker_changed "$sig"
         elif xy=$(sys_nodes find desc="Show roots" pkg~documentsui); then
             picker_trace "touch on Show roots at $xy"
             # shellcheck disable=SC2086
             dev input tap $xy > /dev/null
+            PICKER_STILL=""
             sys_wait 10 "the roots drawer after Show roots" picker_changed "$sig"
         else
             sleep 0.5

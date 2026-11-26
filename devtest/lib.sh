@@ -1131,10 +1131,14 @@ type_field() { # n text
             return 1
             ;;
     esac
-    # The keyboard rises a moment after the field took the focus, and the first time after an emulator started (the keyboard app starts
-    # then) it takes seconds: the sheet moves up when it is there, and what the scenario does next must find it where it ends (s50 and
-    # s38 failed at the first typing of a part, on four versions, 2026-11-26; the same scenarios after another typing never did).
-    UI_QUIET=1 await_ui 10 'keyboard=up' || echo "NOTE  ${CURRENT:-?}  type_field $1: the keyboard was not up 10 s after the typing (the app says: $(ui ready | grep -oE 'editor_sheet=[A-Za-z]+|keyboard=[a-z]+' | tr -s '\n' ' '); the field's middle: $(field_y "$1"))" | tee -a "$RESULTS" >&2
+    # A precaution, not a known cure: the first time after an emulator started the keyboard app starts late and takes seconds, and the
+    # sheet moves up when the keyboard is there; this waits for the app's own keyboard=up, so what the scenario does next starts from a
+    # keyboard that is up (s50 and s38 failed at the first typing of a part on four versions, 2026-11-26; the cause is open, fixround.md,
+    # Round 3). Not after Tab (`next`) and not when the typing takes its own field away
+    # (FIELD_MAY_GO): the keyboard was not up there in the full run 45768125951 (keyboard=down), so the wait was a fixed 10 s.
+    if [ "$1" != next ] && [ -z "${FIELD_MAY_GO:-}" ]; then
+        UI_QUIET=1 await_ui 10 'keyboard=up' || echo "NOTE  ${CURRENT:-?}  type_field $1: the keyboard was not up 10 s after the typing (the app says: $(ui ready | grep -oE 'editor_sheet=[A-Za-z]+|keyboard=[a-z]+' | tr -s '\n' ' '); the field's middle: $(field_y "$1"))" | tee -a "$RESULTS" >&2
+    fi
     await_settled 3
     place=${said#OK }
     held=$(ui "heldat:${place// /:}")

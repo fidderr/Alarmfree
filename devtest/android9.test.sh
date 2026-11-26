@@ -132,4 +132,15 @@ dev() { :; }
 picker_crash > /dev/null
 verdict "a clean log is no crash" "$([ $? -ne 0 ] && echo 1)"
 
+# ---- the picker waits for a still list once for each opening ----
+waits=0
+picker_wait_list() { waits=$((waits + 1)); }
+sys_dump() { return 0; }
+PICKER_STILL=""
+picker_dump; picker_dump; picker_dump
+verdict "three dumps of one opening of the picker wait for the list once ($waits)" "$([ "$waits" = 1 ] && echo 1)" "waits: $waits"
+PICKER_STILL=""
+picker_dump; picker_dump
+verdict "after a touch that loads another listing (PICKER_STILL cleared) the next dump waits again ($waits)" "$([ "$waits" = 2 ] && echo 1)" "waits: $waits"
+
 exit $bad

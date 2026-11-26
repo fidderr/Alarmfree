@@ -25,13 +25,13 @@ ui() {
         *) echo "$1" >> "$DIR/calls" ;;
     esac
 }
-type_field 1 'Take pills'
+type_field "${FIELD:-1}" 'Take pills'
 echo "rc=$?" > "$DIR/rc"
 D
 
 run_case() { # name heldat-answer [settext-answer]
     mkdir -p "$tmp/$1"
-    env LIB="$here/lib.sh" DIR="$tmp/$1" ANSWER="$2" SETTEXT="${3-OK 540 600}" FIELD_MAY_GO="${MAYGO-}" KB="${KB-0}" Y="${Y-600}" LOW="${LOW-1500}" RISE="${RISE-0}" bash "$tmp/drive.sh" > "$tmp/$1/stdout" 2> "$tmp/$1/stderr"
+    env LIB="$here/lib.sh" DIR="$tmp/$1" ANSWER="$2" SETTEXT="${3-OK 540 600}" FIELD_MAY_GO="${MAYGO-}" FIELD="${FIELD-}" KB="${KB-0}" Y="${Y-600}" LOW="${LOW-1500}" RISE="${RISE-0}" bash "$tmp/drive.sh" > "$tmp/$1/stdout" 2> "$tmp/$1/stderr"
 }
 verdict() { # name ok
     if [ "$2" = 1 ]; then echo "PASS  $1"; else echo "FAIL  $1"; bad=1; fi
@@ -53,6 +53,10 @@ verdict "no such field: fails after one try, without a read-back" "$([ "$(cat "$
 verdict "after a typing the keyboard is waited for (a named state), before the read-back" "$(grep -n -E '^await:10000:keyboard=up$|^heldat:' "$tmp/same/calls" | head -2 | cut -d: -f2- | tr '
 ' ' ' | grep -q '^await:10000:keyboard=up heldat:' && echo 1)"
 verdict "a keyboard that is not up 10 s after the typing is said in a NOTE (with the field), the typing still goes on" "$(grep -q 'type_field 1: the keyboard was not up 10 s after the typing' "$tmp/same/stderr" && [ "$(cat "$tmp/same/rc")" = rc=0 ] && echo 1)"
+FIELD=next run_case tab 'TEXT:Take pills'
+verdict "after a Tab typing the keyboard is not waited for, and no NOTE says it was not up" "$([ "$(cat "$tmp/tab/rc")" = rc=0 ] && ! grep -q 'keyboard=up' "$tmp/tab/calls" && ! grep -q 'keyboard was not up' "$tmp/tab/stderr" && echo 1)"
+MAYGO=1 run_case maygo2 'TEXT:Take pills'
+verdict "when the typing may take its own field away the keyboard is not waited for, and no NOTE" "$([ "$(cat "$tmp/maygo2/rc")" = rc=0 ] && ! grep -q 'keyboard=up' "$tmp/maygo2/calls" && ! grep -q 'keyboard was not up' "$tmp/maygo2/stderr" && echo 1)"
 # The keyboard is up (900 of 1920 px, from 1020): a field at 1500 is under it until the sheet scrolls.
 KB=900 Y=1500 run_case under 'TEXT:Take pills'
 verdict "a field that stays under the keyboard: fails without a touch, says where it is" "$([ "$(cat "$tmp/under/rc")" = rc=1 ] && [ "$(settext_calls under)" = 0 ] && grep -q 'stays under the keyboard (its middle at 1500, the keyboard from 1020)' "$tmp/under/stderr" && echo 1)"
@@ -60,4 +64,5 @@ KB=900 RISE=3 run_case rises 'TEXT:Take pills'
 verdict "a field that is under the keyboard for a moment and then scrolled up: typed once, after the wait" "$([ "$(cat "$tmp/rises/rc")" = rc=0 ] && [ "$(settext_calls rises)" = 1 ] && echo 1)"
 KB=900 Y=700 run_case above 'TEXT:Take pills'
 verdict "a field above the keyboard: typed once at once" "$([ "$(cat "$tmp/above/rc")" = rc=0 ] && [ "$(settext_calls above)" = 1 ] && echo 1)"
+[ -n "${DEBUG_TF:-}" ] && { cat "$tmp/tab/calls" "$tmp/tab/rc"; cat "$tmp/tab/stderr"; }
 exit $bad
