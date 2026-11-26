@@ -187,6 +187,13 @@ fn back(ctx: &Rc<Ctx>) {
     let Some(ui) = ctx.ui.upgrade() else {
         return;
     };
+    trace!(
+        "back key: screen {} ed_sheet {:?} panel {} home_sheet {:?}",
+        ui.get_screen(),
+        ui.get_ed_sheet(),
+        ui.get_panel_open(),
+        ui.get_home_sheet()
+    );
     if challenge_run::back(ctx) {
         return;
     }

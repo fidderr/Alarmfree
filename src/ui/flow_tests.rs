@@ -511,9 +511,9 @@ impl Flow {
     }
 }
 
-/// The field of a sound being renamed has the focus by itself. `settext:focus:` types into it with no touch: a touch on the place the
-/// field was read at can miss it when the sheet has moved since (the keyboard rising, on a slow phone), and nothing is typed (s38 on
-/// Android 16, 2026-11-26). Without a focused field it says so and types nothing.
+/// The field of a sound being renamed has the focus by itself. `settext:focus:` types into it with no touch (s38 on Android 16 once
+/// ended with the sheet closed after a typing with a touch, 2026-11-26; the cause of that is open). Without a focused field it says so
+/// and types nothing.
 #[test]
 fn typing_into_the_focused_field_makes_no_touch() {
     struct Sound(std::path::PathBuf);

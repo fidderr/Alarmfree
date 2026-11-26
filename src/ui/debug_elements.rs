@@ -499,8 +499,8 @@ pub fn run(ui: &MainWindow, command: &str) -> Option<String> {
         // `settext:<n>:<text>`: the same through the keys. The answer is `OK <x> <y>`, the place of the field in device
         // pixels, for `heldat`.
         // `settext:focus:<text>` types into the field that has the focus, with no touch: a field shown for typing takes the focus by itself,
-        // and a touch on the place it was read at can miss it when the sheet has moved since (the keyboard rising), which closed the sheet
-        // (s38 on Android 16, 2026-11-26). `none` when no field has the focus.
+        // so none is needed. (s38 on Android 16 once ended with the sheet closed after a typing with a touch, 2026-11-26; the cause of that
+        // is open.) `none` when no field has the focus.
         "settext" if arg.starts_with("focus:") => match caret(ui) {
             Some(c) => {
                 type_keys(ui, &arg["focus:".len()..]);

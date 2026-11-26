@@ -164,7 +164,14 @@ guard_allows() {
     [ "$*" = "input keyevent KEYCODE_BACK" ] && echo "$f" | grep -Eq 'u0 com\.android\.settings/' && return 0 # lint-ok: the text of the command compared with, not an input
     return 1
 }
+# Every BACK the script sends, with who sent it: the app's trace has a "back key" line for each one that reached it, so a BACK
+# without that line went to something else (the keyboard), and a "back key" line without a BACK here came from elsewhere.
+key_record() {
+    [ -n "${CURRENT:-}" ] || return 0
+    echo "+$((SECONDS - ${SCENARIO_START:-0}))s $(date +%T.%N | cut -c1-12) BACK from ${FUNCNAME[2]:-?} <- ${FUNCNAME[3]:-?} (line ${BASH_LINENO[3]:-?})" >> "$OUT/$CURRENT.keys.txt"
+}
 dev() {
+    case "$*" in "input keyevent KEYCODE_BACK"*) key_record ;; esac # lint-ok: the text of the command compared with, not an input
     [ -z "$CHAOS_ON" ] || chaos_touch "$@" || return 0
     case "$SERIAL:$*" in emulator-*) ;; *"input "*) guard_input "$@" || return 1 ;; esac
     case "$1" in
@@ -1106,8 +1113,9 @@ type_field() { # n text
     # The keyboard moves the sheet: tap a field only once the layout stands still, or the tap
     # lands where the field was (the second text went into the first field).
     await_settled 6 || return 1
-    # A field below the top of the keyboard cannot be touched: the sheet has not scrolled it up yet (the keyboard rises a moment after
-    # the field gets the focus, and the touch then lands on the sheet's scrim, which closes the sheet: s50 and s38, 2026-11-26).
+    # A field below the top of the keyboard cannot be touched: wait until the sheet has scrolled it up (the keyboard rises a moment after
+    # the field gets the focus). What closed the sheet in s50 and s38 (2026-11-26) is not known (fixround.md, Round 3): this wait, the
+    # typing without a touch and the wait for the keyboard below are precautions that waited on a state, none of them shown to be the cure.
     wait_for 8 field_above_keyboard "$1" || {
         echo "field $1 stays under the keyboard (its middle at $(field_y "$1"), the keyboard from $(($(window_size | cut -d' ' -f2) - $(sn insets_bottom_px | cut -d. -f1))))" >&2
         return 1
@@ -1126,7 +1134,7 @@ type_field() { # n text
     # The keyboard rises a moment after the field took the focus, and the first time after an emulator started (the keyboard app starts
     # then) it takes seconds: the sheet moves up when it is there, and what the scenario does next must find it where it ends (s50 and
     # s38 failed at the first typing of a part, on four versions, 2026-11-26; the same scenarios after another typing never did).
-    UI_QUIET=1 await_ui 10 'keyboard=up' || true
+    UI_QUIET=1 await_ui 10 'keyboard=up' || echo "NOTE  ${CURRENT:-?}  type_field $1: the keyboard was not up 10 s after the typing (the app says: $(ui ready | grep -oE 'editor_sheet=[A-Za-z]+|keyboard=[a-z]+' | tr -s '\n' ' '); the field's middle: $(field_y "$1"))" | tee -a "$RESULTS" >&2
     await_settled 3
     place=${said#OK }
     held=$(ui "heldat:${place// /:}")
@@ -1703,14 +1711,18 @@ keyboard_up() {
     [ "$px" -gt 400 ]
 }
 keyboard_down() { ! keyboard_up; }
+# One BACK for each look that says keyboard=up. The keyboard can take seconds to go on a busy device, and a BACK sent while the
+# first is still on its way, or after the keyboard went, reaches the app and closes the sheet it shows (editor::back): so the next
+# BACK waits until the keyboard has had 8 s and is read as up again.
 hide_keyboard() {
     local try
     for try in 1 2 3; do
         keyboard_up || return 0
         dev input keyevent KEYCODE_BACK
         after_input
-        wait_for 2 keyboard_down && return 0
+        wait_for 8 keyboard_down && return 0
     done
+    echo "NOTE  ${CURRENT:-?}  hide_keyboard: the keyboard was still up after three BACKs" | tee -a "$RESULTS" >&2
 }
 sheet_scroll_up() {
     # shellcheck disable=SC2046

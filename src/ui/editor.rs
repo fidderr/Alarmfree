@@ -732,6 +732,7 @@ pub fn discard(ctx: &Rc<Ctx>) {
 }
 
 pub fn sheet_closed(ctx: &Rc<Ctx>) {
+    trace!("sheet closed by its own close (Done or the dimmed area)");
     stop_preview(ctx);
 }
 

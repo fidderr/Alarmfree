@@ -1558,7 +1558,7 @@ s38() {
         *mytune*) ;;
         *) problems="$problems; own sound not listed: $names" ;;
     esac
-    # What the screen and the app say at each step, kept before anything else touches the sheet (a swipe on its scrim closes it): in the
+    # What the screen and the app say at each step, kept before anything else touches the sheet: in the
     # results as $CURRENT.rename.txt and, when the scenario fails, as lines of the log. The pictures carry the scenario's name, so the
     # first run's are kept as first_* when a rerun follows.
     rename_record() { # step
@@ -1570,6 +1570,8 @@ s38() {
             echo "settext said: [${TYPE_SAID:-}] heldat said: [${TYPE_HELD:-}]"
             echo "prefs: $(printf 'SELECT prefs FROM settings;\n' | sql | grep -o '"sound_names":{[^}]*}')"
             echo "trace: $(ui trace | tail -c 400)"
+            echo "keys: $(tail -n 4 "$OUT/$CURRENT.keys.txt" 2> /dev/null | tr '\n' ';')"
+            echo "reached the app: $(ui trace | grep -oE '[0-9]+ (back key: [^|]*|sheet closed[^|]*)' | tail -n 4 | tr '\n' ';')"
         } >> "$OUT/$CURRENT.rename.txt"
     }
     : > "$OUT/$CURRENT.rename.txt"
@@ -1577,8 +1579,8 @@ s38() {
     rename_record before_typing
     screenshot "$CURRENT.rename_before"
     TYPE_SAID="" TYPE_HELD=""
-    # The rename field has the focus by itself: typed into without a touch (a touch on the place it was read at missed it on afg16 and closed
-    # the sheet, x7 45704663722), and a field without the focus is no field to rename in.
+    # The rename field has the focus by itself: typed into without a touch (the one recorded failure of s38, afg16, x7 45704663722,
+    # typed with a touch and ended with the sheet closed: the cause is open, this is a precaution), and a field without the focus is no field to rename in.
     set_field focus Morning || problems="$problems; no field to rename in (settext said [$TYPE_SAID], heldat [$TYPE_HELD])"
     rename_record after_typing
     screenshot "$CURRENT.rename_typed"
@@ -1590,8 +1592,7 @@ s38() {
     await_ui 10 'keyboard=down' || problems="$problems; the keyboard is still up after the rename: $(ui ready | grep -oE 'keyboard=[a-z]+')"
     rename_record keyboard_down
     if ! wait_for 10 has_there Morning; then
-        # A swipe is only made on an open sheet: on a closed one it scrolls the editor, and on a sheet that is not under the finger
-        # its scrim takes the release for a click.
+        # A swipe is only made on an open sheet: on a closed one it scrolls the editor.
         if ui ready | grep -q 'editor_sheet=None'; then
             problems="$problems; the sound sheet is closed, Morning cannot show"
         else
@@ -2373,7 +2374,7 @@ done_sheet() {
     # A panel takes touches once it holds still (the first Done after a sheet within it is lost on a busy machine).
     await_settled 4
     # Without a Done on screen the failure says what the screen and the keyboard were (s50 on afg12, afg14 and msd28, 2026-11-26).
-    TAP_WAIT=5 tap_in Done L 0.3 || echo "NOTE  $CURRENT  S50 done_sheet, no Done: the app: $(ui ready | cut -c1-210); texts: $(texts_of | cut -c1-260); keyboard: $(dev dumpsys input_method | grep -o -E 'mInputShown=[a-z]*|mImeWindowVis=[0-9a-fx]*' | tr -s '[:space:]' ' ')" | tee -a "$RESULTS"
+    TAP_WAIT=5 tap_in Done L 0.3 || echo "NOTE  $CURRENT  S50 done_sheet, no Done: the app: $(ui ready | cut -c1-210); texts: $(texts_of | cut -c1-260); keyboard: $(dev dumpsys input_method | grep -o -E 'mInputShown=[a-z]*|mImeWindowVis=[0-9a-fx]*' | tr -s '[:space:]' ' '); BACKs sent by the script: $(tail -n 4 "$OUT/$CURRENT.keys.txt" 2> /dev/null | tr '\n' ';'); what reached the app: $(ui trace | grep -oE '[0-9]+ (back key: [^|]*|sheet closed[^|]*)' | tail -n 4 | tr '\n' ';')" | tee -a "$RESULTS"
     await_ui 8 'editor_sheet=None' && return 0
     screenshot done_sheet_still_up
     step_failed "done_sheet: the sheet is still up after Done: $(sn ed_sheet)"
@@ -2429,7 +2430,7 @@ s50() {
     open_row Label
     type_field 0 Morning || problems="$problems; label field: $(field_value 0)"
     # The note is the next field of the sheet: reached with Tab, not with a touch on the place it was read at (the sheet moves while the
-    # keyboard rises: s50 failed there in three full runs on afg12 and msd28, 2026-11-26).
+    # keyboard rises; s50 failed in this step in three full runs on afg12 and msd28, 2026-11-26: cause open, this is a precaution).
     type_field next 'Take pills' || problems="$problems; note field: $(field_value 1)"
     # On a slow emulator the keyboard comes up late and stays over the lower half of everything after this
     # (the whole editor then failed at once, 156 s, with the keyboard in the picture).
@@ -2728,16 +2729,28 @@ s53() {
         i=$((i + 1))
     done
     scroll_to "This app in the phone's settings" || problems="$problems; no button for the app's settings"
-    # The settings page of the app can finish by itself a few seconds after it opened (Android 14, afg14: it opened and was gone again
-    # before the next look at the focus, run 45730456654 and x13): what counts is that Android started it after the tap, which the system
-    # log says whatever the focus did meanwhile.
+    # The page of the app's settings can be gone again a few seconds after it came up (Android 14, afg14, run 45735280521, kept in
+    # fixround/x13_afg14: Android started it at 01:46:51 and it was gone at 01:46:57, with no `input` command of the script in between and
+    # the app stopped all that time, so neither a key of the script nor the app closed it; Settings finished its own page. A dump of the
+    # screen by the script ran in between, 3 s after it came up; 12 of 12 dumps on that page on afg14 did not close it, so that is not shown
+    # to be the cause). The first look of that run came about 9 s after the page opened (its 30 s wait ended at 01:47:33), too late to see it. So the focus is watched from before
+    # the tap, every 0.1 s, and the check wants both: the focus seen away from the app, and the log line of Android starting the page.
     settings_starts() { adb_ logcat -d 2> /dev/null | grep -a -c -E 'START u0 .*(APPLICATION_DETAILS_SETTINGS|cmp=com\.android\.settings/)'; }
-    local starts_before
+    local starts_before seen="$OUT/$CURRENT.focus_left_app" watcher
     starts_before=$(settings_starts)
+    rm -f "$seen"
+    ( until [ -e "$seen" ]; do
+        adb_ shell "dumpsys window 2> /dev/null | grep mCurrentFocus | tail -n 1" 2> /dev/null | tr -d '\r' | grep -v null | grep -qv "$PKG/" && date +%T.%N > "$seen"
+        sleep 0.1 # lint-ok: the poll interval of the watcher that runs beside the tap
+    done ) &
+    watcher=$!
     tap_in "This app in the phone's settings"
-    settings_left_the_app() { away || [ "$(settings_starts)" -gt "$starts_before" ]; }
-    sys_wait "$SYS_DEADLINE" "the app's settings leaving the app" settings_left_the_app || problems="$problems; the app's settings stay in the app: $SYS_WHY"
+    settings_left_the_app() { [ -e "$seen" ] && [ "$(settings_starts)" -gt "$starts_before" ]; }
+    sys_wait "$SYS_DEADLINE" "the app's settings leaving the app (the focus away from the app, and Android starting the page)" settings_left_the_app || problems="$problems; the app's settings stay in the app: $SYS_WHY"
+    kill "$watcher" 2> /dev/null
     sys_leave "the app's settings" || problems="$problems; Back from the app's settings: $SYS_WHY"
+    # What happened around the page, for the record: when Android started it, when the script's own commands ran, when it went.
+    adb_ logcat -d -v threadtime 2> /dev/null | grep -a -E 'APPLICATION_DETAILS_SETTINGS|automator.Launcher|commands.input.Input|t=OPEN.*com.android.settings|t=CLOSE' | cut -c1-220 > "$OUT/$CURRENT.settings_timeline.txt"
     if [ -z "$problems" ]; then
         pass "deleting a sound, $n fix buttons"
     else
