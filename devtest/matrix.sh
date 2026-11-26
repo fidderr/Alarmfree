@@ -2372,7 +2372,8 @@ s49() {
 done_sheet() {
     # A panel takes touches once it holds still (the first Done after a sheet within it is lost on a busy machine).
     await_settled 4
-    tap_in Done L 0.3
+    # Without a Done on screen the failure says what the screen and the keyboard were (s50 on afg12, afg14 and msd28, 2026-11-26).
+    TAP_WAIT=5 tap_in Done L 0.3 || echo "NOTE  $CURRENT  S50 done_sheet, no Done: the app: $(ui ready | cut -c1-210); texts: $(texts_of | cut -c1-260); keyboard: $(dev dumpsys input_method | grep -o -E 'mInputShown=[a-z]*|mImeWindowVis=[0-9a-fx]*' | tr -s '[:space:]' ' ')" | tee -a "$RESULTS"
     await_ui 8 'editor_sheet=None' && return 0
     screenshot done_sheet_still_up
     step_failed "done_sheet: the sheet is still up after Done: $(sn ed_sheet)"
