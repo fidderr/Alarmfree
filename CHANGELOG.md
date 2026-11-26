@@ -7,6 +7,8 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-11-26
+
 ### Fixed
 
 - **The ring screen could come up late or not at all when the app had been in the background for a few seconds.**
