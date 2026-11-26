@@ -51,6 +51,13 @@ case "$avd" in
         ;;
     *) audio=no camera=none gps=no keyboard=yes heap=256 ;;
 esac
+# afg12 as well, with the audio device on: with the output off the goldfish audio HAL (audio@6.0-impl.ranchu) blocks in pcm_write
+# for about 4 s and then fails with an I/O error. AudioService's screen-on receiver waits behind it on the system_server main
+# thread, and so does the player setup of the first ring after the screen came on: the sound of s26 came 3.9 to 4.5 s (once 7.2 s)
+# after delivery in 5 of 24 cold rings, and audioserver aborted in TimeCheckThread when the block outlasted its 5 s (run 45885511953,
+# afg12 with the output off against afg12 with it on: 5 asks and 4 audioserver restarts against none in 24 cold rings each).
+[ "$avd" != afg12 ] || audio=yes
+case "$opts" in *+noaudio+*) audio=no ;; esac
 cat >> "$cfg" << EOF
 hw.lcd.width=1080
 hw.lcd.height=1920
