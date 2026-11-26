@@ -2937,7 +2937,7 @@ dependencies = [
 [[package]]
 name = "mobile-sentinel"
 version = "0.7.1"
-source = "git+https://github.com/fidderr/mobile-sentinel?rev=c4426e1b9c4ea9fc9a655dde2526562abb87e510#c4426e1b9c4ea9fc9a655dde2526562abb87e510"
+source = "git+https://github.com/fidderr/mobile-sentinel?rev=db81014d19af1df9f57c28661a882b781778bf30#db81014d19af1df9f57c28661a882b781778bf30"
 dependencies = [
  "android_logger",
  "chrono",
