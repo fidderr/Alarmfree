@@ -64,5 +64,4 @@ KB=900 RISE=3 run_case rises 'TEXT:Take pills'
 verdict "a field that is under the keyboard for a moment and then scrolled up: typed once, after the wait" "$([ "$(cat "$tmp/rises/rc")" = rc=0 ] && [ "$(settext_calls rises)" = 1 ] && echo 1)"
 KB=900 Y=700 run_case above 'TEXT:Take pills'
 verdict "a field above the keyboard: typed once at once" "$([ "$(cat "$tmp/above/rc")" = rc=0 ] && [ "$(settext_calls above)" = 1 ] && echo 1)"
-[ -n "${DEBUG_TF:-}" ] && { cat "$tmp/tab/calls" "$tmp/tab/rc"; cat "$tmp/tab/stderr"; }
 exit $bad
