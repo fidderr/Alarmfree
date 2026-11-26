@@ -297,14 +297,13 @@ fn key(ui: &MainWindow, text: slint::SharedString) {
 
 /// Put `value` in a text field the way a person does: touch it, clear it, type it key by key, so the
 /// field's own `edited` handler runs.
-/// Types `value` into the field at this place, in place of what it holds. A touch on it comes first, to give it the focus; not when
-/// it has the focus already (a field that is shown for typing takes it by itself): a touch that misses the field (the sheet moved
-/// since the place was read) lands on the sheet's scrim, which closes the sheet, and nothing is typed (s38 on Android 9).
 fn type_into(ui: &MainWindow, x: f32, y: f32, value: &str) {
-    let focused = caret(ui).is_some_and(|c| (c.x - x).abs() < 1.5 && (c.y - y).abs() < 1.5);
-    if !focused {
-        tap_at(ui, x, y);
-    }
+    tap_at(ui, x, y);
+    type_keys(ui, value);
+}
+
+/// The keys of a typing: to the end, the old text out, the new one in.
+fn type_keys(ui: &MainWindow, value: &str) {
     key(ui, Key::End.into());
     for _ in 0..80 {
         key(ui, Key::Backspace.into());
@@ -499,6 +498,16 @@ pub fn run(ui: &MainWindow, command: &str) -> Option<String> {
         },
         // `settext:<n>:<text>`: the same through the keys. The answer is `OK <x> <y>`, the place of the field in device
         // pixels, for `heldat`.
+        // `settext:focus:<text>` types into the field that has the focus, with no touch: a field shown for typing takes the focus by itself,
+        // and a touch on the place it was read at can miss it when the sheet has moved since (the keyboard rising), which closed the sheet
+        // (s38 on Android 16, 2026-11-26). `none` when no field has the focus.
+        "settext" if arg.starts_with("focus:") => match caret(ui) {
+            Some(c) => {
+                type_keys(ui, &arg["focus:".len()..]);
+                format!("OK {} {}", c.x.round() as i32, c.y.round() as i32)
+            }
+            None => "none".to_owned(),
+        },
         "settext" => match arg.split_once(':') {
             Some((n, value)) => match n
                 .parse::<usize>()

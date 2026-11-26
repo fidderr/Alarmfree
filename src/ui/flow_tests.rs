@@ -511,26 +511,29 @@ impl Flow {
     }
 }
 
-/// The field of a sound being renamed has the focus by itself. Typing into it makes no touch: a touch that misses the field (the
-/// sheet moved since the field was looked up, on a slow phone) lands on the sheet's scrim and closes the sheet, and then nothing is
-/// typed (s38 on Android 9, 2026-11-25).
+/// The field of a sound being renamed has the focus by itself. `settext:focus:` types into it with no touch: a touch on the place the
+/// field was read at can miss it when the sheet has moved since (the keyboard rising, on a slow phone), and nothing is typed (s38 on
+/// Android 16, 2026-11-26). Without a focused field it says so and types nothing.
 #[test]
-fn typing_into_a_field_that_has_the_focus_makes_no_touch() {
-    let touches = |f: &Flow| f.cmd("trace").matches("tap_at").count();
-    let dir = crate::custom_sounds::custom_sounds_dir();
-    std::fs::create_dir_all(&dir).unwrap();
-    // The file is taken away again, also when an expectation below fails.
+fn typing_into_the_focused_field_makes_no_touch() {
     struct Sound(std::path::PathBuf);
     impl Drop for Sound {
         fn drop(&mut self) {
             let _ = std::fs::remove_file(&self.0);
         }
     }
+    let touches = |f: &Flow| f.cmd("trace").matches("tap_at").count();
+    let dir = crate::custom_sounds::custom_sounds_dir();
+    std::fs::create_dir_all(&dir).unwrap();
     let _sound = Sound(dir.join("mytune.ogg"));
     std::fs::write(&_sound.0, b"OggS").unwrap();
     let f = Flow::new(Vec::new());
     f.expect(f.tap("Create new alarm"), "no create button");
     f.open_row("Sound");
+    f.expect(
+        f.cmd("settext:focus:x") == "none",
+        "a field was typed into with none focused",
+    );
     let own = super::editor_sound::sound_ids().len() - 1;
     f.press("sound-rename", &own.to_string());
     f.settle();
@@ -540,7 +543,16 @@ fn typing_into_a_field_that_has_the_focus_makes_no_touch() {
         format!("the rename field has no focus: {focused}"),
     );
     let before = touches(&f);
-    f.set_field(0, "Morning");
+    let said = f.cmd("settext:focus:Morning");
+    f.settle();
+    f.expect(
+        said.starts_with("OK "),
+        format!("settext:focus said {said}"),
+    );
+    f.expect(
+        f.cmd("cursor").contains("\"t\":\"Morning\""),
+        format!("the field holds {}", f.cmd("cursor")),
+    );
     f.expect(
         touches(&f) == before,
         format!(
@@ -552,7 +564,6 @@ fn typing_into_a_field_that_has_the_focus_makes_no_touch() {
         f.editor_sheet_open(),
         "the sheet closed while a name was typed",
     );
-    // A field that has no focus is still touched first, to take it.
     f.press("sound-rename-done", "");
     f.settle();
     f.finish();

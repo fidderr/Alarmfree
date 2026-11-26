@@ -1577,7 +1577,9 @@ s38() {
     rename_record before_typing
     screenshot "$CURRENT.rename_before"
     TYPE_SAID="" TYPE_HELD=""
-    set_field 0 Morning || problems="$problems; no field to rename in (settext said [$TYPE_SAID], heldat [$TYPE_HELD])"
+    # The rename field has the focus by itself: typed into without a touch (a touch on the place it was read at missed it on afg16 and closed
+    # the sheet, x7 45704663722), and a field without the focus is no field to rename in.
+    set_field focus Morning || problems="$problems; no field to rename in (settext said [$TYPE_SAID], heldat [$TYPE_HELD])"
     rename_record after_typing
     screenshot "$CURRENT.rename_typed"
     press sound-rename-done "" 0.6
