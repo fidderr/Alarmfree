@@ -531,6 +531,14 @@ picker_watch() { # label rounds
 picker_preview_up() { sys_focus | grep -v -e documentsui -e "$PKG" -e '^$' -e '^null' | grep -q .; }
 # The picker is gone: the app has the keys again. After a detour through the preview of the file the picker's task can leave the
 # launcher in front (Android 13, run 45082824603): the app is then started again, and a NOTE says so.
+# The crash of the picker's own process (run 45743443306, Android 11: a StaleDataException in DocumentsUI, 4 s after it came up,
+# while the dump walked its list): the exception line, and a non-zero status when the picker did not crash. The log is cleared
+# at the start of a scenario.
+picker_crash() {
+    local line
+    line=$(dev "logcat -d -b crash,main -s AndroidRuntime:E 2> /dev/null" | tr -d '\r' | grep -A1 'Process: com\.[a-z.]*documentsui' | tail -1 | cut -c1-200)
+    [ -n "$line" ] && printf '%s' "$line" | sed 's/^.*AndroidRuntime[^:]*: //'
+}
 picker_back_in_app() {
     sys_wait 15 "the app getting the keys back from the picker" focus_in_app && return 0
     picker_up && return 1
@@ -566,13 +574,20 @@ picker_keys_file() { # name
 # the picker of Android 10 and 11 takes the touch, then the keys. Each way is tried once, and only after the one before left the
 # file in the list.
 picker_pick() { # name
-    local name=$1 end xy step=0 sig
+    local name=$1 end xy step=0 sig crash
     sys_wait "$SYS_DEADLINE" "the file picker being up" picker_up || return 1
     picker_trace "== pick $name: $(sys_show)"
     end=$(($(now_ms) + ${PICKER_DEADLINE:-150} * 1000))
     while :; do
         sys_anr_check || return 1
-        picker_up || { picker_back_in_app; return; }
+        if ! picker_up; then
+            crash=$(picker_crash) && {
+                SYS_WHY="the system's file picker crashed on its own ($crash): the app was given no file"
+                return 1
+            }
+            picker_back_in_app
+            return
+        fi
         if [ "$(now_ms)" -ge "$end" ]; then
             SYS_WHY="the picker did not deliver $name within ${PICKER_DEADLINE:-150}s (step $step; shows: $(picker_summary); $(sys_show))"
             return 1

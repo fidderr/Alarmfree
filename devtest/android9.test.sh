@@ -121,4 +121,15 @@ N=$(grep -c read "$tmp/reads")
 verdict "the API level is read once when the runner primes it ($N read, $a $b)" "$([ "$N" = 1 ] && [ "$a$b" = 2828 ] && echo 1)" "reads: $N"
 verdict "the runner primes it in the main shell before it runs anything" "$(grep -q '^sdk_level > /dev/null' "$here/matrix.sh" && echo 1)" "no line in matrix.sh"
 
+# ---- the picker's own crash is named, an app crash and a clean log are not ----
+dev() { printf '%s\n' "11-26 03:04:34.351 E/AndroidRuntime(15443): FATAL EXCEPTION: main" "11-26 03:04:34.351 E/AndroidRuntime(15443): Process: com.google.android.documentsui, PID: 15443" "11-26 03:04:34.351 E/AndroidRuntime(15443): android.database.StaleDataException: Attempted to access a cursor after it has been closed."; }
+got=$(picker_crash)
+verdict "a crash of DocumentsUI is named by its exception" "$([ "$got" = "android.database.StaleDataException: Attempted to access a cursor after it has been closed." ] && echo 1)" "got: $got"
+dev() { printf '%s\n' "11-26 03:04:34.351 E/AndroidRuntime(1): FATAL EXCEPTION: main" "11-26 03:04:34.351 E/AndroidRuntime(1): Process: com.fidderr.alarmfree, PID: 1" "11-26 03:04:34.351 E/AndroidRuntime(1): java.lang.Boom"; }
+picker_crash > /dev/null
+verdict "a crash of another app is not the picker's" "$([ $? -ne 0 ] && echo 1)"
+dev() { :; }
+picker_crash > /dev/null
+verdict "a clean log is no crash" "$([ $? -ne 0 ] && echo 1)"
+
 exit $bad
