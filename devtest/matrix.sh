@@ -2729,12 +2729,11 @@ s53() {
         i=$((i + 1))
     done
     scroll_to "This app in the phone's settings" || problems="$problems; no button for the app's settings"
-    # The page of the app's settings can be gone again a few seconds after it came up (Android 14, afg14, run 45735280521, kept in
-    # fixround/x13_afg14: Android started it at 01:46:51 and it was gone at 01:46:57, with no `input` command of the script in between and
-    # the app stopped all that time, so neither a key of the script nor the app closed it; Settings finished its own page. A dump of the
-    # screen by the script ran in between, 3 s after it came up; 12 of 12 dumps on that page on afg14 did not close it, so that is not shown
-    # to be the cause). The first look of that run came about 9 s after the page opened (its 30 s wait ended at 01:47:33), too late to see it. So the focus is watched from before
-    # the tap, every 0.1 s, and the check wants both: the focus seen away from the app, and the log line of Android starting the page.
+    # The tap on this button went to the bar's button under it in the two flakes of afg14 (run 45735280521 and 45758973538: the screens at
+    # the failure show "Cancel the test alarm" and the text "Rings within 2 minutes": the row was in the tree but under the bar), so
+    # Android never started the page and nothing was away from the app. tap_above_bar scrolls the row clear of the bar first. The check
+    # wants both signs that the page came: the focus seen away from the app (a look that runs from before the tap, every 0.1 s) and the
+    # log line of Android starting the page after the tap.
     settings_starts() { adb_ logcat -d 2> /dev/null | grep -a -c -E 'START u0 .*(APPLICATION_DETAILS_SETTINGS|cmp=com\.android\.settings/)'; }
     local starts_before seen="$OUT/$CURRENT.focus_left_app" watcher
     starts_before=$(settings_starts)
@@ -2744,13 +2743,14 @@ s53() {
         sleep 0.1 # lint-ok: the poll interval of the watcher that runs beside the tap
     done ) &
     watcher=$!
-    tap_in "This app in the phone's settings"
+    tap_above_bar "This app in the phone's settings" "Test alarm" "Cancel the test alarm"
     settings_left_the_app() { [ -e "$seen" ] && [ "$(settings_starts)" -gt "$starts_before" ]; }
     sys_wait "$SYS_DEADLINE" "the app's settings leaving the app (the focus away from the app, and Android starting the page)" settings_left_the_app || problems="$problems; the app's settings stay in the app: $SYS_WHY"
     kill "$watcher" 2> /dev/null
     sys_leave "the app's settings" || problems="$problems; Back from the app's settings: $SYS_WHY"
     # What happened around the page, for the record: when Android started it, when the script's own commands ran, when it went.
-    adb_ logcat -d -v threadtime 2> /dev/null | grep -a -E 'APPLICATION_DETAILS_SETTINGS|automator.Launcher|commands.input.Input|t=OPEN.*com.android.settings|t=CLOSE' | cut -c1-220 > "$OUT/$CURRENT.settings_timeline.txt"
+    echo "== run at $(date +%T)" >> "$OUT/$CURRENT.settings_timeline.txt"
+    adb_ logcat -d -v threadtime 2> /dev/null | grep -a -E 'APPLICATION_DETAILS_SETTINGS|automator.Launcher|commands.input.Input|t=OPEN.*com.android.settings|t=CLOSE' | cut -c1-220 >> "$OUT/$CURRENT.settings_timeline.txt"
     if [ -z "$problems" ]; then
         pass "deleting a sound, $n fix buttons"
     else
