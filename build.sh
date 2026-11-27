@@ -14,6 +14,13 @@
 #                                   a changed file builds in seconds, the .so is bigger. Not for shipping.
 #   ./build.sh aab                  release AAB for Play (unsigned; then ./sign-aab.sh)
 #
+# A test copy beside the real app (debug only; a release, fast or aab build refuses it):
+#   APP_ID_SUFFIX=.dev ./build.sh install
+# has the id com.fidderr.alarmfree.dev and the launcher label "AlarmFree test", so it installs next to
+# the Play app without touching it, and writes build/alarmfree-slint-debug-dev.apk. Everything that has
+# to be unique per app follows the id (provider authorities, the receiver permission). Without the
+# switch the build is exactly as before. devtest/phone.sh runs the suite on that id.
+#
 # Phones are arm64. An emulator needs another ABI:
 #   TARGET=x86_64-linux-android ./build.sh install emulator-5556
 #
@@ -21,6 +28,9 @@
 set -euo pipefail
 
 cd "$(dirname "$0")"
+# The copy of sentinel.toml that a test build (APP_ID_SUFFIX, below) leaves when it is killed: put back before anything reads it.
+TOML_COPY=build/sentinel.toml.original
+[ ! -f "$TOML_COPY" ] || mv -f "$TOML_COPY" sentinel.toml
 SDK_HOME="${ANDROID_HOME:-${LOCALAPPDATA:-}/Android/Sdk}"
 export PATH="$PATH:$HOME/.cargo/bin:$SDK_HOME/platform-tools"
 export ANDROID_HOME="$SDK_HOME"
@@ -42,6 +52,10 @@ done
 TARGET="${TARGET:-aarch64-linux-android}"
 SENTINEL_MANIFEST="${SENTINEL_MANIFEST:-../mobile-sentinel/Cargo.toml}"
 
+APP_ID_SUFFIX="${APP_ID_SUFFIX:-}"
+APP_ID_LABEL="AlarmFree test"
+[[ -z $APP_ID_SUFFIX || $APP_ID_SUFFIX =~ ^\.[a-z][a-z0-9_]*$ ]] || { echo "ERROR: APP_ID_SUFFIX is a dot and a lower-case word, for example .dev"; exit 1; }
+
 MODE=debug
 PROFILE_DIR=debug
 # The debug build carries what devtest/ drives it with (cargo feature devtest); no other build does.
@@ -61,6 +75,11 @@ case "${1:-}" in
     CARGO_FLAGS=(--release); SENTINEL_FLAGS=(--release --aab)
     shift ;;
 esac
+if [ -n "$APP_ID_SUFFIX" ] && [ "$MODE" != debug ]; then
+  echo "ERROR: APP_ID_SUFFIX is for the debug build only: the $MODE build is the app that goes to Play"
+  exit 1
+fi
+OUT_NAME="alarmfree-slint-$MODE${APP_ID_SUFFIX:+-${APP_ID_SUFFIX#.}}"
 INSTALL=false
 SERIAL=""
 if [ "${1:-}" = "install" ]; then
@@ -85,6 +104,16 @@ cp "target/$TARGET/$PROFILE_DIR/libalarmfree.so" "build/jniLibs/$ABI/libmain.so"
 cp "target/$TARGET/$PROFILE_DIR/libalarmfree.so" build/libmain.so.unstripped
 
 echo "=== [2/3] Generating the Android project, wiring mobile-sentinel + assets + icon, and Gradle ==="
+# The SDK reads the id and the label from sentinel.toml in this folder: for a test copy it reads a changed one, and the
+# trap puts the real one back (also after an abort; a copy left by a run that was killed is put back first).
+mkdir -p build
+if [ -n "$APP_ID_SUFFIX" ]; then
+  cp -p sentinel.toml "$TOML_COPY"
+  trap 'mv -f "$TOML_COPY" sentinel.toml' EXIT
+  sed -i -e "/^application_id *=/s/\"[[:space:]]*\$/$APP_ID_SUFFIX\"/" -e "/^label *=/s/\".*\"/\"$APP_ID_LABEL\"/" sentinel.toml
+  grep -q "^application_id = \".*$APP_ID_SUFFIX\"" sentinel.toml || { echo "ERROR: sentinel.toml has no application_id to give the suffix"; exit 1; }
+  echo "Test copy: $(sed -n 's/^application_id *= *"\(.*\)".*/\1/p' sentinel.toml), label \"$APP_ID_LABEL\""
+fi
 # Newer SDKs keep the build tool behind the `build` feature.
 SDK_FEATURES=()
 grep -q '^build = ' "$SENTINEL_MANIFEST" && SDK_FEATURES=(--features build)
@@ -99,16 +128,15 @@ else
   OUT_REL=target/sentinel-android/app/build/outputs/apk/release/app-release.apk
   [ -f "$OUT_REL" ] || OUT_REL=target/sentinel-android/app/build/outputs/apk/release/app-release-unsigned.apk
 fi
-mkdir -p build
 EXT=apk; [ "$MODE" = aab ] && EXT=aab
-cp "$OUT_REL" "build/alarmfree-slint-$MODE.$EXT"
-echo "built build/alarmfree-slint-$MODE.$EXT ($(du -h "build/alarmfree-slint-$MODE.$EXT" | cut -f1))"
+cp "$OUT_REL" "build/$OUT_NAME.$EXT"
+echo "built build/$OUT_NAME.$EXT ($(du -h "build/$OUT_NAME.$EXT" | cut -f1))"
 
 if $INSTALL && [ "$MODE" != aab ]; then
   echo "=== [3/3] Installing ==="
   if [ -n "$SERIAL" ]; then
-    adb -s "$SERIAL" install -r "build/alarmfree-slint-$MODE.apk"
+    adb -s "$SERIAL" install -r "build/$OUT_NAME.apk"
   else
-    adb install -r "build/alarmfree-slint-$MODE.apk"
+    adb install -r "build/$OUT_NAME.apk"
   fi
 fi

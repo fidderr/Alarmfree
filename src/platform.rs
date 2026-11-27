@@ -619,8 +619,31 @@ impl std::fmt::Display for SaveError {
     }
 }
 
+/// The id of the app on Google Play.
+const APP_ID: &str = "com.fidderr.alarmfree";
+
+/// The files this app saves to Downloads are named `alarmfree-...`. A test build with its own id
+/// (`APP_ID_SUFFIX=.dev ./build.sh`) lives beside the Play app and shares Downloads with it, so its
+/// files are `alarmfree.dev-...`: the suite never finds, replaces or deletes the owner's files.
+fn download_name(name: &str, files_dir: &std::path::Path) -> String {
+    let package = files_dir
+        .parent()
+        .and_then(|dir| dir.file_name())
+        .and_then(|dir| dir.to_str())
+        .unwrap_or_default();
+    let suffix = package
+        .strip_prefix(APP_ID)
+        .filter(|rest| rest.starts_with('.'))
+        .unwrap_or_default();
+    match name.strip_prefix("alarmfree") {
+        Some(rest) => format!("alarmfree{suffix}{rest}"),
+        None => name.to_string(),
+    }
+}
+
 /// Write `text` to a file in the phone's Downloads. Returns where it went.
 pub fn save_to_downloads(text: &str, name: &str, mime_type: &str) -> Result<String, SaveError> {
+    let name = &download_name(name, &mobile_sentinel::app_files_dir());
     let path = mobile_sentinel::app_files_dir().join(name);
     std::fs::write(&path, text).map_err(|e| SaveError::Failed(e.to_string()))?;
     let result =
@@ -865,6 +888,36 @@ pub fn alarm_data_to_spec(alarm: &AlarmData) -> AlarmSpec {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_test_build_saves_under_its_own_name() {
+        use std::path::Path;
+        let own = |dir: &str| download_name("alarmfree-rings.txt", Path::new(dir));
+        assert_eq!(
+            own("/data/user/0/com.fidderr.alarmfree/files"),
+            "alarmfree-rings.txt"
+        );
+        assert_eq!(
+            own("/data/user_de/0/com.fidderr.alarmfree/files"),
+            "alarmfree-rings.txt"
+        );
+        assert_eq!(
+            own("/data/user_de/0/com.fidderr.alarmfree.dev/files"),
+            "alarmfree.dev-rings.txt"
+        );
+        assert_eq!(
+            own("/data/user/0/com.fidderr.alarmfreex/files"),
+            "alarmfree-rings.txt"
+        );
+        assert_eq!(own("."), "alarmfree-rings.txt");
+        assert_eq!(
+            download_name(
+                "notes.txt",
+                Path::new("/data/user/0/com.fidderr.alarmfree.dev/files")
+            ),
+            "notes.txt"
+        );
+    }
 
     #[test]
     fn a_save_that_failed_for_the_storage_permission_says_so() {
