@@ -1,0 +1,2 @@
+# Text files are LF in every checkout: the scripts run in bash and on the device, where CRLF breaks them.
+* text=auto eol=lf
