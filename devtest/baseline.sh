@@ -105,7 +105,7 @@ baseline_parse() { # text
     case "$f" in
         "") BL_VAL[focusc]="" ;;
         *"Not Responding"* | *Recents*) BL_VAL[focusc]=bad ;;
-        *"${PKG:-com.fidderr.alarmfree}/"* | *"=null"* | *[Ll]auncher*) BL_VAL[focusc]=ok ;;
+        *"$PKG/"* | *"=null"* | *[Ll]auncher*) BL_VAL[focusc]=ok ;;
         *) BL_VAL[focusc]=bad ;;
     esac
     f=${f%\}}
@@ -122,7 +122,7 @@ baseline_parse() { # text
 # true and 3 a little later; s49 started with the insets saying up and the baseline having read false), so the keyboard is up
 # when either of the two says so.
 baseline_app_keyboard() { UI_QUIET=1 ui ready 2> /dev/null | sed -n 's/.*keyboard=\([a-z]*\).*/\1/p' | head -1; }
-baseline_app_in_front() { case "${BL_VAL[focus]-}" in *"${PKG:-com.fidderr.alarmfree}/"*) return 0 ;; esac; return 1; }
+baseline_app_in_front() { case "${BL_VAL[focus]-}" in *"$PKG/"*) return 0 ;; esac; return 1; }
 
 # One call to the device. Returns 1 when it did not answer.
 baseline_read() {
@@ -226,7 +226,7 @@ baseline_is_lock() {
 # lock screen (s06 leaves its ring there) holds the dismiss back, so it is stopped first (every scenario starts with the same
 # force-stop); from the second round the lock screen is also swiped away, as a hand would.
 baseline_unlock() { # round
-    local pk=${PKG:-com.fidderr.alarmfree} size w h
+    local pk=$PKG size w h
     case "${BL_VAL[focus]-}" in
         *"$pk/"*) [ "${BL_VAL[keyguard]-}" != true ] || dev am force-stop "$pk" > /dev/null 2>&1 ;;
     esac

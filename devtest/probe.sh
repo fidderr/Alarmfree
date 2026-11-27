@@ -180,7 +180,7 @@ t07_probe_picker() {
     fresh
     pr "sdk $(dev getprop ro.build.version.sdk)"
     dev rm -f /sdcard/Download/mytune.ogg
-    rm_download 'alarmfree-*'
+    rm_download "$FILE_PREFIX-*"
     adb_ push assets/sounds/default/air.ogg /sdcard/Download/mytune.ogg > /dev/null
     dev content call --uri content://media --method scan_volume --arg external_primary > /dev/null 2>&1
     seed a "$(alarm_json a 7 0 "$EVERY_DAY" null)"
@@ -226,7 +226,7 @@ t07_probe_picker() {
         sleep 0.5
     done
     pr_nodes "after Save to a file"
-    rm_download 'alarmfree-*'
+    rm_download "$FILE_PREFIX-*"
     dev rm -f /sdcard/Download/mytune.ogg
     pass "probed the picker: see probe_picker.txt"
 }

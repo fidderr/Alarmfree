@@ -2,16 +2,20 @@
 # The suite on a real phone: APK=<arm64 apk> SERIAL=<phone> PHONE_SQLITE=<aarch64 af_sqlite3 on this PC> bash devtest/phone.sh <name> [scenarios...]
 # Never reboots it, never sets a PIN, no widget: not reboot_and_wait as devtest/all.sh does, because
 # a phone with a PIN would then stand at its lock screen. The alarm volume goes to 1 for the run and
-# comes back after, also when the run is stopped. Run it with a test build and no alarms of one's own
-# on it: `fresh` throws the app's data away.
+# comes back after, also when the run is stopped. Run it with the test build, which has its own id (PKG, by default
+# the .dev id of `APP_ID_SUFFIX=.dev ./build.sh`) and lives beside the owner's app: no command of the run names the
+# real id (lib.sh refuses it), and the run does not start on the real id when that is the Play install.
 cd "$(dirname "$0")/.." || exit 1
 NAME=$1
 shift
 : "${APK:?APK names the build for the phone}" "${SERIAL:?SERIAL names the phone}" "${PHONE_SQLITE:?PHONE_SQLITE names the sqlite tool on it}"
+export PKG="${PKG:-com.fidderr.alarmfree.dev}"
 export APK SERIAL PHONE_SQLITE AVD=phone OUT="devtest-out/$NAME" NO_LOCK=1 MIN_VOLUME=1
 mkdir -p "$OUT"
 (
     . devtest/lib.sh
+    refuse_play_install || exit 1
+    [ -n "${NO_INSTALL:-}" ] || [ "$(apk_package "$APK")" = "$PKG" ] || { echo "STOP  $APK is not the app $PKG (apk_package says '$(apk_package "$APK")')"; exit 1; }
     alarm_volume() { dev cmd media_session volume --stream 4 --get 2> /dev/null | grep -oE 'volume is [0-9]+' | grep -oE '[0-9]+' | sed -n 1p; }
     OLD_VOLUME=$(alarm_volume)
     OLD_TIMEOUT=$(timeout 20 "$ADB" -s "$SERIAL" shell settings get system screen_off_timeout | tr -d '\r')

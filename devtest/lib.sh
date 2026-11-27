@@ -9,7 +9,11 @@
 export MSYS_NO_PATHCONV=1
 ADB="${ADB:-$LOCALAPPDATA/Android/Sdk/platform-tools/adb.exe}"
 SERIAL="${SERIAL:-emulator-5554}"
-PKG=com.fidderr.alarmfree
+PKG="${PKG:-com.fidderr.alarmfree}"
+# The Play app. A run on a test id (the build with APP_ID_SUFFIX, see build.sh) has it on the same device, and no command may name it.
+REAL_PKG=com.fidderr.alarmfree # lint-ok: the one place the real id is spelled out, to refuse it
+# What the app calls the files it saves to Downloads: alarmfree-rings.txt, or alarmfree.dev-rings.txt in the test build.
+FILE_PREFIX="alarmfree${PKG#"$REAL_PKG"}"
 ACTIVITY=android.app.NativeActivity
 OUT="${OUT:-devtest-out}"
 mkdir -p "$OUT"
@@ -57,9 +61,42 @@ give_way() {
     exit 3
 }
 
+# A command that names the real app while the run is on another id: refused before it reaches the device (exit 126).
+real_app_named() {
+    local re=${REAL_PKG//./\.}'($|[^.[:alnum:]_])'
+    [ "$PKG" != "$REAL_PKG" ] && [[ $* =~ $re ]]
+}
+refuse_real_app() {
+    echo "STOP  refused, it names the real app $REAL_PKG while the run is on $PKG: $*" >&2
+    return 126
+}
+# Who installed $1 according to the package manager: nothing for an app that is not there or has no installer. Exact package, not a prefix.
+installer_of() { # package
+    local line
+    line=$(adb_ shell pm list packages -i "$1" | tr -d '' | grep -E "^package:${1//./\.}[[:space:]]") || return 0
+    line=${line##*installer=}
+    echo "${line%%[[:space:]]*}"
+}
+# A run on the real id while the device has the Google Play install: the suite clears and force-stops its app, so it ends here.
+refuse_play_install() {
+    [ "$PKG" = "$REAL_PKG" ] || return 0
+    local by
+    by=$(installer_of "$PKG")
+    [ "$by" = com.android.vending ] || return 0
+    echo "STOP  $PKG on this device comes from Google Play: the suite clears it and force-stops it. Install the test build (APP_ID_SUFFIX=.dev ./build.sh) and run with PKG=$PKG.dev"
+    return 1
+}
+# The package name inside an APK (nothing when it cannot be read: aapt2 of the newest build-tools).
+apk_package() { # apk
+    local aapt
+    aapt=$(ls "${ANDROID_HOME:-$LOCALAPPDATA/Android/Sdk}"/build-tools/*/aapt2* 2> /dev/null | sort -V | tail -1)
+    [ -n "$aapt" ] || return 0
+    "$aapt" dump packagename "$1" 2> /dev/null | tr -d ''
+}
 # Nothing may hang a run: an unresponsive device fails instead of waiting forever.
 adb_() {
     still_ours || give_way
+    ! real_app_named "$@" || { refuse_real_app "$@"; return 126; }
     device_is_dead && return 124
     # While a unit runs on a GitHub machine, what adb says about a lost connection is kept (link_stderr, baseline.sh).
     if [ -n "${LINK_PID:-}" ]; then
@@ -160,7 +197,7 @@ guard_input() {
 guard_allows() {
     local f=$1
     shift
-    echo "$f" | grep -Eq 'com\.fidderr\.alarmfree|nputMethod|inputmethod|permissioncontroller|packageinstaller|RequestIgnoreBatteryOptimizations' && return 0
+    echo "$f" | grep -Eq "${PKG//./\.}([/} ]|\$)|nputMethod|inputmethod|permissioncontroller|packageinstaller|RequestIgnoreBatteryOptimizations" && return 0
     [ "$*" = "input keyevent KEYCODE_BACK" ] && echo "$f" | grep -Eq 'u0 com\.android\.settings/' && return 0 # lint-ok: the text of the command compared with, not an input
     return 1
 }
@@ -171,6 +208,7 @@ key_record() {
     echo "+$((SECONDS - ${SCENARIO_START:-0}))s $(date +%T.%N | cut -c1-12) BACK from ${FUNCNAME[2]:-?} <- ${FUNCNAME[3]:-?} (line ${BASH_LINENO[3]:-?})" >> "$OUT/$CURRENT.keys.txt"
 }
 dev() {
+    ! real_app_named "$@" || { refuse_real_app "$@"; return 126; }
     case "$*" in "input keyevent KEYCODE_BACK"*) key_record ;; esac # lint-ok: the text of the command compared with, not an input
     [ -z "$CHAOS_ON" ] || chaos_touch "$@" || return 0
     case "$SERIAL:$*" in emulator-*) ;; *"input "*) guard_input "$@" || return 1 ;; esac
@@ -1296,7 +1334,7 @@ RING_WHY=""
 # is frozen 10 s after it went cached (Android 14 and up) and a broadcast that is queued for it is not delivered.
 main_process_state() {
     local s
-    s=$(dev "dumpsys activity lru | grep 'com.fidderr.alarmfree/u'" | sed -nE 's/^ *#[0-9]+: *(.*) [0-9]+:com\.fidderr\.alarmfree\/u.*/\1/p' | head -1)
+    s=$(dev "dumpsys activity lru | grep '$PKG/u'" | sed -nE "s/^ *#[0-9]+: *(.*) [0-9]+:${PKG//./\.}\/u.*/\1/p" | head -1)
     echo "${s:-gone}"
 }
 

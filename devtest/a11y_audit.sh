@@ -65,10 +65,10 @@ label_dump_screen() { # name
         dev uiautomator dump /sdcard/ui.xml > /dev/null
         adb_ exec-out cat /sdcard/ui.xml > "$OUT/labels/$1.xml"
         # The dump is one line: grep -c counts matching lines (0 or 1), not occurrences. Count them with -o.
-        [ "$(grep -o 'com.fidderr.alarmfree' "$OUT/labels/$1.xml" | wc -l)" -gt 6 ] && break
+        [ "$(grep -o "$PKG" "$OUT/labels/$1.xml" | wc -l)" -gt 6 ] && break
         sleep 1
     done
-    python -I devtest/label_check.py "$1" < "$OUT/labels/$1.xml"
+    PKG="$PKG" python -I devtest/label_check.py "$1" < "$OUT/labels/$1.xml"
 }
 label_dump() {
     scenario label_dump
@@ -119,14 +119,14 @@ names_here() { # screen
         dev uiautomator dump /sdcard/ui.xml > /dev/null 2>&1 # lint-ok: the tree a screen reader gets is the subject of this scenario
         adb_ exec-out cat /sdcard/ui.xml > "$f" 2> /dev/null
         # The dump is one line: grep -c counts matching lines (0 or 1), not occurrences. Count them with -o.
-        [ "$(grep -o 'com.fidderr.alarmfree' "$f" | wc -l)" -gt 6 ]
+        [ "$(grep -o "$PKG" "$f" | wc -l)" -gt 6 ]
     }
     if ! wait_for 15 names_dumped; then
         NAMES_PROBLEMS="$NAMES_PROBLEMS; $1: no tree of the window"
         return 0
     fi
     NAMES_SCREENS=$((NAMES_SCREENS + 1))
-    out=$(python -I devtest/label_check.py "$1" < "$f")
+    out=$(PKG="$PKG" python -I devtest/label_check.py "$1" < "$f")
     while IFS= read -r line; do
         case "$line" in
             *": UNNAMED "* | *": ROOT "*) NAMES_PROBLEMS="$NAMES_PROBLEMS; $line" ;;

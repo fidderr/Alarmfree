@@ -5,11 +5,12 @@ export PATH="$PATH:$LOCALAPPDATA/Android/Sdk/platform-tools"
 S=bb741d88
 OUT=/c/Git/alarmfree-slint/devtest-out/phone/design
 WOUT=C:/Git/alarmfree-slint/devtest-out/phone/design
-O=com.fidderr.alarmfree; OA=dev.dioxus.main.MainActivity
-L=com.fidderr.alarmfree.slint; LA=android.app.NativeActivity
+PKG="${PKG:-com.fidderr.alarmfree}"
+O=$PKG; OA=dev.dioxus.main.MainActivity
+L=$PKG.slint; LA=android.app.NativeActivity
 sh() { adb -s $S shell "$@" | tr -d '\r'; }
 focus() { sh dumpsys window | grep mCurrentFocus; }
-ok() { focus | grep -Eq 'com\.fidderr\.alarmfree(\.slint)?/'; }
+ok() { focus | grep -Eq "${PKG//./\.}(\.slint)?/"; }
 need() { ok || { echo "ABORT focus: $(focus | grep -oE 'Window\{[^}]*\}')"; return 1; }; }
 tap() { need && sh input tap "$1" "$2"; }
 back() { need && sh input keyevent KEYCODE_BACK; }

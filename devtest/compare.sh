@@ -47,9 +47,9 @@ IDLE_SECONDS="${IDLE_SECONDS:-60}"
 OUT="${OUT:-devtest-out/compare}"
 ORIG_APK="${ORIG_APK:-build/original/target/dx/alarmfree/release/android/app/app/build/outputs/apk/release/app-release-unsigned.apk}"
 SLINT_APK="${SLINT_APK:-build/alarmfree-slint-release.apk}"
-ORIG_PKG=com.fidderr.alarmfree
+ORIG_PKG=com.fidderr.alarmfree # lint-ok: the old Dioxus app against the Slint copy: two fixed ids, never a phone run
 ORIG_ACT=dev.dioxus.main.MainActivity
-SLINT_PKG=com.fidderr.alarmfree.slint
+SLINT_PKG=com.fidderr.alarmfree.slint # lint-ok: see ORIG_PKG
 SLINT_ACT=android.app.NativeActivity
 mkdir -p "$OUT"
 
@@ -77,7 +77,7 @@ px() { awk -v d="$1" -v n="$DENS" 'BEGIN { printf "%d", d * n / 160 + 0.5 }'; }
 focus_ok() {
   local i
   for i in 1 2 3; do
-    shell dumpsys window | grep mCurrentFocus | grep -Eq 'com\.fidderr\.alarmfree(\.slint)?/' && return 0
+    shell dumpsys window | grep mCurrentFocus | grep -Eq "${ORIG_PKG//./\.}(\.slint)?/" && return 0
     sleep 1
   done
   return 1

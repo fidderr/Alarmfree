@@ -1270,7 +1270,7 @@ s32() {
     # By the window's own events: a finger's tap in the moment Android resizes the new window is lost, and what counts here is the record.
     tap_in "Turn off" 0 0.5
     wait_for 5 sound_off
-    rm_download alarmfree-rings.txt
+    rm_download "$FILE_PREFIX-rings.txt"
     start_app
     wait_for 20 page_is_up
     # The window is up before its bottom bar has painted, on a loaded emulator.
@@ -1283,9 +1283,9 @@ s32() {
     # and then its middle can still be behind the Test alarm button): the tap waits until the whole row is above the bar.
     tap_above_bar "Save the record of how fast alarms rang" "Test alarm" "Cancel the test alarm"
     # The file is written a moment after the tap: wait for what is in it, not for half a second.
-    has_record() { [ "$(dev cat /sdcard/Download/alarmfree-rings.txt 2> /dev/null | grep -c ' sound ')" -ge 1 ]; }
+    has_record() { [ "$(dev cat /sdcard/Download/$FILE_PREFIX-rings.txt 2> /dev/null | grep -c ' sound ')" -ge 1 ]; }
     wait_for 10 has_record && record=yes
-    rm_download alarmfree-rings.txt
+    rm_download "$FILE_PREFIX-rings.txt"
     events() { printf 'SELECT count(*) FROM alarm_events;
 ' | sql; }
     if ! sound_on && [ "$(db_count '"hidden":true')" = 0 ] && [ "$(events)" = 0 ] && [ "$record" = yes ]; then
@@ -1923,7 +1923,7 @@ s48() {
     scenario s48_files_in_and_out
     fresh
     dev rm -f /sdcard/Download/mytune.ogg
-    rm_download 'alarmfree-*'
+    rm_download "$FILE_PREFIX-*"
     adb_ push assets/sounds/default/air.ogg /sdcard/Download/mytune.ogg > /dev/null
     dev content call --uri content://media --method scan_volume --arg external_primary > /dev/null 2>&1
     seed a "$(alarm_json a 7 0 "$EVERY_DAY" null)"
@@ -1976,7 +1976,7 @@ s48() {
     on_screen "Save to a file" 30 || problems="$problems; no Save to a file"
     tap_has "Save to a file"
     saved_file() {
-        file=$(dev ls /sdcard/Download/ | grep -m1 '^alarmfree-')
+        file=$(dev ls /sdcard/Download/ | grep -m1 "^$FILE_PREFIX-")
         [ -n "$file" ] && [ "$(dev cat "/sdcard/Download/$file" | grep -c '"time_hour"')" -ge 1 ]
     }
     wait_for 30 saved_file || problems="$problems; no file with an alarm in Downloads (Downloads holds: $(dev ls /sdcard/Download/ | tr '\n' ' '))"
@@ -2024,7 +2024,7 @@ s48b() {
     fi
     scenario s48b_backup_with_sounds
     fresh
-    rm_download 'alarmfree-*'
+    rm_download "$FILE_PREFIX-*"
     as_app "mkdir -p files/sounds/custom && cp files/sounds/default/air.ogg files/sounds/custom/mytune.ogg"
     seed a "$(alarm_json a 7 0 "$EVERY_DAY" null mytune.ogg)"
     start_app
@@ -2042,7 +2042,7 @@ s48b() {
         on_screen "Save alarms only" 30 || { problems="$problems; no choice of files: $(texts_of)"; return 1; }
         has_there "MB)" || problems="$problems; the size of the larger file is not told: $(texts_of)"
         tap_has "$1"
-        saved_file() { file=$(dev ls /sdcard/Download/ | grep -m1 '^alarmfree-'); [ -n "$file" ] && [ "$(dev cat "/sdcard/Download/$file" | grep -c '"file"')" -ge 1 ]; }
+        saved_file() { file=$(dev ls /sdcard/Download/ | grep -m1 "^$FILE_PREFIX-"); [ -n "$file" ] && [ "$(dev cat "/sdcard/Download/$file" | grep -c '"file"')" -ge 1 ]; }
         wait_for 30 saved_file || { problems="$problems; no file with the sound's name in Downloads (holds: $(dev ls /sdcard/Download/ | tr '
 ' ' '))"; return 1; }
     }
@@ -2149,7 +2149,7 @@ s48c() {
     # the first save finds "asked before, no dialog can come" and opens the settings instead of asking.
     dev am force-stop "$PKG"
     dev run-as "$PKG" rm -f shared_prefs/mobilesentinel_share.xml
-    rm_download alarmfree-rings.txt
+    rm_download "$FILE_PREFIX-rings.txt"
     dev am force-stop "$PKG"
     PERMISSIONS_TOUCHED=1
     dev pm revoke "$PKG" android.permission.WRITE_EXTERNAL_STORAGE > /dev/null 2>&1
@@ -2189,16 +2189,16 @@ s48c() {
             problems="$problems; the person is not told to allow the storage access: $(texts_of | cut -c1-300)"
         fi
     fi
-    has_file() { [ -n "$(dev ls /sdcard/Download/ | grep -m1 '^alarmfree-rings')" ]; }
+    has_file() { [ -n "$(dev ls /sdcard/Download/ | grep -m1 "^$FILE_PREFIX-rings")" ]; }
     ! has_file || problems="$problems; a file was saved without the permission"
     # Allowed, with the app stopped: the next start has both permissions from the beginning, and the same save works.
     dev am force-stop "$PKG"
     grant_all
     save_the_record || true
-    has_record() { [ "$(dev cat /sdcard/Download/alarmfree-rings.txt 2> /dev/null | grep -c ' sound ')" -ge 1 ]; }
+    has_record() { [ "$(dev cat /sdcard/Download/$FILE_PREFIX-rings.txt 2> /dev/null | grep -c ' sound ')" -ge 1 ]; }
     wait_for 15 has_record || problems="$problems; no record in Downloads after the permission was given (Downloads holds: $(dev ls /sdcard/Download/ | tr '
 ' ' '))"
-    rm_download alarmfree-rings.txt
+    rm_download "$FILE_PREFIX-rings.txt"
     if [ -z "$problems" ]; then
         pass "without the permission the save asked for it and told the person, the window kept answering; with it the file is in Downloads"
     else
@@ -2226,7 +2226,7 @@ s48d() {
     dev am force-stop "$PKG"
     dev run-as "$PKG" rm -f shared_prefs/mobilesentinel_share.xml
     as_app "mkdir -p files/sentinel/ringing && printf \"1700000000000 sound a\\n1700000000400 ui a\\n\" > files/sentinel/ringing/timing.log"
-    rm_download alarmfree-rings.txt
+    rm_download "$FILE_PREFIX-rings.txt"
     # Android 9 has no `pm set-permission-flags`: a small program (devtest/af_permflags, run by app_process) sets what "Deny, and don't
     # ask again" leaves on a permission, or takes it off again.
     adb_ push devtest/af_permflags/af_permflags.dex /data/local/tmp/af_permflags.dex > /dev/null
@@ -2265,7 +2265,7 @@ s48d() {
     else
         problems="$problems; the app's settings did not open at the second save (focus: $(focused_window | cut -c1-120))"
     fi
-    [ -z "$(dev ls /sdcard/Download/ | grep -m1 '^alarmfree-rings')" ] || problems="$problems; a file was saved without the permission"
+    [ -z "$(dev ls /sdcard/Download/ | grep -m1 "^$FILE_PREFIX-rings")" ] || problems="$problems; a file was saved without the permission"
     # Allowed in the settings (here: from outside, the app stopped): the same save works.
     dev am force-stop "$PKG"
     perm_flags "$w" fixed
@@ -2276,9 +2276,9 @@ s48d() {
     on_home 30
     open_reliability || problems="$problems; no reliability screen after the access was given"
     save_it
-    has_record() { [ "$(dev cat /sdcard/Download/alarmfree-rings.txt 2> /dev/null | grep -c ' sound ')" -ge 1 ]; }
+    has_record() { [ "$(dev cat /sdcard/Download/$FILE_PREFIX-rings.txt 2> /dev/null | grep -c ' sound ')" -ge 1 ]; }
     wait_for 15 has_record || problems="$problems; no record in Downloads after the access was given"
-    rm_download alarmfree-rings.txt
+    rm_download "$FILE_PREFIX-rings.txt"
     # The flags are not left on the app for the scenarios after this one (s48c wants a dialog).
     perm_flags "$w" clear
     perm_flags "$r" clear
@@ -3826,7 +3826,7 @@ s63b() {
     until_past $((T - 1))
     local at_ring frozen=no
     at_ring=$(probe_main_state)
-    adb_ logcat -d -b events 2> /dev/null | tr -d '\r' | grep -E 'am_freeze' | grep -q 'com\.fidderr\.alarmfree\]' && frozen=yes
+    adb_ logcat -d -b events 2> /dev/null | tr -d '\r' | grep -E 'am_freeze' | grep -q "${PKG//./\.}\]" && frozen=yes
     dev am force-stop com.android.settings
     dev am force-stop com.google.android.contacts
     dev am force-stop com.android.chrome
@@ -4025,7 +4025,7 @@ shade_tap() { # Skip or Undo
     return 1
 }
 sql_alarm() { printf "SELECT data FROM alarms WHERE id='a';\n" | sql; }
-own_notifications() { dev dumpsys notification --noredact | awk '/NotificationRecord\(/ { ours = /pkg=com\.fidderr\.alarmfree/ } /^  [^ ]/ { ours = 0 } ours'; }
+own_notifications() { dev dumpsys notification --noredact | awk -v pkg="$PKG" '/NotificationRecord\(/ { ours = index($0, "pkg=" pkg " ") > 0 } /^  [^ ]/ { ours = 0 } ours'; }
 reminded() { own_notifications | grep -q '"Skip"'; }
 done_notice() { own_notifications | grep -q '"Undo"'; }
 skipped() { sql_alarm | grep -q "\"skip_until_ms\":$((T * 1000))"; }
@@ -4064,7 +4064,7 @@ s60p_a() {
     t0=$SECONDS
     wait_for 20 skipped || problems="$problems; a tap on the pop-up did not skip: $(sql_alarm | grep -o '"skip_until_ms":[^,]*')"
     echo "skipped $((SECONDS - t0))s after the tap"
-    echo "the phone's log says: $(dev logcat -d -b all -t 4000 | grep -oE 'notification_(action_)?clicked.{0,30}alarmfree' | tail -1 | cut -c1-40)"
+    echo "the phone's log says: $(dev logcat -d -b all -t 4000 | grep -oE 'notification_(action_)?clicked.{0,30}'$PKG | tail -1 | cut -c1-40)"
     moved() { [ "$(armed_at_ms a)" = "$((ARMED + 86400000))" ]; }
     wait_for 10 moved || problems="$problems; armed for $(armed_at_ms a), was $ARMED"
     wait_for 8 done_notice || problems="$problems; nothing to take it back with"

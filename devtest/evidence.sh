@@ -67,7 +67,7 @@ _ev_device_script() { # phone(0|1) id
 ok=1
 if [ $1 = 1 ]; then
     ok=0
-    case \"\$f\" in *com.fidderr.alarmfree*|*nputMethod*|*inputmethod*|*permissioncontroller*|*packageinstaller*|*RequestIgnoreBatteryOptimizations*) ok=1 ;; esac
+    case \"\$f\" in *$PKG*|*nputMethod*|*inputmethod*|*permissioncontroller*|*packageinstaller*|*RequestIgnoreBatteryOptimizations*) ok=1 ;; esac
 fi
 echo \"@@PICTURE \$ok\"
 echo \"@@FOCUS\"; echo \"\$f\"

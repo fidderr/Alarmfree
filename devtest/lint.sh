@@ -9,17 +9,21 @@
 #                 per hit). The list only shrinks: a hit that is not on it fails, and an entry that no longer hits fails too (remove it).
 #   blind-repeat  tap_again, the suite's ask-again helper (retry_used), a try counter, an `again` helper, and a loop over
 #                 a few numbers or by a counter (while [ "$i" -lt 3 ]) that does an action and leaves at the first success
+#   literal-id    the app's id (com.fidderr.alarmfree, also as com\.fidderr\.alarmfree) in a command: the suite takes it from $PKG
+#                 (PKG="${PKG:-com.fidderr.alarmfree}" is the one allowed way to spell it), or a run on the test id (APP_ID_SUFFIX in
+#                 build.sh) would address the owner's real app. Read in every script and tool of devtest/, not only the scenario files,
+#                 and judged apart from the counts above (its own PASS or FAIL line).
 # A comment is not code. A line that ends in `# lint-ok: <reason>` is allowed and counted apart.
 #
 # Usage: bash devtest/lint.sh [--report] [--list] [files...]
 #   --list    every hit as file:line: rule: the line      --report    the exit code is always 0
 # Default files: the devtest files that hold scenarios (a line that starts a `scenario`). lib.sh, the helpers, is shown
-# apart and does not count for the exit code. Exit 1 when a count is above zero.
+# apart and does not count for the exit code (but for literal-id). The other scripts and tools of devtest/ are read for literal-id only. Exit 1 when a count is above zero.
 
 here=${BASH_SOURCE[0]%/*}
 [ "$here" != "${BASH_SOURCE[0]}" ] || here=.
 LINT_LIST="${LINT_LIST:-$here/lint_sleep_check.txt}"
-report="" list="" files=() explicit=""
+report="" list="" files=() id_files=() explicit=""
 for arg in "$@"; do
     case "$arg" in
         --report) report=1 ;;
@@ -54,8 +58,15 @@ if [ ${#files[@]} -eq 0 ]; then
         done < "$f"
     done
     [ -f "$here/lib.sh" ] && files+=("$here/lib.sh")
+    for f in "$here"/*.sh "$here"/*.py; do
+        case "${f##*/}" in lint.sh | *.test.sh) continue ;; esac
+        [[ " ${files[*]} " == *" $f "* ]] || id_files+=("$f")
+    done
 fi
 
+re_id='com\\?\.fidderr\\?\.alarmfree'
+# The one way to name the id: the default of the variable (a script) or of the environment (a tool in Python).
+re_id_default='(:-|environ\.get\("PKG", ")com\.fidderr\.alarmfree(\.dev)?["}]'
 re_sleep='(^|[^[:alnum:]_./-])sleep[[:space:]]+[0-9$"'"'"']'
 re_raw='(^|[^[:alnum:]_])input[[:space:]]+(tap|swipe|text|keyevent|touchscreen|draganddrop|motionevent)([^[:alnum:]_]|$)'
 re_dump='uiautomator'
@@ -117,6 +128,7 @@ hit() { # rule
             N_SC=$((N_SC + 1))
             ;;
         raw-input) N_RAW=$((N_RAW + 1)) ;;
+        literal-id) N_ID=$((N_ID + 1)) ;;
         screen-dump) N_DUMP=$((N_DUMP + 1)) ;;
         blind-repeat) N_BLIND=$((N_BLIND + 1)) ;;
     esac
@@ -125,9 +137,9 @@ hit() { # rule
         printf '%s:%s: %s: %s\n' "$file" "$((i + 1))" "$1" "$text"
     fi
 }
-lint_file() {
+lint_file() { # file [ids-only]
     file=$1
-    N_SLEEP=0 N_RAW=0 N_DUMP=0 N_BLIND=0 N_ALLOWED=0 N_SC=0 N_SCL=0
+    N_SLEEP=0 N_RAW=0 N_DUMP=0 N_BLIND=0 N_ALLOWED=0 N_SC=0 N_SCL=0 N_ID=0
     local lines=() i j depth body_act body_exit after_sleep="" code
     mapfile -t lines < "$file"
     for ((i = 0; i < ${#lines[@]}; i++)); do
@@ -136,6 +148,10 @@ lint_file() {
         case "$line" in *"# lint-ok:"*) allowed=1 ;; esac
         strip_comment "$line"
         case "$CODE" in *[![:space:]]*) ;; *) continue ;; esac
+        rest=$CODE
+        [[ $CODE =~ $re_id_default ]] && rest=${CODE/"${BASH_REMATCH[0]}"/}
+        [[ $rest =~ $re_id ]] && hit literal-id
+        [ -z "${2:-}" ] || continue
         # A read right after a fixed sleep: the line before is a sleep of its own, or the sleep is on the same line before ; or &&.
         code=$CODE
         if [ -n "$after_sleep" ] && [[ $code =~ $re_check ]] && ! [[ $code =~ $re_verdict ]]; then
@@ -172,13 +188,14 @@ lint_file() {
 
 row() { printf '%-26s sleep %4s  raw-input %4s  screen-dump %4s  blind-repeat %4s  allowed %4s  sleep-check %3s (listed %s)\n' "$1" "$2" "$3" "$4" "$5" "$6" "$7" "$8"; }
 
-t_sleep=0 t_raw=0 t_dump=0 t_blind=0 t_allowed=0 t_sc=0 t_scl=0 h_row=""
+t_sleep=0 t_raw=0 t_dump=0 t_blind=0 t_allowed=0 t_sc=0 t_scl=0 t_id=0 h_row=""
 for file in "${files[@]}"; do
     if [ ! -f "$file" ]; then
         echo "no such file: $file" >&2
         exit 2
     fi
     lint_file "$file"
+    t_id=$((t_id + N_ID))
     if [ "${file##*/}" = lib.sh ]; then
         h_row=$(row "helpers: ${file##*/}" "$N_SLEEP" "$N_RAW" "$N_DUMP" "$N_BLIND" "$N_ALLOWED" "$N_SC" "$N_SCL")
         continue
@@ -186,6 +203,10 @@ for file in "${files[@]}"; do
     row "$file" "$N_SLEEP" "$N_RAW" "$N_DUMP" "$N_BLIND" "$N_ALLOWED" "$N_SC" "$N_SCL"
     t_sleep=$((t_sleep + N_SLEEP)) t_raw=$((t_raw + N_RAW)) t_dump=$((t_dump + N_DUMP))
     t_blind=$((t_blind + N_BLIND)) t_allowed=$((t_allowed + N_ALLOWED)) t_sc=$((t_sc + N_SC)) t_scl=$((t_scl + N_SCL))
+done
+for file in "${id_files[@]}"; do
+    lint_file "$file" ids-only
+    t_id=$((t_id + N_ID))
 done
 # The list only shrinks: an entry that no longer hits is a finding too (the whole default set was read, so every entry could hit).
 stale=0
@@ -206,5 +227,10 @@ if [ "$total" -gt 0 ]; then
 else
     echo "PASS  nothing a scenario may not do"
 fi
+if [ "$t_id" -gt 0 ]; then
+    echo "FAIL  $t_id literal app id(s) in a command: take it from \$PKG (lib.sh), or give the line a lint-ok reason"
+else
+    echo "PASS  no literal app id"
+fi
 [ -n "$report" ] && exit 0
-[ "$total" -eq 0 ] && [ "$t_sc" -eq 0 ] && [ "$stale" -eq 0 ]
+[ "$t_id" -eq 0 ] && [ "$total" -eq 0 ] && [ "$t_sc" -eq 0 ] && [ "$stale" -eq 0 ]

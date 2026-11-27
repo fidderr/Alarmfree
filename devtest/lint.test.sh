@@ -115,6 +115,25 @@ out=$(LINT_LIST="$dir/stale.txt" bash "$lint" --report)
 out=$(bash "$lint" --report)
 [[ $out != *STALE* ]] && [[ $out != *"not on the list"* ]] && verdict "the list of the repository matches the code (no new hit, no stale entry)" 1 || verdict "the list of the repository matches the code" 0
 
+# The rule against the app's id spelled out in a command (literal-id): a run on the test id must never address the real app.
+fixture id_cmd 'scenario s99' '    dev am force-stop com.fidderr.alarmfree'
+found id_cmd literal-id && verdict "the app's id in a command is found (literal-id)" 1 || verdict "the app's id in a command is found (literal-id)" 0
+fixture id_escaped 'scenario s99' '    dev "dumpsys window | grep com\.fidderr\.alarmfree"'
+found id_escaped literal-id && verdict "the id with escaped dots is found" 1 || verdict "the id with escaped dots is found" 0
+fixture id_other 'scenario s99' '    dev pm clear com.fidderr.alarmfree.dev' '    ok() { focus | grep -Eq "com.fidderr.alarmfree(.slint)?/"; }'
+[ "$(bash "$lint" --list --report "$dir/id_other.sh" | grep -c ': literal-id: ')" = 2 ] && verdict "an id with a suffix is found too (it is still a literal id)" 1 || verdict "an id with a suffix is found too (it is still a literal id)" 0
+fixture id_var 'scenario s99' '    dev am force-stop "$PKG"' '    PKG="${PKG:-com.fidderr.alarmfree}"' '    export PKG="${PKG:-com.fidderr.alarmfree.dev}"' '    x=1 # com.fidderr.alarmfree' '# com.fidderr.alarmfree' '    REAL=com.fidderr.alarmfree # lint-ok: the real id, to refuse it'
+[ "$(bash "$lint" --list --report "$dir/id_var.sh" | grep -c ': literal-id: ')" = 0 ] && verdict "the variable, its default, a comment and a lint-ok line are not found" 1 || verdict "the variable, its default, a comment and a lint-ok line are not found" 0
+fixture id_twice 'scenario s99' '    PKG="${PKG:-com.fidderr.alarmfree}" dev am force-stop com.fidderr.alarmfree'
+found id_twice literal-id && verdict "an id next to the allowed default is still found" 1 || verdict "an id next to the allowed default is still found" 0
+printf '%s\n' 'e = os.environ.get("PKG", "com.fidderr.alarmfree")' 'if el.get("package") != "com.fidderr.alarmfree":' > "$dir/id_tool.py"
+out=$(bash "$lint" --list --report "$dir/id_tool.py")
+[[ $out == *"id_tool.py:2: literal-id"* && $out != *"id_tool.py:1:"* ]] && verdict "a tool in Python: the default of the environment is allowed, a compared id is not" 1 || verdict "a tool in Python: the default of the environment is allowed, a compared id is not" 0
+out=$(bash "$lint" "$dir/id_cmd.sh")
+[[ $out == *"FAIL  1 literal app id"* ]] && verdict "a literal id fails the lint with its own line" 1 || verdict "a literal id fails the lint with its own line" 0
+out=$(bash "$lint" --report)
+[[ $out == *"PASS  no literal app id"* ]] && verdict "no script or tool of devtest names the app's id (the id comes from \$PKG)" 1 || verdict "no script or tool of devtest names the app's id: $(bash "$lint" --list --report | grep -c ': literal-id: ') found" 0
+
 # A script with a CR at the end of its lines (CRLF) cannot run on the Linux machines (run 45280008934: every part stopped at the first line of matrix.sh).
 crs=""
 for f in "$here"/*.sh "$here"/ci/*.sh "$here"/ci/*.py; do

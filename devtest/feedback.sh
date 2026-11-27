@@ -111,7 +111,7 @@ s71() {
     printf "UPDATE alarms SET data = replace(data, '\"label\":\"a\"', '\"label\":\"Secret errand\"') WHERE id='a';
 " | sql
     as_app "mkdir -p files/sentinel && printf '2026-11-14T07:00:01.000+01:00 ring started id=aaaaaaaa 1s after its time challenges=0\n2026-11-14T07:00:09.000+01:00 ring stopped id=aaaaaaaa how=solved challenges_solved=0\nleak Secret errand\n' > files/sentinel/diag.log"
-    rm_download 'alarmfree-report-*.txt' 'alarmfree-setup-*.json'
+    rm_download "$FILE_PREFIX-report-*.txt" "$FILE_PREFIX-setup-*.json"
     local problems=""
     open_settings || problems="$problems; no settings"
     settings_row "Report a problem or idea"
@@ -134,14 +134,14 @@ s71() {
     # No email app on this image: the report goes to Downloads, and the screen says so.
     if has_there "No email app found"; then
         local saved
-        saved=$(dev ls /sdcard/Download | grep -c "alarmfree-report-")
+        saved=$(dev ls /sdcard/Download | grep -c "$FILE_PREFIX-report-")
         [ "$saved" -ge 1 ] || problems="$problems; the report is not in Downloads"
-        dev cat /sdcard/Download/alarmfree-report-*.txt > "$OUT/s71_report.txt"
+        dev cat /sdcard/Download/$FILE_PREFIX-report-*.txt > "$OUT/s71_report.txt"
         grep -q "It did not ring this morning" "$OUT/s71_report.txt" || problems="$problems; saved report lacks the answer"
         grep -q "ring started" "$OUT/s71_report.txt" || problems="$problems; saved report lacks the log"
         grep -q "Secret errand" "$OUT/s71_report.txt" && problems="$problems; saved report has a label"
         grep -q "Time zone:" "$OUT/s71_report.txt" || problems="$problems; saved report has no time zone"
-        dev ls /sdcard/Download | grep -q "alarmfree-setup-" || problems="$problems; the alarm setup is not in Downloads"
+        dev ls /sdcard/Download | grep -q "$FILE_PREFIX-setup-" || problems="$problems; the alarm setup is not in Downloads"
         screenshot s71_saved
     else
         # An email app took it: the screen is left.

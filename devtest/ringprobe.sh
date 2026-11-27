@@ -36,7 +36,7 @@ PROBE_HEADER="avd kind moment round T rx sound hu_sent hu_recv freeze unfreeze r
 
 # The alarm's lines of the log, as ms past T. Needs T. Prints: rx sound hu_sent hu_recv freeze unfreeze resumed banner bal
 probe_times() { # logfile (logcat -v epoch)
-    awk -v t="$T" '
+    awk -v t="$T" -v pkg="$PKG" '
         function note(k, v) { if (!(k in at) || v < at[k]) at[k] = v }
         $1 ~ /^[0-9]+\.[0-9]+$/ && $1 > t - 120 && $1 < t + 120 {
             e = $1
@@ -44,10 +44,10 @@ probe_times() { # logfile (logcat -v epoch)
             if ($0 ~ /FiringAudio.*playing /) note("sound", e)
             if ($0 ~ /Guardian.*sendHeadsUpBroadcast/) note("hu_sent", e)
             if ($0 ~ /SentinelJobsInit.*JOB_HEADS_UP received/) note("hu_recv", e)
-            if ($0 ~ /am_freeze|freezing [0-9]+ com\.fidderr\.alarmfree( |$)/ && $0 ~ /com\.fidderr\.alarmfree(\]|$| )/ && $0 !~ /alarmfree:sentinel/) note("freeze", e)
-            if ($0 ~ /am_unfreeze|unfreezing|Unfreez/ && $0 ~ /com\.fidderr\.alarmfree(\]|$| )/ && $0 !~ /alarmfree:sentinel/) note("unfreeze", e)
-            if ($0 ~ /wm_set_resumed_activity.*com\.fidderr\.alarmfree/) note("resumed", e)
-            if ($0 ~ /sysui_heads_up_status.*com\.fidderr\.alarmfree/) note("banner", e)
+            if ($0 ~ /am_freeze|freezing [0-9]+ [^ ]+( |$)/ && $0 ~ (pkg "([]]|$| )") && $0 !~ /:sentinel/) note("freeze", e)
+            if ($0 ~ /am_unfreeze|unfreezing|Unfreez/ && $0 ~ (pkg "([]]|$| )") && $0 !~ /:sentinel/) note("unfreeze", e)
+            if ($0 ~ ("wm_set_resumed_activity.*" pkg)) note("resumed", e)
+            if ($0 ~ ("sysui_heads_up_status.*" pkg)) note("banner", e)
             if ($0 ~ /ackground activity (start|launch).*(blocked|aborted|not allowed)|BAL_BLOCK|Abort background activity/) bal++
         }
         END {
@@ -60,8 +60,8 @@ probe_times() { # logfile (logcat -v epoch)
 # The main process (not the sentinel one) as the system lists it: its importance and process state, on one word.
 probe_main_state() {
     local s
-    s=$(dev "dumpsys activity lru | grep 'com.fidderr.alarmfree/u'" 2> /dev/null | # lint-ok: the probe reads the process list
-        sed -nE 's/^ *#[0-9]+: *(.*) [0-9]+:com\.fidderr\.alarmfree\/u.*/\1/p' | head -1 | tr ' ' '_')
+    s=$(dev "dumpsys activity lru | grep '$PKG/u'" 2> /dev/null | # lint-ok: the probe reads the process list
+        sed -nE "s/^ *#[0-9]+: *(.*) [0-9]+:${PKG//./\\.}\/u.*/\1/p" | head -1 | tr ' ' '_')
     echo "${s:-gone}"
 }
 
@@ -143,7 +143,7 @@ probe_round() { # kind moment n
         "- "*)
             {
                 echo "NO RING: armed at ms: $(armed_at_ms a), T*1000 = $((T * 1000)), device time now $(now_s)"
-                dev "dumpsys alarm | grep -i -B1 -A3 alarmfree | head -40"
+                dev "dumpsys alarm | grep -i -B1 -A3 $PKG | head -40"
                 as_app "tail -n 8 files/sentinel/diag.log"
             } >> "$log" 2>&1
             ;;

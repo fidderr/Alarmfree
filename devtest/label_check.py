@@ -3,6 +3,7 @@ Reports a root named app_process64, interactive nodes without a name, and names 
 two or more interactive nodes of the screen share. usage: label_check.py SCREEN_NAME
 """
 import collections
+import os
 import sys
 import xml.etree.ElementTree as ET
 
@@ -13,7 +14,7 @@ bad = 0
 roots = []
 interactive = []
 for el in root.iter("node"):
-    if el.get("package") != "com.fidderr.alarmfree":
+    if el.get("package") != os.environ.get("PKG", "com.fidderr.alarmfree"):
         continue
     cls = el.get("class", "").split(".")[-1]
     label = el.get("content-desc") or el.get("text") or ""
