@@ -7,7 +7,9 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
-## [0.7.2] - 2026-11-26
+## [0.7.2] - 2026-11-27
+
+versionCode 12602. Needs mobile-sentinel 0.7.2.
 
 ### Fixed
 
