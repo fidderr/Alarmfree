@@ -96,6 +96,7 @@ apk_package() { # apk
 # Nothing may hang a run: an unresponsive device fails instead of waiting forever.
 adb_() {
     still_ours || give_way
+    [ -z "${COMMAND_LOG:-}" ] || printf '%s adb %s\n' "$(date +%T)" "$*" >> "$COMMAND_LOG"
     ! real_app_named "$@" || { refuse_real_app "$@"; return 126; }
     device_is_dead && return 124
     # While a unit runs on a GitHub machine, what adb says about a lost connection is kept (link_stderr, baseline.sh).
@@ -152,6 +153,8 @@ shells_open() { kill -0 "$DEV_PID" 2> /dev/null && kill -0 "$APP_PID" 2> /dev/nu
 ask() { # pid in out command
     local pid=$1 line text="" rest
     still_ours || give_way
+    [ -z "${COMMAND_LOG:-}" ] || printf '%s ask %s\n' "$(date +%T)" "$4" >> "$COMMAND_LOG"
+    ! real_app_named "$4" || { refuse_real_app "$4"; return 126; }
     device_is_dead && return 124
     printf '{ %s\n} < /dev/null 2>&1; echo "__DONE__$?"\n' "$4" >&"$2"
     while :; do

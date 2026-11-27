@@ -71,6 +71,12 @@ out=$(run_lib "$REAL.dev" "" adb_ shell pm clear "$REAL.dev")
 out=$(run_lib "" "" adb_ shell pm clear "$REAL")
 [[ $out == *"rc=0"* && $(cat "$tmp/adb.log") == *"pm clear $REAL"* ]] && verdict "adb_ on the real id sends it (the default suite is unchanged)" 1 || verdict "adb_ on the real id sends it (the default suite is unchanged): $out" 0
 
+out=$(run_lib "$REAL.dev" "" ask 1 5 6 "am force-stop $REAL")
+[[ $out == *"STOP  refused"* && $out == *"rc=126"* ]] && verdict "ask (the open shells of dev and as_app) refuses a command that names the real app" 1 || verdict "ask (the open shells of dev and as_app) refuses a command that names the real app: $out" 0
+COMMAND_LOG="$tmp/commands.txt" run_lib "$REAL.dev" "" adb_ shell pm clear "$REAL.dev" > /dev/null
+COMMAND_LOG="$tmp/commands.txt" run_lib "$REAL.dev" "" adb_ shell pm clear "$REAL" > /dev/null
+[ "$(grep -c "pm clear" "$tmp/commands.txt")" = 2 ] && verdict "COMMAND_LOG records every command, also a refused one" 1 || verdict "COMMAND_LOG records every command, also a refused one: $(cat "$tmp/commands.txt")" 0
+
 # What the input guard of a phone lets through: the focus has to be the app of this run.
 allows() { # pkg focus
     run_lib "$1" "" guard_allows "$2" input tap 1 1 | grep -q 'rc=0'
