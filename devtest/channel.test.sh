@@ -22,7 +22,7 @@ verdict() { # name ok
         bad=1
     fi
 }
-now_ms() { NOW=$((${EPOCHREALTIME/[.,]/} / 1000)); }
+mark_ms() { NOW=$((${EPOCHREALTIME/[.,]/} / 1000)); }
 
 # The stand-in app. The delay (seconds, in `delay`) is read for each request; `silent` makes it take a request and never answer.
 cat > "$tmp/app.sh" << 'E'
@@ -110,11 +110,11 @@ stop_app_standin
 new_case late 3.5
 said1=$(ui snapshot)
 rc1=$?
-now_ms
+mark_ms
 t0=$NOW
 said2=$(ui screen)
 rc2=$?
-now_ms
+mark_ms
 took=$((NOW - t0))
 case "$said1" in "no answer from the app"*) ok1=1 ;; *) ok1=0 ;; esac
 case "$said2" in "no answer from the app"*) ok2=1 ;; *) ok2=0 ;; esac
@@ -135,11 +135,11 @@ stop_app_standin
 
 # 3. An action waits for its OK.
 new_case action 1
-now_ms
+mark_ms
 t0=$NOW
 action snooze:a
 rc=$?
-now_ms
+mark_ms
 took=$((NOW - t0))
 last=$(tail -1 "$DEV/requests.log")
 [ "$rc" = 0 ] && [ "$took" -ge 900 ] && [ "${last#* }" = "snooze:a" ] && verdict "action waits for its OK" 1 || verdict "action waits for its OK (rc $rc, ${took} ms, [$last])" 0
